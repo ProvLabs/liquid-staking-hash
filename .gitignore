@@ -1,0 +1,24 @@
+# Rust / CosmWasm
+target/
+artifacts/
+*.wasm
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Logs
+*.log
