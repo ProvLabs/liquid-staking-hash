@@ -1,0 +1,33 @@
+{
+  "name": "nvhash-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "nvHASH Program Console - chain-truth verification tool for the nvHASH liquid staking program",
+  "scripts": {
+    "dev": "vite --mode devnet",
+    "dev:test": "vite --mode test",
+    "build": "tsc -b && vite build --mode production",
+    "build:test": "tsc -b && vite build --mode test",
+    "build:devnet": "tsc -b && vite build --mode devnet",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.32.4",
+    "@cosmjs/crypto": "^0.32.4",
+    "@cosmjs/encoding": "^0.32.4",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "~5.5.4",
+    "vite": "^5.4.8"
+  }
+}

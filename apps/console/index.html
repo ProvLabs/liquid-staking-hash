@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Self-contained delivery (spec §12): strict CSP, only the configured LCD as a network peer.
+         connect-src is widened at deploy time to the profile's lcd_url; 'self' covers the SPA assets. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' http://localhost:* https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'"
+    />
+    <title>nvHASH Console</title>
+    <!-- Pre-paint theme resolution so the first frame is the right surface (no flash). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("nvhash.theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

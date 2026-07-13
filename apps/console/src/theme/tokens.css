@@ -1,0 +1,102 @@
+/* Color, type, spacing, and shape tokens (spec §11.2-§11.4).
+   The palette is the validated reference instance of the repo's dataviz method;
+   any change re-runs validate_palette.js for BOTH surfaces (spec §11.6.5).
+   Both themes are first-class, separately-tuned steps - never an inversion. */
+
+:root {
+  /* chrome + ink (light) */
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --accent: #2a78d6;
+  --delta-up: #006300;
+
+  /* status (reserved for state; always paired with icon + label) */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* chart categorical slots (fixed order; follow the entity, never rank) */
+  --cat-1: #2a78d6; /* blue   */
+  --cat-2: #1baf7a; /* aqua   */
+  --cat-3: #eda100; /* yellow */
+  --cat-4: #008300; /* green  */
+  --cat-5: #4a3aa7; /* violet */
+  --drag: #e34948; /* diverging red pole */
+  --diverge-mid: #f0efec;
+
+  /* typography */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* spacing scale (base 4px) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 40px;
+  --sp-10: 64px;
+
+  /* shape */
+  --radius-panel: 8px;
+  --radius-control: 6px;
+  --radius-pill: 999px;
+  --content-max: 1280px;
+}
+
+:root[data-theme="dark"] {
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --ink-1: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-3: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #3987e5;
+  --delta-up: #0ca30c;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  --cat-1: #3987e5;
+  --cat-2: #2bc68f;
+  --cat-3: #f5b731;
+  --cat-4: #1aa31a;
+  --cat-5: #6f5fd6;
+  --drag: #e66767;
+  --diverge-mid: #383835;
+}
+
+/* auto: follow the OS when no manual override is set on the root */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink-1: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-3: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --accent: #3987e5;
+    --delta-up: #0ca30c;
+    --cat-1: #3987e5;
+    --cat-2: #2bc68f;
+    --cat-3: #f5b731;
+    --cat-4: #1aa31a;
+    --cat-5: #6f5fd6;
+    --drag: #e66767;
+    --diverge-mid: #383835;
+  }
+}

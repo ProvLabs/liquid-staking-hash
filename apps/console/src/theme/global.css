@@ -1,0 +1,571 @@
+/* Global styles (spec §11). Austere operator UI: system fonts, flat surfaces,
+   dense tables, status color only when true. Components reference tokens only. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+button {
+  font-family: inherit;
+}
+
+/* focus: 2px accent ring, 2px offset, on every interactive element (§11.7) */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* numeric columns and figures use tabular figures (§11.3) */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+.muted {
+  color: var(--ink-2);
+}
+.muted-3 {
+  color: var(--ink-3);
+}
+.delta-up {
+  color: var(--delta-up);
+}
+
+/* ---- app shell ---------------------------------------------------------- */
+.app {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  grid-template-columns: 220px 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "banner banner"
+    "nav    main";
+  min-height: 100%;
+}
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar__title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.topbar__spacer {
+  flex: 1;
+}
+.bannerstack {
+  grid-area: banner;
+}
+.bannerstack:empty {
+  display: none;
+}
+
+.sidenav {
+  grid-area: nav;
+  padding: var(--sp-4) var(--sp-2);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+.sidenav__group {
+  margin-bottom: var(--sp-5);
+}
+.sidenav__caption {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 0 var(--sp-3) var(--sp-2);
+}
+.sidenav__link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  border-left: 2px solid transparent;
+  font-size: 14px;
+}
+.sidenav__link:hover {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--ink-1) 4%, transparent);
+}
+.sidenav__link.active {
+  color: var(--ink-1);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.main {
+  grid-area: main;
+  padding: var(--sp-6);
+  max-width: var(--content-max);
+  width: 100%;
+}
+.page-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--sp-2);
+}
+.page-sub {
+  color: var(--ink-2);
+  margin-bottom: var(--sp-6);
+}
+
+.footer {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
+  border-top: 1px solid var(--border);
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+/* ---- layout primitives -------------------------------------------------- */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+.row {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.grid-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-4);
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-6);
+}
+
+/* ---- panel -------------------------------------------------------------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--sp-5);
+}
+/* §11.4 normative: the 12px heading gap belongs to the HEADER WRAPPER, not the
+   title element, so it survives when actions share the header row. */
+.panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.panel__title {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.panel__actions {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* ---- stat tile ---------------------------------------------------------- */
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.tile__label {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.tile__value {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.tile__caption {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* ---- status pill -------------------------------------------------------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.pill--good {
+  color: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 12%, transparent);
+}
+.pill--warning {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+}
+.pill--serious {
+  color: var(--status-serious);
+  background: color-mix(in srgb, var(--status-serious) 12%, transparent);
+}
+.pill--critical {
+  color: var(--status-critical);
+  background: color-mix(in srgb, var(--status-critical) 12%, transparent);
+}
+.pill--neutral {
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink-1) 8%, transparent);
+}
+:root[data-theme="dark"] .pill--good,
+:root[data-theme="dark"] .pill--warning,
+:root[data-theme="dark"] .pill--serious,
+:root[data-theme="dark"] .pill--critical {
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+
+/* ---- address chip ------------------------------------------------------- */
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink-1) 5%, transparent);
+  border-radius: var(--radius-control);
+  padding: 2px 6px;
+  cursor: pointer;
+  border: none;
+}
+.chip:hover {
+  color: var(--ink-1);
+}
+
+/* ---- buttons ------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-1);
+}
+.btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn--secondary {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--ink-1);
+}
+.btn--warning {
+  background: var(--status-warning);
+  color: #1a1a19;
+}
+.btn--danger {
+  background: var(--status-critical);
+  color: #fff;
+}
+.btn--ghost {
+  color: var(--accent);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn--sm {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 13px;
+}
+.guardbtn {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.guardbtn__reason {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ---- tables (dense, scannable §11.4) ----------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+}
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+table.data th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--baseline);
+  white-space: nowrap;
+}
+table.data td {
+  padding: 0 var(--sp-3);
+  height: 40px;
+  border-bottom: 1px solid var(--grid);
+}
+table.data tbody tr:hover {
+  background: color-mix(in srgb, var(--ink-1) 4%, transparent);
+}
+table.data td.num,
+table.data th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+tr.own {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* ---- banner ------------------------------------------------------------- */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-6);
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.banner__icon {
+  font-weight: 700;
+}
+.banner--critical {
+  background: color-mix(in srgb, var(--status-critical) 12%, transparent);
+  color: var(--status-critical);
+}
+.banner--serious {
+  background: color-mix(in srgb, var(--status-serious) 12%, transparent);
+  color: var(--status-serious);
+}
+.banner--warning {
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  color: var(--status-warning);
+}
+
+/* ---- toast -------------------------------------------------------------- */
+.toaststack {
+  position: fixed;
+  right: var(--sp-6);
+  bottom: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  z-index: 40;
+  max-width: 380px;
+}
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--sp-3) var(--sp-4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+}
+
+/* ---- confirm sheet ------------------------------------------------------ */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.sheet {
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  padding: var(--sp-6);
+  width: min(480px, calc(100vw - 32px));
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.sheet__title {
+  font-size: 18px;
+  font-weight: 600;
+}
+.disclosure {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--sp-2) var(--sp-3);
+}
+.disclosure pre {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink-2);
+}
+
+/* ---- state cards -------------------------------------------------------- */
+.state {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.state--error {
+  color: var(--status-critical);
+}
+.skeleton {
+  height: 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink-1) 8%, transparent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---- forms -------------------------------------------------------------- */
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.input {
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--page);
+  color: var(--ink-1);
+  font-family: inherit;
+  font-size: 14px;
+}
+.callout {
+  border-radius: var(--radius-control);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 13px;
+}
+.callout--serious {
+  background: color-mix(in srgb, var(--status-serious) 12%, transparent);
+  color: var(--status-serious);
+}
+.callout--info {
+  background: color-mix(in srgb, var(--ink-1) 4%, transparent);
+  color: var(--ink-2);
+}
+
+/* ---- freshness ---------------------------------------------------------- */
+.stale {
+  opacity: 0.55;
+}
+.freshness {
+  font-size: 12px;
+  color: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ---- responsive (§11.4) ------------------------------------------------- */
+@media (max-width: 1279px) {
+  .grid-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 767px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "banner"
+      "nav"
+      "main";
+  }
+  .sidenav {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .grid-tiles,
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
