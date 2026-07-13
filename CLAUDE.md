@@ -24,6 +24,16 @@ nvHASH liquid staking system — a monorepo with four legs:
 - `docs/architecture/` — system-level architecture docs and ADRs.
 - `docs/user/` — end-user and operator documentation.
 
+## Security
+
+Read [`SECURITY.md`](SECURITY.md) before changing contract, service, or app
+code — it is the working security guidance for this repo. Non-negotiables:
+all contract inputs validated and bounded at entry with simulation coverage
+across the full allowed input domain; no user-identifiable information
+collected or stored by backend services beyond public chain data; no key
+material ever handled outside the user's wallet; spec, invariant assertions,
+and status ledger updated in the same change as the behavior they describe.
+
 ## Working conventions
 
 - Each area has its own `CLAUDE.md` with area-specific conventions and commands;

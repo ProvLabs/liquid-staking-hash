@@ -1,6 +1,10 @@
 # Migration Tranche 1: Specs, READMEs, and Dev-Tooling Homes
 
-**Status:** DRAFT — awaiting Ira's review before execution
+**Status:** EXECUTED 2026-07-13, with two adjustments from Ira's review: the
+old repo's "no em-dashes" convention is dropped (not carried into any
+CLAUDE.md), and IMPLEMENTATION-STATUS.md was pruned on migration to the
+delivered baseline + open work (historical tranche detail stays in the old
+repo's ledger)
 **Source:** `~/Projects/nvhash-cosmos-contracts` (exploratory nvHASH repo)
 **Target:** this repository
 

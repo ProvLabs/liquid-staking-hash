@@ -1,0 +1,577 @@
+# nvHASH Program App: Full-Featured Application Technical Specification
+
+> Migrated 2026-07-13 from `nvhash-cosmos-contracts` @ dbce15e, source `docs/nvHASH-app-spec.md`. Paths updated for this repository's layout.
+
+**Version:** 1.0-RC1 (2026-07-10). **Not yet certified for implementation.**
+**Owner:** Ira
+**Companion to:** `liquid-staking-spec.md` (v1.0, baselined 2026-07-09), the governing contract spec — section references of the form "contract §N" point there; `dashboard-personas.md` (the five personas); `../architecture/application-boundary.md` (the Console-vs-App split this spec implements — "boundary §N"); and `console-spec.md` (v2.0-RC1, the chain-truth verification counterpart — "console §N").
+
+**Status:** Release candidate for engineering review, *not baselined for implementation*. This is the App seeded by boundary §7.1: the stateful, consumer-grade surface of the nvHASH program. The architecture follows the engineering team's established reference application (`Labs/nuva-app`) — React Router 7 SSR, PostgreSQL/Prisma with the three-layer route/service/model rule, Tailwind 4 + shadcn/Radix, and an in-house chain indexer — rather than introducing new stack dependencies. The open items in **§14** must be closed before certification.
+
+**How to read this:** §1 is the summary. §5 is the data the App consumes (chain, indexer, off-chain feeds); §8 (pages), §9 (backend & indexer), and §10 (transaction flows) are the build-defining sections. §11 is the design language (inherits the NUVA family register the console deliberately gave up). §12 encodes the boundary doc's trust-reconciliation model — it is normative, not advisory. **§14 is the open-items list**: `[DECIDE]` = a decision to make, `[VERIFY]` = a fact to confirm against the deployed chain, bridge, or vendors.
+
+**Where review attention is most valuable:** (1) the indexer design and its reconciliation-to-chain contract (§9 — the App holds state, so honest freshness labeling and canonical deference are what keep the two-surface trust model sound); (2) the redemption flow's "guaranteed vs typical" framing (§8.4, §10.4 — the single most consequential piece of consumer communication in the program); and (3) the governance workflow split with the console (§8.7, §14.6).
+
+---
+
+## 1. Purpose & Approach
+
+This document specifies the **nvHASH App**: the full-featured web application for the nvHASH liquid staking program on Provenance Blockchain. Where the Console proves chain state to engineers, the App **explains, transacts, remembers, and notifies** for everyone else. It is the program's front door: the place an Evaluator learns what nvHASH is, a Position Holder deposits, monitors, and redeems, a Validator reads the economics of participating, and an Administrator watches whether the program's cohorts are healthy.
+
+The App serves the **four primary (non-Protocol-Engineer) personas** (personas §5–§8): **Evaluator, Position Holder, Validator, Administrator**. Per the boundary rule (boundary §2), everything here either requires off-chain state (durable history, cross-chain pricing, notifications, analytics), or exists to educate and guide rather than to verify. Chain-truth verification remains the Console's job; the App links into it rather than duplicating it.
+
+The App has **four objectives**:
+
+1. **Convert understanding into trust** — plain-language education, security posture, historical performance, and honest exit-path framing for the Evaluator (closes register item A1).
+2. **Guided transactions** — consumer-grade deposit (`SwapIn`), redemption (`SwapOut`), and exit-path comparison, with the user's own wallet signing every transaction (closes A2).
+3. **Durable personal and program history** — indexed positions, accrued gains, effective yield, exportable transaction history, canonical epoch trends, and DEX market context (closes A3, C2, C3, D2).
+4. **Awareness** — configurable alerts and an incident feed for holders and admins, plus the cohort-satisfaction analytics the no-backend console cannot produce (closes A4, D1).
+
+**At a glance:**
+
+- **Stateful application with its own backend and indexer.** React Router 7 (framework mode, SSR) serving both the UI and a versioned JSON API; PostgreSQL via Prisma; a chain indexer that turns Provenance events into durable history. This is the same architecture, layering discipline, and dependency set as the team's `nuva-app` reference (§3, §6).
+- **The chain stays canonical.** Every material number the App shows is either read live from the node or reconciled to it, labeled with its freshness, and accompanied by a "Verify on chain" deep-link into the Console (§12). **The App is the product; the Console is the proof** (boundary §5).
+- **Wallet-signed, never custodial.** All fund-moving actions are built in the browser, previewed decoded, and signed by the user's wallet over WalletConnect v2 (personas §2). The backend holds no keys and can move no funds (§10, §12).
+- **Consumer register, same chart honesty.** The App wears the NUVA family design language (§11) — the brand accent, display typeface, and calm surfaces the console explicitly removed — but its charts obey the identical dataviz method and honesty rules (step-after NAV, no interpolation of stepwise values, minimum-window APR rule).
+
+**The one rule that shapes the whole design: the App must never become an authority about chain state.** It may be faster, richer, and longer-remembering than the chain node, but on any conflict it defers, labels, and links to proof. A consumer product that quietly contradicts the chain would poison both surfaces (boundary §5); this spec treats reconciliation and freshness as load-bearing features, not plumbing.
+
+Delivery path: *spec → backend/indexer against devnet → read-only pages → transacting flows on testnet → notification + analytics → mainnet* (§15).
+
+---
+
+## 2. Glossary
+
+Economic vocabulary is shared with the console (console §2) and the contract spec; terms below are App-specific or repeated because pages depend on them. This shared table is the E3 (vocabulary ratification) deliverable: all three documents use these words identically.
+
+| Term | Meaning |
+|------|---------|
+| **App** | The web application this document specifies. |
+| **Console** | The chain-truth verification tool (`console-spec.md`); the target of every "Verify on chain" link. |
+| **Contract** | The nvHASH staking CosmWasm contract (the vault's asset manager), contract §11. |
+| **Vault** | The `ProvLabs/vault` module instance holding user funds; the App's `SwapIn`/`SwapOut` counterparty. |
+| **Indexer** | The App's background ingestion workers that read chain blocks/tx events into PostgreSQL (§9.2). |
+| **Freshness label** | The indexed-height/timestamp annotation every indexer-derived figure carries (§12). |
+| **Verify link** | The per-figure deep-link into the Console at the corresponding view and environment (§12.2). |
+| **NAV / exchange rate** | `Net TVV / total_shares` — HASH per nvHASH. Rises **stepwise at each monthly epoch** (contract §5); never interpolated in any App display. |
+| **Market price** | What nvHASH trades for on a secondary venue (the Base/Ethereum Uniswap pool, contract §11.5) — may sit at a premium or discount to NAV. |
+| **Premium / discount** | `(market price − NAV) / NAV`, the spread the exit-path comparison surfaces. |
+| **Guaranteed window** | The `withdrawal_delay_seconds` redemption ceiling (~60 days, contract §8). The only promised number. |
+| **Typical time-to-payout** | The indexed historical distribution of actual expedite times (§9.5) — displayed *beside*, never *instead of*, the guaranteed window. |
+| **Effective yield** | A specific holder's realized accrual on their own position (§9.5), as distinct from the program's advertised APR. |
+| **Gross / net APR** | The program-level rates from the contract's `Apr {}` (contract §9.10): gross = rewards + commission + TIP annualized; net = gross minus AUM-fee estimate and write-downs. |
+| **Cohort analytics** | The admin-facing adoption/retention/churn/upkeep-timeliness metrics (§8.8), computed from indexed history and product analytics. |
+| **bps / nhash / nvhash scales** | Identical to console §2: rates cross the wire in bps; 1 HASH = 1e9 nhash; 1 nvHASH = 1e15 base shares (= 1 HASH at neutral NAV). |
+
+---
+
+## 3. Confirmed Design Decisions
+
+The following are settled, subject only to the §14 open items:
+
+1. **Stack = the `nuva-app` reference architecture.** React Router 7 (framework mode, SSR, `remix-flat-routes` file routing), TypeScript strict, Vite. UI: Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/ui on Radix primitives, `lucide-react` icons, `cn()` (clsx + tailwind-merge), `class-variance-authority`. Forms: `react-hook-form` + `zod`. Tables: `@tanstack/react-table`. Charts: **Recharts**. Toasts: `sonner`. Dates: `date-fns`. Matching: `ts-pattern`. No new framework, CSS system, or chart library is introduced.
+2. **Backend = the same process, three layers.** Routes (loaders/actions + `api+/v1+` JSON routes) → services (`app/lib/services/*.server.ts`, business logic, logging) → models (`app/lib/models/*.server.ts`, the only Prisma import). Routes never touch the database; models hold no business logic (nuva `ARCHITECTURE.md` is normative here).
+3. **PostgreSQL + Prisma, multi-file schema.** One model per `prisma/*.prisma` file; migrations via `prisma migrate`. Indexer cursors persist in an `indexer_checkpoints` table (the nuva precedent).
+4. **The App both indexes and reads live.** Historical/aggregate data comes from the indexer; the canonical live numbers (NAV, TVV, vault paused state, pending swap-out queue, guard-relevant state) are read server-side from the configured LCD on request (short-TTL cached) so the App can label and reconcile rather than trail (resolves boundary §7.5: **both**).
+5. **Wallet auth = WalletConnect v2, session by signature, no KYC.** Connecting a wallet is anonymous; a server session is established by signing a nonce (address-scoped, no account creation step). An optional **email is collected only for notifications** and is verifiable/deletable; no custody, no KYC, no allowlist (personas §2; resolves boundary §7.6). Wallet vendor set is `[DECIDE §14.1]`.
+6. **All fund-moving transactions are user-signed in the browser.** The backend never holds keys, never signs, and exposes no endpoint that could move funds. Server writes are limited to the App's own state (sessions, alert rules, notification log, analytics).
+7. **The trust-reconciliation model of boundary §5 is implemented as stated:** chain canonical, freshness labels on indexed data, per-figure verify links into the Console, bounded and labeled divergence, automatic alarm on reconciliation failure (§12).
+8. **Amount discipline is identical to the console.** `Uint128` decimal strings parse to `BigInt` in TypeScript; Postgres stores base-unit amounts as `NUMERIC(39,0)` via Prisma `Decimal`; display conversion (nhash → HASH, bps → %) happens at render only. No floating-point on amounts anywhere, including the indexer.
+9. **Chart honesty rules carry over verbatim** from the shared dataviz method (console §11.6 is the sibling instance): NAV renders **step-after** (stepwise accrual is a fact, interpolation is a lie); APR windows under one day render "n/a" rather than absurd annualizations; diverging palettes only for genuinely signed measures; every chart offers a table view. Recharts is configured to these rules; the rules, not the library defaults, are normative.
+10. **The App carries the NUVA family brand** (§11): the design tokens, type stack (Funnel Sans / Space Grotesk display / Geist Mono), and accent treatment from `nuva-app`'s design system, adapted to this program. The console stays austere; the App is the branded surface (boundary §6; resolves §7.4 as "shared method, App re-implements tokens in the nuva idiom" — packaging a shared library remains `[DECIDE §14.8]`).
+11. **i18n from day one, English-only at launch.** The nuva route-based localization pattern (`$lang+` segments, translation namespaces, no hardcoded UI strings) is adopted wholesale so later locales are additive; the launch locale set is `en` `[DECIDE §14.9]`. Admin-gated routes are English-only (nuva convention).
+12. **Theme: Auto/Light/Dark three-way** via `next-themes`, dark default (the NUVA family register); both palettes are validated token sets per the dataviz method, not inversions.
+13. **Environments mirror the program's:** devnet / testnet / mainnet deployments, each pinned to one chain, one contract, one console origin. No in-app network switcher; the environment badge is prominent on non-mainnet (§7).
+14. **Product analytics = Mixpanel** (nuva precedent), events scoped to funnel/cohort measurement (§8.8), never wallet-linked beyond the address the user already revealed by connecting; a consent banner gates it `[DECIDE §14.10]`.
+15. **Deployment:** Docker image, ArgoCD, the team's standard pipeline (nuva precedent). Playwright e2e + Vitest unit tests gate CI; MSW mock fixtures make every page buildable offline.
+
+---
+
+## 4. Actors & Roles
+
+> **Personas ground this section.** The App is the primary surface for the **Evaluator** and **Position
+> Holder**, the consumer-economics surface for the **Validator**, and the analytics + governance-workflow
+> surface for the **Administrator** (boundary §4). The **Protocol Engineer** uses the App rarely and by
+> choice; nothing here is designed for him — his surface is the Console.
+
+- **Evaluator ("Casey") — anonymous visitor.** No wallet, no session. Sees the full public surface: education, performance history, security posture, exit explainer, market context. Their only CTA is "Connect wallet to stake." Success is comprehension and conversion (personas §5).
+- **Position Holder ("Priya") — connected wallet.** The core transacting user: deposits, monitors her position and effective yield, compares exit paths, redeems, exports history, configures alerts. Roles are additive (register F1): if her address also operates a validator or sits on the admin policy, those surfaces compose onto her session rather than replacing it.
+- **Validator operator ("Owen/Pat") — connected wallet matching a `ValidatorStatus.operator`.** Reads his program economics (delegation, earnings, fees owed, standing, eligibility headroom, peer rank) in consumer form, and participates in governance votes where granted (register B2). **Chain-ops writes (enroll, unregister, pay commission/TIP, purge) stay in the Console** (boundary §4); every obligation shown in the App carries a deep-link to the Console page where it is acted on.
+- **Administrator ("Grace") — connected wallet that is a member of the `x/group` admin policy.** Uses the governance center (proposals, tallies, votes, execution) and the cohort-analytics dashboard. Privileged *program* actions (config, halt, pause) remain Console surfaces; the App's governance center handles the proposal/vote workflow (§8.7, `[DECIDE §14.6]`).
+- **The backend itself** is an actor with read-only chain access and no signing capability — worth stating because it is the one new trust surface the two-application split introduces (§12).
+
+| Role | Detected by | App write surface |
+|------|-------------|-------------------|
+| Anonymous | no session | none (public reads) |
+| Holder | wallet session | `SwapIn` / `SwapOut` (self-signed), alert rules, email opt-in, history export |
+| Operator | session address = a `ValidatorStatus.operator` | holder surface + governance vote signing (if a group member) |
+| Admin | session address ∈ admin `x/group` policy members (live chain read) | operator surface + proposal create/vote/execute signing + analytics access |
+
+Role detection is an on-chain fact re-checked server-side per session refresh — the App stores no role list (same principle as console §3.4). Group membership comes from the whitelisted `x/group` queries (contract §12.1).
+
+---
+
+## 5. Key Dependencies: Chain, Contract, and Off-Chain Feeds
+
+The App consumes four data planes. The first two are shared with the console; the last two are App-only and are why the App exists as a separate architecture.
+
+### 5.1 Live chain reads (canonical plane)
+
+Identical query surface to console §5.1–§5.2, executed **server-side** by a typed LCD client (the `nuva-app` `vault-client.ts` pattern: plain REST fetch, proto-shaped TypeScript types, no client-side chain access needed for reads):
+
+| Data | Source | App use |
+|------|--------|---------|
+| `Config {}`, `EpochStatus {}`, `Validators {}`, `JailReports {}`, `EpochSnapshot {}`, `Apr {}` | contract smart queries | headline metrics, validator surfaces, incident detection, guard context for flows |
+| Vault account, NAV inputs (`total_vault_value`, `total_shares`), paused state, `withdrawal_delay_seconds`, principal balances | `GET /vault/v1/vaults/{addr}` (route verified on devnet, console §14.2) | NAV, deposit/redeem previews, paused banners |
+| Pending swap-out queue (paginated) + per-request estimates | vault queries | the user's redemption tracker, queue position, funded state |
+| Delegations, unbonding, validator monikers/status | `cosmos.staking.v1beta1` | deployment split, validator pages |
+| `x/group` group/policy/proposal/vote/tally queries | `cosmos.group.v1` | governance center (§8.7) |
+| Latest block height/time | LCD node info | freshness labels, indexer lag measurement |
+
+These live reads are short-TTL cached in-process (per query, seconds not minutes) and are the **canonical plane**: pages that show a material number prefer the live value and fall back to the indexed value *with a stale label* when the node is unreachable — never silently (§12).
+
+### 5.2 Indexed history (durable plane)
+
+The chain retains only the most recent `EpochSnapshot` (contract §9.10) and no per-user history at all. The indexer (§9.2) ingests, per environment:
+
+- **Epoch history:** every `RunEpoch` transaction's snapshot/APR events → the canonical `epoch_snapshots` table. This is the durable ledger the boundary doc assigns to the App (boundary §3 "durable epoch trend history"), superseding the console's best-effort per-browser ledger for anything longitudinal.
+- **User flows:** vault `SwapIn`/`SwapOut` events, share-denom bank transfers, redemption enqueue/expedite/payout/refund events → `transactions` and `redemption_requests`.
+- **Validator lifecycle:** enrollment/unregistration, per-epoch eligibility, uptime, TIP, commission accrual/payment, jail reports and purges → `validator_epochs` samples for churn/history.
+- **Program state changes:** halt toggles, vault pause/unpause, config updates, write-downs → `incidents` candidates (§9.6).
+
+### 5.3 Cross-chain market data (App-only plane)
+
+- **DEX price & depth:** the nvHASH/(paired asset) Uniswap pool on **Base** (and Ethereum if deployed) read via `viem` against configured RPC endpoints — pool address, fee tier, and pair denomination from the NUVA bridge deployment `[VERIFY §14.3]`. Sampled on a short cadence into `market_samples`; the App derives spot price, premium/discount to NAV, and depth-at-slippage bands. This is exactly the data the Provenance-only console structurally cannot have (register A3).
+- **Bridge state (display-only in v1):** local vs remote share split via the vault's bridge accounting, plus destination-chain supply read via `viem`, so the market page can say how much nvHASH lives where. The transit UX itself is `[DECIDE §14.4]` — it depends on the NUVA Labs bridge deliverable (contract §11.5).
+
+### 5.4 Static trust content
+
+Audit reports (firm, scope, date, report links, covered commit/code-hash), program documentation, and the mechanism explainer are **build-reviewed content** (MDX/config in the repo, shipped with the App), not database rows — they change by pull request, which is the right auditability for trust claims (register C1). The displayed code-hash claim carries a verify link to the Console's deployed-build check so the "audited build is the live build" assertion is provable, not asserted.
+
+---
+
+## 6. Architecture Overview
+
+```
+                      Browser
+   ┌────────────────────────────────────────────────┐
+   │  React Router 7 app (SSR-hydrated)             │
+   │  public pages · portfolio · flows · governance │
+   │        │ loaders/actions        │ sign         │
+   └────────┼────────────────────────┼──────────────┘
+            │ HTTPS                  ▼
+            │              ┌──────────────────┐
+            │              │ Wallet            │
+            │              │ (WalletConnect v2)│──── broadcast ──┐
+            ▼              └──────────────────┘                  │
+   ┌─────────────────────────────────────────────┐               │
+   │  App server (React Router 7 / Node)          │               │
+   │  routes → services → models (3-layer)        │               ▼
+   │  ├─ live LCD client (canonical reads) ───────┼──▶ ┌──────────────────┐
+   │  ├─ reconciler (indexed vs chain, alarms)    │    │ Provenance node   │
+   │  ├─ notifier (alert rules → email/push)      │    │ (LCD/RPC)         │
+   │  └─ API  /api/v1/*  (JSON, versioned)        │    └──────────────────┘
+   └───────────────┬─────────────────────────────┘               ▲
+                   │ Prisma                                       │
+   ┌───────────────▼─────────────┐   ┌────────────────────────┐  │
+   │  PostgreSQL                  │   │ Indexer workers         │──┘
+   │  users/sessions/alerts       │◀──│ block & event ingestion │
+   │  transactions/positions      │   │ cursors in              │
+   │  epoch_snapshots/validators  │   │ indexer_checkpoints     │
+   │  incidents/market_samples    │   └───────────┬────────────┘
+   │  gov cache/notifications     │               │ viem (RPC)
+   └──────────────────────────────┘   ┌───────────▼────────────┐
+                                      │ Base / Ethereum RPC     │
+   "Verify on chain" deep-links ────▶ │ (Uniswap pool, bridge   │
+      nvHASH Console (per env)        │  supply — read-only)    │
+                                      └─────────────────────────┘
+```
+
+**Component summary:**
+
+- **App server:** one deployable (nuva pattern) — SSR UI, JSON API under `app/routes/api+/v1+/`, services, models. Loaders call services; services orchestrate models, the LCD client, and the market readers; models are the sole Prisma importers.
+- **Indexer workers:** long-running loops in the same codebase (separate process/container per stream), each with a durable cursor: `chain-events` (contract + vault + relevant module events by height), `epoch-history` (RunEpoch tx scan + backfill), `validator-sampler` (periodic `Validators {}` snapshot), `market-sampler` (DEX pool reads). Idempotent upserts keyed by (txhash, event index) so replays are safe.
+- **Reconciler:** a scheduled service comparing indexed aggregates against live chain reads (NAV, total shares, queue length, epoch index); divergence beyond tolerance raises an `incident` and flips the affected surfaces to their live-read/stale-label mode (§12).
+- **Notifier:** evaluates alert rules on indexer ticks; delivers via email (provider `[DECIDE §14.7]`) and web push. All notifications are also readable in-app, so delivery channels are enhancement, not dependency.
+- **Wallet layer:** WalletConnect v2 session in the browser; message construction and decoded preview client-side; the server supplies read-only context (estimates, guard state) but never touches the signing path.
+
+---
+
+## 7. Application Configuration (concrete values)
+
+Per-environment server config (env vars via the nuva `config.ts` pattern) plus a client-safe subset serialized into the root loader:
+
+| Parameter | Value (mainnet profile) | Notes |
+|-----------|------------------------|-------|
+| `CHAIN_ID` | `pio-mainnet-1` | Devnet/testnet profiles substitute theirs; rendered in the environment badge. |
+| `LCD_URL` | program-operated node | Server-side reads; the browser never needs LCD CORS. |
+| `CONTRACT_ADDRESS` / `VAULT_ADDRESS` | deployed addresses | Vault address cross-checked against `Config {}` at boot; mismatch fails startup. |
+| `CONSOLE_URL` | the same-environment Console origin | Verify-link base (§12.2). One console per environment; links never cross environments. |
+| `DATABASE_URL` | PostgreSQL | Indexer + app state. |
+| `BASE_RPC_URL` / `ETH_RPC_URL` | EVM read endpoints | Market + bridge-supply sampling (§5.3). |
+| `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
+| `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. |
+| `EMAIL_PROVIDER_*` | — | Notifier credentials `[DECIDE §14.7]`. |
+| `MIXPANEL_TOKEN` | — | Product analytics, consent-gated `[DECIDE §14.10]`. |
+| denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
+| `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
+| `RECONCILE_TOLERANCE` / cadence | tolerance per metric; ~1 min cadence | §12 reconciler thresholds. |
+| `APP_ENV` | `development` \| `staging` \| `production` | nuva convention; drives badge + Mixpanel env tag. |
+
+---
+
+## 8. Information Architecture & Pages
+
+### 8.0 Site map & global chrome
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ nvHASH  Learn · Stake · Portfolio · Market · Validators · Governance│  top nav
+│                          [env badge] [alerts 🔔] [theme] [wallet]   │
+├────────────────────────────────────────────────────────────────────┤
+│ ⚠ banner slot: VAULT PAUSED / PROGRAM HALTED / DATA DEGRADED        │  (only when true)
+├────────────────────────────────────────────────────────────────────┤
+│                            page content                             │
+├────────────────────────────────────────────────────────────────────┤
+│ footer: chain id · indexed to block N (Ns ago) · docs · console ↗   │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+- **Public-first.** Learn, Market, Validators, and the program-history views render fully with no wallet — the Evaluator's entire journey is anonymous. Portfolio and Governance prompt connection with an explanation, never a blank.
+- **Banner slot** mirrors the program's true states, computed from live reads: vault paused (with reason and the plain-language consequence "deposits, redemption payouts, and new redemption requests are on hold"), contract halted, and **data degraded** (indexer lagging or reconciler alarm — the App's own honesty banner, §12).
+- **Alerts bell** shows unread notifications for the connected address; anonymous users see the alerting feature advertised, not the bell.
+- **Environment badge** is quiet on mainnet, loud (warning-tinted, labeled) on testnet/devnet.
+- **Footer freshness line** is global: the indexed head vs chain head, always visible — the consumer-calm analogue of the console's freshness footer.
+- Routes live under `$lang+` per the nuva i18n pattern; paths below omit the locale segment.
+
+### 8.1 Learn (route `/`, the Evaluator's home)
+
+The comprehension → due-diligence funnel (personas §5), and the program's public face. Progressive disclosure: each section answers one Evaluator question and expands into verifiable detail.
+
+1. **Hero + mechanism explainer.** Plain-language "what this is": *deposit HASH → pooled and staked across reliable validators → rewards, validator commission, and tips flow back into the pool → your nvHASH is redeemable for more HASH over time*. An animated (reduced-motion-safe) flow diagram of exactly that pipeline. **Stepwise honesty is built into the first explanation** (register E4): "value lands in monthly steps when the epoch settles — between epochs your redemption value is flat, and that is normal," with the step chart right there.
+2. **Live proof strip.** Current NAV, net APR (with gross in the caption, window-labeled, minimum-window rule applied), TVL, participant count, program age, eligible-validator count — each with a verify link. The participant count and age come from indexed history (register C3).
+3. **Where the yield comes from.** The `Apr {}` decomposition presented for a lay reader: staking rewards + validator-paid commission + tips, minus the AUM fee — with the honest note that validators fund commission/TIP from their own pockets (contract §10.1), which is *why* the vault can out-yield self-staking. A "compare to self-staking" panel makes Dana's actual decision explicit (contract §17.2 R2 in consumer form).
+4. **Security & trust posture.** Audit panel (§5.4): firm, scope, date, report links, covered build with its verify link; the multisig governance model in one paragraph; the risk register in plain words (smart-contract risk, validator slashing and how write-downs work, bridge trust boundary for cross-chain holders — contract §12). No marketing adjectives; the console's "numbers carry the enthusiasm" rule holds here too.
+5. **Incident & slashing history.** The indexed incident feed (register C2), empty state proudly labeled ("No slash events or program incidents since launch — this list is generated from chain history, not curated").
+6. **Exit explainer.** The two paths side by side: instant DEX trade at market price (with live premium/discount) vs native redemption at protocol rate (guaranteed ≤ 60 days, typically faster — the §8.4 framing, previewed here because "can I get out?" is a pre-deposit question).
+7. **CTA:** "Connect wallet to stake" → §8.3. The funnel steps (arrive → scroll depth → due-diligence sections → connect → first deposit) are the Mixpanel conversion events §8.8 consumes.
+
+### 8.2 Portfolio (route `/portfolio`, wallet required)
+
+Priya's home. Composes additional roles additively (register F1): operator and admin cards append below the holder view when the address qualifies.
+
+- **Position summary:** nvHASH balance (on-chain live read), value in HASH at current NAV, value at market price (both labeled as what they are), accrued gain since first deposit, and cost basis — from indexed history (§9.5).
+- **Effective yield panel:** her personal realized accrual annualized (§9.5 formula) charted against the program's advertised net APR per epoch. The two lines answering "am I getting what the headline says?" is the single highest-trust feature in the App; any systematic gap is explained inline (timing of deposits vs epoch steps).
+- **Accrual tracker:** her position's HASH value over time — a step-after chart (her balance × NAV history), with deposit/redeem markers.
+- **Active redemptions:** each pending `SwapOut` with escrowed shares, current estimate, the maturity countdown, funded state, and the expedite explanation; links to §8.4's tracker detail.
+- **Transaction history:** every indexed event for her address (deposits, redemptions, transfers in/out, refunds), each row with amounts, NAV at the time, txhash → explorer, and verify link. **Exportable as CSV** (register D2) with a tax-friendly column set `[DECIDE §14.11]`.
+- **Alert settings:** per-address rules — NAV step posted, redemption matured/expedited/refunded, market premium/discount beyond X bps, vault paused/halted, validator-set incident — each deliverable in-app always, plus email/push when opted in (register D1).
+
+### 8.3 Stake (route `/stake`, wallet required to submit)
+
+The guided `SwapIn` flow (§10.3 for the transaction mechanics):
+
+- **Educate inline:** one screen states what will happen — HASH transfers into the vault, nvHASH mints at the current rate, value accrues at monthly epochs, exit paths exist — with the *next expected epoch step* date (from `EpochStatus.last_run + min_run_interval`).
+- **Amount entry** with wallet balance, vault min/max limits (vault config), and a live preview: expected nvHASH out at current NAV `[VERIFY §14.2: estimate query]`, plus the plain sentence "your nvHASH amount stays fixed; its redemption value grows."
+- **Vesting-HASH honesty:** unvested HASH cannot be deposited (contract §13); if the connected account holds locked HASH the flow says so rather than letting the transaction fail cryptically.
+- **Preview → sign → track** per §10.2, then land on Portfolio with the new position and a first-timer explainer of the accrual model.
+
+### 8.4 Redeem & Exit (route `/exit`)
+
+The most communication-critical surface in the program (contract §17.1 "the 60-day headline number needs communication"). It opens with the **exit-path comparison**, not a form:
+
+| | DEX trade (instant) | Native redemption (protocol rate) |
+|---|---|---|
+| You get | market price − slippage (live quote from indexed pool state) | full NAV at **maturity** (re-priced at payout, contract §8) |
+| Timing | now (on Base/Ethereum, after bridging) | **guaranteed ≤ 60 days**; *typically* released early — the indexed median / p90 time-to-payout for recent epochs shown beside the guarantee |
+| Risks | premium/discount, pool depth, bridge transit | none beyond the wait; unfunded maturity refunds shares (never a loss) |
+
+- **The guaranteed-vs-typical framing is normative:** the 60-day ceiling is always the number in the promise position; the historical expedite distribution (§9.5) is always labeled "typical, not guaranteed." Reviewers should reject any layout that visually promotes the typical number into a promise.
+- **Native redemption flow:** shares amount → payout estimate with the maturity re-pricing explained ("estimates rise if an epoch lands before payout") → preview/sign/track (§10.3) → the **redemption tracker**: queue position, live funded state, countdown, and what "expedited" means; subscribes the user to the matured/expedited/refunded alerts by default.
+- **DEX path (v1):** honest quote + premium/discount + depth bands from `market_samples`, then a **hand-off**: bridging UX per `[DECIDE §14.4]`, and the destination pool link. In-app swap execution is explicitly out of v1 scope.
+- **Direct-vault redemptions appear here too** — the tracker reads the on-chain queue, so a redemption made with any tool shows up (same property the contract guarantees, contract §8).
+
+### 8.5 Market (route `/market`)
+
+The secondary-market context page (register A3): NAV vs market price over time (two series, clearly named — the accrual step line vs the market line); current premium/discount with an explainer of *why* a spread exists (stepwise NAV creates a pre-/post-epoch seam — contract §17.1 — plus liquidity and bridge-transit costs); pool depth and where nvHASH supply lives (local vs bridged, §5.3). Alert hooks for spread thresholds. Every market figure is labeled with its venue and sample time — market data is the one plane with **no** chain-canonical version, so its freshness labeling works twice as hard.
+
+### 8.6 Validators (route `/validators`, public; `/validators/mine` for operators)
+
+- **Public view:** the validator set as consumer-legible cards/table — moniker, eligibility, uptime vs threshold, program delegation, tenure — plus set-health aggregates (eligible count trend, churn from indexed history). Framing: "who is staking your HASH and are they reliable," not the console's operational table. Verify links land on the Console validators page.
+- **Operator view ("my validator"):** the participation economics in consumer form — current + historical program delegation, rewards earned on it, commission owed (with the one-epoch grace state made plain), TIP paid vs rank effect, eligibility headroom on each threshold, and net-benefit-after-fees (personas §7's core question). Historical earnings and peer-rank context come from `validator_epochs` — history the console cannot show. **Every action lands in the Console** (pay commission/TIP, enroll/unregister, purge) via deep-links with the reason stated ("chain-ops actions are performed in the verification console"); the App's job is that Owen never *discovers* an obligation late (arrears alert rule is on by default for operator sessions).
+
+### 8.7 Governance (route `/governance`, public read; member write)
+
+The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 governance split; the primary-home question is `[DECIDE §14.6]`):
+
+- **Proposal list & detail:** live + indexed proposals for the program's group policies — decoded messages (human-readable summary above the exact JSON), proposer, submitted/expiry times, tally vs threshold, per-member vote status (who, how, when), and outcome history (durable, indexed — the audit trail personas §8 requires).
+- **Member actions:** cast vote and execute-when-passed, signed by the connected wallet (`MsgVote`, `MsgExec` on `cosmos.group.v1`), with the §10.2 preview/sign/track lifecycle and the decoded payload shown before signing (Grace's "what exactly does this do" question).
+- **Proposal creation:** v1 scopes composition to **selecting from decoded templates of the program's admin actions** (config change with a diff view, halt/resume, pause/unpause, bridge config) rather than free-form message building — free-form compose stays a Console strength. `[DECIDE §14.6]`
+- **Validator votes:** if register B2 resolves toward validator-elected admins, the voting surface is this page; the spec takes no position on B2 itself.
+
+### 8.8 Admin Analytics (route `/admin`, admin only)
+
+The cohort-satisfaction dashboard the no-backend console cannot render (register A4), fed by the indexer and Mixpanel:
+
+- **Program health header:** TVL trend, net APR trend, depositor count, net deposit flow per epoch — indexed, with verify links for the current values.
+- **Holder cohort:** adoption (new depositors/epoch), retention (cohort curves by first-deposit epoch), redemption mix (expedited vs matured vs refunded), TVL concentration.
+- **Validator cohort:** enrollment/churn timeline, eligibility trend, arrears frequency, TIP participation, purge events.
+- **Evaluator funnel:** Learn-page conversion (visit → due-diligence depth → connect → first deposit) from product analytics.
+- **Upkeep timeliness:** time-lag distributions for the permissionless cranks (epoch run after eligibility, capture-signal cadence gaps, service-redemption latency) — indexed from crank txs; this is the personas' "upkeep-action lag" signal and doubles as keeper monitoring.
+- **Incident feed:** §9.6 incidents with severity, acknowledgment, and durable history.
+- Support/complaint signals are out of scope for v1 (manual/off-tool) and said so explicitly.
+
+---
+
+## 9. Backend & Data Layer
+
+### 9.1 Prisma schema (multi-file, one model per file)
+
+Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry the ingestion height/txhash where applicable):
+
+- `users` (wallet address PK, first/last seen, optional verified email, locale), `sessions` (nonce-signature auth, expiry).
+- `transactions` (txhash + msg index PK; address; kind: `swap_in | swap_out_request | redemption_payout | redemption_refund | transfer_in | transfer_out`; amounts in shares and nhash; NAV at height; block time).
+- `redemption_requests` (request id; owner; shares; estimates over time; enqueued/expedited/matured/refunded timestamps; terminal status) — the §9.5 time-to-payout source.
+- `epoch_snapshots` (epoch_index PK; the full contract §9.10 decomposition; gross/net APR bps; txhash; height; observed_at) — canonical program history, backfilled from genesis-of-contract (§9.3).
+- `validator_registry` (valoper; operator; moniker; enrolled_at; unregistered_at) and `validator_epochs` (valoper × epoch; uptime bps; eligible + failing reasons; tip; commission accrued/paid/due; program delegation; jailed events).
+- `incidents` (kind; severity; opened/closed; payload; acknowledgment) — §9.6.
+- `market_samples` (venue; pool; price; depth bands; sampled_at) and `bridge_supply_samples` (chain; remote supply; sampled_at).
+- `gov_proposals` / `gov_votes` (indexed mirror of `x/group` state for history and per-member status).
+- `alert_rules`, `notifications` (rule; address; channel; payload; delivered_at; read_at).
+- `indexer_checkpoints` (stream name PK; cursor height/page; updated_at) — the nuva precedent, one row per worker stream.
+
+### 9.2 Indexer workers
+
+- **Transport:** LCD tx-search by height range and event filters (contract address for wasm events; vault module events; group module events), paging to exhaustion per block window; RPC websocket subscription is a latency optimization, not a correctness dependency `[DECIDE §14.5]`.
+- **Idempotency:** all writes are upserts keyed by (txhash, event index) or natural keys; a worker can be restarted or re-pointed at height 0 and converge to the same state.
+- **Ordering & finality:** workers trail the head by a small confirmation depth (~block-time-safe; Provenance ~5 s blocks, instant finality — depth 0 acceptable `[VERIFY §14.5]`); the cursor advances only after the full block window commits in one DB transaction.
+- **Event shapes are contract-verified fixtures:** every event the indexer decodes (`RunEpoch` snapshot attributes, vault swap events, expedite events) is captured from devnet drills into MSW/unit fixtures, so a contract event change breaks tests, not production `[VERIFY §14.2]`.
+- **Lag accounting:** each stream exposes `indexed_height` vs `chain_height`; the max lag drives the footer freshness line and the DATA DEGRADED banner threshold.
+
+### 9.3 Backfill
+
+On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3).
+
+### 9.4 API surface
+
+Versioned JSON under `/api/v1/` (nuva `api+/v1+` route convention): public program endpoints (`/metrics`, `/epochs`, `/validators`, `/market`, `/incidents`), session-scoped personal endpoints (`/portfolio`, `/transactions?format=csv`, `/alerts`), and admin analytics endpoints. Every response envelope carries `{ data, meta: { chain_height, indexed_height, generated_at, source: "live" | "indexed" } }` — the freshness contract is in the API shape, not just the UI.
+
+### 9.5 Derived metrics (formulas)
+
+All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.
+
+1. **Cost basis & accrued gain (per address):** cost basis = Σ(deposit nhash) − Σ(redemption payout nhash allocated FIFO against deposits) `[DECIDE §14.11: FIFO vs average-cost for the export]`; accrued gain = current shares × current NAV − remaining cost basis, plus realized gains on completed redemptions.
+2. **Effective yield (per address):** over window W, gain = Σ per-interval (shares held × ΔNAV at each epoch step inside W); effective APR = gain ÷ time-weighted average invested value, annualized. Rendered per epoch beside the program's `net_apr_bps` for the same window. Sub-day windows follow the shared minimum-window rule (render "n/a").
+3. **Typical time-to-payout:** per recent-epoch cohort of terminal `redemption_requests`, the median and p90 of (`expedited_at ?? matured_at`) − `enqueued_at`. Displayed only with ≥ a minimum sample count `[DECIDE §14.12]`; below it, the flow shows the guarantee alone — a small-sample "typical" would be a lie with extra steps.
+4. **Premium/discount:** `(market_price − NAV) / NAV` in bps, computed at each market sample against the NAV current at that sample's time.
+5. **Upkeep lag:** for each crank kind, actual execution time − earliest-eligible time (from config intervals + prior state), distribution per epoch.
+6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run.
+
+### 9.6 Incident derivation
+
+Incidents are **computed from indexed facts, never hand-entered**: contract halted/resumed; vault paused/unpaused (with reason); slash write-down > 0 in an epoch; redemption refund observed (unfunded maturity — contract §8's "failure mode is a refund"); jail report opened/purged; epoch overdue (now − last_run > interval + slack); reconciler divergence; indexer lag beyond threshold. Each maps to a severity aligned with the console's status semantics (console §11.2) and feeds banners, the Learn-page history (C2), holder/admin alerts (D1), and the admin feed (A4). Closure is likewise computed (the condition clearing), with optional admin acknowledgment for the record.
+
+---
+
+## 10. Control Surfaces & Transaction Flows
+
+### 10.1 Wallet integration
+
+- **WalletConnect v2** is the confirmed interface across roles (personas §2): pairing, session, and `sign & broadcast` for Provenance messages. Wallet vendor set (Figure/Provenance wallets; extension fallback) is `[DECIDE §14.1]`, coordinated with the console's §14.1 so both surfaces certify the same wallets.
+- The App performs **no server-side signing** of user transactions, holds no keys, and has no devnet key mode (that is a Console tool; the App's devnet build simply points WalletConnect at devnet).
+- Session auth (§3.5) uses a one-time nonce signed by the wallet; the session cookie scopes personal reads and App-state writes only.
+
+### 10.2 Transaction lifecycle (all flows)
+
+1. **Build** client-side: typed Provenance messages (vault `MsgSwapIn` / `MsgSwapOut` `[VERIFY §14.2: exact msg names/fields on the deployed vault module]`; group `MsgSubmitProposal` / `MsgVote` / `MsgExec`).
+2. **Preflight** from server-supplied context: vault not paused, amount within min/max, balance sufficient (incl. fee), vesting-lock check for deposits; disabled controls always carry the reason (the console's R1 rule adopted verbatim).
+3. **Simulate** for gas; fee = gas × gas price with adjustment `[VERIFY: reuse console §14.3 result]`.
+4. **Confirm:** consumer-worded consequence summary + the exact message JSON behind a disclosure + fee. Warning tier for redemptions ("shares escrow now; guaranteed release date D; typically sooner") and governance execution; there are no danger-tier App actions (those live in the Console).
+5. **Sign & broadcast** via the wallet; **track** inclusion; toast lifecycle (sonner) with explorer link; on success the affected live reads refresh and an indexer fast-poll reconciles the user's history within seconds (an optimistic pending row bridges the gap, clearly marked pending).
+
+### 10.3 Flow-specific rules
+
+- **SwapIn:** never enabled while the vault is paused (with the reason and the "deposits resume automatically when unpaused" note); preview shows shares at current NAV and states the mint is at the *execution-time* rate.
+- **SwapOut:** confirmation restates the three timing facts in fixed order — guaranteed ceiling, typical-experience statistic (when sample-sufficient), and the refund-not-loss failure mode. Post-submit, the tracker owns expectations; the matured/expedited alert is opt-out, not opt-in.
+- **Governance:** votes and executions show the decoded action and current tally at signing time; execution additionally simulates and surfaces would-fail states before the user signs.
+- **Everything else is a link, not a transaction:** validator chain-ops and admin program-ops deep-link to the Console (§8.6, §4). The App never half-implements a privileged write surface.
+
+### 10.4 Notifications
+
+Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notifications` and fan out per channel opt-in. Email content is minimal (event + link into the App); no amounts in subject lines. Push uses standard Web Push, per-browser opt-in. Every alert kind has an in-app rendering so users without external channels lose nothing but latency.
+
+---
+
+## 11. Design Language
+
+The App is the **branded, consumer-register member of the family**; the boundary doc assigned the calm consumer surface here so the console could stay austere (console §1, boundary §6). Two normative sources compose:
+
+1. **The nuva design system** (`Labs/nuva-app` `app.css` tokens, `app/lib/design-system/tokens.ts`, shadcn/ui `new-york` components) supplies the idiom: Tailwind 4 token definitions, component primitives, radii/spacing/type scales, and the brand register — **Funnel Sans** body, **Space Grotesk** display, **Geist Mono** for addresses/hashes/JSON, the NUVA mint-green accent treatment for primary CTAs, dark default with a first-class light theme. Program-specific token values (this product's accent tuning, status set) are established in a design pass `[DECIDE §14.8]` and re-validated with the dataviz palette validator for both themes.
+2. **The shared dataviz method** (the same references the console §11.6 instantiates) governs every chart regardless of register: NAV and position-value series are **step-after** (interpolation of stepwise accrual is a lie); signed measures (net deposits, premium/discount) use the diverging pair, unsigned use sequential; status colors are reserved for state and always ship icon + label; single series are titled not legended; every chart offers a table view; sub-3:1 contrast slots carry direct labels. Recharts renders; the method decides.
+
+**Register rules (the consumer deltas from the console):**
+
+- **Explanation is a first-class element.** Every economic figure a consumer sees has one plain-language sentence available at its point of use (caption or tooltip) — the App assumes *no* prior liquid-staking literacy on public pages.
+- **Calm by default, honest always.** Larger type, more whitespace, fewer simultaneous numbers than the console — but the same refusal to hide state: freshness, paused/halted banners, and "typical vs guaranteed" labeling are never sacrificed to calm.
+- **Verify links are quiet but omnipresent** on material numbers — an affordance, not a shout (§12.2).
+- **Voice:** plain, concrete, no exclamation points, no yield hype; jargon that the console permits ("crank", "drain order") is translated or avoided on public pages. Numbers still carry the enthusiasm.
+- **Motion:** 150–200 ms ease-out transitions, one optional explainer animation on Learn; `prefers-reduced-motion` disables all. Full keyboard operability and focus rings per the nuva/shadcn baseline; WCAG AA on both themes.
+
+---
+
+## 12. Trust & Security Model
+
+This section encodes boundary §5 as build requirements.
+
+### 12.1 Reconciliation & freshness (the App's honesty surface)
+
+1. **Chain canonical.** For NAV, APR, TVV, shares, redemption status, validator state, and governance tallies, the live-read plane (§5.1) is authoritative in every screen where it is available; indexed values serve history and aggregates.
+2. **Freshness labels are structural.** Every API envelope and every indexer-derived figure carries source + indexed height/time (§9.4); the UI renders staleness (dim + badge) rather than blanking, exactly the console's stale rule.
+3. **The reconciler is the alarm.** Divergence between indexed and live beyond per-metric tolerance opens an incident, flips affected surfaces to live-read-only with a "history temporarily degraded" note, and notifies admins. The App must never present a chain-contradicting number as current — this is the boundary doc's hard rule, and it is enforced by machinery, not review.
+4. **Market data is labeled as unprovable.** DEX figures carry venue + sample time and no verify link (there is nothing on Provenance to verify them against); the UI vocabulary keeps "market price" and "redemption value" visually and verbally distinct everywhere they co-occur.
+
+### 12.2 Verify-on-chain deep links (boundary §7.3 resolved)
+
+- Link shape: `{CONSOLE_URL}/{route}` with the console's own view addressing; `CONSOLE_URL` is per-environment config, so **a link can never cross environments** — the App refuses to render verify links if its configured console profile's chain id mismatches its own (checked at boot).
+- Figure → console view mapping: NAV/APR/TVV → Overview; epoch decomposition → Epoch & Ops; a validator → Validators; a redemption → Redemptions; governance/config assertions → the relevant console panel. Entity-level anchors (e.g., a specific request id) require a small console addition — recorded as a console follow-on in §14.13, not silently assumed.
+
+### 12.3 Application security
+
+- **No custody, no server signing, no fund-moving endpoints** (§10.1). A full backend compromise can lie (until reconciliation alarms) and leak App-state data; it cannot move funds. Stating this bound explicitly is the point of the two-surface split.
+- **Personal data minimization:** wallet address (public by nature), optional email (verified, deletable, used only for notifications), locale/theme, alert rules. No KYC data exists to protect (personas §2). Data deletion on request removes the user row and rules; indexed *chain* history is public information and remains.
+- **Sessions:** nonce-signature login, `HttpOnly`/`SameSite` cookies, address-scoped authorization on every personal endpoint; admin endpoints re-verify group membership on-chain per session refresh, not per cached role.
+- **API hygiene:** rate limiting on public endpoints, zod-validated inputs at every route boundary (nuva convention), winston structured logging in services, no secrets in the client bundle (server config never serializes past the §7 client-safe subset).
+- **Analytics consent-gated;** analytics never receives amounts or balances — funnel events and page classes only `[DECIDE §14.10]`.
+- **Supply chain:** the team's standard dependency policy; the transacting pages must function with third-party scripts blocked (analytics is additive).
+
+---
+
+## 13. Constraints Summary
+
+Protocol and platform facts this design must respect (chain constraints identical to console §13 unless noted):
+
+- **Amount scales and types:** decimal-string `Uint128` → `BigInt`/`Decimal(39,0)`; bps rates; exponent 9/15 denominations; signed `net_deposits`.
+- **Stepwise NAV** (contract §5): no interpolated NAV anywhere — charts, previews, or notifications; between-epoch flatness is a displayed fact, not smoothed away.
+- **Single-snapshot retention on chain** (contract §9.10): program history exists only because the App indexes it; the indexer is therefore availability-critical for history but never for canonical current values (live reads survive an indexer outage).
+- **Redemption facts** (contract §8): the 60-day ceiling is the only promise; expedites are marker-liquidity-gated UX; maturity re-prices at payout NAV; unfunded maturity refunds shares. The App's copy must be generatable from these four facts alone.
+- **Vault pause blocks user swaps and payouts** — the paused banner explains both, and both flows disable with the reason.
+- **Vesting HASH cannot be deposited** (contract §13) — preflight, not error message.
+- **Governance is `x/group`** (contract §12.1): proposals/votes/execution follow group-module semantics; the App renders and signs, never emulates.
+- **Bridge accounting cannot move NAV** (contract §11.5): cross-chain supply display never implies NAV risk from bridging; the bridge trust note (contract §12.2) is the Learn-page risk text's source.
+- **DEX liquidity lives on Base/Ethereum** — market data is cross-chain by construction, read-only via `viem`, and unprovable from Provenance (§12.1.4).
+- **~5 s blocks, instant finality** size indexer cadence and the freshness thresholds; users pay gas on every signed action (no fee-grant in v1).
+
+---
+
+## 14. Open Decisions Before Build
+
+1. **[DECIDE] Wallet vendor set** for WalletConnect v2 (Figure mobile/extension, Keplr/Leap with Provenance config) — coordinate with console §14.1 so the program certifies one wallet story.
+2. **[VERIFY] Vault user-message surface:** exact `MsgSwapIn`/`MsgSwapOut` names/fields on the deployed module, swap estimate query shapes, and the event attributes for swap/expedite/payout/refund the indexer decodes (§9.2). Capture as devnet fixtures.
+3. **[VERIFY] DEX/bridge deployment facts:** Uniswap pool addresses, pair asset, fee tier per chain; bridged-nvHASH token contracts; NUVA bridge transit API/UX integration points.
+4. **[DECIDE] Bridge transit UX in v1:** integrate NUVA's transit flow in-app, deep-link out to a NUVA-operated bridge UI, or defer transit entirely (display-only market page). Depends on the NUVA Labs deliverable timeline (contract §15 bridge note).
+5. **[DECIDE/VERIFY] Indexer transport details:** tx-search vs RPC websocket subscription; confirmation depth on Provenance; LCD paging limits under load.
+6. **[DECIDE] Governance home & composer scope** (boundary §7.2): confirm the App-as-workflow / Console-as-composer split of §8.7, and whether template-scoped proposal creation ships in v1 or the App is vote/execute-only at launch. Interacts with register B2 (validator voting) and console §14.6.
+7. **[DECIDE] Notification channels & provider:** email provider, Web Push scope, and which alert kinds default-on per role.
+8. **[DECIDE] Design-system packaging** (boundary §7.4): extract shared tokens/dataviz validation into a package both surfaces consume, or App-local tokens validated by the same script. Plus the program-specific brand pass (accent, status set) over the nuva base.
+9. **[DECIDE] Launch locale set** (`en` assumed; `zh`/`ko` are nuva-supported precedents).
+10. **[DECIDE] Analytics consent model** and event taxonomy (what the Evaluator funnel may record pre-consent, if anything).
+11. **[DECIDE] Cost-basis method for the CSV export** (FIFO vs average cost) and the exact tax-friendly column set — a statement of fact requirements, not tax advice.
+12. **[DECIDE] Minimum sample threshold** for displaying "typical time-to-payout" (§9.5.3), and its cold-start behavior in the first epochs after launch.
+13. **[FOLLOW-ON, console] Entity-level deep-link anchors** (request id, valoper, epoch index) so App verify links can land on the exact row, not just the page — a small console addition to schedule with console §14.
+14. **[DECIDE] Product name & domain** (boundary §7.1): this spec uses the working title "nvHASH App"; naming, domain, and whether devnet/testnet deployments are public are launch decisions.
+
+---
+
+## 15. Build & Verification Plan (when greenlit)
+
+1. **Scaffold** from the nuva reference shape: React Router 7 + TS + Vite + Tailwind 4 + shadcn; `$lang+` routing; Prisma multi-file schema; env config; CI with typecheck, Vitest, Playwright, and the palette validator.
+2. **Chain clients + fixtures:** typed LCD client (contract + vault + staking + group), devnet fixture capture for every query/event shape (§14.2), MSW mocks so pages build offline.
+3. **Indexer:** checkpointed workers + backfill against the repository's devnet drills (`contracts/drills/p2p-drill.sh` et al. as state generators — the same generators the console plan uses); reconciler + incident derivation; prove idempotent replay.
+4. **Public read surfaces:** Learn → Market → Validators → program history, fully anonymous, freshness labels and verify links from the start.
+5. **Wallet + sessions:** WalletConnect v2 pairing, nonce-signature sessions, role detection.
+6. **Transacting flows on devnet:** Stake, then Redeem + tracker, exercised against full drill cycles including an expedite and an unfunded-maturity refund so every terminal state has been rendered from real chain history, not synthetic data.
+7. **Portfolio + alerts + notifier;** CSV export; effective-yield math property-tested against simulated deposit/redeem sequences.
+8. **Governance center;** admin analytics; Mixpanel funnel wiring behind consent.
+9. **Hardening pass:** reconciler alarm drills (feed the indexer a wrong row, watch the surface degrade honestly), accessibility walk on both themes, load test the public API.
+10. **Testnet pilot** alongside the console (the verify-link contract is only testable with both deployed), then **mainnet** behind the §14 closures and the program's launch checklist.
+
+---
+
+## 16. Stakeholder Personas
+
+> The canonical personas are in [`dashboard-personas.md`](./dashboard-personas.md);
+> the App is the primary surface for the consumer side of each (boundary §4). "For / Against" below is
+> deliberately honest about what this architecture does and does not give each of them.
+
+### 16.1 Evaluator: "Casey" (primary)
+*Deciding whether to trust the program with capital.*
+
+- **For:** a comprehension-first home that answers mechanism, yield source, security, maturity, and exit paths without a wallet; live figures with proof links; an incident/slash history generated from chain data rather than curated; the stepwise-accrual honesty up front rather than discovered later.
+- **Against:** some trust content (audit panel) is asserted by the operator, however well-linked — the skeptical tail must still follow the verify links to the Console; DEX depth for the "instant exit" story depends on real pool liquidity the program cannot promise.
+
+### 16.2 Position Holder: "Priya" (primary)
+*Managing a live position.*
+
+- **For:** position, accrued gains, and *her own* effective yield against the advertised rate; guided deposit/redeem with the guaranteed-vs-typical framing and a live redemption tracker; durable exportable history; alerts that tell her when something matters instead of requiring vigil.
+- **Against:** the 60-day ceiling is unchanged — the App communicates it well but cannot shorten it; DEX exit requires bridging in v1 (§14.4); indexed personal history is trustworthy but its authority is the chain, and on reconciler alarm her history view degrades to live-only until repaired.
+
+### 16.3 Validator: "Owen"
+*Reading the economics of participation.*
+
+- **For:** net-benefit-after-fees answered directly with history the console cannot hold; standing and arrears made loud with default-on alerts; peer context; governance votes (if granted) in a workflow, not raw messages.
+- **Against:** every chain action still requires the hop to the Console — deliberate, but a two-tool workflow; historical earnings attribution is the indexer's best reconstruction of contract events, labeled but not chain-provable at row level.
+
+### 16.4 Administrator: "Grace"
+*Steering the program.*
+
+- **For:** the cohort dashboard that answers "is each cohort satisfied" with real longitudinal data; a computed incident feed with durable history; the full proposal/tally/vote/execute workflow with decoded payloads and an audit trail.
+- **Against:** privileged program operations remain Console surfaces (the App won't half-implement them); complaint/support signals are out of scope in v1; analytics quality depends on consented instrumentation she does not control.
+
+### 16.5 Protocol Engineer: "Theo" (secondary by design)
+
+- **For:** the indexed program history and upkeep-lag distributions are genuinely useful telemetry even for him; every material number links back to his surface.
+- **Against:** nothing here is provable in the App itself, and that is intentional — his tool is the Console; the App's `meta.source` envelope at least tells him instantly which plane a number came from.
+
+---
+
+## 17. Cross-Persona Review: Points to Consider & Recommended Refinements
+
+### 17.1 Points to consider
+
+- **The App's honesty machinery is its product, exactly as the console's is.** Freshness envelopes, reconciler alarms, guaranteed-vs-typical framing, and market-vs-NAV vocabulary discipline are what let a stateful consumer surface coexist with a zero-trust verifier without corroding it. Treat cuts here as scope cuts to the trust architecture, not polish.
+- **The typical-time-to-payout statistic is powerful and dangerous.** It is the single best answer to the program's hardest UX problem (the 60-day headline) and the easiest number to accidentally promote into a promise. The §8.4 layout rule and §14.12 sample threshold exist for that reason; hold the line in review.
+- **Cold start is a real state, not an edge case.** At launch there are no epochs, no redemption statistics, no incident history, and thin market samples. Every §9.5 metric specifies its below-threshold rendering; the Learn page must be persuasive on mechanism + posture alone before performance history exists.
+- **The two-tool validator workflow (App reads, Console writes) should be measured, not assumed fine.** If operators live in the App and miss obligations because acting requires the hop, revisit whether commission/TIP payment graduates to the App — the boundary doc permits it (payments are chain-native), it is a scope choice, not an architecture change.
+- **The indexer is the App's availability soft spot.** Design reviews should keep the property that canonical current values survive an indexer outage (live reads) and only *history* degrades; that property is what makes the indexer an enhancement to trust rather than a dependency of it.
+
+### 17.2 Recommended refinements (high-confidence, material)
+
+- **R1: Ship the reconciler and freshness envelope in the first read-only milestone,** not with the transacting flows — retrofitting honesty machinery after pages exist is how silent-authority drift happens. *Confidence: high.*
+- **R2: Default-on alerts for the two moments users feel abandoned** — redemption matured/expedited (holder) and arrears opened (operator) — with in-app delivery guaranteed and external channels additive. *Confidence: high.*
+- **R3: Property-test the effective-yield and cost-basis math against the contract simulation suite's deposit/redeem traces** (contract §15.3) so personal-finance numbers inherit the program's verification culture. *Confidence: high.*
+
+### 17.3 Deferred / future enhancements (post-v1)
+
+- **In-app DEX execution and integrated bridge transit** (once §14.3/§14.4 facts and the NUVA transit deliverable land).
+- **Commission/TIP payment flows for operators in the App** (per §17.1's measurement).
+- **Public program API** (the `/api/v1` surface opened to third parties with keys/quotas) — the indexer already does the work.
+- **Historical-NAV smoothing overlays for market analysis** (never for the accrual displays), and richer market analytics (pool fee APR for LPs).
+- **Locale expansion** (`zh`, `ko` per nuva precedent) and notification digest modes.
+- **Mobile wrapper** if WalletConnect mobile flows prove the demand.
+
+---
+
+## 18. References
+
+- User personas (the design check for this App): [`dashboard-personas.md`](./dashboard-personas.md), especially §5–§8; open trade-offs in the [persona-review action register](../plans/persona-review-action-register.md) — this spec closes or hosts A1, A2, A3, A4, C1, C2, C3, D1, D2, E3, E4, F1.
+- Console-vs-App division of responsibility (this spec's charter): [`../architecture/application-boundary.md`](../architecture/application-boundary.md) — §2 boundary rule, §5 trust model, §7 open items resolved here (§3, §12, §14).
+- Chain-truth counterpart: [`console-spec.md`](./console-spec.md) (v2.0-RC1) — shared glossary/scales (§2, §13), wallet coordination (§14.1), verify-link target views (§8).
+- Governing contract spec: [`liquid-staking-spec.md`](./liquid-staking-spec.md) (v1.0) — §5 accrual model, §8 redemptions, §9.10 snapshot/APR, §10 commission/TIP, §11 interface, §11.5/§12.2 bridge, §13 constraints, §17.1 communication mandates.
+- Reference application (stack, layering, indexer precedent): `Labs/nuva-app` — `ARCHITECTURE.md` (three-layer rule), `CLAUDE.md` (conventions, i18n), `package.json` (dependency set), `prisma/` (multi-file schema incl. `indexer-checkpoints`), `app/lib/vault-client.ts` (typed LCD client pattern), `app/app.css` + `app/lib/design-system/tokens.ts` (design tokens).
+- As-built contract interface: `contracts/src/msg.rs`, `contracts/src/state.rs`; JSON schema via `cargo schema` in `contracts/schema/`; devnet drills in `contracts/drills/`, dev-node tooling in `infra/devnet/`.
+- Dataviz method (chart rules shared with the console): the repository's dataviz skill references and `validate_palette.js`.
+- ProvLabs Vault module: https://github.com/ProvLabs/vault · Provenance docs: https://developer.provenance.io/ · Cosmos `x/group`: https://docs.cosmos.network/main/build/modules/group · WalletConnect v2: https://docs.walletconnect.network/ · viem: https://viem.sh/ · React Router: https://reactrouter.com/ · Prisma: https://www.prisma.io/docs
+
+---
+
+*v1.0-RC1, 2026-07-10: initial App specification per the two-application split (`../architecture/application-boundary.md` §7.1). Serves the Evaluator, Position Holder, Validator, and Administrator personas on the engineering team's `nuva-app` reference architecture; the Console remains the Protocol Engineer's chain-truth surface. Not yet certified for implementation; resolve §14 before certification.*

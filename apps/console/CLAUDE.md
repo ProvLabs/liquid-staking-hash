@@ -10,6 +10,10 @@ Internal testing/operations web console.
   nodes, unpublished contract schemas) that `apps/web/` must not.
 - Keep shared UI or client code that both apps need in a shared package rather
   than importing across app boundaries.
+- Security ([`SECURITY.md`](../../SECURITY.md)): same rules as the web app —
+  no key material outside the wallet, client bundle is public, contract is
+  the enforcement boundary. Never lie about state: the honesty-surface rules
+  (spec §17) are load-bearing for a verification tool.
 
 ## Commands
 

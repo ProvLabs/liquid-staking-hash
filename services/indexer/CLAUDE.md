@@ -9,6 +9,10 @@ Chain-event indexer feeding the query store used by `services/api/`.
 - Treat chain data as the source of truth; derived tables are rebuildable.
 - Schema migrations live with the service and must run cleanly on an empty
   database.
+- Security ([`SECURITY.md`](../../SECURITY.md)): persist only public chain
+  data plus minimal operational data — no user-identifiable information, no
+  IP-to-address linkage (including logs); treat indexed events as untrusted
+  input; never hold keys or sign.
 
 ## Commands
 
