@@ -1,0 +1,35 @@
+# Rust / CosmWasm
+target/
+artifacts/
+*.wasm
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Devnet runtime state
+infra/devnet/state/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code — local/sensitive (shared config like .claude/settings.json,
+# commands, agents, and skills remains tracked)
+.claude/settings.local.json
+.claude/*.local.json
+CLAUDE.local.md
+**/CLAUDE.local.md
+.claude/local/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Logs
+*.log
