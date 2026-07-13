@@ -1409,6 +1409,8 @@ dependencies = [
  "cw-utils",
  "cw2",
  "prost",
+ "provwasm-common",
+ "provwasm-mocks",
  "provwasm-std",
  "provwasm-test-tube",
  "schemars",
@@ -1623,6 +1625,17 @@ checksum = "861394e21e7f2f9667ff10738d057bde04f22ee8d8171162685d316b1f5023aa"
 dependencies = [
  "cosmwasm-std",
  "ed25519-zebra",
+]
+
+[[package]]
+name = "provwasm-mocks"
+version = "2.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61715347ee57e3584373c51d715e1490e7b85b3cd4e9e1378319b912b8d24bf8"
+dependencies = [
+ "cosmwasm-std",
+ "provwasm-common",
+ "serde",
 ]
 
 [[package]]

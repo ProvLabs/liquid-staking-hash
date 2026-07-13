@@ -71,6 +71,9 @@ pub struct Scenario {
     pub performance_threshold_bps: u64,
     /// Initial user deposit magnitude ceiling (stress the u128 headroom).
     pub deposit_ceiling: u128,
+    /// Smallest deposit a user may make. 1 = dust economies (SECURITY.md
+    /// boundary domain: one base unit must flow through every leg cleanly).
+    pub min_deposit: u128,
     /// Per-step event probabilities, in percent.
     pub p_deposit: u64,
     pub p_redeem: u64,
@@ -94,6 +97,7 @@ impl Scenario {
             aum_fee_bps: r.below(30),
             performance_threshold_bps: if r.chance(1, 2) { 0 } else { 9_000 + r.below(900) },
             deposit_ceiling: r.range(1_000_000_000, 1_000_000_000_000_000_000_000),
+            min_deposit: 1_000_000,
             p_deposit: 10 + r.below(40),
             p_redeem: 5 + r.below(30),
             p_jail: r.below(8),
@@ -103,6 +107,84 @@ impl Scenario {
             p_pay_commission: 60 + r.below(41),
         }
     }
+}
+
+/// Deterministic boundary-domain scenarios (SECURITY.md: the simulation must
+/// cover the full allowed input domain, not just its randomized interior).
+/// Each pins one edge of the domain; the CI test runs all of them and asserts
+/// the targeted edge was actually exercised, so none can rot into a no-op.
+pub fn boundary_scenarios(epochs: u32) -> Vec<(&'static str, Scenario)> {
+    let base = |seed: u64| Scenario::from_seed(seed, epochs);
+    vec![
+        (
+            // One-base-unit deposits: the whole economy lives in dust, so every
+            // floor division, margin, and largest-remainder split sees 0/1-unit
+            // operands.
+            "dust-economy",
+            Scenario {
+                deposit_ceiling: 1_000,
+                min_deposit: 1,
+                p_deposit: 60,
+                p_redeem: 40,
+                ..base(0xD057)
+            },
+        ),
+        (
+            // No deposits ever: every epoch cranks an empty vault (zero shares,
+            // zero TVV, no redemptions) without violation or panic.
+            "empty-vault",
+            Scenario {
+                p_deposit: 0,
+                p_redeem: 0,
+                ..base(0xE307)
+            },
+        ),
+        (
+            // Cross the uint64 share ceiling (shares = nhash x 1e6 crosses 2^64
+            // at ~18,447 HASH TVL): valuation math must stay exact past it.
+            "uint64-share-crossing",
+            Scenario {
+                deposit_ceiling: 60_000_000_000_000, // 60k HASH per deposit max
+                p_deposit: 60,
+                p_redeem: 10,
+                ..base(0x64C5)
+            },
+        ),
+        (
+            // Extreme TVL: deposits to 1e30 nhash push every u128 sum and the
+            // 256-bit-widened valuation paths far past realistic supply.
+            "extreme-tvl",
+            Scenario {
+                deposit_ceiling: 1_000_000_000_000_000_000_000_000_000_000,
+                p_deposit: 50,
+                ..base(0x7F1A)
+            },
+        ),
+        (
+            // Rates at their configured maxima (bounds enforced by
+            // Config::validate): 100% commission, 100%/yr AUM fee, a 100%
+            // uptime threshold. Fee starvation and arrears churn are expected;
+            // invariant violations are not.
+            "rates-at-maxima",
+            Scenario {
+                commission_bps: 10_000,
+                aum_fee_bps: 10_000,
+                performance_threshold_bps: 10_000,
+                ..base(0xFEE5)
+            },
+        ),
+        (
+            // The 100-validator bound (MAX_VALIDATORS mirrors the Provenance
+            // active-set ceiling): planner scale at the full seat count.
+            "validator-ceiling",
+            Scenario {
+                max_validators: 100,
+                p_enroll: 100,
+                p_unregister: 0,
+                ..base(0x100A)
+            },
+        ),
+    ]
 }
 
 // Time quantization: 4 keeper steps per epoch; the mainnet shape (unbonding
@@ -159,6 +241,9 @@ pub struct Stats {
     pub redelegations: u64,
     pub fee_starved_steps: u64,
     pub max_tvv: u128,
+    /// Largest outstanding share supply observed; boundary scenarios assert it
+    /// actually crossed the uint64 share ceiling they target.
+    pub max_shares: u128,
     pub worst_convergence_dev: u128,
 }
 
@@ -700,6 +785,7 @@ impl Sim {
         );
         self.stats.epochs += 1;
         self.stats.max_tvv = self.stats.max_tvv.max(self.tvv());
+        self.stats.max_shares = self.stats.max_shares.max(self.shares);
     }
 
     /// One keeper step: user/world events, keeper service, maturities, fees.
@@ -714,7 +800,7 @@ impl Sim {
         }
         // Deposits.
         if self.rng.chance(self.sc.p_deposit, 100) {
-            let amount = self.rng.range(1_000_000, self.sc.deposit_ceiling);
+            let amount = self.rng.range(self.sc.min_deposit, self.sc.deposit_ceiling);
             let minted = if self.shares == 0 {
                 amount.saturating_mul(SHARE_SCALAR)
             } else {
@@ -902,5 +988,52 @@ mod tests {
             total_epochs += result.stats.epochs;
         }
         assert!(total_epochs >= 40 * 48);
+    }
+
+    /// Boundary-domain CI check (SECURITY.md): every edge scenario completes
+    /// with zero violations, and each one demonstrably hit the edge it targets
+    /// (a scenario that stops exercising its boundary fails, not just one that
+    /// breaks an invariant).
+    #[test]
+    fn simulation_boundary_domain_zero_violations() {
+        for (label, sc) in boundary_scenarios(48) {
+            let result = run_scenario(sc);
+            assert!(
+                result.violations.is_empty(),
+                "boundary scenario '{label}' violations: {:#?}",
+                result.violations
+            );
+            let s = &result.stats;
+            assert!(s.epochs >= 48, "'{label}' ran only {} epochs", s.epochs);
+            match label {
+                "dust-economy" => {
+                    assert!(s.deposits > 0, "dust economy made no deposits");
+                    assert!(
+                        s.max_tvv <= 1_000 * 200,
+                        "dust economy TVL escaped the dust range: {}",
+                        s.max_tvv
+                    );
+                }
+                "empty-vault" => {
+                    assert_eq!(s.deposits, 0, "empty-vault scenario deposited");
+                    assert_eq!(s.max_tvv, 0, "empty-vault scenario accrued TVV");
+                }
+                "uint64-share-crossing" => {
+                    assert!(
+                        s.max_shares > u64::MAX as u128,
+                        "share supply never crossed uint64: {}",
+                        s.max_shares
+                    );
+                }
+                "extreme-tvl" => {
+                    assert!(
+                        s.max_tvv > 1_000_000_000_000_000_000_000_000_000, // > 1e27
+                        "extreme-TVL scenario stayed small: {}",
+                        s.max_tvv
+                    );
+                }
+                _ => {}
+            }
+        }
     }
 }

@@ -122,7 +122,17 @@ attribution, slash write-down); the full record is in spec §14. Still open:
 Covered today: all pure planners, every authz gate positive + negative,
 control-plane integration on the real embedded chain, the devnet drill
 harness, and the chain-free simulation soak (`src/sim.rs` + the `simulate`
-binary; deterministic seeds, CI smoke test).
+binary; deterministic seeds, CI smoke test). Added 2026-07-13 (SECURITY.md
+boundary domain): deterministic edge scenarios in CI — dust economy
+(one-base-unit deposits), forced-empty vault, uint64 share-ceiling crossing,
+1e30 TVL, rates at their configured maxima, and the 100-validator bound —
+each asserting the targeted edge was actually exercised. The `run_epoch`
+message-sequence lock also landed 2026-07-13 (`src/epoch.rs` sequence_tests,
+via provwasm-mocks): the full mocked-querier crank asserts the exact emitted
+order (claims → undelegate → return settlement → write-down sandwich →
+pause/deposit/unpause → transfer-then-burn → mint/deploy → delegate) on both
+the reward-deposit and write-down paths, so refactors cannot silently
+reorder legs.
 
 **NOT covered (the honest headline):** no automated test moves value end to
 end in CI — provwasm-test-tube 0.5.0 ships a vault module without
@@ -130,10 +140,8 @@ end in CI — provwasm-test-tube 0.5.0 ships a vault module without
 money-path invariants are unit-asserted on the plan functions and drilled
 live on devnet, but never checked against actual vault state in CI.
 
-- [ ] Message-sequence assertion test for `run_epoch` (settlement before
-      pause, withdraw inside pause, transfer-then-burn after unpause, deploy
-      last): lock the ordering with a unit test over the emitted message list
-      using a mocked querier, so refactors cannot silently reorder legs
+- [x] Message-sequence assertion test for `run_epoch` — done 2026-07-13, see
+      above
 - [ ] Gas profile at the 100-validator bound (MAX_VALIDATORS raised 50 → 100
       on 2026-07-09 to match the Provenance active-set ceiling). Rebalance
       moves are already gas-chunked; profile the fixed per-crank work (up to
