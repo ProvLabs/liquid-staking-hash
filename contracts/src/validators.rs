@@ -181,16 +181,38 @@ pub fn has_liveness_signal(validator: &Validator) -> bool {
     !validator.jailed && validator.status == BondStatus::Bonded as i32
 }
 
-/// Whether the validator is currently jailed on chain. A validator missing
-/// from the staking module is treated as not jailed (there is nothing to
-/// purge from it; any delegation to it would already be gone).
-fn is_jailed_on_chain(deps: Deps, valoper: &str) -> bool {
+/// The validator's live jail state: (jailed, unbonding_height). The height is
+/// the jail-episode fingerprint stored with a report (see JailObservation).
+/// A validator missing from the staking module is treated as not jailed
+/// (there is nothing to purge from it; any delegation to it would already be
+/// gone).
+fn jail_state_on_chain(deps: Deps, valoper: &str) -> (bool, i64) {
     StakingQuerier::new(&deps.querier)
         .validator(valoper.to_string())
         .ok()
         .and_then(|resp| resp.validator)
-        .map(|v| v.jailed)
-        .unwrap_or(false)
+        .map(|v| (v.jailed, v.unbonding_height))
+        .unwrap_or((false, 0))
+}
+
+/// The program's live delegation to a validator, in the underlying denom.
+fn program_stake_on(
+    deps: Deps,
+    env: &Env,
+    cfg: &crate::state::Config,
+    valoper: &str,
+) -> StdResult<Uint128> {
+    Ok(deps
+        .querier
+        .query_delegation(env.contract.address.to_string(), valoper.to_string())?
+        .map(|d| {
+            if d.amount.denom == cfg.underlying_denom {
+                d.amount.amount
+            } else {
+                Uint128::zero()
+            }
+        })
+        .unwrap_or_default())
 }
 
 /// RC1 §9.8 phase 1 (permissionless): record the first observation of a jailed
@@ -207,11 +229,32 @@ pub fn report_jailed(
     let resp = Response::new()
         .add_attribute("action", "report_jailed_validator")
         .add_attribute("valoper", valoper.clone());
-    if is_jailed_on_chain(deps.as_ref(), &valoper) {
-        if JAIL_REPORTS.has(deps.storage, &valoper) {
-            return Ok(resp.add_attribute("result", "already_reported"));
+    let (jailed, unbonding_height) = jail_state_on_chain(deps.as_ref(), &valoper);
+    if jailed {
+        // Reports exist to move program stake; a validator the program has no
+        // live delegation on has nothing to purge, so recording it would only
+        // seed a stale report for a later episode.
+        let cfg = CONFIG.load(deps.storage)?;
+        if program_stake_on(deps.as_ref(), env, &cfg, &valoper)?.is_zero() {
+            return Ok(resp.add_attribute("result", "no_program_stake"));
         }
-        JAIL_REPORTS.save(deps.storage, &valoper, &env.block.time)?;
+        if let Some(existing) = JAIL_REPORTS.may_load(deps.storage, &valoper)? {
+            if existing.unbonding_height == unbonding_height {
+                // Same episode: keep the ORIGINAL timestamp so spam cannot
+                // push the purge window out.
+                return Ok(resp.add_attribute("result", "already_reported"));
+            }
+            // A report from an earlier jail episode: restart the cycle on the
+            // current one rather than inheriting the elapsed cooldown.
+        }
+        JAIL_REPORTS.save(
+            deps.storage,
+            &valoper,
+            &crate::state::JailObservation {
+                reported_at: env.block.time,
+                unbonding_height,
+            },
+        )?;
         Ok(resp
             .add_attribute("result", "reported")
             .add_attribute("reported_at", env.block.time.seconds().to_string()))
@@ -242,12 +285,13 @@ pub fn purge_jailed(
 
     // Storage-level gates first (cheap, unit-testable): a report must exist
     // and its cooldown must have elapsed.
-    let reported_at = JAIL_REPORTS
+    let report = JAIL_REPORTS
         .may_load(deps.storage, &valoper)?
         .ok_or_else(|| ContractError::JailReportMissing {
             valoper: valoper.clone(),
         })?;
-    let ready = reported_at
+    let ready = report
+        .reported_at
         .seconds()
         .saturating_add(cfg.jail_unbond_delay_secs);
     if env.block.time.seconds() < ready {
@@ -269,24 +313,36 @@ pub fn purge_jailed(
     }
 
     // Second observation: still jailed NOW, or the report is void.
-    if !is_jailed_on_chain(deps.as_ref(), &valoper) {
+    let (jailed, unbonding_height) = jail_state_on_chain(deps.as_ref(), &valoper);
+    if !jailed {
         JAIL_REPORTS.remove(deps.storage, &valoper);
         return Err(ContractError::NotJailed { valoper });
+    }
+    // Same jail EPISODE as the report, or the report is stale: the validator
+    // unjailed and was jailed again without an intervening observation, so
+    // the sustained-downtime guard has not actually run. Restart the cycle on
+    // the current episode instead of purging against the old timestamp.
+    if unbonding_height != report.unbonding_height {
+        JAIL_REPORTS.save(
+            deps.storage,
+            &valoper,
+            &crate::state::JailObservation {
+                reported_at: env.block.time,
+                unbonding_height,
+            },
+        )?;
+        return Err(ContractError::JailCooldownActive {
+            ready: env
+                .block
+                .time
+                .seconds()
+                .saturating_add(cfg.jail_unbond_delay_secs),
+        });
     }
 
     // The program's live delegation. Zero = already purged: idempotent no-op,
     // first caller won.
-    let staked = deps
-        .querier
-        .query_delegation(env.contract.address.to_string(), valoper.clone())?
-        .map(|d| {
-            if d.amount.denom == cfg.underlying_denom {
-                d.amount.amount
-            } else {
-                Uint128::zero()
-            }
-        })
-        .unwrap_or_default();
+    let staked = program_stake_on(deps.as_ref(), env, &cfg, &valoper)?;
     if staked.is_zero() {
         return Ok(Response::new()
             .add_attribute("action", "purge_jailed_validator")
@@ -948,5 +1004,177 @@ mod tests {
             ..Default::default()
         };
         assert!(cons_address(&validator).is_err());
+    }
+}
+
+/// Regression tests for the jail-episode fingerprint (PR #2 review): a report
+/// recorded during one jail episode must not authorize a purge in a LATER
+/// episode, and reports are only recorded where the program has stake.
+#[cfg(test)]
+mod jail_episode_tests {
+    use super::*;
+    use cosmwasm_std::testing::{message_info, mock_env};
+    use cosmwasm_std::{
+        Binary, Coin as CwCoin, ContractResult, Decimal, FullDelegation, SystemResult,
+        Validator as CwValidator,
+    };
+    use prost::Message as _;
+    use provwasm_common::MockableQuerier;
+    use provwasm_mocks::{mock_provenance_dependencies, MockProvenanceQuerier};
+    use provwasm_std::types::cosmos::staking::v1beta1::{
+        QueryDelegatorUnbondingDelegationsResponse, QueryValidatorResponse,
+        Validator as PValidator,
+    };
+
+    const VALOPER: &str = "tpvaloper1epi0000000000000000000000000000000000";
+
+    fn grpc<R: prost::Message>(q: &mut MockProvenanceQuerier, path: &str, resp: &R) {
+        let bytes = provwasm_std::types::tendermint::abci::ResponseQuery {
+            value: resp.encode_to_vec(),
+            ..Default::default()
+        }
+        .encode_to_vec();
+        q.register_custom_query(
+            path.to_string(),
+            Box::new(move |_| SystemResult::Ok(ContractResult::Ok(Binary::from(bytes.clone())))),
+        );
+    }
+
+    /// (Re-)register the chain's view of the validator: jailed or not, and the
+    /// unbonding_height that fingerprints the current jail episode.
+    fn set_validator(q: &mut MockProvenanceQuerier, jailed: bool, unbonding_height: i64) {
+        grpc(
+            q,
+            "/cosmos.staking.v1beta1.Query/Validator",
+            &QueryValidatorResponse {
+                validator: Some(PValidator {
+                    operator_address: VALOPER.to_string(),
+                    jailed,
+                    tokens: "1000".to_string(),
+                    unbonding_height,
+                    ..Default::default()
+                }),
+            },
+        );
+    }
+
+    fn setup(
+        with_stake: bool,
+    ) -> cosmwasm_std::OwnedDeps<
+        cosmwasm_std::testing::MockStorage,
+        cosmwasm_std::testing::MockApi,
+        MockProvenanceQuerier,
+    > {
+        let mut deps = mock_provenance_dependencies();
+        let env = mock_env();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        crate::contract::instantiate(
+            deps.as_mut(),
+            env.clone(),
+            message_info(&admin, &[]),
+            crate::msg::InstantiateMsg {
+                admin: admin.to_string(),
+                vault_address: vault.to_string(),
+                underlying_denom: "nhash".to_string(),
+                receipt_denom: "nvhash.staked".to_string(),
+                min_run_interval_secs: 0,
+                max_delegations_per_run: 0,
+                aum_fee_bps: 0,
+                performance_threshold_bps: 0,
+                min_capture_interval_secs: 0,
+                max_concentration_multiple_bps: None,
+                min_bonded_cap_bps: None,
+                max_bonded_cap_bps: None,
+                concentration_safety_offset_bps: None,
+                commission_bps: None,
+                jail_unbond_delay_secs: None, // 8h default
+            },
+        )
+        .unwrap();
+        if with_stake {
+            let zero = CwCoin::new(0u128, "nhash");
+            deps.querier.mock_querier.staking.update(
+                "nhash",
+                &[CwValidator::create(
+                    VALOPER.to_string(),
+                    Decimal::zero(),
+                    Decimal::one(),
+                    Decimal::one(),
+                )],
+                &[FullDelegation::create(
+                    env.contract.address.clone(),
+                    VALOPER.to_string(),
+                    CwCoin::new(1_000u128, "nhash"),
+                    zero,
+                    vec![],
+                )],
+            );
+        }
+        grpc(
+            &mut deps.querier,
+            "/cosmos.staking.v1beta1.Query/DelegatorUnbondingDelegations",
+            &QueryDelegatorUnbondingDelegationsResponse {
+                unbonding_responses: vec![],
+                pagination: None,
+            },
+        );
+        deps
+    }
+
+    #[test]
+    fn stale_report_from_earlier_jail_episode_cannot_bypass_cooldown() {
+        let mut deps = setup(true);
+        let env0 = mock_env();
+        let delay = crate::contract::DEFAULT_JAIL_UNBOND_DELAY_SECS;
+
+        // Episode 1: jailed at unbonding_height 100; report recorded.
+        set_validator(&mut deps.querier, true, 100);
+        let res = report_jailed(deps.as_mut(), &env0, VALOPER.to_string()).unwrap();
+        assert!(res.attributes.iter().any(|a| a.value == "reported"));
+        // Idempotent within the episode: original timestamp kept.
+        let res = report_jailed(deps.as_mut(), &env0, VALOPER.to_string()).unwrap();
+        assert!(res.attributes.iter().any(|a| a.value == "already_reported"));
+
+        // The validator unjails and is jailed AGAIN (episode 2, height 200)
+        // with no observation in between. The old report's cooldown has fully
+        // elapsed — the purge must still refuse and restart the cycle.
+        let mut env1 = env0.clone();
+        env1.block.time = env0.block.time.plus_seconds(delay + 1_000);
+        set_validator(&mut deps.querier, true, 200);
+        let info = message_info(&deps.api.addr_make("keeper"), &[]);
+        let err =
+            purge_jailed(deps.as_mut(), &env1, &info, VALOPER.to_string(), None).unwrap_err();
+        match err {
+            ContractError::JailCooldownActive { ready } => {
+                assert_eq!(ready, env1.block.time.seconds() + delay, "cooldown must restart NOW");
+            }
+            other => panic!("expected restarted cooldown, got {other:?}"),
+        }
+        // The report was refreshed onto episode 2.
+        let obs = JAIL_REPORTS.load(&deps.storage, VALOPER).unwrap();
+        assert_eq!(obs.unbonding_height, 200);
+        assert_eq!(obs.reported_at, env1.block.time);
+
+        // Same episode after the restarted cooldown: the purge proceeds and
+        // unbonds the full program delegation.
+        let mut env2 = env1.clone();
+        env2.block.time = env1.block.time.plus_seconds(delay + 1);
+        let res = purge_jailed(deps.as_mut(), &env2, &info, VALOPER.to_string(), None).unwrap();
+        assert!(matches!(
+            &res.messages[0].msg,
+            cosmwasm_std::CosmosMsg::Staking(cosmwasm_std::StakingMsg::Undelegate { validator, amount })
+                if validator == VALOPER && amount.amount.u128() == 1_000
+        ));
+        assert!(!JAIL_REPORTS.has(&deps.storage, VALOPER));
+    }
+
+    #[test]
+    fn report_is_recorded_only_where_the_program_has_stake() {
+        let mut deps = setup(false);
+        set_validator(&mut deps.querier, true, 100);
+        let res = report_jailed(deps.as_mut(), &mock_env(), VALOPER.to_string()).unwrap();
+        assert!(res.attributes.iter().any(|a| a.value == "no_program_stake"));
+        assert!(!JAIL_REPORTS.has(&deps.storage, VALOPER));
     }
 }

@@ -171,12 +171,27 @@ pub const VALIDATORS: Map<&str, ValidatorRecord> = Map::new("validators");
 /// Timestamp of the last accepted CaptureUptimeSignal (interval gate).
 pub const LAST_CAPTURE: Item<Timestamp> = Item::new("last_capture");
 
-/// Jail reports (RC1 §9.8 phase 1), keyed by valoper: the time the validator
-/// was first observed jailed. Starts the jail_unbond_delay cooldown; cleared
-/// whenever the validator is observed unjailed, and after a full purge (so a
-/// later re-jail always needs a fresh two-observation cycle). Independent of
-/// enrollment: any validator the program still has stake on can be reported.
-pub const JAIL_REPORTS: Map<&str, Timestamp> = Map::new("jail_reports");
+/// A recorded observation of a jailed validator (RC1 §9.8 phase 1).
+#[cw_serde]
+pub struct JailObservation {
+    /// When the validator was first observed jailed in THIS jail episode.
+    /// Starts the jail_unbond_delay cooldown.
+    pub reported_at: Timestamp,
+    /// Jail-episode fingerprint: the validator's `unbonding_height` at the
+    /// observation. A validator must re-bond before it can be jailed again,
+    /// and jailing stamps a fresh unbonding_height, so a mismatch at purge
+    /// time proves the report belongs to an EARLIER episode — without this,
+    /// a stale report would let anyone purge a freshly re-jailed validator
+    /// immediately, bypassing the sustained-downtime cooldown.
+    pub unbonding_height: i64,
+}
+
+/// Jail reports keyed by valoper. Cleared whenever the validator is observed
+/// unjailed, and after a full purge (so a later re-jail always needs a fresh
+/// two-observation cycle). Recorded only for validators the program has live
+/// stake on (there is nothing to purge from the others). Independent of
+/// enrollment.
+pub const JAIL_REPORTS: Map<&str, JailObservation> = Map::new("jail_reports");
 
 /// Admin emergency stop for the fund-moving permissionless cranks (RunEpoch and
 /// ServiceRedemptions, including continuation cranks). Registration, capture and

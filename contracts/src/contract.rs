@@ -217,10 +217,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             let reports: Vec<crate::msg::JailReport> = crate::state::JAIL_REPORTS
                 .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
                 .map(|item| {
-                    item.map(|(valoper, at)| crate::msg::JailReport {
+                    item.map(|(valoper, obs)| crate::msg::JailReport {
                         valoper,
-                        reported_at_seconds: at.seconds(),
-                        purge_ready_at_seconds: at
+                        reported_at_seconds: obs.reported_at.seconds(),
+                        purge_ready_at_seconds: obs
+                            .reported_at
                             .seconds()
                             .saturating_add(cfg.jail_unbond_delay_secs),
                     })
@@ -1008,7 +1009,14 @@ mod unit {
 
         // Inside the cooldown the purge is rejected with the ready time.
         JAIL_REPORTS
-            .save(deps.as_mut().storage, &jailed, &mock_env().block.time)
+            .save(
+                deps.as_mut().storage,
+                &jailed,
+                &crate::state::JailObservation {
+                    reported_at: mock_env().block.time,
+                    unbonding_height: 0,
+                },
+            )
             .unwrap();
         execute(
             deps.as_mut(),
@@ -1040,7 +1048,14 @@ mod unit {
 
         // Backdate the report so the cooldown has elapsed for the rest.
         JAIL_REPORTS
-            .save(deps.as_mut().storage, &jailed, &Timestamp::from_seconds(1))
+            .save(
+                deps.as_mut().storage,
+                &jailed,
+                &crate::state::JailObservation {
+                    reported_at: Timestamp::from_seconds(1),
+                    unbonding_height: 0,
+                },
+            )
             .unwrap();
 
         // Claimant gates (checked before any chain read): self-claim rejected,
@@ -1111,7 +1126,14 @@ mod unit {
 
         // Halt blocks the purge (fund-moving) but not the report.
         JAIL_REPORTS
-            .save(deps.as_mut().storage, &jailed, &Timestamp::from_seconds(1))
+            .save(
+                deps.as_mut().storage,
+                &jailed,
+                &crate::state::JailObservation {
+                    reported_at: Timestamp::from_seconds(1),
+                    unbonding_height: 0,
+                },
+            )
             .unwrap();
         execute(
             deps.as_mut(),

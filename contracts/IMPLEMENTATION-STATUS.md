@@ -39,6 +39,13 @@ violations):
 - POC flaw hardenings F1–F9 (register:
   [`docs/architecture/history/2026-07-02-poc-flaw-register.md`](../docs/architecture/history/2026-07-02-poc-flaw-register.md))
 - Emergency controls: `SetHalted`, `ClearPendingDelegations`
+- Jail-episode fingerprint on reports (2026-07-13, PR #2 review): a
+  `JailObservation` stores the validator's `unbonding_height` alongside the
+  report timestamp; purge requires the SAME episode (a mismatch restarts the
+  cooldown on the current episode), so a stale report can no longer authorize
+  an immediate purge after an unjail/re-jail cycle. Reports are also recorded
+  only for validators the program has live stake on. Regression-tested with a
+  mocked chain (`validators.rs` jail_episode_tests)
 - Config input bounding at the message boundary (2026-07-13, SECURITY.md
   conformance): `Config::validate()` enforced at instantiate and after every
   `UpdateConfig` merge — bps rates capped at 10000, cap ordering
