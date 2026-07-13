@@ -1,6 +1,8 @@
 # nvHASH Program App: Full-Featured Application Technical Specification
 
 > Migrated 2026-07-13 from `nvhash-cosmos-contracts` @ dbce15e, source `docs/nvHASH-app-spec.md`. Paths updated for this repository's layout.
+>
+> **Revision 2026-07-13 (security alignment):** email collection/delivery and third-party product analytics (Mixpanel) removed to conform to the repository security policy (`SECURITY.md`): no off-chain identity linked to wallet addresses, no third-party analytics that can deanonymize wallets. Notifications are in-app + optional Web Push; funnel/cohort analytics are first-party and aggregate-only. Decisions 5 and 14 (§3), §6, §7, §8.2, §8.8, §9.1, §10.4, §12.3, and §14.7/§14.10 updated accordingly.
 
 **Version:** 1.0-RC1 (2026-07-10). **Not yet certified for implementation.**
 **Owner:** Ira
@@ -73,7 +75,7 @@ The following are settled, subject only to the §14 open items:
 2. **Backend = the same process, three layers.** Routes (loaders/actions + `api+/v1+` JSON routes) → services (`app/lib/services/*.server.ts`, business logic, logging) → models (`app/lib/models/*.server.ts`, the only Prisma import). Routes never touch the database; models hold no business logic (nuva `ARCHITECTURE.md` is normative here).
 3. **PostgreSQL + Prisma, multi-file schema.** One model per `prisma/*.prisma` file; migrations via `prisma migrate`. Indexer cursors persist in an `indexer_checkpoints` table (the nuva precedent).
 4. **The App both indexes and reads live.** Historical/aggregate data comes from the indexer; the canonical live numbers (NAV, TVV, vault paused state, pending swap-out queue, guard-relevant state) are read server-side from the configured LCD on request (short-TTL cached) so the App can label and reconcile rather than trail (resolves boundary §7.5: **both**).
-5. **Wallet auth = WalletConnect v2, session by signature, no KYC.** Connecting a wallet is anonymous; a server session is established by signing a nonce (address-scoped, no account creation step). An optional **email is collected only for notifications** and is verifiable/deletable; no custody, no KYC, no allowlist (personas §2; resolves boundary §7.6). Wallet vendor set is `[DECIDE §14.1]`.
+5. **Wallet auth = WalletConnect v2, session by signature, no KYC.** Connecting a wallet is anonymous; a server session is established by signing a nonce (address-scoped, no account creation step). **No off-chain identity is collected — no email, no account creation, no KYC, no allowlist** (personas §2; `SECURITY.md` data minimization; resolves boundary §7.6). Notifications are in-app plus optional Web Push (§10.4). Wallet vendor set is `[DECIDE §14.1]`.
 6. **All fund-moving transactions are user-signed in the browser.** The backend never holds keys, never signs, and exposes no endpoint that could move funds. Server writes are limited to the App's own state (sessions, alert rules, notification log, analytics).
 7. **The trust-reconciliation model of boundary §5 is implemented as stated:** chain canonical, freshness labels on indexed data, per-figure verify links into the Console, bounded and labeled divergence, automatic alarm on reconciliation failure (§12).
 8. **Amount discipline is identical to the console.** `Uint128` decimal strings parse to `BigInt` in TypeScript; Postgres stores base-unit amounts as `NUMERIC(39,0)` via Prisma `Decimal`; display conversion (nhash → HASH, bps → %) happens at render only. No floating-point on amounts anywhere, including the indexer.
@@ -82,7 +84,7 @@ The following are settled, subject only to the §14 open items:
 11. **i18n from day one, English-only at launch.** The nuva route-based localization pattern (`$lang+` segments, translation namespaces, no hardcoded UI strings) is adopted wholesale so later locales are additive; the launch locale set is `en` `[DECIDE §14.9]`. Admin-gated routes are English-only (nuva convention).
 12. **Theme: Auto/Light/Dark three-way** via `next-themes`, dark default (the NUVA family register); both palettes are validated token sets per the dataviz method, not inversions.
 13. **Environments mirror the program's:** devnet / testnet / mainnet deployments, each pinned to one chain, one contract, one console origin. No in-app network switcher; the environment badge is prominent on non-mainnet (§7).
-14. **Product analytics = Mixpanel** (nuva precedent), events scoped to funnel/cohort measurement (§8.8), never wallet-linked beyond the address the user already revealed by connecting; a consent banner gates it `[DECIDE §14.10]`.
+14. **Product analytics = first-party, aggregate-only.** The nuva Mixpanel precedent does **not** carry over: `SECURITY.md` prohibits third-party analytics that can deanonymize wallets. Funnel/cohort measurement (§8.8) is computed server-side as aggregate counters (page-class visits, funnel-stage tallies) never keyed by wallet address, session, or device; no third-party analytics script ships. Event taxonomy is `[DECIDE §14.10]`.
 15. **Deployment:** Docker image, ArgoCD, the team's standard pipeline (nuva precedent). Playwright e2e + Vitest unit tests gate CI; MSW mock fixtures make every page buildable offline.
 
 ---
@@ -103,7 +105,7 @@ The following are settled, subject only to the §14 open items:
 | Role | Detected by | App write surface |
 |------|-------------|-------------------|
 | Anonymous | no session | none (public reads) |
-| Holder | wallet session | `SwapIn` / `SwapOut` (self-signed), alert rules, email opt-in, history export |
+| Holder | wallet session | `SwapIn` / `SwapOut` (self-signed), alert rules, push opt-in, history export |
 | Operator | session address = a `ValidatorStatus.operator` | holder surface + governance vote signing (if a group member) |
 | Admin | session address ∈ admin `x/group` policy members (live chain read) | operator surface + proposal create/vote/execute signing + analytics access |
 
@@ -169,7 +171,7 @@ Audit reports (firm, scope, date, report links, covered commit/code-hash), progr
    │  routes → services → models (3-layer)        │               ▼
    │  ├─ live LCD client (canonical reads) ───────┼──▶ ┌──────────────────┐
    │  ├─ reconciler (indexed vs chain, alarms)    │    │ Provenance node   │
-   │  ├─ notifier (alert rules → email/push)      │    │ (LCD/RPC)         │
+   │  ├─ notifier (alert rules → in-app/push)     │    │ (LCD/RPC)         │
    │  └─ API  /api/v1/*  (JSON, versioned)        │    └──────────────────┘
    └───────────────┬─────────────────────────────┘               ▲
                    │ Prisma                                       │
@@ -192,7 +194,7 @@ Audit reports (firm, scope, date, report links, covered commit/code-hash), progr
 - **App server:** one deployable (nuva pattern) — SSR UI, JSON API under `app/routes/api+/v1+/`, services, models. Loaders call services; services orchestrate models, the LCD client, and the market readers; models are the sole Prisma importers.
 - **Indexer workers:** long-running loops in the same codebase (separate process/container per stream), each with a durable cursor: `chain-events` (contract + vault + relevant module events by height), `epoch-history` (RunEpoch tx scan + backfill), `validator-sampler` (periodic `Validators {}` snapshot), `market-sampler` (DEX pool reads). Idempotent upserts keyed by (txhash, event index) so replays are safe.
 - **Reconciler:** a scheduled service comparing indexed aggregates against live chain reads (NAV, total shares, queue length, epoch index); divergence beyond tolerance raises an `incident` and flips the affected surfaces to their live-read/stale-label mode (§12).
-- **Notifier:** evaluates alert rules on indexer ticks; delivers via email (provider `[DECIDE §14.7]`) and web push. All notifications are also readable in-app, so delivery channels are enhancement, not dependency.
+- **Notifier:** evaluates alert rules on indexer ticks; delivers via Web Push (scope `[DECIDE §14.7]`). There is no email channel — `SECURITY.md` prohibits collecting off-chain identity linked to wallets. All notifications are also readable in-app, so push is enhancement, not dependency.
 - **Wallet layer:** WalletConnect v2 session in the browser; message construction and decoded preview client-side; the server supplies read-only context (estimates, guard state) but never touches the signing path.
 
 ---
@@ -211,12 +213,11 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `BASE_RPC_URL` / `ETH_RPC_URL` | EVM read endpoints | Market + bridge-supply sampling (§5.3). |
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
 | `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. |
-| `EMAIL_PROVIDER_*` | — | Notifier credentials `[DECIDE §14.7]`. |
-| `MIXPANEL_TOKEN` | — | Product analytics, consent-gated `[DECIDE §14.10]`. |
+| `WEB_PUSH_VAPID_*` | — | Web Push credentials `[DECIDE §14.7]`. |
 | denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
 | `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
 | `RECONCILE_TOLERANCE` / cadence | tolerance per metric; ~1 min cadence | §12 reconciler thresholds. |
-| `APP_ENV` | `development` \| `staging` \| `production` | nuva convention; drives badge + Mixpanel env tag. |
+| `APP_ENV` | `development` \| `staging` \| `production` | nuva convention; drives the environment badge. |
 
 ---
 
@@ -254,7 +255,7 @@ The comprehension → due-diligence funnel (personas §5), and the program's pub
 4. **Security & trust posture.** Audit panel (§5.4): firm, scope, date, report links, covered build with its verify link; the multisig governance model in one paragraph; the risk register in plain words (smart-contract risk, validator slashing and how write-downs work, bridge trust boundary for cross-chain holders — contract §12). No marketing adjectives; the console's "numbers carry the enthusiasm" rule holds here too.
 5. **Incident & slashing history.** The indexed incident feed (register C2), empty state proudly labeled ("No slash events or program incidents since launch — this list is generated from chain history, not curated").
 6. **Exit explainer.** The two paths side by side: instant DEX trade at market price (with live premium/discount) vs native redemption at protocol rate (guaranteed ≤ 60 days, typically faster — the §8.4 framing, previewed here because "can I get out?" is a pre-deposit question).
-7. **CTA:** "Connect wallet to stake" → §8.3. The funnel steps (arrive → scroll depth → due-diligence sections → connect → first deposit) are the Mixpanel conversion events §8.8 consumes.
+7. **CTA:** "Connect wallet to stake" → §8.3. The funnel steps (arrive → scroll depth → due-diligence sections → connect → first deposit) are counted as the aggregate funnel-stage tallies §8.8 consumes (first-party, aggregate-only; §3 decision 14).
 
 ### 8.2 Portfolio (route `/portfolio`, wallet required)
 
@@ -265,7 +266,7 @@ Priya's home. Composes additional roles additively (register F1): operator and a
 - **Accrual tracker:** her position's HASH value over time — a step-after chart (her balance × NAV history), with deposit/redeem markers.
 - **Active redemptions:** each pending `SwapOut` with escrowed shares, current estimate, the maturity countdown, funded state, and the expedite explanation; links to §8.4's tracker detail.
 - **Transaction history:** every indexed event for her address (deposits, redemptions, transfers in/out, refunds), each row with amounts, NAV at the time, txhash → explorer, and verify link. **Exportable as CSV** (register D2) with a tax-friendly column set `[DECIDE §14.11]`.
-- **Alert settings:** per-address rules — NAV step posted, redemption matured/expedited/refunded, market premium/discount beyond X bps, vault paused/halted, validator-set incident — each deliverable in-app always, plus email/push when opted in (register D1).
+- **Alert settings:** per-address rules — NAV step posted, redemption matured/expedited/refunded, market premium/discount beyond X bps, vault paused/halted, validator-set incident — each deliverable in-app always, plus Web Push when opted in (register D1).
 
 ### 8.3 Stake (route `/stake`, wallet required to submit)
 
@@ -311,12 +312,12 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 
 ### 8.8 Admin Analytics (route `/admin`, admin only)
 
-The cohort-satisfaction dashboard the no-backend console cannot render (register A4), fed by the indexer and Mixpanel:
+The cohort-satisfaction dashboard the no-backend console cannot render (register A4), fed by the indexer and the first-party aggregate analytics (§3 decision 14):
 
 - **Program health header:** TVL trend, net APR trend, depositor count, net deposit flow per epoch — indexed, with verify links for the current values.
 - **Holder cohort:** adoption (new depositors/epoch), retention (cohort curves by first-deposit epoch), redemption mix (expedited vs matured vs refunded), TVL concentration.
 - **Validator cohort:** enrollment/churn timeline, eligibility trend, arrears frequency, TIP participation, purge events.
-- **Evaluator funnel:** Learn-page conversion (visit → due-diligence depth → connect → first deposit) from product analytics.
+- **Evaluator funnel:** Learn-page conversion (visit → due-diligence depth → connect → first deposit) from the aggregate stage counters — totals per funnel stage only, never per-wallet or per-session web behavior.
 - **Upkeep timeliness:** time-lag distributions for the permissionless cranks (epoch run after eligibility, capture-signal cadence gaps, service-redemption latency) — indexed from crank txs; this is the personas' "upkeep-action lag" signal and doubles as keeper monitoring.
 - **Incident feed:** §9.6 incidents with severity, acknowledgment, and durable history.
 - Support/complaint signals are out of scope for v1 (manual/off-tool) and said so explicitly.
@@ -329,7 +330,7 @@ The cohort-satisfaction dashboard the no-backend console cannot render (register
 
 Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry the ingestion height/txhash where applicable):
 
-- `users` (wallet address PK, first/last seen, optional verified email, locale), `sessions` (nonce-signature auth, expiry).
+- `users` (wallet address PK, first/last seen, locale), `sessions` (nonce-signature auth, expiry). No off-chain identity columns, ever (`SECURITY.md`): adding one is a design-review event, not a migration.
 - `transactions` (txhash + msg index PK; address; kind: `swap_in | swap_out_request | redemption_payout | redemption_refund | transfer_in | transfer_out`; amounts in shares and nhash; NAV at height; block time).
 - `redemption_requests` (request id; owner; shares; estimates over time; enqueued/expedited/matured/refunded timestamps; terminal status) — the §9.5 time-to-payout source.
 - `epoch_snapshots` (epoch_index PK; the full contract §9.10 decomposition; gross/net APR bps; txhash; height; observed_at) — canonical program history, backfilled from genesis-of-contract (§9.3).
@@ -398,7 +399,7 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 
 ### 10.4 Notifications
 
-Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notifications` and fan out per channel opt-in. Email content is minimal (event + link into the App); no amounts in subject lines. Push uses standard Web Push, per-browser opt-in. Every alert kind has an in-app rendering so users without external channels lose nothing but latency.
+Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notifications` and fan out per channel opt-in. Channels are **in-app (always)** and **Web Push (per-browser opt-in)**; there is no email channel (`SECURITY.md`: no off-chain identity linked to wallets). A push subscription is stored as an opaque, revocable endpoint token and is deleted on opt-out or session deletion; push payloads are minimal (event + link into the App, no amounts). Every alert kind has an in-app rendering so users without push lose nothing but latency.
 
 ---
 
@@ -438,10 +439,10 @@ This section encodes boundary §5 as build requirements.
 ### 12.3 Application security
 
 - **No custody, no server signing, no fund-moving endpoints** (§10.1). A full backend compromise can lie (until reconciliation alarms) and leak App-state data; it cannot move funds. Stating this bound explicitly is the point of the two-surface split.
-- **Personal data minimization:** wallet address (public by nature), optional email (verified, deletable, used only for notifications), locale/theme, alert rules. No KYC data exists to protect (personas §2). Data deletion on request removes the user row and rules; indexed *chain* history is public information and remains.
+- **Personal data minimization (`SECURITY.md` is normative):** wallet address (public by nature), first/last-seen timestamps (minimal operational metadata, retained deliberately for transparent and minimally intrusive usage measurement), locale/theme, alert rules, and — when opted in — an opaque Web Push subscription token (revocable, deleted on opt-out). No email or other off-chain identity, no KYC, and no IP-or-device linkage to addresses in persisted logs (scrub or aggregate). Data deletion on request removes the user row, rules, and push subscriptions; indexed *chain* history is public information and remains.
 - **Sessions:** nonce-signature login, `HttpOnly`/`SameSite` cookies, address-scoped authorization on every personal endpoint; admin endpoints re-verify group membership on-chain per session refresh, not per cached role.
 - **API hygiene:** rate limiting on public endpoints, zod-validated inputs at every route boundary (nuva convention), winston structured logging in services, no secrets in the client bundle (server config never serializes past the §7 client-safe subset).
-- **Analytics consent-gated;** analytics never receives amounts or balances — funnel events and page classes only `[DECIDE §14.10]`.
+- **Analytics are first-party and aggregate-only:** no third-party trackers; counters are never keyed by wallet address, session, or device; never amounts or balances — page classes and funnel-stage tallies only `[DECIDE §14.10]`.
 - **Supply chain:** the team's standard dependency policy; the transacting pages must function with third-party scripts blocked (analytics is additive).
 
 ---
@@ -471,10 +472,10 @@ Protocol and platform facts this design must respect (chain constraints identica
 4. **[DECIDE] Bridge transit UX in v1:** integrate NUVA's transit flow in-app, deep-link out to a NUVA-operated bridge UI, or defer transit entirely (display-only market page). Depends on the NUVA Labs deliverable timeline (contract §15 bridge note).
 5. **[DECIDE/VERIFY] Indexer transport details:** tx-search vs RPC websocket subscription; confirmation depth on Provenance; LCD paging limits under load.
 6. **[DECIDE] Governance home & composer scope** (boundary §7.2): confirm the App-as-workflow / Console-as-composer split of §8.7, and whether template-scoped proposal creation ships in v1 or the App is vote/execute-only at launch. Interacts with register B2 (validator voting) and console §14.6.
-7. **[DECIDE] Notification channels & provider:** email provider, Web Push scope, and which alert kinds default-on per role.
+7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Remaining `[DECIDE]`: which alert kinds default-on per role. Email remains excluded and is not an option.
 8. **[DECIDE] Design-system packaging** (boundary §7.4): extract shared tokens/dataviz validation into a package both surfaces consume, or App-local tokens validated by the same script. Plus the program-specific brand pass (accent, status set) over the nuva base.
 9. **[DECIDE] Launch locale set** (`en` assumed; `zh`/`ko` are nuva-supported precedents).
-10. **[DECIDE] Analytics consent model** and event taxonomy (what the Evaluator funnel may record pre-consent, if anything).
+10. **[DECIDE] Aggregate-analytics event taxonomy:** which page classes and funnel stages are counted, and the consent posture for the counters — within the `SECURITY.md` constraint that analytics are first-party, aggregate-only, and never keyed by wallet, session, or device.
 11. **[DECIDE] Cost-basis method for the CSV export** (FIFO vs average cost) and the exact tax-friendly column set — a statement of fact requirements, not tax advice.
 12. **[DECIDE] Minimum sample threshold** for displaying "typical time-to-payout" (§9.5.3), and its cold-start behavior in the first epochs after launch.
 13. **[FOLLOW-ON, console] Entity-level deep-link anchors** (request id, valoper, epoch index) so App verify links can land on the exact row, not just the page — a small console addition to schedule with console §14.
@@ -491,7 +492,7 @@ Protocol and platform facts this design must respect (chain constraints identica
 5. **Wallet + sessions:** WalletConnect v2 pairing, nonce-signature sessions, role detection.
 6. **Transacting flows on devnet:** Stake, then Redeem + tracker, exercised against full drill cycles including an expedite and an unfunded-maturity refund so every terminal state has been rendered from real chain history, not synthetic data.
 7. **Portfolio + alerts + notifier;** CSV export; effective-yield math property-tested against simulated deposit/redeem sequences.
-8. **Governance center;** admin analytics; Mixpanel funnel wiring behind consent.
+8. **Governance center;** admin analytics; first-party aggregate funnel counters (§14.10 taxonomy).
 9. **Hardening pass:** reconciler alarm drills (feed the indexer a wrong row, watch the surface degrade honestly), accessibility walk on both themes, load test the public API.
 10. **Testnet pilot** alongside the console (the verify-link contract is only testable with both deployed), then **mainnet** behind the §14 closures and the program's launch checklist.
 

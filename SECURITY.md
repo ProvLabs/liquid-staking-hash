@@ -68,6 +68,10 @@ in [`contracts/IMPLEMENTATION-STATUS.md`](contracts/IMPLEMENTATION-STATUS.md).
   wallet addresses (including in logs — scrub or aggregate); no third-party
   analytics that can deanonymize wallets. If a feature seems to need PII,
   raise it for explicit design review instead of adding a column.
+  Accepted exceptions (Ira, 2026-07-13): opt-in **Web Push subscription
+  tokens** (opaque, revocable, deleted on opt-out) as a notification channel,
+  and minimal operational metadata such as per-address **first/last-seen
+  timestamps** for transparent, minimally intrusive usage measurement.
 - **No custody, no signing.** Services never hold private keys and never
   relay or construct transactions on a user's behalf; signing happens
   client-side in the wallet.
