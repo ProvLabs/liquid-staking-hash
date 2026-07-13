@@ -1,0 +1,48 @@
+[package]
+name = "nvhash-staking"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# use library feature to disable all instantiate/execute/query exports
+library = []
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = "abort"
+incremental = false
+overflow-checks = true
+
+# Single build path: both aliases delegate to the freshness-aware build script
+# (arch auto-detected, -aarch64 output normalized) so no flow can bypass it.
+[package.metadata.scripts]
+optimize = "./scripts/build-artifact.sh --force"
+optimize-arm64 = "./scripts/build-artifact.sh --force"
+
+[dependencies]
+bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
+cosmwasm-schema = "2.2"
+cosmwasm-std = { version = "2.2", default-features = false, features = ["cosmwasm_2_1", "stargate", "staking", "std"] }
+prost = { version = "0.13", default-features = false }
+cw-storage-plus = "2.0"
+cw2 = "2.0"
+cw-utils = "2.0"
+provwasm-std = { version = "2.8.0", default-features = false, features = ["provlabs-all", "provenance-marker", "provenance-exchange", "cosmos-staking", "cosmos-slashing", "cosmos-auth", "cosmos-crypto"] }
+schemars = "0.8"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+sha2 = { version = "0.10", default-features = false }
+thiserror = "1.0"
+
+[dev-dependencies]
+provwasm-common = "0.3.1"
+provwasm-mocks = "2.8.0"
+provwasm-std = { version = "2.8.0", default-features = false, features = ["full"] }
+provwasm-test-tube = "0.5.0"

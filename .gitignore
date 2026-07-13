@@ -2,6 +2,9 @@
 target/
 artifacts/
 *.wasm
+*.wasm.gz
+contracts/schema/raw/
+sim-failures.log
 
 # Node
 node_modules/

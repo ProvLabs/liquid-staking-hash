@@ -4,12 +4,6 @@ The local Provenance dev chain that every leg of the system develops and
 verifies against: the contract drills, the console's devnet profile, and
 (eventually) the indexer all point at this node.
 
-> **Migration pending:** the scripts described here still live in the
-> exploratory `nvhash-cosmos-contracts` repository under `scripts/` and
-> migrate here alongside the contract code. This README fixes the
-> organization and records the workflow so the tranche is a straight file
-> move.
-
 ## Layout
 
 - `dev-node.sh` — chain lifecycle: `reset` (wipe state, generate genesis,
@@ -18,7 +12,9 @@ verifies against: the contract drills, the console's devnet profile, and
 - `bootstrap/` — vault + receipt marker + contract bootstrap scripts
   (`nvhash-deploy-p2p.sh`): share-denom metadata, `nvhash.pb` attribute
   grants, marker permissions (including the contract's Transfer on the
-  receipt), asset-manager and NAV-authority rotation, grants.
+  receipt), asset-manager and NAV-authority rotation, grants. Builds the
+  contract artifact on demand (`contracts/scripts/build-artifact.sh`) when
+  it is missing.
 - `actions/` — every contract operation wrapped as a one-shot script against
   the running node (shared plumbing in `_common.sh`: auto-resolves vault +
   contract, commit-polls txs). Catalog: `status.sh` (full engine, validator,

@@ -1,0 +1,1170 @@
+{
+  "contract_name": "nvhash-staking",
+  "contract_version": "0.1.0",
+  "idl_version": "1.0.0",
+  "instantiate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "InstantiateMsg",
+    "type": "object",
+    "required": [
+      "admin",
+      "receipt_denom",
+      "underlying_denom",
+      "vault_address"
+    ],
+    "properties": {
+      "admin": {
+        "type": "string"
+      },
+      "aum_fee_bps": {
+        "default": 0,
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "commission_bps": {
+        "description": "Program commission rate in bps of rewards earned on program delegations. None = the 10% default (DEFAULT_COMMISSION_BPS).",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "concentration_safety_offset_bps": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "jail_unbond_delay_secs": {
+        "description": "Cooldown between jail report and purge (RC1 §9.8). None = 8h default.",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "max_bonded_cap_bps": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "max_concentration_multiple_bps": {
+        "description": "Concentration-cap mirrors; None = Provenance defaults (5.5x, 5%, 33%) and a 5% safety offset below the per-validator max bond.",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "max_delegations_per_run": {
+        "default": 0,
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0.0
+      },
+      "min_bonded_cap_bps": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "min_capture_interval_secs": {
+        "description": "Min seconds between accepted uptime captures (0 = every call accepted).",
+        "default": 0,
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "min_run_interval_secs": {
+        "default": 0,
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "performance_threshold_bps": {
+        "description": "Uptime eligibility threshold in bps (0 = uptime gating disabled).",
+        "default": 0,
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "receipt_denom": {
+        "type": "string"
+      },
+      "underlying_denom": {
+        "type": "string"
+      },
+      "vault_address": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "execute": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ExecuteMsg",
+    "oneOf": [
+      {
+        "description": "Admin-gated: pause the managed vault (manual override / emergency stop).",
+        "type": "object",
+        "required": [
+          "pause_vault"
+        ],
+        "properties": {
+          "pause_vault": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Admin-gated: unpause the managed vault.",
+        "type": "object",
+        "required": [
+          "unpause_vault"
+        ],
+        "properties": {
+          "unpause_vault": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Admin-gated: update program configuration. Only supplied fields change.",
+        "type": "object",
+        "required": [
+          "update_config"
+        ],
+        "properties": {
+          "update_config": {
+            "type": "object",
+            "properties": {
+              "aum_fee_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "commission_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "concentration_safety_offset_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "jail_unbond_delay_secs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "max_bonded_cap_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "max_concentration_multiple_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "max_delegations_per_run": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              },
+              "min_bonded_cap_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "min_capture_interval_secs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "min_run_interval_secs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "performance_threshold_bps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Admin-gated: emergency stop / resume for the fund-moving permissionless cranks (RunEpoch including continuations, ServiceRedemptions). Does not touch the vault's own pause state.",
+        "type": "object",
+        "required": [
+          "set_halted"
+        ],
+        "properties": {
+          "set_halted": {
+            "type": "object",
+            "required": [
+              "halted"
+            ],
+            "properties": {
+              "halted": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Admin-gated: abort a stuck epoch continuation by dropping the persisted delegation targets and returning to Idle. Safe: the withdrawn nhash stays in the contract balance and the next epoch's return settlement swaps the matching receipt back out and burns it (TVV preserved).",
+        "type": "object",
+        "required": [
+          "clear_pending_delegations"
+        ],
+        "properties": {
+          "clear_pending_delegations": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Validator-operator: enroll a validator in the program (RC1 §11.2). The caller must be the valoper's operator account (same key payload); the validator must exist on chain. Starts with no captured uptime; eligibility is evaluated from live chain state at each epoch.",
+        "type": "object",
+        "required": [
+          "register_participation"
+        ],
+        "properties": {
+          "register_participation": {
+            "type": "object",
+            "required": [
+              "valoper"
+            ],
+            "properties": {
+              "valoper": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Operator or admin: withdraw a validator from the program. Existing program stake on it is unbonded at the next epoch and redeployed.",
+        "type": "object",
+        "required": [
+          "unregister_participation"
+        ],
+        "properties": {
+          "unregister_participation": {
+            "type": "object",
+            "required": [
+              "valoper"
+            ],
+            "properties": {
+              "valoper": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Permissionless (RC1 §9.8 phase 1): flag that a validator the program has stake on is jailed. Verified against live chain state: if jailed, the first report starts the jail_unbond_delay cooldown (later reports while still jailed are no-ops); if NOT jailed, any existing report is cleared. Moves no funds.",
+        "type": "object",
+        "required": [
+          "report_jailed_validator"
+        ],
+        "properties": {
+          "report_jailed_validator": {
+            "type": "object",
+            "required": [
+              "valoper"
+            ],
+            "properties": {
+              "valoper": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Permissionless (RC1 §9.8 phase 2, halt-gated): after the cooldown, move the program's stake off a STILL-jailed validator. With an eligible `claimant_valoper` (caller must be its enrolled operator): redelegate up to the claimant's concentration headroom, unbond the remainder. Without one (e.g. a depositor calling): unbond the full program delegation. Rejected (report cleared) if the validator unjailed in the interim. Idempotent once the stake has moved.",
+        "type": "object",
+        "required": [
+          "purge_jailed_validator"
+        ],
+        "properties": {
+          "purge_jailed_validator": {
+            "type": "object",
+            "required": [
+              "valoper"
+            ],
+            "properties": {
+              "claimant_valoper": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "valoper": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Anyone (nhash attached): pay program commission on behalf of an enrolled validator (RC1 §10.1). Credits the validator's cumulative paid total; overpayment prepays future accrual; non-refundable. Funds are held by the contract and swept into vault principal (raising NAV) at the next epoch's deposit leg.",
+        "type": "object",
+        "required": [
+          "pay_commission"
+        ],
+        "properties": {
+          "pay_commission": {
+            "type": "object",
+            "required": [
+              "valoper"
+            ],
+            "properties": {
+              "valoper": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Anyone (nhash attached): pay a TIP for an enrolled validator (RC1 §10.2). Credits the CURRENT epoch's tip (the primary priority key; resets at every epoch completion). Non-refundable; funds sweep into vault principal at the next epoch's deposit leg.",
+        "type": "object",
+        "required": [
+          "pay_tip"
+        ],
+        "properties": {
+          "pay_tip": {
+            "type": "object",
+            "required": [
+              "valoper"
+            ],
+            "properties": {
+              "valoper": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Permissionless: fold every enrolled validator's current signed-blocks ratio (slashing SigningInfo) into its per-epoch uptime accumulator (RC1 §10.4). Interval-gated by min_capture_interval_secs; early calls are accepted no-ops. Never required: plan time falls back to a direct read.",
+        "type": "object",
+        "required": [
+          "capture_uptime_signal"
+        ],
+        "properties": {
+          "capture_uptime_signal": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Permissionless: withdraw accrued staking rewards for every delegated validator that has any (phase A alone). Keeper cadence note: rewards claimed inside RunEpoch itself land in the contract balance AFTER that crank's state reads, so they are deposited into the vault at the NEXT epoch. Call ClaimRewards in a prior tx (any time before RunEpoch) so the current epoch's deposit includes them.",
+        "type": "object",
+        "required": [
+          "claim_rewards"
+        ],
+        "properties": {
+          "claim_rewards": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Permissionless (halt-gated): unbond to cover queued swap-outs and expedite funded ones (phases B + D2 alone). Expedites are gated on principal-marker liquidity only.",
+        "type": "object",
+        "required": [
+          "service_redemptions"
+        ],
+        "properties": {
+          "service_redemptions": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Permissionless (min-interval and halt guarded): the full epoch crank. Bypasses the interval guard only to drain a pending continuation.",
+        "type": "object",
+        "required": [
+          "run_epoch"
+        ],
+        "properties": {
+          "run_epoch": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "query": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "QueryMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "epoch_status"
+        ],
+        "properties": {
+          "epoch_status": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Enrolled validators with a live eligibility assessment (uptime, jailed, tombstoned, commission standing, concentration headroom) read from current chain state. Sorted by program priority, highest first (TIP desc, then uptime desc, then enrollment age) — the reverse of the redemption drain order (RC1 §10.2).",
+        "type": "object",
+        "required": [
+          "validators"
+        ],
+        "properties": {
+          "validators": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Open jail reports (RC1 §9.8): validators observed jailed and the time a purge becomes allowed. Keeper-facing.",
+        "type": "object",
+        "required": [
+          "jail_reports"
+        ],
+        "properties": {
+          "jail_reports": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "The most recent epoch's value decomposition (RC1 §9.10). Only the last snapshot is retained; None before the first epoch crank.",
+        "type": "object",
+        "required": [
+          "epoch_snapshot"
+        ],
+        "properties": {
+          "epoch_snapshot": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Realized APR over the last epoch window with the gross-to-net breakdown (rewards, +commission, +TIP, -AUM estimate, -slash write-down), per RC1 §9.10 / R2 transparency. None before the first epoch crank.",
+        "type": "object",
+        "required": [
+          "apr"
+        ],
+        "properties": {
+          "apr": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "migrate": null,
+  "sudo": null,
+  "responses": {
+    "apr": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AprResponse",
+      "type": "object",
+      "required": [
+        "aum_fee_estimate",
+        "commission_received",
+        "epoch_index",
+        "gross_apr_bps",
+        "net_apr_bps",
+        "rewards_claimed",
+        "tips_received",
+        "tvv_before",
+        "window_seconds",
+        "write_down"
+      ],
+      "properties": {
+        "aum_fee_estimate": {
+          "description": "Window drags: the AUM estimate and slash losses recognized this epoch.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
+        },
+        "commission_received": {
+          "$ref": "#/definitions/Uint128"
+        },
+        "epoch_index": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "gross_apr_bps": {
+          "description": "(rewards + commission + tips) annualized against tvv_before, in bps.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "net_apr_bps": {
+          "description": "Gross inflow minus drags (floored at zero) annualized, in bps.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "rewards_claimed": {
+          "description": "Window inflow components.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
+        },
+        "tips_received": {
+          "$ref": "#/definitions/Uint128"
+        },
+        "tvv_before": {
+          "$ref": "#/definitions/Uint128"
+        },
+        "window_seconds": {
+          "description": "Seconds between the previous and last snapshot (the measurement window).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "write_down": {
+          "$ref": "#/definitions/Uint128"
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "config": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ConfigResponse",
+      "type": "object",
+      "required": [
+        "admin",
+        "aum_fee_bps",
+        "commission_bps",
+        "concentration_safety_offset_bps",
+        "jail_unbond_delay_secs",
+        "max_bonded_cap_bps",
+        "max_concentration_multiple_bps",
+        "max_delegations_per_run",
+        "min_bonded_cap_bps",
+        "min_capture_interval_secs",
+        "min_run_interval_secs",
+        "performance_threshold_bps",
+        "receipt_denom",
+        "underlying_denom",
+        "vault_address"
+      ],
+      "properties": {
+        "admin": {
+          "type": "string"
+        },
+        "aum_fee_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "commission_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "concentration_safety_offset_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "jail_unbond_delay_secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_bonded_cap_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_concentration_multiple_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_delegations_per_run": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "min_bonded_cap_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "min_capture_interval_secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "min_run_interval_secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "performance_threshold_bps": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "receipt_denom": {
+          "type": "string"
+        },
+        "underlying_denom": {
+          "type": "string"
+        },
+        "vault_address": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "epoch_snapshot": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EpochSnapshotResponse",
+      "type": "object",
+      "properties": {
+        "snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EpochSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "EpochSnapshot": {
+          "description": "The single most recent epoch value decomposition (RC1 §9.10): overwritten every epoch, never a growing history. Its `tvv_after` seeds the next epoch's `net_deposits` derivation. Adapted to the single-tx engine: `rewards_deposited` and `write_down` are the crank's exact values, so `tvv_after = tvv_before + rewards_deposited - write_down` by construction (settlement and deploy legs are value-neutral; AUM accrual is the only drift). Commission/TIP funds sit in the contract (outside TVV) between epochs, so the between-epoch TVV delta is purely user swap flow minus AUM: `net_deposits = tvv_before(this) - tvv_after(previous)`.",
+          "type": "object",
+          "required": [
+            "aum_fee_estimate",
+            "commission_received",
+            "deployed",
+            "eligible_count",
+            "end_height",
+            "ended_at_seconds",
+            "epoch_index",
+            "net_deposits",
+            "redemptions_expedited",
+            "rewards_claimed",
+            "rewards_deposited",
+            "settled",
+            "started_at_seconds",
+            "tips_received",
+            "total_shares",
+            "tvv_after",
+            "tvv_before",
+            "unbonded_for_redemptions",
+            "validators_purged",
+            "write_down"
+          ],
+          "properties": {
+            "aum_fee_estimate": {
+              "description": "The AUM drag over the window, estimated from the admin's aum_fee_bps mirror (provwasm-std 2.8.0 exposes no vault fee fields).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "commission_received": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "deployed": {
+              "description": "This crank's fresh deployment (receipt minted and delegated).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "eligible_count": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "end_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "ended_at_seconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "epoch_index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "net_deposits": {
+              "description": "User swap flow since the previous epoch: tvv_before - previous tvv_after. Negative = net redemptions. Slightly understated by the window's AUM accrual.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Int128"
+                }
+              ]
+            },
+            "rebalanced": {
+              "description": "Stake redirected between validators by the uniform-slot rebalance (RC1 §9.3): value-neutral, kept productive throughout.",
+              "default": "0",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "redemptions_expedited": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "rewards_claimed": {
+              "description": "Window inflows (accumulated since the previous snapshot, incl. this crank).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "rewards_deposited": {
+              "description": "This crank's actual NAV step (liquid swept into principal).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "settled": {
+              "description": "This crank's value-neutral return settlement and slash recognition.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "started_at_seconds": {
+              "description": "Previous snapshot's end (0 for the first epoch: derived rates guard on it).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "tips_received": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "total_shares": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "tvv_after": {
+              "description": "Expected post-crank TVV: before + rewards_deposited - write_down.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "tvv_before": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "unbonded_for_redemptions": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "validators_purged": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "write_down": {
+              "$ref": "#/definitions/Uint128"
+            }
+          },
+          "additionalProperties": false
+        },
+        "Int128": {
+          "description": "An implementation of i128 that is using strings for JSON encoding/decoding, such that the full i128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `i128` to get the value out:\n\n``` # use cosmwasm_std::Int128; let a = Int128::from(258i128); assert_eq!(a.i128(), 258); ```",
+          "type": "string"
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "epoch_status": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EpochStatusResponse",
+      "type": "object",
+      "required": [
+        "halted",
+        "last_run_seconds",
+        "pending_delegations",
+        "phase",
+        "receipt_minted"
+      ],
+      "properties": {
+        "halted": {
+          "type": "boolean"
+        },
+        "last_run_seconds": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "pending_delegations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PendingDelegation"
+          }
+        },
+        "pending_redelegations": {
+          "description": "Uniform-slot rebalance moves awaiting continuation cranks.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PendingRedelegation"
+          }
+        },
+        "phase": {
+          "type": "string"
+        },
+        "receipt_minted": {
+          "$ref": "#/definitions/Uint128"
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "PendingDelegation": {
+          "type": "object",
+          "required": [
+            "amount",
+            "valoper"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "valoper": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "PendingRedelegation": {
+          "type": "object",
+          "required": [
+            "amount",
+            "dst",
+            "src"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "dst": {
+              "type": "string"
+            },
+            "src": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "jail_reports": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "JailReportsResponse",
+      "type": "object",
+      "required": [
+        "reports"
+      ],
+      "properties": {
+        "reports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JailReport"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "JailReport": {
+          "type": "object",
+          "required": [
+            "purge_ready_at_seconds",
+            "reported_at_seconds",
+            "valoper"
+          ],
+          "properties": {
+            "purge_ready_at_seconds": {
+              "description": "reported_at + jail_unbond_delay: the earliest a purge may execute.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "reported_at_seconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "valoper": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "validators": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ValidatorsResponse",
+      "type": "object",
+      "required": [
+        "validators"
+      ],
+      "properties": {
+        "validators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ValidatorStatus"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "ValidatorStatus": {
+          "type": "object",
+          "required": [
+            "commission_accrued",
+            "commission_due",
+            "commission_paid",
+            "eligible",
+            "enrolled_at_seconds",
+            "headroom",
+            "in_arrears",
+            "jailed",
+            "operator",
+            "tip_epoch",
+            "tombstoned",
+            "uptime_capture_count",
+            "valoper"
+          ],
+          "properties": {
+            "commission_accrued": {
+              "description": "Cumulative program commission accrued / paid, and the grace boundary the paid total must currently meet (RC1 §10.1).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "commission_due": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "commission_paid": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "eligible": {
+              "description": "Live eligibility: enrolled, bonded, not jailed/tombstoned, uptime meets the configured threshold, commission current.",
+              "type": "boolean"
+            },
+            "enrolled_at_seconds": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "headroom": {
+              "description": "nhash of new delegation this validator could still legally receive under the concentration cap minus the safety offset (0 when ineligible).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "in_arrears": {
+              "description": "True when commission_paid < commission_due: past the one-epoch grace, which alone makes the validator ineligible until brought current.",
+              "type": "boolean"
+            },
+            "jailed": {
+              "type": "boolean"
+            },
+            "operator": {
+              "type": "string"
+            },
+            "tip_epoch": {
+              "description": "TIP credited for the current epoch (primary priority key).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
+            },
+            "tombstoned": {
+              "type": "boolean"
+            },
+            "uptime_bps": {
+              "description": "Effective uptime in bps (accumulator mean if any captures, else the live signing-info read). None when uptime cannot be determined (validator or signing info missing, non-ed25519 consensus key).",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "uptime_capture_count": {
+              "description": "Captures folded into the current epoch's accumulator.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "valoper": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

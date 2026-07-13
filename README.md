@@ -52,8 +52,9 @@ division of responsibility is pinned in
 
 This repository is the structured home for the nvHASH program, being migrated
 in stages from the exploratory `nvhash-cosmos-contracts` repository.
-Documentation and specifications have migrated; contract, console, and tooling
-code follow in future tranches. Delivery status for the contract is tracked in
+Documentation, specifications, the staking contract, and the devnet tooling
+have migrated; the console follows in a future tranche. Delivery status for
+the contract is tracked in
 [`contracts/IMPLEMENTATION-STATUS.md`](contracts/IMPLEMENTATION-STATUS.md).
 
 ## Security
