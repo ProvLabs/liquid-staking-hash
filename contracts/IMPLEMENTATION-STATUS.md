@@ -39,6 +39,11 @@ violations):
 - POC flaw hardenings F1–F9 (register:
   [`docs/architecture/history/2026-07-02-poc-flaw-register.md`](../docs/architecture/history/2026-07-02-poc-flaw-register.md))
 - Emergency controls: `SetHalted`, `ClearPendingDelegations`
+- Config input bounding at the message boundary (2026-07-13, SECURITY.md
+  conformance): `Config::validate()` enforced at instantiate and after every
+  `UpdateConfig` merge — bps rates capped at 10000, cap ordering
+  (min <= max, max > 0), non-zero concentration multiple, safety offset
+  < 100%, SDK denom shape, distinct underlying/receipt denoms
 
 **Bootstrap requirements:** the contract needs Transfer access on the
 restricted receipt marker (burn leg) and must be rotated in as the vault's
@@ -159,9 +164,10 @@ under [`infra/devnet/`](../infra/devnet/); drills under
   assessed on the crank caller's tx: attach flat `--fees` (30 HASH covers an
   epoch with both legs).
 - `cargo test --lib` needs `GOTOOLCHAIN=go1.24.5` on Go >= 1.26 hosts.
-- Test-tube tests load the optimized artifact: re-run
-  `cargo run-script optimize-arm64` (Docker) after contract source changes or
-  the suite exercises a stale binary.
+- The optimized artifact is not committed (repo policy: no binaries in git):
+  `scripts/build-artifact.sh` builds it on demand (Docker), skipping when the
+  source is unchanged; test-tube tests and the devnet bootstrap load it from
+  `artifacts/`.
 - The test-tube genesis validator's operator key is not recoverable; tests
   that need an operator create a real validator from a funded account
   (`src/tests.rs::create_validator`).

@@ -9,6 +9,9 @@ pub enum ContractError {
     #[error("unauthorized")]
     Unauthorized {},
 
+    #[error("invalid config: {reason}")]
+    InvalidConfig { reason: String },
+
     #[error("halted: cranks are disabled by the admin")]
     Halted {},
 

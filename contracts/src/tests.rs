@@ -135,7 +135,12 @@ fn setup_wasm_with_underlying(
     underlying: &str,
 ) -> Addr {
     let wasm = Wasm::new(app);
-    let wasm_byte_code = std::fs::read("artifacts/nvhash_staking.wasm").unwrap();
+    // The optimized artifact is not committed (repo policy: binaries are built
+    // on demand); build it with scripts/build-artifact.sh when missing.
+    let wasm_byte_code = std::fs::read("artifacts/nvhash_staking.wasm").expect(
+        "artifacts/nvhash_staking.wasm not found — build it first: \
+         contracts/scripts/build-artifact.sh (Docker required)",
+    );
     // store_code needs more gas than the Auto fee default (4M) as the contract
     // has grown; sign the upload with an explicit gas limit.
     let uploader = app

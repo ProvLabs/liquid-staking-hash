@@ -30,7 +30,7 @@ resolve() {
   VAULT="${VAULT:-$(qj vault list 2>/dev/null | jq -r --arg d "$SHARE" \
     '.vaults[]?|select(.total_shares.denom==$d)|.base_account.address' | head -1)}"
   [ -n "${VAULT:-}" ] && [ "$VAULT" != "null" ] || {
-    echo "no vault found for share denom '$SHARE'; is the dev node bootstrapped? (scripts/nvhash-deploy-p2p.sh)" >&2
+    echo "no vault found for share denom '$SHARE'; is the dev node bootstrapped? (infra/devnet/bootstrap/nvhash-deploy-p2p.sh)" >&2
     exit 1
   }
   CONTRACT="${CONTRACT:-$(qj vault get "$VAULT" | jq -r '.vault.asset_manager')}"

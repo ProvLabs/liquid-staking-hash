@@ -57,6 +57,71 @@ pub struct Config {
     pub jail_unbond_delay_secs: u64,
 }
 
+impl Config {
+    /// Bound every admin-suppliable value into its valid range (SECURITY.md:
+    /// inputs are validated at the message boundary, not where they are used).
+    /// Enforced at instantiate and after every UpdateConfig merge, so no
+    /// out-of-range value can ever be stored.
+    pub fn validate(&self) -> Result<(), crate::ContractError> {
+        let invalid = |reason: &str| crate::ContractError::InvalidConfig {
+            reason: reason.to_string(),
+        };
+        validate_denom(&self.underlying_denom, "underlying_denom")?;
+        validate_denom(&self.receipt_denom, "receipt_denom")?;
+        if self.underlying_denom == self.receipt_denom {
+            return Err(invalid("underlying_denom and receipt_denom must differ"));
+        }
+        if self.aum_fee_bps > 10_000 {
+            return Err(invalid("aum_fee_bps must be <= 10000"));
+        }
+        if self.performance_threshold_bps > 10_000 {
+            return Err(invalid(
+                "performance_threshold_bps must be <= 10000 (0 disables gating)",
+            ));
+        }
+        if self.commission_bps > 10_000 {
+            return Err(invalid("commission_bps must be <= 10000"));
+        }
+        if self.max_concentration_multiple_bps == 0 {
+            return Err(invalid(
+                "max_concentration_multiple_bps must be > 0 (10000 = 1x)",
+            ));
+        }
+        if self.max_bonded_cap_bps == 0 || self.max_bonded_cap_bps > 10_000 {
+            return Err(invalid("max_bonded_cap_bps must be in 1..=10000"));
+        }
+        if self.min_bonded_cap_bps > self.max_bonded_cap_bps {
+            return Err(invalid(
+                "min_bonded_cap_bps must be <= max_bonded_cap_bps",
+            ));
+        }
+        // An offset of 10000 bps (100% of max bond) would silently zero every
+        // deploy target; disabling deploys is SetHalted's job, not a config
+        // value that looks like a margin.
+        if self.concentration_safety_offset_bps >= 10_000 {
+            return Err(invalid(
+                "concentration_safety_offset_bps must be < 10000",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Cosmos SDK denom shape: 3..=128 chars, leading alphabetic, then
+/// alphanumerics and '/', ':', '.', '_', '-'. Rejecting malformed denoms here
+/// keeps every downstream bank/marker/exchange message well-formed.
+fn validate_denom(denom: &str, field: &str) -> Result<(), crate::ContractError> {
+    let mut chars = denom.chars();
+    let head_ok = chars.next().is_some_and(|c| c.is_ascii_alphabetic());
+    let tail_ok = chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | ':' | '.' | '_' | '-'));
+    if denom.len() < 3 || denom.len() > 128 || !head_ok || !tail_ok {
+        return Err(crate::ContractError::InvalidConfig {
+            reason: format!("{field} is not a valid denom: {denom:?}"),
+        });
+    }
+    Ok(())
+}
+
 pub const CONFIG: Item<Config> = Item::new("config");
 
 /// An enrolled validator (RC1 §11.2 RegisterParticipation). Enrollment is

@@ -3,11 +3,11 @@
 # reset a single-node Provenance devnet configured the way this repo's drills
 # expect (short unbonding for real maturities, tx indexing on).
 #
-#   scripts/dev-node.sh up          create/patch config if needed, start, wait for blocks
-#   scripts/dev-node.sh down        stop and remove the container (state kept)
-#   scripts/dev-node.sh reset       down + wipe state + up (fresh chain)
-#   scripts/dev-node.sh bootstrap   up (if needed) + nvhash-deploy-p2p.sh
-#   scripts/dev-node.sh status      container + block height
+#   infra/devnet/dev-node.sh up          create/patch config if needed, start, wait for blocks
+#   infra/devnet/dev-node.sh down        stop and remove the container (state kept)
+#   infra/devnet/dev-node.sh reset       down + wipe state + up (fresh chain)
+#   infra/devnet/dev-node.sh bootstrap   up (if needed) + nvhash-deploy-p2p.sh
+#   infra/devnet/dev-node.sh status      container + block height
 #
 # IMAGE REQUIREMENT (documented, not automated here): a locally built
 # `provenance-io/blockchain-dev:latest` containing the settlement-era vault
@@ -17,7 +17,7 @@
 # genesis/config into the mounted state dir on first run.
 #
 # Environment overrides:
-#   DEVNET_HOME=.devnet        state dir (bind-mounted at /provenance)
+#   DEVNET_HOME=infra/devnet/state  state dir (bind-mounted at /provenance)
 #   CONTAINER=dev-node         container name
 #   IMAGE=provenance-io/blockchain-dev:latest
 #   UNBONDING=120s             staking unbonding_time patched into genesis
@@ -25,8 +25,7 @@
 set -euo pipefail
 
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$SDIR/.." && pwd)"
-DEVNET_HOME="${DEVNET_HOME:-$REPO/.devnet}"
+DEVNET_HOME="${DEVNET_HOME:-$SDIR/state}"
 CONTAINER="${CONTAINER:-dev-node}"
 IMAGE="${IMAGE:-provenance-io/blockchain-dev:latest}"
 UNBONDING="${UNBONDING:-120s}"
@@ -131,7 +130,7 @@ case "$CMD" in
   bootstrap)
     up
     echo "== bootstrapping vault + contract =="
-    "$SDIR/nvhash-deploy-p2p.sh"
+    "$SDIR/bootstrap/nvhash-deploy-p2p.sh"
     ;;
   status)
     if [ "$(docker ps -q -f name="^${CONTAINER}$")" ]; then

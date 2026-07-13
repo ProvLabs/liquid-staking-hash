@@ -34,7 +34,12 @@ WITHDRAWAL_DELAY_MULT_NUM="${WITHDRAWAL_DELAY_MULT_NUM:-3}"
 WITHDRAWAL_DELAY_MULT_DEN="${WITHDRAWAL_DELAY_MULT_DEN:-2}"
 
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WASM_HOST="${WASM_HOST:-$SDIR/../artifacts/nvhash_staking.wasm}"
+REPO_ROOT="$(cd "$SDIR/../../.." && pwd)"
+WASM_HOST="${WASM_HOST:-$REPO_ROOT/contracts/artifacts/nvhash_staking.wasm}"
+# The artifact is not committed; build it on demand (Docker).
+if [ ! -f "$WASM_HOST" ]; then
+  "$REPO_ROOT/contracts/scripts/build-artifact.sh"
+fi
 WASM_IN="${WASM_IN:-/tmp/nvhash_staking.wasm}"
 CONTRACT_LABEL="${CONTRACT_LABEL:-nvhash-staking}"
 CONTRACT_ADMIN="${CONTRACT_ADMIN:-}"
@@ -262,4 +267,4 @@ echo "  vault          : $VAULT (share=$SHARE, underlying=$UNDERLYING)"
 echo "  principal      : $PRINCIPAL_ADDR"
 echo "  code id        : $CODE_ID"
 echo "  contract       : $CONTRACT (asset_manager)"
-echo "  next           : scripts/p2p-drill.sh (settlement drill with assertions)"
+echo "  next           : contracts/drills/p2p-drill.sh (settlement drill with assertions)"

@@ -9,7 +9,7 @@
 #     STATUS.md §6 and the provenance repo: make devnet-start), tx indexer "kv",
 #     and a SHORT staking unbonding_time (the drill waits for real maturities;
 #     120s recommended: patch app_state.staking.params.unbonding_time in genesis)
-#   - scripts/nvhash-deploy-p2p.sh completed (marker, vault, NAV seed, contract)
+#   - infra/devnet/bootstrap/nvhash-deploy-p2p.sh completed (marker, vault, NAV seed, contract)
 #
 # Phases:
 #   1 enroll     validator registers; live eligibility asserted
@@ -341,4 +341,4 @@ assert_receipt_invariant
 
 echo; echo "== DRILL PASSED =="
 echo "  slash write-down + jail report/purge are covered separately by"
-echo "  scripts/jail-drill.sh (needs real downtime jailing)."
+echo "  contracts/drills/jail-drill.sh (needs real downtime jailing)."

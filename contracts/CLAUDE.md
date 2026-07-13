@@ -1,9 +1,7 @@
 # CLAUDE.md — contracts
 
 CosmWasm asset-manager contract for the nvHASH liquid staking vault on
-Provenance. Contract code migrates here from the exploratory
-`nvhash-cosmos-contracts` repository; until it lands, this file records the
-durable facts that carry over.
+Provenance.
 
 ## Governing documents
 
@@ -20,9 +18,10 @@ durable facts that carry over.
 - cosmwasm-std 2.2, provwasm-std 2.8.0, provwasm-test-tube 0.5.0.
 - Release profile has `overflow-checks = true`: saturating/checked/
   multiply_ratio math only, floor arithmetic everywhere.
-- `cargo test --lib` = pure tests (no Docker); rebuild the optimized artifact
-  (`cargo run-script optimize-arm64`, Docker) before test-tube runs or the
-  suite exercises a stale binary. `cargo schema` regenerates `schema/`.
+- The optimized wasm artifact is never committed (repo policy): build it on
+  demand with `scripts/build-artifact.sh` (Docker; skips when fresh, rebuilds
+  when source is newer). The test-tube integration tests and the devnet
+  bootstrap load it from `artifacts/`. `cargo schema` regenerates `schema/`.
 - `cargo test --lib` needs `GOTOOLCHAIN=go1.24.5` on Go >= 1.26 hosts
   (provwasm-test-tube's bundled Go deps do not build on 1.26).
 

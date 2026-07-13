@@ -3,11 +3,6 @@
 CosmWasm asset-manager contract for the nvHASH liquid staking vault on
 Provenance.
 
-> **Migration pending:** the contract crate (`src/`, `Cargo.toml`, `schema/`,
-> `artifacts/`) and the drill scripts still live in the exploratory
-> `nvhash-cosmos-contracts` repository and migrate here in a future tranche.
-> The layout and commands below describe where things land.
-
 Governing spec: [`docs/specs/liquid-staking-spec.md`](../docs/specs/liquid-staking-spec.md)
 (v1.0, baselined). Delivery ledger and open work:
 [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md).
@@ -17,7 +12,9 @@ Governing spec: [`docs/specs/liquid-staking-spec.md`](../docs/specs/liquid-staki
 - `src/` — the staking contract crate (contract entry points, epoch engine,
   planners, validator marketplace, simulation harness).
 - `schema/` — generated JSON schemas for contract messages (`cargo schema`).
-- `scripts/` — build/optimizer scripts.
+- `scripts/` — `build-artifact.sh` builds the optimized wasm on demand
+  (the artifact is never committed; tests and the devnet bootstrap build it
+  when missing).
 - `drills/` — scripted end-to-end verification against a live dev chain
   (see [`drills/README.md`](drills/README.md)).
 
@@ -29,14 +26,14 @@ saturating/checked/floor.
 
 **Build and unit/integration tests**
 
-    cargo run-script optimize-arm64    # or optimize (x86): builds the wasm artifact
+    scripts/build-artifact.sh          # optimized wasm via Docker (skips if fresh)
     cargo test --lib                   # unit + embedded-chain integration tests
     cargo schema                       # regenerate schema/
 
-The integration tests load the optimized artifact, so rebuild it (Docker
-required) after contract changes. On hosts with Go >= 1.26, prefix test runs
-with `GOTOOLCHAIN=go1.24.5` (a provwasm-test-tube dependency does not build on
-newer Go).
+The integration tests load `artifacts/nvhash_staking.wasm`; `build-artifact.sh`
+rebuilds it when the source is newer (Docker required). On hosts with
+Go >= 1.26, prefix test runs with `GOTOOLCHAIN=go1.24.5` (a provwasm-test-tube
+dependency does not build on newer Go).
 
 **Simulation soak** (chain-free stability harness; run for minutes or days)
 

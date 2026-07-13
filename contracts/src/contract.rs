@@ -66,6 +66,7 @@ pub fn instantiate(
             .jail_unbond_delay_secs
             .unwrap_or(DEFAULT_JAIL_UNBOND_DELAY_SECS),
     };
+    config.validate()?;
     CONFIG.save(deps.storage, &config)?;
     EPOCH.save(deps.storage, &EpochState::default())?;
     RECEIPT_MINTED.save(deps.storage, &Uint128::zero())?;
@@ -359,6 +360,7 @@ fn exec_update_config(
         if let Some(v) = jail_unbond_delay_secs {
             c.jail_unbond_delay_secs = v;
         }
+        c.validate()?;
         Ok(c)
     })?;
     Ok(Response::new().add_attribute("action", "update_config"))
@@ -470,6 +472,145 @@ mod unit {
         assert!(PENDING_DELEGATIONS.load(&deps.storage).unwrap().is_empty());
         assert_eq!(RECEIPT_MINTED.load(&deps.storage).unwrap(), Uint128::zero());
         assert!(!HALTED.load(&deps.storage).unwrap());
+    }
+
+    /// The setup InstantiateMsg with one field overridden per case.
+    fn base_msg(admin: &Addr, vault: &Addr) -> InstantiateMsg {
+        InstantiateMsg {
+            admin: admin.to_string(),
+            vault_address: vault.to_string(),
+            underlying_denom: "nhash".to_string(),
+            receipt_denom: "nvhash.staked".to_string(),
+            min_run_interval_secs: 0,
+            max_delegations_per_run: 0,
+            aum_fee_bps: 0,
+            performance_threshold_bps: 0,
+            min_capture_interval_secs: 0,
+            max_concentration_multiple_bps: None,
+            min_bonded_cap_bps: None,
+            max_bonded_cap_bps: None,
+            concentration_safety_offset_bps: None,
+            commission_bps: None,
+            jail_unbond_delay_secs: None,
+        }
+    }
+
+    #[test]
+    fn instantiate_bounds_every_config_input() {
+        let cases: Vec<(&str, Box<dyn Fn(&mut InstantiateMsg)>)> = vec![
+            ("aum_fee_bps over 100%", Box::new(|m| m.aum_fee_bps = 10_001)),
+            (
+                "performance_threshold_bps over 100%",
+                Box::new(|m| m.performance_threshold_bps = 10_001),
+            ),
+            (
+                "commission_bps over 100%",
+                Box::new(|m| m.commission_bps = Some(10_001)),
+            ),
+            (
+                "zero concentration multiple",
+                Box::new(|m| m.max_concentration_multiple_bps = Some(0)),
+            ),
+            (
+                "zero max bonded cap",
+                Box::new(|m| m.max_bonded_cap_bps = Some(0)),
+            ),
+            (
+                "min bonded cap above max",
+                Box::new(|m| {
+                    m.min_bonded_cap_bps = Some(3_400);
+                    m.max_bonded_cap_bps = Some(3_300);
+                }),
+            ),
+            (
+                "safety offset at 100% of max bond",
+                Box::new(|m| m.concentration_safety_offset_bps = Some(10_000)),
+            ),
+            (
+                "empty underlying denom",
+                Box::new(|m| m.underlying_denom = String::new()),
+            ),
+            (
+                "denom with illegal characters",
+                Box::new(|m| m.receipt_denom = "nv hash!".to_string()),
+            ),
+            (
+                "denom starting with a digit",
+                Box::new(|m| m.underlying_denom = "9hash".to_string()),
+            ),
+            (
+                "identical underlying and receipt denoms",
+                Box::new(|m| {
+                    m.underlying_denom = "nhash".to_string();
+                    m.receipt_denom = "nhash".to_string();
+                }),
+            ),
+        ];
+        for (label, mutate) in cases {
+            let mut deps = mock_dependencies();
+            let admin = deps.api.addr_make("admin");
+            let vault = deps.api.addr_make("vault");
+            let mut msg = base_msg(&admin, &vault);
+            mutate(&mut msg);
+            let err = instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg)
+                .unwrap_err();
+            assert!(
+                matches!(err, ContractError::InvalidConfig { .. }),
+                "case '{label}' should be rejected as InvalidConfig, got: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn instantiate_accepts_boundary_config_values() {
+        // Exact edges of every bound are valid: 100% bps rates, min==max caps,
+        // offset one below 100%, and a 3-char denom.
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        let mut msg = base_msg(&admin, &vault);
+        msg.underlying_denom = "abc".to_string();
+        msg.aum_fee_bps = 10_000;
+        msg.performance_threshold_bps = 10_000;
+        msg.commission_bps = Some(10_000);
+        msg.min_bonded_cap_bps = Some(3_300);
+        msg.max_bonded_cap_bps = Some(3_300);
+        msg.concentration_safety_offset_bps = Some(9_999);
+        instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg).unwrap();
+    }
+
+    #[test]
+    fn update_config_rejects_out_of_range_values() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&admin, &[]),
+            ExecuteMsg::UpdateConfig {
+                min_run_interval_secs: None,
+                max_delegations_per_run: None,
+                aum_fee_bps: Some(10_001),
+                performance_threshold_bps: None,
+                min_capture_interval_secs: None,
+                max_concentration_multiple_bps: None,
+                min_bonded_cap_bps: None,
+                max_bonded_cap_bps: None,
+                concentration_safety_offset_bps: None,
+                commission_bps: None,
+                jail_unbond_delay_secs: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InvalidConfig { .. }));
+
+        // The rejected update must not have modified the stored config.
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+        let resp: ConfigResponse = from_json(&bin).unwrap();
+        assert_eq!(resp.aum_fee_bps, 0);
     }
 
     #[test]
