@@ -18,8 +18,10 @@ ARTIFACT="$CRATE/artifacts/nvhash_staking.wasm"
 OPTIMIZER_VERSION="0.17.0"
 
 if [ "${1:-}" != "--force" ] && [ -f "$ARTIFACT" ]; then
-  # Stale check: any tracked source newer than the artifact forces a rebuild.
-  if [ -z "$(find "$CRATE/src" "$CRATE/Cargo.toml" -newer "$ARTIFACT" -print -quit)" ]; then
+  # Stale check: source, manifest, or lockfile newer than the artifact forces
+  # a rebuild (a lockfile-only change still changes the dependency graph the
+  # wasm is built from).
+  if [ -z "$(find "$CRATE/src" "$CRATE/Cargo.toml" "$CRATE/Cargo.lock" -newer "$ARTIFACT" -print -quit)" ]; then
     echo "artifact up to date: $ARTIFACT"
     exit 0
   fi
@@ -39,8 +41,9 @@ docker run --rm -v "$CRATE":/code \
   "$IMAGE"
 
 # The arm64 optimizer may emit a -aarch64 suffixed artifact; tests and the
-# bootstrap load the plain name.
-if [ ! -f "$ARTIFACT" ] && [ -f "${ARTIFACT%.wasm}-aarch64.wasm" ]; then
+# bootstrap load the plain name. Always overwrite after a build — gating on
+# the plain file's absence would leave a stale plain artifact in place.
+if [ -f "${ARTIFACT%.wasm}-aarch64.wasm" ]; then
   cp "${ARTIFACT%.wasm}-aarch64.wasm" "$ARTIFACT"
 fi
 
