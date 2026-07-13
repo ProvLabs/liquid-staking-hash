@@ -36,3 +36,11 @@ Internal testing/operations web console.
   `contracts/src/msg.rs` / `state.rs`; update it in the same change as any
   contract interface change, and keep guard preflight (`src/lib/guards.ts`)
   aligned with the contract's actual gates.
+- Dependency surface is deliberately minimal (react, react-dom,
+  react-router-dom only). The `@cosmjs/*` packages were removed 2026-07-13 as
+  unused — they carried a critical `elliptic` advisory chain. When the
+  extension-wallet adapter lands (spec §14.1), re-add only the needed cosmjs
+  packages at a current, audited version.
+- The index.html CSP pins `connect-src` to the known profile LCD hosts; a
+  deployment on a different LCD updates that list — never widen it to a
+  blanket `https:`.

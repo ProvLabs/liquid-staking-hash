@@ -3,11 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Self-contained delivery (spec §12): strict CSP, only the configured LCD as a network peer.
-         connect-src is widened at deploy time to the profile's lcd_url; 'self' covers the SPA assets. -->
+    <!-- Self-contained delivery (spec §12): strict CSP, only the configured LCD as a
+         network peer. connect-src enumerates the known profile LCD hosts plus localhost
+         for the devnet profile — never a blanket https: (SECURITY.md: injected code must
+         not be able to exfiltrate to arbitrary hosts). A deployment on a different LCD
+         adjusts this list (or tightens it further via server headers). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://localhost:* https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'"
+      content="default-src 'self'; connect-src 'self' http://localhost:* https://lcd.provenance.io https://lcd.test.provenance.io; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'"
     />
     <title>nvHASH Console</title>
     <!-- Pre-paint theme resolution so the first frame is the right surface (no flash). -->
