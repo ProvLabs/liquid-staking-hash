@@ -11,7 +11,7 @@
     "build:test": "tsc -b && vite build --mode test",
     "build:devnet": "tsc -b && vite build --mode devnet",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@cosmjs/cosmwasm-stargate": "^0.32.4",

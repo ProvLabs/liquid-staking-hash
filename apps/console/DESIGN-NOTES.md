@@ -6,8 +6,8 @@ against. For each surface: the page's job, the ranked reader-task list (the comm
 hierarchy), the block roles and emphasis levels derived from that ranking, and a
 persona triangulation against personas chosen for *conflict*.
 
-Sources: `docs/nvHASH-console-spec.md` (§8 pages, §4 roles, §11 design language),
-`docs/liquid-staking-dashboard-personas.md` (the five personas). The console is a
+Sources: `docs/specs/console-spec.md` (§8 pages, §4 roles, §11 design language),
+`docs/specs/dashboard-personas.md` (the five personas). The console is a
 **chain-truth verification tool** whose primary user is the Protocol Engineer (Theo);
 the load-bearing product value is honesty about state (freshness, guard reasons,
 invariant pills), not consumer polish.

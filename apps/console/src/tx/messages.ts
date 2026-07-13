@@ -1,5 +1,5 @@
 // ExecuteMsg builders (spec §10.2 build step). One typed builder per contract variant
-// (src/msg.rs ExecuteMsg). Funds are attached only for PayCommission / PayTip.
+// (contracts/src/msg.rs ExecuteMsg). Funds are attached only for PayCommission / PayTip.
 
 export type ExecuteMsg =
   | { pause_vault: { reason: string } }

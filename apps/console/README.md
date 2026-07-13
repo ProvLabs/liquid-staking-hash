@@ -2,10 +2,14 @@
 
 A chain-truth verification tool for the nvHASH liquid staking program on Provenance.
 Static SPA, no backend: the chain is the database. Built to
-[`docs/nvHASH-console-spec.md`](../docs/nvHASH-console-spec.md) v2.0-RC1, grounded on the
-as-built contract interface (`src/msg.rs`, `src/state.rs`).
+[`docs/specs/console-spec.md`](../../docs/specs/console-spec.md) v2.0-RC1, grounded on the
+as-built contract interface (`contracts/src/msg.rs`, `contracts/src/state.rs`).
 
-This rebuild's information architecture was derived with the `page-layout` skill before
+The console is the engineering/verification half of the program's two-surface split —
+the consumer experience is [`apps/web/`](../web/); the seam between them is pinned in
+[`docs/architecture/application-boundary.md`](../../docs/architecture/application-boundary.md).
+
+This build's information architecture was derived with the `page-layout` skill before
 any markup was written; the derivation (per-page task rankings, block roles, persona
 triangulation) is in [`DESIGN-NOTES.md`](./DESIGN-NOTES.md).
 
@@ -19,7 +23,8 @@ npm run dev          # devnet profile; VITE_MOCK=true renders every page from fi
 Open http://localhost:5273. In mock mode the app runs with no live node: connect a mock
 identity (admin / operator / keeper) from the wallet button to see each role's write
 surface. Point at a real node by setting `VITE_MOCK=false` and the LCD/contract values in
-`.env.<profile>` (restore prior devnet values with `git show HEAD:console/.env.devnet`).
+`.env.<profile>` (a local devnet supplies them via [`infra/devnet/`](../../infra/devnet/);
+restore prior values with `git show HEAD:apps/console/.env.devnet`).
 
 ```
 npm run typecheck

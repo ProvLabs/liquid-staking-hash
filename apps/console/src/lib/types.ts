@@ -1,4 +1,4 @@
-// TypeScript mirror of the contract query/response surface (src/msg.rs, src/state.rs,
+// TypeScript mirror of the contract query/response surface (contracts/src/msg.rs, contracts/src/state.rs,
 // verified 2026-07-09). All Uint128/Int128 arrive as decimal STRINGS and are parsed to
 // BigInt at the edge (spec Decision 8); these interfaces keep the wire shape as strings.
 
