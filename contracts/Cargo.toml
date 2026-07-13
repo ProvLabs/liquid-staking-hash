@@ -21,16 +21,11 @@ panic = "abort"
 incremental = false
 overflow-checks = true
 
+# Single build path: both aliases delegate to the freshness-aware build script
+# (arch auto-detected, -aarch64 output normalized) so no flow can bypass it.
 [package.metadata.scripts]
-optimize = """DOCKER_DEFAULT_PLATFORM=linux/amd64 docker run --rm -v "$(pwd)":/code \
-  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-  cosmwasm/optimizer:0.17.0"""
-
-optimize-arm64 = """docker run --rm -v "$(pwd)":/code \
-  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-  cosmwasm/optimizer-arm64:0.17.0"""
+optimize = "./scripts/build-artifact.sh --force"
+optimize-arm64 = "./scripts/build-artifact.sh --force"
 
 [dependencies]
 bech32 = { version = "0.11", default-features = false, features = ["alloc"] }

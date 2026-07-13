@@ -41,10 +41,17 @@ docker run --rm -v "$CRATE":/code \
   "$IMAGE"
 
 # The arm64 optimizer may emit a -aarch64 suffixed artifact; tests and the
-# bootstrap load the plain name. Always overwrite after a build — gating on
-# the plain file's absence would leave a stale plain artifact in place.
-if [ -f "${ARTIFACT%.wasm}-aarch64.wasm" ]; then
-  cp "${ARTIFACT%.wasm}-aarch64.wasm" "$ARTIFACT"
+# bootstrap load the plain name. Copy when the suffixed file is the newer
+# output of THIS build: unconditional copying would let a stale leftover
+# -aarch64 file clobber a freshly built plain artifact, and gating on the
+# plain file's absence would leave a stale plain artifact in place.
+SUFFIXED="${ARTIFACT%.wasm}-aarch64.wasm"
+if [ -f "$SUFFIXED" ] && { [ ! -f "$ARTIFACT" ] || [ "$SUFFIXED" -nt "$ARTIFACT" ]; }; then
+  cp "$SUFFIXED" "$ARTIFACT"
 fi
 
+if [ ! -f "$ARTIFACT" ]; then
+  echo "optimizer completed but $ARTIFACT was not produced" >&2
+  exit 1
+fi
 ls -lh "$ARTIFACT"

@@ -128,6 +128,44 @@ fn setup_wasm(app: &ProvwasmTestApp, admin: &SigningAccount, vault_address: &Add
     setup_wasm_with_underlying(app, admin, vault_address, UNDERLYING_DENOM)
 }
 
+/// Newest modification time under a path (file or directory, recursive).
+fn newest_mtime(path: &std::path::Path) -> Option<std::time::SystemTime> {
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_dir() {
+        return meta.modified().ok();
+    }
+    std::fs::read_dir(path)
+        .ok()?
+        .flatten()
+        .filter_map(|e| newest_mtime(&e.path()))
+        .max()
+}
+
+/// Load the optimized artifact, refusing to run against a STALE one: a binary
+/// older than the contract source would silently exercise outdated code (the
+/// same freshness rule scripts/build-artifact.sh enforces).
+fn read_fresh_artifact() -> Vec<u8> {
+    const HINT: &str = "build it: contracts/scripts/build-artifact.sh (Docker required)";
+    let artifact = std::path::Path::new("artifacts/nvhash_staking.wasm");
+    let bytes = std::fs::read(artifact)
+        .unwrap_or_else(|_| panic!("artifacts/nvhash_staking.wasm not found — {HINT}"));
+    let built_at = artifact
+        .metadata()
+        .and_then(|m| m.modified())
+        .expect("artifact mtime unreadable");
+    let newest_src = ["src", "Cargo.toml", "Cargo.lock"]
+        .iter()
+        .filter_map(|p| newest_mtime(std::path::Path::new(p)))
+        .max()
+        .expect("contract source mtime unreadable");
+    assert!(
+        built_at >= newest_src,
+        "artifacts/nvhash_staking.wasm is OLDER than the contract source — \
+         the suite would test a stale binary; re{HINT}"
+    );
+    bytes
+}
+
 fn setup_wasm_with_underlying(
     app: &ProvwasmTestApp,
     admin: &SigningAccount,
@@ -135,12 +173,7 @@ fn setup_wasm_with_underlying(
     underlying: &str,
 ) -> Addr {
     let wasm = Wasm::new(app);
-    // The optimized artifact is not committed (repo policy: binaries are built
-    // on demand); build it with scripts/build-artifact.sh when missing.
-    let wasm_byte_code = std::fs::read("artifacts/nvhash_staking.wasm").expect(
-        "artifacts/nvhash_staking.wasm not found — build it first: \
-         contracts/scripts/build-artifact.sh (Docker required)",
-    );
+    let wasm_byte_code = read_fresh_artifact();
     // store_code needs more gas than the Auto fee default (4M) as the contract
     // has grown; sign the upload with an explicit gas limit.
     let uploader = app

@@ -35,10 +35,17 @@ WITHDRAWAL_DELAY_MULT_DEN="${WITHDRAWAL_DELAY_MULT_DEN:-2}"
 
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SDIR/../../.." && pwd)"
-WASM_HOST="${WASM_HOST:-$REPO_ROOT/contracts/artifacts/nvhash_staking.wasm}"
-# The artifact is not committed; build it on demand (Docker).
-if [ ! -f "$WASM_HOST" ]; then
+WASM_DEFAULT="$REPO_ROOT/contracts/artifacts/nvhash_staking.wasm"
+WASM_HOST="${WASM_HOST:-$WASM_DEFAULT}"
+# The artifact is not committed; keep the default one fresh on EVERY bootstrap
+# (the build script no-ops when the artifact already matches the source, so
+# this also rebuilds after a pull that only changed src/ or Cargo.lock). An
+# explicit WASM_HOST override is deployed as-is and must already exist.
+if [ "$WASM_HOST" = "$WASM_DEFAULT" ]; then
   "$REPO_ROOT/contracts/scripts/build-artifact.sh"
+elif [ ! -f "$WASM_HOST" ]; then
+  echo "WASM_HOST not found: $WASM_HOST" >&2
+  exit 1
 fi
 WASM_IN="${WASM_IN:-/tmp/nvhash_staking.wasm}"
 CONTRACT_LABEL="${CONTRACT_LABEL:-nvhash-staking}"
@@ -214,7 +221,7 @@ if [ -n "$CONTRACT" ]; then
   echo "  vault asset_manager is already an nvhash-staking contract: $CONTRACT — reusing"
 else
   [ -f "$WASM_HOST" ] || {
-    echo "wasm not found: $WASM_HOST (build: cargo run-script optimize-arm64)" >&2; exit 1; }
+    echo "wasm not found: $WASM_HOST (build: contracts/scripts/build-artifact.sh)" >&2; exit 1; }
   docker cp "$WASM_HOST" "$CONTAINER:$WASM_IN"
 
   STORE_RES="$(tx wasm store "$WASM_IN" --from "$ADMIN")"

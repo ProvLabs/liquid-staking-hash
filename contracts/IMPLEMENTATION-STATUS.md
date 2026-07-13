@@ -180,9 +180,13 @@ under [`infra/devnet/`](../infra/devnet/); drills under
   epoch with both legs).
 - `cargo test --lib` needs `GOTOOLCHAIN=go1.24.5` on Go >= 1.26 hosts.
 - The optimized artifact is not committed (repo policy: no binaries in git):
-  `scripts/build-artifact.sh` builds it on demand (Docker), skipping when the
-  source is unchanged; test-tube tests and the devnet bootstrap load it from
-  `artifacts/`.
+  `scripts/build-artifact.sh` is the SINGLE build path — it builds on demand
+  (Docker) and no-ops when the artifact is newer than `src/`, `Cargo.toml`,
+  and `Cargo.lock`. Every consumer enforces freshness (2026-07-13, PR #2
+  review): the test-tube suite refuses to run against a stale artifact, the
+  devnet bootstrap re-runs the check on every deploy (an explicit `WASM_HOST`
+  override is deployed as-is), and the `cargo run-script optimize*` aliases
+  delegate to the same script.
 - The test-tube genesis validator's operator key is not recoverable; tests
   that need an operator create a real validator from a funded account
   (`src/tests.rs::create_validator`).
