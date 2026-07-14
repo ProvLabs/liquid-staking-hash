@@ -86,7 +86,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, []);
 
+  // Mutable mirror of the store for the async loaders. The poll intervals are
+  // mount-scoped, so an interval-held closure reading `d` directly would be
+  // frozen at the first (empty) state forever: vault/swapOuts would never see
+  // config, deployment would compute against zero balances, and the ledger
+  // would never append. `set` updates the mirror synchronously (ahead of the
+  // React commit) so loaders always read the latest cells, including ones
+  // written earlier in the same poll pass.
+  const dRef = useRef(d);
+
   const set = useCallback(<K extends keyof StoreData>(key: K, value: StoreData[K]) => {
+    dRef.current = { ...dRef.current, [key]: value };
     setD((cur) => ({ ...cur, [key]: value }));
   }, []);
 
@@ -110,19 +120,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const loadReal = useCallback(
     async (keys?: (keyof StoreData)[]) => {
       const want = (k: keyof StoreData) => !keys || keys.includes(k);
-      const one = async <T,>(key: keyof StoreData, fn: () => Promise<T>) => {
-        if (!want(key)) return;
+      const fetchCell = async <T,>(key: keyof StoreData, fn: () => Promise<T>) => {
         try {
           const data = await fn();
           set(key, { data, fetchedAt: now(), error: null } as StoreData[typeof key]);
           missesRef.current = 0;
         } catch (e) {
-          set(key, { ...(d[key] as Cell<T>), error: e instanceof Error ? e.message : String(e) } as StoreData[typeof key]);
+          set(key, {
+            ...(dRef.current[key] as Cell<T>),
+            error: e instanceof Error ? e.message : String(e),
+          } as StoreData[typeof key]);
           missesRef.current += 1;
         }
       };
+      const one = async <T,>(key: keyof StoreData, fn: () => Promise<T>) => {
+        if (!want(key)) return;
+        await fetchCell(key, fn);
+      };
+      // Config gates the vault/swapOut queries (it carries the vault address),
+      // so resolve it before the concurrent pass whenever it is wanted or has
+      // never loaded — the first real-mode poll then completes in one pass.
+      if (want("config") || !dRef.current.config.data) {
+        await fetchCell("config", () => smartQuery<ConfigResponse>({ config: {} }));
+      }
       await Promise.all([
-        one("config", () => smartQuery<ConfigResponse>({ config: {} })),
         one("epoch", () => smartQuery<EpochStatusResponse>({ epoch_status: {} })),
         one("validators", () => smartQuery<ValidatorsResponse>({ validators: {} })),
         one("jail", () => smartQuery<JailReportsResponse>({ jail_reports: {} })),
@@ -132,12 +153,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         one("apr", () => smartQuery<AprResponse>({ apr: {} }).catch(() => null)),
         one("block", () => latestBlock()),
         one("vault", async () => {
-          const cfg = d.config.data;
+          const cfg = dRef.current.config.data;
           if (!cfg) throw new Error("config not loaded");
           return vaultQuery(cfg.vault_address);
         }),
         one("swapOuts", async () => {
-          const cfg = d.config.data;
+          const cfg = dRef.current.config.data;
           if (!cfg) throw new Error("config not loaded");
           return pendingSwapOuts(cfg.vault_address);
         }),
@@ -145,15 +166,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // delegated + unbonding fetched fresh; liquid/pending use last-known vault/epoch
           // (they converge within a tick). Falls back to 0 before those first resolve.
           const { delegated, unbonding } = await stakingTotals(config.contractAddress);
-          const liquid = d.vault.data?.principal_liquid_nhash ?? "0";
-          const pending = (d.epoch.data?.pending_delegations ?? []).reduce((a, p) => (BigInt(a) + BigInt(p.amount)).toString(), "0");
+          const liquid = dRef.current.vault.data?.principal_liquid_nhash ?? "0";
+          const pending = (dRef.current.epoch.data?.pending_delegations ?? []).reduce(
+            (a, p) => (BigInt(a) + BigInt(p.amount)).toString(),
+            "0",
+          );
           return { delegated, unbonding, liquid, pending };
         }),
       ]);
       setStale(missesRef.current >= config.staleAfterMisses);
       // append snapshot to the ledger when epoch_index advances
-      const snap = d.snapshot.data;
-      const apr = d.apr.data;
+      const snap = dRef.current.snapshot.data;
+      const apr = dRef.current.apr.data;
       if (snap) {
         await ledgerAppend({
           ...snap,
@@ -164,7 +188,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         set("ledger", await ledgerAll());
       }
     },
-    [set, d],
+    [set],
   );
 
   const refresh = useCallback(
