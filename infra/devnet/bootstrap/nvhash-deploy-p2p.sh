@@ -64,12 +64,12 @@ addr_of() { pexec keys show "$1" -a -t --home "$HOME_DIR" --keyring-backend test
 
 tx() {
   echo "+ tx $*" >&2
-  local out txhash code res i
+  local out txhash code res
   out="$(pexec tx "$@" $COMMON 2>/dev/null)"
   code="$(echo "$out" | jq -r '.code // empty')"; txhash="$(echo "$out" | jq -r '.txhash // empty')"
   [ -n "$txhash" ] || { echo "TX BROADCAST FAILED: $out" >&2; exit 1; }
   [ "$code" = "0" ] || { echo "TX REJECTED (code=$code): $(echo "$out" | jq -r '.raw_log')" >&2; exit 1; }
-  for i in $(seq 1 20); do
+  for _ in $(seq 1 20); do
     res="$(pexec query tx "$txhash" -t --home "$HOME_DIR" -o json 2>/dev/null || true)"
     code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null || true)"
     [ -n "$code" ] && break; sleep 1

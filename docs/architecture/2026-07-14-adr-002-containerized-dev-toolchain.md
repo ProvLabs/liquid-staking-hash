@@ -103,7 +103,10 @@ contributors join.
 
 1. [x] This PR: compose file, `./dev` wrapper, `dev-node.sh` network join,
    CLAUDE.md command-section updates, plan M0 row.
-2. [ ] PR 1.1/1.2/1.3: scaffolds define their scripts to run under `./dev`;
+2. [x] PR 0.5: workspace-level GitHub Actions gate (`app-ci`) in the same
+   image — frozen-lockfile install, `-r` typecheck/test, fixture completeness
+   check, shellcheck.
+3. [ ] PR 1.1/1.2/1.3: scaffolds define their scripts to run under `./dev`;
    CI uses the same images.
 3. [ ] PR 1.3: Playwright service on this compose file.
 4. [ ] PR 1.5: indexer/api/web services join `infra/dev/compose.yaml`;
