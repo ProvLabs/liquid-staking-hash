@@ -10,6 +10,12 @@
 //! Remaining [VERIFY] is runtime-only, on the devnet drill: that the deployed
 //! chain build ships this message and that settlement clears the restricted
 //! receipt marker's send restrictions into the principal marker.
+//!
+//! This shim exists because no tagged vault release ships AcceptAsset yet
+//! (compatibility is by feature probe against vault main). When the formal
+//! vault release is cut, re-verify these shapes against it — and retire this
+//! shim if provwasm-std then ships the generated types (see the vault version
+//! gating item in IMPLEMENTATION-STATUS.md).
 
 use cosmwasm_std::{AnyMsg, Binary, CosmosMsg};
 use prost::Message;

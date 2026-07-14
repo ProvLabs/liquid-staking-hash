@@ -117,8 +117,14 @@ attribution, slash write-down); the full record is in spec §14. Still open:
       it at or above expected epoch yield x the unbonding/delay fraction; the
       soak's refund counter quantifies any chosen setting
 - [ ] Vault module version gating: `AcceptAsset` exists ONLY on vault main as
-      of 2026-07-08 (v1.0.15 and v1.1.0 lack it) — the launch chain must ship
-      a vault release containing it; share NAV uint64 publish behavior
+      of 2026-07-08 (v1.0.15 and v1.1.0 lack it) — no formal upstream release
+      ships it yet, so until one is cut, "compatible vault" is established by
+      **feature probe** (`AcceptAsset` present ⇒ development build), never by
+      version pin (2026-07-13, Ira). When the vault release lands: pin the
+      version, re-run the contract drills and the App fixture/test suites
+      against the released build (app plan PR 8.0), and only then certify any
+      release — the launch chain must ship that release; share NAV uint64
+      publish behavior
 - [ ] valcons derivation under consensus KEY ROTATION (drill validator never
       rotated)
 

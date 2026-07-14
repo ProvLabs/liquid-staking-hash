@@ -559,7 +559,7 @@ Delivered in this repository (steps 1–6 of the original plan, complete):
 
 Remaining (partner and governance involvement):
 
-5. **Testnet pilot** with a small validator set, on a chain build that ships the settlement-era vault module.
+5. **Testnet pilot** with a small validator set, on a chain build that ships the settlement-era vault module — which requires the vault module's **formal release** (none exists yet as of 2026-07-13; devnet compatibility is established by feature probe against vault `main` only, per the vault version gating item in `contracts/IMPLEMENTATION-STATUS.md`). When that release is cut, the drill and simulation suites are re-run against it before any release is certified.
 6. **Audit** (contract + NAV-authority surface + bridge-adapter authorization), then **mainnet** with conservative caps, per the §14 launch checklist.
 
 **Bridge note:** the NUVA Labs bridge-adapter and destination-chain (Base/Ethereum) contracts are a **separate, coordinated deliverable** (§11.5, §12.2), not built in this scope. This project's responsibility is limited to correct vault `bridge_address`/`bridge_enabled` configuration and ensuring the adapter's authorization is included in the security audit. Sequence the `bridge_address` handoff so bridging is enabled only after the adapter is audited.
