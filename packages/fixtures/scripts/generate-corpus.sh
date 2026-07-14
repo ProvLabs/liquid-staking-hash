@@ -29,16 +29,16 @@ pexec() { docker exec "$CONTAINER" provenanced "$@"; }
 cli_q() { pexec query "$@" -t --home "$HOME_DIR" -o json; }
 
 if [ "${SKIP_RESET:-0}" != "1" ]; then
-  echo "== 1/3: fresh chain (slashing window patched for the anchor validator) =="
+  echo "== 1/4: fresh chain (slashing window patched for the anchor validator) =="
   SLASH_WINDOW="${SLASH_WINDOW:-10000000}" "$REPO/infra/devnet/dev-node.sh" reset
   "$REPO/infra/devnet/dev-node.sh" bootstrap
 fi
 
-echo "== 2/3: p2p drill (full money path) =="
+echo "== 2/4: p2p drill (full money path) =="
 bash "$REPO/contracts/drills/p2p-drill.sh"
 
 echo
-echo "== 3/3: unfunded-maturity refund =="
+echo "== 3/4: unfunded-maturity refund =="
 VAULT="$(cli_q vault list | jq -r --arg d "$SHARE" \
   '.vaults[]?|select(.total_shares.denom==$d)|.base_account.address' | head -1)"
 PRINCIPAL="$(cli_q vault get "$VAULT" | jq -r '.principal.address')"
@@ -73,5 +73,48 @@ while :; do
   echo -n "."
   sleep 5
 done
+
+echo
+echo "== 4/4: standalone expedite (burn-free crank) =="
+# A swap-out small enough that standing marker liquidity covers its payout,
+# then service_redemptions: the D2 expedite leg lives in that crank too
+# (epoch.rs "Phases B + D2 alone"), so the already-funded request expedites
+# immediately — a crank tx carrying the expedite event with NO burn leg. This
+# gives the corpus an expedite fixture distinct from the return-settlement
+# crank: one run_epoch can legitimately carry deploy, return, AND expedite
+# legs at once, and presence-only capture once pinned the same tx under two
+# fixture names (PR #5 review).
+CONTRACT="$(cli_q vault get "$VAULT" | jq -r '.vault.asset_manager')"
+LIQUID="$(cli_q bank balances "$PRINCIPAL" | jq -r --arg d "$UNDERLYING" \
+  '[.balances[]|select(.denom==$d)|.amount][0] // "0"')"
+[ "$LIQUID" -gt 10000000 ] || { echo "marker liquidity ${LIQUID} too small for the expedite scenario" >&2; exit 1; }
+EXP_SHARES="$(echo "$LIQUID / 2 * 1000000" | bc)"
+echo "marker liquid=${LIQUID}${UNDERLYING}; standalone-expedite swap-out of ${EXP_SHARES}${SHARE}"
+
+tx_commit() { # tx_commit <tx subcommand and flags…> -> committed tx JSON on stdout
+  local out txhash code res
+  out="$(pexec tx "$@" $TXFLAGS 2>/dev/null)"
+  txhash="$(echo "$out" | jq -r '.txhash // empty')"
+  [ -n "$txhash" ] || { echo "broadcast failed: $out" >&2; exit 1; }
+  [ "$(echo "$out" | jq -r '.code')" = "0" ] || { echo "rejected: $(echo "$out" | jq -r '.raw_log')" >&2; exit 1; }
+  for _ in $(seq 1 30); do
+    res="$(pexec query tx "$txhash" -t --home "$HOME_DIR" -o json 2>/dev/null || true)"
+    code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null || true)"
+    [ -n "$code" ] && break; sleep 1
+  done
+  [ "$code" = "0" ] || { echo "tx failed (code=${code:-?}): $(echo "$res" | jq -r '.raw_log // "not committed"' | head -c 300)" >&2; exit 1; }
+  echo "$res"
+}
+
+tx_commit vault swap-out "$USER_ADDR" "$VAULT" "${EXP_SHARES}${SHARE}" \
+  --gas auto --gas-adjustment 2.0 --gas-prices 1nhash --from "$USER_ACCT" >/dev/null
+CRANK_RES="$(tx_commit wasm execute "$CONTRACT" '{"service_redemptions":{}}' \
+  --gas 4000000 --gas-prices 1nhash --from account-1)"
+
+echo "$CRANK_RES" | jq -e '[.events[].type] | index("provlabs.vault.v1.EventPendingSwapOutExpedited")' >/dev/null \
+  || { echo "service crank did not expedite — liquidity or D2 assumptions changed" >&2; exit 1; }
+echo "$CRANK_RES" | jq -e '[.events[].type] | index("provenance.marker.v1.EventMarkerBurn") | not' >/dev/null \
+  || { echo "service crank unexpectedly carried a burn leg" >&2; exit 1; }
+echo "  OK   expedite crank $(echo "$CRANK_RES" | jq -r '.txhash') is burn-free"
 
 echo "== corpus state generation complete =="

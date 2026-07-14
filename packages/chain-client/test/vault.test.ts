@@ -83,7 +83,8 @@ describe("VaultClient transport", () => {
     const client = new VaultClient(lcd);
     await client.getVault(VAULT);
     const est = await client.estimateSwapOut(VAULT, 1000000000000n);
-    expect(est.assets.amount).toBe(1017379n);
+    const raw = expectObject(expectObject(fixture("queries/vault/estimate-swap-out.json"))["assets"]);
+    expect(est.assets.amount).toBe(BigInt(raw["amount"] as string));
     expect(calls.every((u) => !u.includes("/provlabs/"))).toBe(true);
     expect(calls[1]).toContain("estimate_swap_out?shares=1000000000000");
   });

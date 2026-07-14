@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DecodeError,
+  I128_MAX,
+  I128_MIN,
   U128_MAX,
   parseCoin,
   parseInt128,
@@ -31,6 +33,16 @@ describe("parseInt128", () => {
   it("parses signed values (snapshot net_deposits)", () => {
     expect(parseInt128("-1949")).toBe(-1949n);
     expect(parseInt128("0")).toBe(0n);
+  });
+  it("bounds to the i128 domain, which is asymmetric: [-2^127, 2^127 - 1]", () => {
+    expect(parseInt128(I128_MIN.toString())).toBe(I128_MIN);
+    expect(parseInt128(I128_MAX.toString())).toBe(I128_MAX);
+    // one past each end is not a legal cosmwasm Int128
+    expect(() => parseInt128((I128_MAX + 1n).toString())).toThrow(DecodeError); // 2^127
+    expect(() => parseInt128((I128_MIN - 1n).toString())).toThrow(DecodeError);
+    // the old (wrong) symmetric-Uint128 bound must be rejected too
+    expect(() => parseInt128(U128_MAX.toString())).toThrow(DecodeError);
+    expect(() => parseInt128((-U128_MAX).toString())).toThrow(DecodeError);
   });
   it("rejects non-canonical forms", () => {
     for (const bad of ["-0", "--1", "-01", "1.0", ""]) {

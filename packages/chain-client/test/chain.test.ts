@@ -22,8 +22,9 @@ describe("staking decoders against the devnet corpus", () => {
       expect(typeof v.tokens).toBe("bigint");
       expect(v.operatorAddress).toMatch(/^tpvaloper1/);
     }
-    // the corpus chain has the drill anchor + program validators
-    expect(r.pagination.total).toBe(3n);
+    // pagination total decodes to the exact value the corpus carries
+    const rawTotal = expectObject(expectObject(fixture("queries/staking/validators.json"))["pagination"])["total"];
+    expect(r.pagination.total).toBe(BigInt(rawTotal as string));
   });
 
   it("decodes the contract's program delegations", async () => {

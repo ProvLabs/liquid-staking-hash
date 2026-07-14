@@ -1,5 +1,5 @@
 {
-  "height": "202",
+  "height": "7810",
   "txs_results": [
     {
       "code": 0,
@@ -7,7 +7,7 @@
       "log": "",
       "info": "",
       "gas_wanted": "4000000",
-      "gas_used": "906110",
+      "gas_used": "256716",
       "events": [
         {
           "type": "coin_spent",
@@ -74,7 +74,7 @@
           "attributes": [
             {
               "key": "fee",
-              "value": "30000000000nhash",
+              "value": "4000000nhash",
               "index": true
             },
             {
@@ -104,7 +104,7 @@
           "attributes": [
             {
               "key": "acc_seq",
-              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk/21",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk/30",
               "index": true
             }
           ]
@@ -114,7 +114,7 @@
           "attributes": [
             {
               "key": "signature",
-              "value": "LDI+jY5L2G9cgNDkW5fDNpsM2xpj9zCufxL6Yekb8Kpqjtf3xNw5T3JB/eSf8s++oG4qYPLic5xaD2mJkmEYJQ==",
+              "value": "F7PLHISkQUjtpSWB62cfUgXMIShxBmkLdYzfBXxFKxIQ7OZQidiDaR1JBEd+X4d10u/Fa2fsnnMbpRKE9kYiaQ==",
               "index": true
             }
           ]
@@ -169,1197 +169,7 @@
             },
             {
               "key": "action",
-              "value": "run_epoch",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp1jv65s3grqf6v6jl3dp4t6c9t9rk99cd8a624xf",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "9082nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "9082nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp1jv65s3grqf6v6jl3dp4t6c9t9rk99cd8a624xf",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "9082nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "withdraw_rewards",
-          "attributes": [
-            {
-              "key": "amount",
-              "value": "9082nhash",
-              "index": true
-            },
-            {
-              "key": "validator",
-              "value": "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp",
-              "index": true
-            },
-            {
-              "key": "delegator",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.hold.v1.EventHoldAdded",
-          "attributes": [
-            {
-              "key": "address",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "reason",
-              "value": "\"x/exchange: payment \\\"nvhash.return\\\"\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.exchange.v1.EventPaymentCreated",
-          "attributes": [
-            {
-              "key": "external_id",
-              "value": "\"nvhash.return\"",
-              "index": true
-            },
-            {
-              "key": "source",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "source_amount",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "target",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "target_amount",
-              "value": "\"89901836475nvhash.staked\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventVaultReconcile",
-          "attributes": [
-            {
-              "key": "interest_earned",
-              "value": "\"0nhash\"",
-              "index": true
-            },
-            {
-              "key": "principal_after",
-              "value": "\"400175953279nhash\"",
-              "index": true
-            },
-            {
-              "key": "principal_before",
-              "value": "\"400175953279nhash\"",
-              "index": true
-            },
-            {
-              "key": "rate",
-              "value": "\"0.0\"",
-              "index": true
-            },
-            {
-              "key": "time",
-              "value": "\"132\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "2512nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp1evyv7neax9qtxxzuexnhylxyz4guvsyjptn4ha",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "2512nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp1evyv7neax9qtxxzuexnhylxyz4guvsyjptn4ha",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "2512nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventVaultFeeCollected",
-          "attributes": [
-            {
-              "key": "aum_snapshot",
-              "value": "\"400175953279nhash\"",
-              "index": true
-            },
-            {
-              "key": "collected_amount",
-              "value": "\"2512nhash\"",
-              "index": true
-            },
-            {
-              "key": "duration_seconds",
-              "value": "\"132\"",
-              "index": true
-            },
-            {
-              "key": "outstanding_amount",
-              "value": "\"0nhash\"",
-              "index": true
-            },
-            {
-              "key": "requested_amount",
-              "value": "\"2512nhash\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.marker.v1.EventSetNetAssetValue",
-          "attributes": [
-            {
-              "key": "denom",
-              "value": "\"nvhash\"",
-              "index": true
-            },
-            {
-              "key": "price",
-              "value": "\"400175950767nhash\"",
-              "index": true
-            },
-            {
-              "key": "source",
-              "value": "\"vault\"",
-              "index": true
-            },
-            {
-              "key": "volume",
-              "value": "\"400000000000000000\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.hold.v1.EventHoldReleased",
-          "attributes": [
-            {
-              "key": "address",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.exchange.v1.EventPaymentAccepted",
-          "attributes": [
-            {
-              "key": "external_id",
-              "value": "\"nvhash.return\"",
-              "index": true
-            },
-            {
-              "key": "source",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "source_amount",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "target",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "target_amount",
-              "value": "\"89901836475nvhash.staked\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventAssetAccepted",
-          "attributes": [
-            {
-              "key": "direction",
-              "value": "\"outbound\"",
-              "index": true
-            },
-            {
-              "key": "external_id",
-              "value": "\"nvhash.return\"",
-              "index": true
-            },
-            {
-              "key": "source",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "source_amount",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "target_amount",
-              "value": "\"89901836475nvhash.staked\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventNAVUpdated",
-          "attributes": [
-            {
-              "key": "denom",
-              "value": "\"nvhash.staked\"",
-              "index": true
-            },
-            {
-              "key": "price",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "signer",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "source",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "updated_block_height",
-              "value": "\"202\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "volume",
-              "value": "\"89901836475\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.marker.v1.EventSetNetAssetValue",
-          "attributes": [
-            {
-              "key": "denom",
-              "value": "\"nvhash.staked\"",
-              "index": true
-            },
-            {
-              "key": "price",
-              "value": "\"89901836475nhash\"",
-              "index": true
-            },
-            {
-              "key": "source",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "volume",
-              "value": "\"89901836475\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventVaultInterestChange",
-          "attributes": [
-            {
-              "key": "current_rate",
-              "value": "\"0.0\"",
-              "index": true
-            },
-            {
-              "key": "desired_rate",
-              "value": "\"0.0\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventVaultPaused",
-          "attributes": [
-            {
-              "key": "authority",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "forced",
-              "value": "false",
-              "index": true
-            },
-            {
-              "key": "forced_error",
-              "value": "\"\"",
-              "index": true
-            },
-            {
-              "key": "reason",
-              "value": "\"epoch\"",
-              "index": true
-            },
-            {
-              "key": "total_vault_value",
-              "value": "\"400175950767nhash\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "87828446nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "87828446nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "87828446nhash",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventDepositPrincipalFunds",
-          "attributes": [
-            {
-              "key": "amount",
-              "value": "\"87828446nhash\"",
-              "index": true
-            },
-            {
-              "key": "authority",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventVaultInterestChange",
-          "attributes": [
-            {
-              "key": "current_rate",
-              "value": "\"0.0\"",
-              "index": true
-            },
-            {
-              "key": "desired_rate",
-              "value": "\"0.0\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provlabs.vault.v1.EventVaultUnpaused",
-          "attributes": [
-            {
-              "key": "authority",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "total_vault_value",
-              "value": "\"400263779213nhash\"",
-              "index": true
-            },
-            {
-              "key": "vault_address",
-              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp13wmwpfd5v6fe6qw3thql2g7u7q6elhcxr4kwla",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp13wmwpfd5v6fe6qw3thql2g7u7q6elhcxr4kwla",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.marker.v1.EventMarkerTransfer",
-          "attributes": [
-            {
-              "key": "administrator",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "\"89901836475\"",
-              "index": true
-            },
-            {
-              "key": "denom",
-              "value": "\"nvhash.staked\"",
-              "index": true
-            },
-            {
-              "key": "from_address",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "to_address",
-              "value": "\"tp13wmwpfd5v6fe6qw3thql2g7u7q6elhcxr4kwla\"",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp13wmwpfd5v6fe6qw3thql2g7u7q6elhcxr4kwla",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_received",
-          "attributes": [
-            {
-              "key": "receiver",
-              "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "transfer",
-          "attributes": [
-            {
-              "key": "recipient",
-              "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
-              "index": true
-            },
-            {
-              "key": "sender",
-              "value": "tp13wmwpfd5v6fe6qw3thql2g7u7q6elhcxr4kwla",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "coin_spent",
-          "attributes": [
-            {
-              "key": "spender",
-              "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "burn",
-          "attributes": [
-            {
-              "key": "burner",
-              "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "89901836475nvhash.staked",
-              "index": true
-            },
-            {
-              "key": "msg_index",
-              "value": "0",
-              "index": true
-            }
-          ]
-        },
-        {
-          "type": "provenance.marker.v1.EventMarkerBurn",
-          "attributes": [
-            {
-              "key": "administrator",
-              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
-              "index": true
-            },
-            {
-              "key": "amount",
-              "value": "\"89901836475\"",
-              "index": true
-            },
-            {
-              "key": "denom",
-              "value": "\"nvhash.staked\"",
+              "value": "service_redemptions",
               "index": true
             },
             {
@@ -1379,7 +189,7 @@
             },
             {
               "key": "request_id",
-              "value": "\"1\"",
+              "value": "\"3\"",
               "index": true
             },
             {
@@ -1404,7 +214,7 @@
             },
             {
               "key": "amount",
-              "value": "29999999999nhash",
+              "value": "3999999nhash",
               "index": true
             }
           ]
@@ -1419,7 +229,7 @@
             },
             {
               "key": "amount",
-              "value": "29999999999nhash",
+              "value": "3999999nhash",
               "index": true
             }
           ]
@@ -1439,7 +249,7 @@
             },
             {
               "key": "amount",
-              "value": "29999999999nhash",
+              "value": "3999999nhash",
               "index": true
             }
           ]
@@ -1469,17 +279,17 @@
             },
             {
               "key": "additionalfee",
-              "value": "10000000009nhash",
+              "value": "1nhash",
               "index": true
             },
             {
               "key": "fee_overage",
-              "value": "19999999990nhash",
+              "value": "3999998nhash",
               "index": true
             },
             {
               "key": "total",
-              "value": "30000000000nhash",
+              "value": "4000000nhash",
               "index": true
             }
           ]
@@ -1509,7 +319,7 @@
       "attributes": [
         {
           "key": "bonded_ratio",
-          "value": "0.000000401032287258",
+          "value": "0.000000417717717287",
           "index": true
         },
         {
@@ -1559,12 +369,12 @@
         },
         {
           "key": "missed_blocks",
-          "value": "168",
+          "value": "7776",
           "index": true
         },
         {
           "key": "height",
-          "value": "202",
+          "value": "7810",
           "index": true
         },
         {
@@ -1575,6 +385,71 @@
       ]
     },
     {
+      "type": "liveness",
+      "attributes": [
+        {
+          "key": "address",
+          "value": "tpvalcons1zddd2z785yfp592jyp9nve0ys735gxrrv5h5f6",
+          "index": true
+        },
+        {
+          "key": "missed_blocks",
+          "value": "7600",
+          "index": true
+        },
+        {
+          "key": "height",
+          "value": "7810",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provlabs.vault.v1.EventVaultReconcile",
+      "attributes": [
+        {
+          "key": "interest_earned",
+          "value": "\"0nhash\"",
+          "index": true
+        },
+        {
+          "key": "principal_after",
+          "value": "\"315387632233nhash\"",
+          "index": true
+        },
+        {
+          "key": "principal_before",
+          "value": "\"315387632233nhash\"",
+          "index": true
+        },
+        {
+          "key": "rate",
+          "value": "\"0.0\"",
+          "index": true
+        },
+        {
+          "key": "time",
+          "value": "\"13723\"",
+          "index": true
+        },
+        {
+          "key": "vault_address",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
       "type": "coin_spent",
       "attributes": [
         {
@@ -1584,7 +459,157 @@
         },
         {
           "key": "amount",
-          "value": "90059350322nhash",
+          "value": "205863nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_received",
+      "attributes": [
+        {
+          "key": "receiver",
+          "value": "tp1evyv7neax9qtxxzuexnhylxyz4guvsyjptn4ha",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "205863nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "transfer",
+      "attributes": [
+        {
+          "key": "recipient",
+          "value": "tp1evyv7neax9qtxxzuexnhylxyz4guvsyjptn4ha",
+          "index": true
+        },
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "205863nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provlabs.vault.v1.EventVaultFeeCollected",
+      "attributes": [
+        {
+          "key": "aum_snapshot",
+          "value": "\"315387632233nhash\"",
+          "index": true
+        },
+        {
+          "key": "collected_amount",
+          "value": "\"205863nhash\"",
+          "index": true
+        },
+        {
+          "key": "duration_seconds",
+          "value": "\"13723\"",
+          "index": true
+        },
+        {
+          "key": "outstanding_amount",
+          "value": "\"0nhash\"",
+          "index": true
+        },
+        {
+          "key": "requested_amount",
+          "value": "\"205863nhash\"",
+          "index": true
+        },
+        {
+          "key": "vault_address",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provenance.marker.v1.EventSetNetAssetValue",
+      "attributes": [
+        {
+          "key": "denom",
+          "value": "\"nvhash\"",
+          "index": true
+        },
+        {
+          "key": "price",
+          "value": "\"315387426370nhash\"",
+          "index": true
+        },
+        {
+          "key": "source",
+          "value": "\"vault\"",
+          "index": true
+        },
+        {
+          "key": "volume",
+          "value": "\"310000000000000000\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36852482nhash",
           "index": true
         },
         {
@@ -1604,7 +629,7 @@
         },
         {
           "key": "amount",
-          "value": "90059350322nhash",
+          "value": "36852482nhash",
           "index": true
         },
         {
@@ -1629,7 +654,7 @@
         },
         {
           "key": "amount",
-          "value": "90059350322nhash",
+          "value": "36852482nhash",
           "index": true
         },
         {
@@ -1664,7 +689,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1684,7 +709,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1709,7 +734,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1744,7 +769,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1764,7 +789,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1789,7 +814,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1824,7 +849,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1844,7 +869,7 @@
         },
         {
           "key": "amount",
-          "value": "90000000000000000nvhash",
+          "value": "36222971000000nvhash",
           "index": true
         },
         {
@@ -1864,7 +889,7 @@
         },
         {
           "key": "amount",
-          "value": "\"90000000000000000\"",
+          "value": "\"36222971000000\"",
           "index": true
         },
         {
@@ -1884,7 +909,7 @@
       "attributes": [
         {
           "key": "assets",
-          "value": "\"90059350322nhash\"",
+          "value": "\"36852482nhash\"",
           "index": true
         },
         {
@@ -1894,7 +919,7 @@
         },
         {
           "key": "request_id",
-          "value": "\"1\"",
+          "value": "\"3\"",
           "index": true
         },
         {
@@ -1929,5 +954,5 @@
     "version": {},
     "abci": {}
   },
-  "app_hash": "FoKb6OXsKPY06Qid60SKQoVu0pjGW2D7RtN310riNXI="
+  "app_hash": "zZB816zN5PCI6tJH1oOkeMaHwYTXUZMdrJGOS4pYmIQ="
 }

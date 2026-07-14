@@ -83,14 +83,25 @@ block_search() { # block_search <query> -> latest height or empty
     --data-urlencode 'order_by="desc"' | jq -r '.result.blocks[0].block.header.height // empty'
 }
 
-tx_search_with() { # tx_search_with <query> <also-required event type> -> latest txhash
-  # The kv indexer does not match AND conditions across different event types,
-  # so the second condition is applied client-side.
+tx_search_filtered() { # tx_search_filtered <query> <must-have type|""> <must-not-have types…>
+  # -> latest matching txhash. The kv indexer does not match AND conditions
+  # across different event types, so beyond the indexed query everything is
+  # filtered client-side. The must-not list keeps overlapping crank fixtures
+  # apart: one crank tx can legitimately carry deploy, return, AND expedite
+  # legs at once, and picking purely by presence made two fixtures identical
+  # (PR #5 review).
+  local query="$1" must="$2"; shift 2
+  local mustnot_json
+  mustnot_json="$(printf '%s\n' "$@" | jq -R . | jq -sc .)"
   curl -sf --get "$RPC/tx_search" \
-    --data-urlencode "query=\"$1\"" --data-urlencode 'per_page=50' \
+    --data-urlencode "query=\"$query\"" --data-urlencode 'per_page=50' \
     --data-urlencode 'order_by="desc"' \
-    | jq -r --arg t "$2" \
-      '[.result.txs[] | select([.tx_result.events[].type] | index($t))][0].hash // empty'
+    | jq -r --arg must "$must" --argjson mustnot "$mustnot_json" '
+        [.result.txs[]
+         | [.tx_result.events[].type] as $types
+         | select($must == "" or ($types | index($must)))
+         | select(all($mustnot[]; . as $ex | $ex == "" or (($types | index($ex)) | not)))
+        ][0].hash // empty'
 }
 
 capture_lcd_tx() { # capture_lcd_tx <file> <txhash>  (verbatim LCD GetTx shape)
@@ -153,16 +164,20 @@ capture() {
   capture_lcd_tx "$OUT/msgs/swap-out.json" "$h_swap_out"
 
   echo "== RunEpoch crank txs (settlement legs + expedite; wasm action attrs)"
-  h_deploy="$(tx_search_with "$EV_PAYMENT_ACCEPTED.target EXISTS" "$EV_MARKER_MINT")"
-  [ -n "$h_deploy" ] || fail "no crank tx with $EV_PAYMENT_ACCEPTED + $EV_MARKER_MINT (deploy settlement)"
+  # Each run-epoch fixture pins a DISTINCT crank tx (gate-enforced below):
+  # deploy = mint leg without burn/expedite; return = burn leg (an expedite
+  # riding along is chain reality and allowed); expedite = expedite WITHOUT a
+  # burn leg (the standalone scenario generate-corpus.sh drives).
+  h_deploy="$(tx_search_filtered "$EV_PAYMENT_ACCEPTED.target EXISTS" "$EV_MARKER_MINT" "$EV_MARKER_BURN" "$EV_EXPEDITED")"
+  [ -n "$h_deploy" ] || fail "no crank tx with a pure deploy settlement (mint + payment, no burn/expedite)"
   capture_lcd_tx "$OUT/run-epoch/deploy-settlement.json" "$h_deploy"
 
-  h_return="$(tx_search_with "$EV_PAYMENT_ACCEPTED.target EXISTS" "$EV_MARKER_BURN")"
-  [ -n "$h_return" ] || fail "no crank tx with $EV_PAYMENT_ACCEPTED + $EV_MARKER_BURN (return settlement)"
+  h_return="$(tx_search_filtered "$EV_PAYMENT_ACCEPTED.target EXISTS" "$EV_MARKER_BURN")"
+  [ -n "$h_return" ] || fail "no crank tx with $EV_MARKER_BURN + $EV_PAYMENT_ACCEPTED (return settlement)"
   capture_lcd_tx "$OUT/run-epoch/return-settlement.json" "$h_return"
 
-  h_expedite="$(tx_search "$EV_EXPEDITED.request_id EXISTS")"
-  [ -n "$h_expedite" ] || fail "no crank tx carrying $EV_EXPEDITED (expedite)"
+  h_expedite="$(tx_search_filtered "$EV_EXPEDITED.request_id EXISTS" "" "$EV_MARKER_BURN")"
+  [ -n "$h_expedite" ] || fail "no burn-free crank tx carrying $EV_EXPEDITED — run scripts/generate-corpus.sh (standalone expedite scenario)"
   capture_lcd_tx "$OUT/run-epoch/expedite.json" "$h_expedite"
 
   echo "== EndBlocker plane (RPC block_results, verbatim — NOT visible to tx-search)"
@@ -246,6 +261,29 @@ require() { # require <file> <marker> <label>
   grep -q "$2" "$f" || MISSING+=("$3 — $1 lacks '$2'")
 }
 
+require_absent() { # require_absent <file> <marker> <label>
+  local f="$OUT/$1"
+  [ -s "$f" ] || return 0 # missing file is reported by its own require line
+  ! grep -q "$2" "$f" || MISSING+=("$3 — $1 must NOT contain '$2'")
+}
+
+# grep-only txhash extraction (the CI gate container has no jq).
+fixture_txhash() { grep -o '"txhash": *"[A-F0-9]*"' "$OUT/$1" 2>/dev/null | head -1; }
+
+# The three run-epoch fixtures must pin three DISTINCT crank txs: one crank
+# can carry deploy, return, and expedite legs at once, and presence-only
+# selection once committed the same tx under two names (PR #5 review).
+require_distinct_cranks() {
+  local a b c
+  a="$(fixture_txhash run-epoch/deploy-settlement.json)"
+  b="$(fixture_txhash run-epoch/return-settlement.json)"
+  c="$(fixture_txhash run-epoch/expedite.json)"
+  [ -n "$a" ] && [ "$a" = "$b" ] && MISSING+=("deploy-settlement and return-settlement pin the same tx")
+  [ -n "$a" ] && [ "$a" = "$c" ] && MISSING+=("deploy-settlement and expedite pin the same tx")
+  [ -n "$b" ] && [ "$b" = "$c" ] && MISSING+=("return-settlement and expedite pin the same tx")
+  return 0 # a passing (false) comparison above must not become the function's status under set -e
+}
+
 check_corpus() {
   echo "== completeness gate (required event inventory)"
   MISSING=()
@@ -260,6 +298,8 @@ check_corpus() {
   require "run-epoch/return-settlement.json"      "$EV_MARKER_BURN"        "RunEpoch return settlement (burn leg)"
   require "run-epoch/return-settlement.json"      "$EV_ASSET_ACCEPTED"     "RunEpoch return settlement (AcceptAsset leg)"
   require "run-epoch/expedite.json"               "$EV_EXPEDITED"          "expedite"
+  require_absent "run-epoch/expedite.json"        "$EV_MARKER_BURN"        "expedite is a standalone (burn-free) crank"
+  require_distinct_cranks
   require "block-events/swap-out-completed.json"  "$EV_SWAP_OUT_COMPLETED" "payout (EndBlocker)"
   require "block-events/swap-out-refunded.json"   "$EV_SWAP_OUT_REFUNDED"  "refund (EndBlocker)"
   require "manifest.json"                         "PROVISIONAL"            "manifest provisional status"

@@ -5,6 +5,9 @@
 // error, never a best-effort continue.
 
 export const U128_MAX = (1n << 128n) - 1n;
+// cosmwasm_std::Int128 domain (i128) — NOT symmetric around the Uint128 max.
+export const I128_MIN = -(1n << 127n);
+export const I128_MAX = (1n << 127n) - 1n;
 
 export class DecodeError extends Error {
   constructor(
@@ -30,13 +33,16 @@ export function parseUint128(value: unknown, path = "$"): bigint {
   return n;
 }
 
-/** Signed decimal string (e.g. the snapshot's net_deposits) -> bigint. */
+/**
+ * Signed decimal string (e.g. the snapshot's net_deposits, a
+ * cosmwasm_std::Int128) -> bigint, bounded to the i128 domain.
+ */
 export function parseInt128(value: unknown, path = "$"): bigint {
   if (typeof value !== "string" || !INT_RE.test(value)) {
     throw new DecodeError(path, "expected canonical integer string", value);
   }
   const n = BigInt(value);
-  if (n > U128_MAX || n < -U128_MAX) throw new DecodeError(path, "exceeds 128-bit range", value);
+  if (n > I128_MAX || n < I128_MIN) throw new DecodeError(path, "exceeds Int128 range", value);
   return n;
 }
 

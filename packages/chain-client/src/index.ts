@@ -4,6 +4,8 @@
 
 export {
   DecodeError,
+  I128_MAX,
+  I128_MIN,
   U128_MAX,
   parseCoin,
   parseInt128,

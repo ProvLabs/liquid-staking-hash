@@ -29,15 +29,17 @@ describe("contract smart-query decoders against the devnet corpus", () => {
 
   it("decodes the §9.10 snapshot decomposition, including signed net_deposits", () => {
     const raw = expectObject(smartData("queries/contract/epoch-snapshot.json"));
-    const snap = parseEpochSnapshot(raw["snapshot"]);
+    const rawSnap = expectObject(raw["snapshot"]);
+    const snap = parseEpochSnapshot(rawSnap);
     expect(snap.epochIndex).toBeGreaterThan(0);
     expect(typeof snap.tvvBefore).toBe("bigint");
     expect(typeof snap.netDeposits).toBe("bigint");
-    // the drilled corpus has a negative net_deposits window — sign must survive
-    expect(snap.netDeposits < 0n).toBe(true);
-    // the drill's phase-4 snapshot identity holds in decoded form
-    // (tvv_after == tvv_before + rewards_deposited for this reward-only window)
-    expect(snap.tvvAfter).toBe(snap.tvvBefore + snap.rewardsDeposited);
+    // decode is value-exact against the raw strings, sign included —
+    // whether THIS window's net_deposits is negative is scenario detail;
+    // the snapshot's economic identities are the drill's assertions, not
+    // this decoder's.
+    expect(snap.netDeposits).toBe(BigInt(rawSnap["net_deposits"] as string));
+    expect(snap.tvvAfter).toBe(BigInt(rawSnap["tvv_after"] as string));
   });
 
   it("decodes APR with numeric bps", () => {
