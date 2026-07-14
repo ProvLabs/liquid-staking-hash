@@ -33,6 +33,6 @@ const snapshot = await new NvhashContractClient(lcd, contractAddr).epochSnapshot
 ```
 
 ```sh
-pnpm --filter @nvhash/chain-client typecheck
-pnpm --filter @nvhash/chain-client test
+./dev pnpm --filter @nvhash/chain-client typecheck
+./dev pnpm --filter @nvhash/chain-client test
 ```

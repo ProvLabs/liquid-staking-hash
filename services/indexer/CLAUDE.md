@@ -25,6 +25,8 @@ Chain-event indexer feeding the query store used by `services/api/`.
 
 ## Commands
 
-Part of the root pnpm workspace (ADR-001 Decision 4); run as
-`pnpm --filter @nvhash/indexer <script>`. Concrete scripts land with the
-PR 1.1 scaffold.
+Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
+containerized toolchain (ADR-002): `./dev pnpm --filter @nvhash/indexer
+<script>`. Dev database via `./dev pg up` (host port 5433); the dev chain is
+reachable in-network as `http://dev-node:1317`. Concrete scripts land with
+the PR 1.1 scaffold.

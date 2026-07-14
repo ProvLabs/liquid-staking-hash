@@ -43,6 +43,11 @@ and status ledger updated in the same change as the behavior they describe.
 
 - Each area has its own `CLAUDE.md` with area-specific conventions and commands;
   read it before making changes in that area.
+- **JS tooling runs in containers, never on the host** (ADR-002 in
+  `docs/architecture/`): use the repo-root `./dev` wrapper — `./dev pnpm …`,
+  `./dev node …`, `./dev pg up|reset`. Host node/pnpm versions are
+  deliberately not load-bearing, and `node_modules` contains Linux binaries
+  that are not runnable from the host.
 - Keep changes scoped to one area per branch where practical.
 - This repo is in migration: when porting exploratory code in, restructure it to
   match this layout rather than copying old layouts wholesale.

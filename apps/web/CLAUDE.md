@@ -30,6 +30,8 @@ End-user web interface. Production quality.
 
 ## Commands
 
-Part of the root pnpm workspace (ADR-001 Decision 4); run as
-`pnpm --filter @nvhash/web <script>`. Concrete scripts land with the
-PR 1.3 scaffold.
+Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
+containerized toolchain (ADR-002): `./dev pnpm --filter @nvhash/web <script>`.
+Playwright e2e will run in the official Playwright image on the same compose
+file (ADR-002 out-of-scope note; decided at PR 1.3). Concrete scripts land
+with the PR 1.3 scaffold.

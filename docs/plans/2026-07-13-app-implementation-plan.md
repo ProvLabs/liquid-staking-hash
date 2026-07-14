@@ -87,6 +87,7 @@ implies — no "docs later" PRs.
 | 0.1 | **ADR: App component architecture.** The §1 split, DB topology, personal-read auth path, notifier home. Amends `app-spec.md` §6/§9.4 and the `services/*/CLAUDE.md` command sections. | — |
 | 0.2 [P] | **Devnet fixture corpus** (spec §14.2 VERIFY). Capture scripts driven by `contracts/drills/`: vault `MsgSwapIn`/`MsgSwapOut` shapes, swap/expedite/payout/refund event attributes, `RunEpoch` snapshot events, query response shapes. Fixtures land in a shared location consumed by both indexer decode tests and MSW mocks. **Completeness is verified, not assumed:** the capture script checks the corpus against the full event inventory (swap in/out, enqueue, expedite, payout, refund, `RunEpoch` settlement) and fails if any terminal state is missing. Captured fixtures are **provisional against the pre-release vault** (§1 upstream status): they pin assumptions for drift detection and are re-vetted at PR 8.0. | a devnet vault deployment that passes the **settlement-feature probe** (`AcceptAsset` present ⇒ development build ahead of the latest formal vault release; no upstream version exists yet to pin — see §1 upstream status and `contracts/IMPLEMENTATION-STATUS.md`), not merely "devnet up" |
 | 0.3 [P] | **Shared typed LCD client package** (contract + vault + staking + group queries, `BigInt` amount discipline), fixture-backed tests. | 0.2 for fixtures (can scaffold before) |
+| 0.4 | **Containerized dev toolchain** (ADR-002, added 2026-07-14): all JS task execution in pinned containers via the repo-root `./dev` wrapper over `infra/dev/compose.yaml` — node/pnpm tools runner, disposable postgres (profile `db`), shared `nvhash-dev` network joined by the dev node. Host toolchain versions stop being load-bearing before M1 bakes commands into scaffolds and CI; PR 1.5's full-stack wiring extends this compose file rather than introducing a new mechanism. | 0.1 (workspace shape); amends M1 scaffold expectations (scripts run under `./dev`, CI uses the same images) |
 
 ### M1 — Scaffolds & CI (three parallel lanes open here)
 
@@ -287,6 +288,11 @@ prerequisite hardened to a verified settlement-era vault build with a
 fixture-completeness check; §14 decision items wired as blocking dependencies
 in §2 (PRs 1.4, 3.3, 5.1, 5.4, 6.1, 6.2, 7.6); CI gate summary now enumerates
 the security-executable checks per component; §6 conformance table added.*
+
+*2026-07-14 (rev 4): M0 PR 0.4 added per Ira's direction — containerized dev
+toolchain (ADR-002) established before M1 so host machine state never leaks
+into builds, tests, or CI; M1 scaffolds and PR 1.5 build on the
+`infra/dev/compose.yaml` substrate.*
 
 *2026-07-13 (rev 3): upstream vault dependency status clarified per Ira —
 `AcceptAsset` detection is a **feature probe against an unreleased development

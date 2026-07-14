@@ -105,9 +105,15 @@ up() {
 
   local ports=()
   [ "$PUBLISH_PORTS" = "1" ] && ports=(-p 26657:26657 -p 9090:9090 -p 1317:1317)
+  # Join the shared dev network (ADR-002) so containerized tooling and, later,
+  # the indexer/api services reach the chain as http://dev-node:1317 without
+  # depending on published host ports.
+  docker network inspect nvhash-dev >/dev/null 2>&1 \
+    || docker network create nvhash-dev >/dev/null
   echo "== starting $CONTAINER ($IMAGE) =="
   docker run -d --name "$CONTAINER" \
     -v "$DEVNET_HOME:/provenance" \
+    --network nvhash-dev \
     ${ports[@]+"${ports[@]}"} \
     "$IMAGE" start >/dev/null
 

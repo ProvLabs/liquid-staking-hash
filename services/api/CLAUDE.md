@@ -29,6 +29,7 @@ Query API over the indexer's data store.
 
 ## Commands
 
-Part of the root pnpm workspace (ADR-001 Decision 4); run as
-`pnpm --filter @nvhash/api <script>`. Concrete scripts land with the
-PR 1.2 scaffold.
+Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
+containerized toolchain (ADR-002): `./dev pnpm --filter @nvhash/api <script>`.
+Dev database via `./dev pg up` (host port 5433). Concrete scripts land with
+the PR 1.2 scaffold.
