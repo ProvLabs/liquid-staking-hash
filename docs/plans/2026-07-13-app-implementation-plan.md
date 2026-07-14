@@ -239,7 +239,7 @@ and recorded in `app-spec.md` §14.
 | Item | Status | Consumed by |
 | --- | --- | --- |
 | §14.1 wallet vendor set | DECIDE — needed before 5.1; coordinate with console §14.1 | PR 5.1 |
-| §14.2 vault msg/event shapes | VERIFY — **two-stage:** dev-build capture by feature probe (PR 0.2, provisional); re-vetted against the formal vault release (PR 8.0) | 0.2, 2.1, 5.2; release gate 8.0 |
+| §14.2 vault msg/event shapes | VERIFY — **two-stage:** stage 1 captured 2026-07-14 (PR 0.2, provisional, `packages/fixtures`); stage 2 re-vets against the formal vault release (PR 8.0) | 0.2, 2.1, 5.2; release gate 8.0 |
 | §14.3 pool/bridge facts | VERIFY — external (NUVA bridge deployment) | 2.4, 3.2 config |
 | §14.4 bridge transit UX | DECIDE — v1 assumption: hand-off, no in-app transit | 5.4 |
 | §14.5 indexer transport/depth | DECIDE/VERIFY — resolved inside 2.1 (tx-search primary, ws optional) | 2.1 |

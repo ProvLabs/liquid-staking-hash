@@ -1,0 +1,54 @@
+{
+  "vault": {
+    "base_account": {
+      "address": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+      "account_number": "13"
+    },
+    "total_shares": {
+      "denom": "nvhash",
+      "amount": "310000000000000000"
+    },
+    "underlying_asset": "nhash",
+    "payment_denom": "nhash",
+    "admin": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+    "current_interest_rate": "0.0",
+    "desired_interest_rate": "0.0",
+    "period_start": "1784045477",
+    "period_timeout": "1784117477",
+    "swap_in_enabled": true,
+    "swap_out_enabled": true,
+    "withdrawal_delay_seconds": "180",
+    "paused_balance": {
+      "amount": "0"
+    },
+    "asset_manager": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
+    "fee_period_start": "1784045477",
+    "fee_period_timeout": "1784117477",
+    "outstanding_aum_fee": {
+      "denom": "nhash",
+      "amount": "0"
+    },
+    "aum_fee_bips": 15,
+    "nav_authority": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8"
+  },
+  "principal": {
+    "address": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+    "coins": [
+      {
+        "denom": "nhash",
+        "amount": "72445942"
+      },
+      {
+        "denom": "nvhash.staked",
+        "amount": "315315186291"
+      }
+    ]
+  },
+  "reserves": {
+    "address": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad"
+  },
+  "total_vault_value": {
+    "denom": "nhash",
+    "amount": "315387625483"
+  }
+}

@@ -1,0 +1,251 @@
+{
+  "height": "392",
+  "txs_results": null,
+  "finalize_block_events": [
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1m3h30wlvsf8llruxtpukdvsy0km2kum8j5f3gk",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "mint",
+      "attributes": [
+        {
+          "key": "bonded_ratio",
+          "value": "0.000000417717717287",
+          "index": true
+        },
+        {
+          "key": "inflation",
+          "value": "0.000000000000000000",
+          "index": true
+        },
+        {
+          "key": "annual_provisions",
+          "value": "0.000000000000000000",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "0",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "liveness",
+      "attributes": [
+        {
+          "key": "address",
+          "value": "tpvalcons1j5let8haqjhwe5esvj6l7axx37zs20fh5l3ll9",
+          "index": true
+        },
+        {
+          "key": "missed_blocks",
+          "value": "358",
+          "index": true
+        },
+        {
+          "key": "height",
+          "value": "392",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "liveness",
+      "attributes": [
+        {
+          "key": "address",
+          "value": "tpvalcons1zddd2z785yfp592jyp9nve0ys735gxrrv5h5f6",
+          "index": true
+        },
+        {
+          "key": "missed_blocks",
+          "value": "182",
+          "index": true
+        },
+        {
+          "key": "height",
+          "value": "392",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "2144891884000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_received",
+      "attributes": [
+        {
+          "key": "receiver",
+          "value": "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "2144891884000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "transfer",
+      "attributes": [
+        {
+          "key": "recipient",
+          "value": "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          "index": true
+        },
+        {
+          "key": "sender",
+          "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "2144891884000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provlabs.vault.v1.EventSwapOutRefunded",
+      "attributes": [
+        {
+          "key": "owner",
+          "value": "\"tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0\"",
+          "index": true
+        },
+        {
+          "key": "reason",
+          "value": "\"insufficient_funds\"",
+          "index": true
+        },
+        {
+          "key": "request_id",
+          "value": "\"2\"",
+          "index": true
+        },
+        {
+          "key": "shares",
+          "value": "\"2144891884000000nvhash\"",
+          "index": true
+        },
+        {
+          "key": "vault_address",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    }
+  ],
+  "validator_updates": null,
+  "consensus_param_updates": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "60000000"
+    },
+    "evidence": {
+      "max_age_num_blocks": "100000",
+      "max_age_duration": "172800000000000",
+      "max_bytes": "1048576"
+    },
+    "validator": {
+      "pub_key_types": [
+        "ed25519"
+      ]
+    },
+    "version": {},
+    "abci": {}
+  },
+  "app_hash": "dyJ0r1BC8itG09ev80wQLjDsOaZBU0MDY8wGc+NIFF8="
+}
