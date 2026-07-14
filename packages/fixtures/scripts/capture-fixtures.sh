@@ -112,9 +112,8 @@ capture_smart() { # capture_smart <file> <contract> <query-json> (verbatim LCD)
   note "$(basename "$1") <- smart $3"
 }
 
-capture_cli() { # capture_cli <file> <query args...>  (proto JSON via CLI/gRPC;
-  # the vault module registers NO LCD REST routes on this build — its queries
-  # are gRPC/CLI only, a pinned fact consumers of this corpus rely on)
+capture_cli() { # capture_cli <file> <query args...>  (proto JSON via CLI/gRPC,
+  # for the queries grpc-gateway cannot serve — see estimate-swap-in below)
   local f="$1"; shift
   cli_q "$@" > "$f" || fail "CLI query failed: $*"
   note "$(basename "$f") <- provenanced query $*"
@@ -176,17 +175,17 @@ capture() {
   [ -n "$b_refund" ] || fail "no block carrying $EV_SWAP_OUT_REFUNDED (unfunded-maturity refund) — run scripts/generate-corpus.sh"
   capture_block_results "$OUT/block-events/swap-out-refunded.json" "$b_refund"
 
-  echo "== vault module query shapes (gRPC/CLI proto JSON; no LCD REST on this build)"
-  capture_cli "$OUT/queries/vault/get.json"                vault get "$vault"
-  capture_cli "$OUT/queries/vault/list.json"               vault list
-  capture_cli "$OUT/queries/vault/params.json"             vault params
-  capture_cli "$OUT/queries/vault/pending-swap-outs.json"  vault vault-pending-swap-outs "$vault"
+  echo "== vault module query shapes (LCD REST under /vault/v1 — NOT /provlabs/vault/v1)"
+  capture_lcd "$OUT/queries/vault/get.json"                "vault/v1/vaults/$vault"
+  capture_lcd "$OUT/queries/vault/list.json"               "vault/v1/vaults"
+  capture_lcd "$OUT/queries/vault/params.json"             "vault/v1/params"
+  capture_lcd "$OUT/queries/vault/pending-swap-outs.json"  "vault/v1/vaults/$vault/pending_swap_outs"
+  capture_lcd "$OUT/queries/vault/payments.json"           "vault/v1/vaults/$vault/payments"
+  # estimate_swap_out serves over REST (string fields); estimate_swap_in does
+  # NOT — grpc-gateway rejects Coin/math.Int query parameters ("field type
+  # *types.Coin is not supported"), so that one query is gRPC/CLI-only.
+  capture_lcd "$OUT/queries/vault/estimate-swap-out.json"  "vault/v1/vaults/$vault/estimate_swap_out?shares=1000000000000"
   capture_cli "$OUT/queries/vault/estimate-swap-in.json"   vault estimate-swap-in "$vault" 1000000000nhash
-  # estimate-swap-out takes a BARE share integer (no denom) — asymmetric with
-  # estimate-swap-in's coin argument; pinned deliberately.
-  capture_cli "$OUT/queries/vault/estimate-swap-out.json"  vault estimate-swap-out "$vault" 1000000000000
-  capture_cli "$OUT/queries/vault/payments.json"           vault payments "$vault"
-
   echo "== contract smart query shapes (LCD /cosmwasm/wasm/v1, verbatim)"
   capture_smart "$OUT/queries/contract/config.json"         "$contract" '{"config":{}}'
   capture_smart "$OUT/queries/contract/epoch-status.json"   "$contract" '{"epoch_status":{}}'
@@ -195,9 +194,13 @@ capture() {
   capture_smart "$OUT/queries/contract/validators.json"     "$contract" '{"validators":{}}'
   capture_smart "$OUT/queries/contract/jail-reports.json"   "$contract" '{"jail_reports":{}}'
 
-  echo "== staking query shapes (LCD, verbatim)"
+  echo "== staking + group query shapes (LCD, verbatim)"
   capture_lcd "$OUT/queries/staking/validators.json"  "cosmos/staking/v1beta1/validators"
   capture_lcd "$OUT/queries/staking/delegations.json" "cosmos/staking/v1beta1/delegations/$contract"
+  mkdir -p "$OUT/queries/group"
+  # No group exists on the drill devnet; the empty response still pins the
+  # pagination envelope shape the group client decodes.
+  capture_lcd "$OUT/queries/group/groups.json"        "cosmos/group/v1/groups"
 
   echo "== manifest"
   jq -n \
@@ -220,7 +223,8 @@ capture() {
         "vault event attribute values are JSON-encoded strings (one extra quoting layer)",
         "payout and refund are EndBlocker events (finalize_block_events via RPC block_results); they never appear in tx-search",
         "block_search indexes EndBlocker events on this build (kv indexer)",
-        "the vault module registers no LCD REST routes on this build — vault queries are gRPC/CLI only",
+        "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
+        "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
         "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events"
       ],
       sources: {
@@ -262,7 +266,7 @@ check_corpus() {
            queries/vault/estimate-swap-out.json queries/vault/pending-swap-outs.json \
            queries/contract/epoch-snapshot.json queries/contract/apr.json \
            queries/contract/epoch-status.json queries/contract/validators.json \
-           queries/staking/validators.json; do
+           queries/staking/validators.json queries/group/groups.json; do
     [ -s "$OUT/$f" ] || MISSING+=("query shape — $f missing/empty")
   done
   if [ "${#MISSING[@]}" -gt 0 ]; then

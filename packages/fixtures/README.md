@@ -26,9 +26,9 @@ gate). Capture context (chain id, height, node image, probe result) is in
 | `fixtures/msgs/` | `MsgSwapInRequest` / `MsgSwapOutRequest` txs with their events (swap-in, enqueue) | LCD `GET /cosmos/tx/v1beta1/txs/{hash}`, verbatim |
 | `fixtures/run-epoch/` | RunEpoch crank txs: deploy settlement (payment + `AcceptAsset` legs), return settlement (marker burn leg), expedite | LCD tx endpoint, verbatim |
 | `fixtures/block-events/` | Payout (`EventSwapOutCompleted`) and unfunded-maturity refund (`EventSwapOutRefunded`) | RPC `block_results` — **EndBlocker events; never visible to tx-search** |
-| `fixtures/queries/vault/` | vault get/list/params/pending-swap-outs/estimates/payments | CLI/gRPC proto JSON — **the vault module registers no LCD REST routes on this build** |
+| `fixtures/queries/vault/` | vault get/list/params/pending-swap-outs/estimates/payments | LCD REST under **`/vault/v1`** (not `/provlabs/vault/v1`), verbatim — except `estimate-swap-in.json` (CLI/gRPC proto JSON; see below) |
 | `fixtures/queries/contract/` | config, epoch_status, epoch_snapshot, apr, validators, jail_reports | LCD `/cosmwasm/wasm/v1/.../smart/`, verbatim |
-| `fixtures/queries/staking/` | validators, contract delegations | LCD, verbatim |
+| `fixtures/queries/staking/`, `fixtures/queries/group/` | validators, contract delegations; groups (empty — pins the pagination envelope) | LCD, verbatim |
 | `fixtures/manifest.json` | capture context, pinned facts, per-fixture source tx/blocks | — |
 
 Facts consumers must not re-derive wrongly (also pinned in the manifest):
@@ -40,6 +40,9 @@ Facts consumers must not re-derive wrongly (also pinned in the manifest):
   via RPC `block_results`, `txs_results` empty) — an indexer reading only
   tx-search never sees a redemption reach its terminal state.
 - `block_search` indexes EndBlocker events on this build (kv indexer).
+- Vault LCD REST lives under `/vault/v1`, and **`estimate_swap_in` is
+  gRPC/CLI-only**: grpc-gateway rejects `Coin`/`math.Int` query parameters.
+  `estimate_swap_out` (string fields) serves over REST.
 - Contract cranks emit plain `wasm` events with `action` attributes; epoch
   snapshot/APR data comes from smart queries, not events.
 

@@ -1,0 +1,20 @@
+{
+  "name": "@nvhash/chain-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed LCD client for the nvHASH App: contract smart queries, vault, staking, and group module reads with BigInt amount discipline (app plan PR 0.3). Zero runtime dependencies.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@nvhash/fixtures": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0"
+  }
+}

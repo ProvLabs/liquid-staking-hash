@@ -5,8 +5,8 @@
     "result": "present"
   },
   "chain_id": "chain-dev",
-  "captured_at": "2026-07-14T16:18:55Z",
-  "head_height": 535,
+  "captured_at": "2026-07-14T16:38:15Z",
+  "head_height": 1172,
   "node_image": "sha256:0d5813910f8c0b2cdc2500ff34aa25b3a4c7002f8bd0a2b0540b87491ff63a73",
   "vault": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
   "contract": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
@@ -15,7 +15,8 @@
     "vault event attribute values are JSON-encoded strings (one extra quoting layer)",
     "payout and refund are EndBlocker events (finalize_block_events via RPC block_results); they never appear in tx-search",
     "block_search indexes EndBlocker events on this build (kv indexer)",
-    "the vault module registers no LCD REST routes on this build — vault queries are gRPC/CLI only",
+    "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
+    "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
     "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events"
   ],
   "sources": {
