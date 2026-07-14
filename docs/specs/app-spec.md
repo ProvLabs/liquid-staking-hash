@@ -6,6 +6,8 @@
 
 > **Revision 2026-07-13 (certification):** **Certified for implementation** (Ira, 2026-07-13), granted on migration into `liquid-staking-hash` with review against `SECURITY.md` and the repository's PR process. The §14 open items are no longer a certification gate: each unresolved item is a **build-gating dependency of the specific PR that consumes it**, per the implementation plan (`../plans/2026-07-13-app-implementation-plan.md` §5) — a PR listed as consuming a `[DECIDE]`/`[VERIFY]` item must not land before that item is resolved and recorded here.
 
+> **Revision 2026-07-14 (component architecture, ADR-001):** §6 and §9.4 amended per [ADR-001](../architecture/2026-07-14-adr-001-app-component-architecture.md) (implementation plan PR 0.1): the App is one logical unit built as three components — `services/indexer`, `services/api`, `apps/web` — replacing the single-deployable `nuva-app` shape. One PostgreSQL database, two role-owned schemas (`indexed`/`app`); address-scoped API reads authorized in-process via scoped service assertions; the notifier is an `apps/web` worker; design-system packaging (§14.8) resolved as web-local tokens validated by the shared method. §9.1 annotated with schema ownership (incident acknowledgment split into an `app`-schema `incident_acks` table).
+
 **Version:** 1.0-RC1 (2026-07-10). **Certified for implementation 2026-07-13** (see certification revision note).
 **Owner:** Ira
 **Companion to:** `liquid-staking-spec.md` (v1.0, baselined 2026-07-09), the governing contract spec — section references of the form "contract §N" point there; `dashboard-personas.md` (the five personas); `../architecture/application-boundary.md` (the Console-vs-App split this spec implements — "boundary §N"); and `console-spec.md` (v2.0-RC1, the chain-truth verification counterpart — "console §N").
@@ -156,6 +158,16 @@ Audit reports (firm, scope, date, report links, covered commit/code-hash), progr
 
 ## 6. Architecture Overview
 
+> **Revision 2026-07-14 (ADR-001):** this section originally described the
+> `nuva-app` single-deployable shape (SSR app, API routes, and indexer workers
+> in one codebase). Per
+> [ADR-001](../architecture/2026-07-14-adr-001-app-component-architecture.md)
+> the App is **one logical unit built as three components** —
+> `services/indexer`, `services/api`, `apps/web` — with ownership enforced by
+> database roles, not convention. The three-layer route/service/model
+> discipline, amount discipline, freshness labeling, and trust model (§12)
+> carry over unchanged **within each component**.
+
 ```
                       Browser
    ┌────────────────────────────────────────────────┐
@@ -164,40 +176,79 @@ Audit reports (firm, scope, date, report links, covered commit/code-hash), progr
    │        │ loaders/actions        │ sign         │
    └────────┼────────────────────────┼──────────────┘
             │ HTTPS                  ▼
-            │              ┌──────────────────┐
-            │              │ Wallet            │
-            │              │ (WalletConnect v2)│──── broadcast ──┐
-            ▼              └──────────────────┘                  │
-   ┌─────────────────────────────────────────────┐               │
-   │  App server (React Router 7 / Node)          │               │
-   │  routes → services → models (3-layer)        │               ▼
-   │  ├─ live LCD client (canonical reads) ───────┼──▶ ┌──────────────────┐
-   │  ├─ reconciler (indexed vs chain, alarms)    │    │ Provenance node   │
-   │  ├─ notifier (alert rules → in-app/push)     │    │ (LCD/RPC)         │
-   │  └─ API  /api/v1/*  (JSON, versioned)        │    └──────────────────┘
-   └───────────────┬─────────────────────────────┘               ▲
-                   │ Prisma                                       │
-   ┌───────────────▼─────────────┐   ┌────────────────────────┐  │
-   │  PostgreSQL                  │   │ Indexer workers         │──┘
-   │  users/sessions/alerts       │◀──│ block & event ingestion │
-   │  transactions/positions      │   │ cursors in              │
-   │  epoch_snapshots/validators  │   │ indexer_checkpoints     │
-   │  incidents/market_samples    │   └───────────┬────────────┘
-   │  gov cache/notifications     │               │ viem (RPC)
-   └──────────────────────────────┘   ┌───────────▼────────────┐
-                                      │ Base / Ethereum RPC     │
-   "Verify on chain" deep-links ────▶ │ (Uniswap pool, bridge   │
-      nvHASH Console (per env)        │  supply — read-only)    │
-                                      └─────────────────────────┘
+            ▼                ┌────────────────────┐
+   ┌─────────────────────┐   │ Wallet             │
+   │ apps/web (server)   │   │ (WalletConnect v2) │
+   │ SSR · sessions ·    │   └─────────┬──────────┘
+   │ app-state routes ·  │             │ broadcast
+   │ notifier worker     │             ▼
+   │ live LCD reads ─────┼──▶ ┌──────────────────┐
+   └──────┬───────┬──────┘    │ Provenance node  │
+          │       │           │ (LCD/RPC)        │◀────┐
+          │       │           └──────────────────┘     │
+          │       │ app schema (app_writer):           │
+          │       │ users · sessions · alerts ·        │
+          │       │ notifications · push · counters    │ LCD tx-search
+          │       ▼                                    │
+          │   ┌────────────────────────────┐           │
+          │   │ PostgreSQL — one database  │           │
+          │   │ two schemas: app · indexed │           │
+          │   └───▲───────────────▲────────┘           │
+          │       │ SELECT only   │ indexed schema     │
+          │       │ (api_reader)  │ (indexer_writer)   │
+          ▼       │               │                    │
+   ┌──────────────┴──────┐        │                    │
+   │ services/api        │   ┌────┴─────────────────┐  │
+   │ read-only /api/v1   │   │ services/indexer     │  │
+   │ freshness envelope  │   │ workers · reconciler │──┘
+   │ scoped assertions   │   │ incident derivation  │
+   │ checked in-process  │   └──────────┬───────────┘
+   └─────────────────────┘              │ viem (RPC, read-only)
+                                        ▼
+                                  Base / Ethereum RPC
+                                  (Uniswap pool · bridge supply)
+
+   "Verify on chain" deep-links ──▶  nvHASH Console (per env)
 ```
 
-**Component summary:**
+**Component summary (ownership per ADR-001):**
 
-- **App server:** one deployable (nuva pattern) — SSR UI, JSON API under `app/routes/api+/v1+/`, services, models. Loaders call services; services orchestrate models, the LCD client, and the market readers; models are the sole Prisma importers.
-- **Indexer workers:** long-running loops in the same codebase (separate process/container per stream), each with a durable cursor: `chain-events` (contract + vault + relevant module events by height), `epoch-history` (RunEpoch tx scan + backfill), `validator-sampler` (periodic `Validators {}` snapshot), `market-sampler` (DEX pool reads). Idempotent upserts keyed by (txhash, event index) so replays are safe.
-- **Reconciler:** a scheduled service comparing indexed aggregates against live chain reads (NAV, total shares, queue length, epoch index); divergence beyond tolerance raises an `incident` and flips the affected surfaces to their live-read/stale-label mode (§12).
-- **Notifier:** evaluates alert rules on indexer ticks; delivers via Web Push (scope `[DECIDE §14.7]`). There is no email channel — `SECURITY.md` prohibits collecting off-chain identity linked to wallets. All notifications are also readable in-app, so push is enhancement, not dependency.
-- **Wallet layer:** WalletConnect v2 session in the browser; message construction and decoded preview client-side; the server supplies read-only context (estimates, guard state) but never touches the signing path.
+- **`services/indexer`:** long-running worker loops (separate process/container
+  per stream), each with a durable cursor in `indexer_checkpoints`:
+  `chain-events` (contract + vault + relevant module events by height),
+  `epoch-history` (RunEpoch tx scan + backfill), `validator-sampler` (periodic
+  `Validators {}` snapshot), `market-sampler` (DEX pool reads via viem).
+  Idempotent upserts keyed by (txhash, event index) so replays are safe. The
+  **reconciler** (scheduled comparison of indexed aggregates against live chain
+  reads — NAV, total shares, queue length, epoch index) and **incident
+  derivation** (§9.6) live here: divergence beyond tolerance raises an
+  `incident` and flips affected surfaces to their live-read/stale-label mode
+  (§12). Sole writer of the `indexed` schema (role `indexer_writer`). Never
+  serves HTTP to users; never holds keys or signs.
+- **`services/api`:** the versioned read-only JSON API under `/api/v1` over
+  indexed data; every response carries the freshness envelope (§9.4);
+  zod-validated query params and rate limiting at every route. Reads `indexed`
+  via a SELECT-only role (`api_reader`); runs no migrations, performs no writes
+  of any kind, submits no transactions. Address-scoped endpoints require a
+  verified-address service assertion checked **in-process** (ADR-001 Decision 2;
+  §12.3).
+- **`apps/web`:** the SSR UI, the wallet/session layer, and the App's own
+  state — sessions, alert rules, notification log, push tokens, aggregate
+  counters, incident acknowledgments — in the `app` schema (role `app_writer`,
+  no grants on `indexed`). Live LCD reads (the canonical plane, §5.1) happen in
+  this server; indexed history is read **only through `services/api`**. The
+  **notifier** runs as a separate worker entrypoint in this codebase,
+  evaluating alert rules on indexer ticks and delivering in-app + Web Push
+  (§10.4); its indexed-fact reads go through the API (public endpoints plus an
+  `internal:notifier`-scoped read-only surface — ADR-001 Decision 3).
+- **Wallet layer:** WalletConnect v2 session in the browser; message
+  construction and decoded preview client-side; the server supplies read-only
+  context (estimates, guard state) but never touches the signing path.
+
+Configuration (§7) is provisioned per component; `DATABASE_URL` resolves to the
+component's own role credential (`indexer_writer`, `api_reader`, `app_writer`),
+and the web tier additionally carries `API_SERVICE_ASSERTION_KEY` (server-only,
+never in the client-safe subset).
 
 ---
 
@@ -330,17 +381,17 @@ The cohort-satisfaction dashboard the no-backend console cannot render (register
 
 ### 9.1 Prisma schema (multi-file, one model per file)
 
-Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry the ingestion height/txhash where applicable):
+Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry the ingestion height/txhash where applicable). Tables live in one of two role-owned schemas per ADR-001 Decision 1: **`indexed`** (written only by `services/indexer`; rebuildable from chain) or **`app`** (written only by `apps/web`; the backup-critical domain). Each domain has its own Prisma schema and migrations; there are no cross-schema foreign keys or joins.
 
-- `users` (wallet address PK, first/last seen, locale), `sessions` (nonce-signature auth, expiry). No off-chain identity columns, ever (`SECURITY.md`): adding one is a design-review event, not a migration.
+- `users` (wallet address PK, first/last seen, locale), `sessions` (nonce-signature auth, expiry) — `app` schema. No off-chain identity columns, ever (`SECURITY.md`): adding one is a design-review event, not a migration.
 - `transactions` (txhash + msg index PK; address; kind: `swap_in | swap_out_request | redemption_payout | redemption_refund | transfer_in | transfer_out`; amounts in shares and nhash; NAV at height; block time).
 - `redemption_requests` (request id; owner; shares; estimates over time; enqueued/expedited/matured/refunded timestamps; terminal status) — the §9.5 time-to-payout source.
 - `epoch_snapshots` (epoch_index PK; the full contract §9.10 decomposition; gross/net APR bps; txhash; height; observed_at) — canonical program history, backfilled from genesis-of-contract (§9.3).
 - `validator_registry` (valoper; operator; moniker; enrolled_at; unregistered_at) and `validator_epochs` (valoper × epoch; uptime bps; eligible + failing reasons; tip; commission accrued/paid/due; program delegation; jailed events).
-- `incidents` (kind; severity; opened/closed; payload; acknowledgment) — §9.6.
+- `incidents` (kind; severity; opened/closed; payload) — §9.6, `indexed` schema (computed facts). The optional admin acknowledgment is an app action and lives in an `app`-schema `incident_acks` table referencing the incident id (ADR-001 Decision 1) — the web tier never writes `incidents`.
 - `market_samples` (venue; pool; price; depth bands; sampled_at) and `bridge_supply_samples` (chain; remote supply; sampled_at).
 - `gov_proposals` / `gov_votes` (indexed mirror of `x/group` state for history and per-member status).
-- `alert_rules`, `notifications` (rule; address; channel; payload; delivered_at; read_at).
+- `alert_rules`, `notifications` (rule; address; channel; payload; delivered_at; read_at) — `app` schema, with Web Push subscriptions and the aggregate funnel counters (§14.10).
 - `indexer_checkpoints` (stream name PK; cursor height/page; updated_at) — the nuva precedent, one row per worker stream.
 
 ### 9.2 Indexer workers
@@ -357,7 +408,12 @@ On first deployment (and after any reset) the epoch-history and chain-events wor
 
 ### 9.4 API surface
 
-Versioned JSON under `/api/v1/` (nuva `api+/v1+` route convention): public program endpoints (`/metrics`, `/epochs`, `/validators`, `/market`, `/incidents`), session-scoped personal endpoints (`/portfolio`, `/transactions?format=csv`, `/alerts`), and admin analytics endpoints. Every response envelope carries `{ data, meta: { chain_height, indexed_height, generated_at, source: "live" | "indexed" } }` — the freshness contract is in the API shape, not just the UI.
+Versioned JSON under `/api/v1/`, split across the two serving processes per ADR-001 (amended 2026-07-14; previously the nuva `api+/v1+` single-process convention):
+
+- **`services/api`** serves everything derived from indexed data: public program endpoints (`/metrics`, `/epochs`, `/validators`, `/market`, `/incidents` — unauthenticated, read-only, rate-limited), address-scoped endpoints (`/portfolio`, `/transactions?format=csv`), and admin analytics endpoints. Address-scoped and admin endpoints are authorized **in-process** by a short-lived scoped service assertion minted by the web tier's session layer (HMAC, `exp − iat ≤ 60 s`, key `API_SERVICE_ASSERTION_KEY` from environment): an `address:<bech32>` scope must match the requested address exactly or the request is rejected (403; absent/expired/invalid → 401). This is an enforced mechanism, never a caller-topology assumption — the cross-address-rejection contract tests gate `services/api` CI (ADR-001 Decision 2, §12.3). A read-only `internal:notifier`-scoped surface serves the notifier's cross-address evaluation reads and grants nothing else.
+- **`apps/web`** serves the app-state routes over its own schema: sessions, `/alerts` rule CRUD, the notification log, push-subscription management, and the aggregate counters. It never reads indexed tables directly; indexed history reaches it only through `services/api`.
+
+Every response from either process carries the freshness envelope `{ data, meta: { chain_height, indexed_height, generated_at, source: "live" | "indexed" } }` — a shared response type (`@nvhash/api-types`) so the freshness contract is in the API shape, not just the UI.
 
 ### 9.5 Derived metrics (formulas)
 
@@ -475,7 +531,7 @@ Protocol and platform facts this design must respect (chain constraints identica
 5. **[DECIDE/VERIFY] Indexer transport details:** tx-search vs RPC websocket subscription; confirmation depth on Provenance; LCD paging limits under load.
 6. **[DECIDE] Governance home & composer scope** (boundary §7.2): confirm the App-as-workflow / Console-as-composer split of §8.7, and whether template-scoped proposal creation ships in v1 or the App is vote/execute-only at launch. Interacts with register B2 (validator voting) and console §14.6.
 7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Remaining `[DECIDE]`: which alert kinds default-on per role. Email remains excluded and is not an option.
-8. **[DECIDE] Design-system packaging** (boundary §7.4): extract shared tokens/dataviz validation into a package both surfaces consume, or App-local tokens validated by the same script. Plus the program-specific brand pass (accent, status set) over the nuva base.
+8. **[DECIDED 2026-07-14, ADR-001 Decision 4]** Design-system packaging (boundary §7.4): design tokens are **web-local** (`apps/web`) for v1, not a shared package — the two surfaces deliberately wear different registers and the console is mid-migration. Family coherence is enforced where it matters: both surfaces run the same dataviz palette validation (`validate_palette.js`) in CI on every token change, both themes. Shared TypeScript code (fixtures, chain client, API types, read-only indexed DB client) lives in a root pnpm workspace under `packages/` (`@nvhash/*`); the console may join the workspace with its own migration. Revisit shared token packaging post-v1 if drift is observed. Remaining for PR 1.4: the program-specific brand pass (accent, status set) over the nuva base.
 9. **[DECIDE] Launch locale set** (`en` assumed; `zh`/`ko` are nuva-supported precedents).
 10. **[DECIDE] Aggregate-analytics event taxonomy:** which page classes and funnel stages are counted, and the consent posture for the counters — within the `SECURITY.md` constraint that analytics are first-party, aggregate-only, and never keyed by wallet, session, or device.
 11. **[DECIDE] Cost-basis method for the CSV export** (FIFO vs average cost) and the exact tax-friendly column set — a statement of fact requirements, not tax advice.
@@ -578,3 +634,5 @@ Protocol and platform facts this design must respect (chain constraints identica
 ---
 
 *v1.0-RC1, 2026-07-10: initial App specification per the two-application split (`../architecture/application-boundary.md` §7.1). Serves the Evaluator, Position Holder, Validator, and Administrator personas on the engineering team's `nuva-app` reference architecture; the Console remains the Protocol Engineer's chain-truth surface. Certified for implementation 2026-07-13 (revision note at top); unresolved §14 items gate their consuming PRs per the implementation plan.*
+
+*2026-07-14 (ADR-001): §6 and §9.4 amended to the three-component architecture (`services/indexer` / `services/api` / `apps/web`) with role-owned database schemas, in-process scoped-assertion authorization for address-scoped reads, the notifier as an `apps/web` worker, and §14.8 resolved (web-local tokens, shared validation method, root pnpm workspace for shared packages). See `../architecture/2026-07-14-adr-001-app-component-architecture.md`.*
