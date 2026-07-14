@@ -12,7 +12,8 @@
 # IMAGE REQUIREMENT (documented, not automated here): a locally built
 # `provenance-io/blockchain-dev:latest` containing the settlement-era vault
 # module (AcceptAsset). Build it once from a provenance checkout whose go.mod
-# points at that vault version (`make docker-build-dev`); afterwards this
+# points at pre-release vault main — no tagged vault release ships AcceptAsset
+# yet (`make docker-build-dev`); afterwards this
 # script needs no provenance repo at all: the image's entrypoint generates
 # genesis/config into the mounted state dir on first run.
 #
