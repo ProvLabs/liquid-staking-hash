@@ -17,4 +17,30 @@ Internal testing/operations web console.
 
 ## Commands
 
-To be filled in when the app scaffold lands.
+- `npm run dev` — devnet profile on http://localhost:5273; `VITE_MOCK=true`
+  renders every page from fixtures with no live node.
+- `npm run typecheck` — `tsc -b` (project references; `noEmit` comes from
+  tsconfig, do not pass `--noEmit` on the command line — TS 5.5 rejects it
+  with `-b`).
+- `npm run build` / `build:devnet` / `build:test` — typecheck + vite build
+  per deployment profile (`.env.<profile>`, all client-public values).
+- Against a real chain: stand up the dev node via `infra/devnet/dev-node.sh
+  bootstrap`, then set `VITE_MOCK=false` with the devnet LCD/contract values.
+
+## Conventions (as built)
+
+- Amounts are `Uint128` decimal strings parsed to `BigInt`; display conversion
+  (nhash → HASH, bps → %) happens at render only — no floating point on
+  amounts.
+- The TypeScript contract mirror (`src/lib/types.ts`) tracks
+  `contracts/src/msg.rs` / `state.rs`; update it in the same change as any
+  contract interface change, and keep guard preflight (`src/lib/guards.ts`)
+  aligned with the contract's actual gates.
+- Dependency surface is deliberately minimal (react, react-dom,
+  react-router-dom only). The `@cosmjs/*` packages were removed 2026-07-13 as
+  unused — they carried a critical `elliptic` advisory chain. When the
+  extension-wallet adapter lands (spec §14.1), re-add only the needed cosmjs
+  packages at a current, audited version.
+- The index.html CSP pins `connect-src` to the known profile LCD hosts; a
+  deployment on a different LCD updates that list — never widen it to a
+  blanket `https:`.

@@ -20,6 +20,11 @@ infra/devnet/state/
 .env
 .env.*
 !.env.example
+# Console deployment profiles are tracked deliberately: VITE_ values are
+# client-public configuration (placeholder addresses, no secrets)
+!apps/console/.env.devnet
+!apps/console/.env.production
+!apps/console/.env.test
 
 # Claude Code — local/sensitive (shared config like .claude/settings.json,
 # commands, agents, and skills remains tracked)
