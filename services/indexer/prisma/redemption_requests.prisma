@@ -1,0 +1,32 @@
+// redemption_requests (app-spec §9.1): the §9.5.3 time-to-payout source.
+// `owner` is a bech32 account (public chain data). `estimates` is the sampled
+// projected-payout series over time; amounts inside are decimal strings, never
+// JS numbers (app-spec §5.8 amount discipline extends into JSON payloads).
+
+model RedemptionRequest {
+  requestId    String            @id
+  owner        String
+  shares       Decimal           @db.Decimal(39, 0)
+  estimates    Json?
+  status       RedemptionStatus
+  enqueuedAt   DateTime
+  expeditedAt  DateTime?
+  maturedAt    DateTime?
+  refundedAt   DateTime?
+  lastHeight   BigInt
+  lastTxhash   String
+
+  @@index([owner])
+  @@index([status])
+  @@map("redemption_requests")
+  @@schema("indexed")
+}
+
+enum RedemptionStatus {
+  enqueued
+  expedited
+  matured
+  refunded
+
+  @@schema("indexed")
+}

@@ -1,0 +1,26 @@
+// nvHASH indexer — Prisma multi-file schema (app-spec §5.3, §9.1).
+//
+// One model per `prisma/*.prisma` file (the nuva precedent). Every table
+// lives in the `indexed` Postgres schema, owned by the `indexer_writer` role
+// (ADR-001 Decision 1) — the sole writer of indexed data, which is fully
+// rebuildable from chain. `services/api` reads it through a SELECT-only role.
+//
+// Amount discipline (app-spec §5.8): base-unit amounts are `Decimal @db.Decimal(39,0)`
+// — never a JS number, never floating point, anywhere in the indexer.
+//
+// Data minimization (SECURITY.md, app-spec §9.1): the `indexed` schema holds
+// only public chain data plus operational cursors. No user-identifiable
+// information, no IP/device identifiers — enforced, not trusted, by the
+// schema-field allowlist gate (test/schema-allowlist.test.ts). Adding a column
+// is a design-review event: it must be added to the allowlist, not merely to a
+// migration.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["indexed"]
+}
+
+generator client {
+  provider = "prisma-client-js"
+}

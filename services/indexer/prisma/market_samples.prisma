@@ -1,0 +1,17 @@
+// market_samples (app-spec §9.1): DEX pool observations (venue/pool/price/depth
+// bands, sampled_at). Market data is unprovable against chain (app-spec §12.1)
+// and carries venue + sample time only. `depthBands` amounts are decimal
+// strings, never JS numbers. No PII — venue/pool are public contract addresses.
+
+model MarketSample {
+  id         BigInt   @id @default(autoincrement())
+  venue      String
+  pool       String
+  price      Decimal  @db.Decimal(39, 0)
+  depthBands Json
+  sampledAt  DateTime
+
+  @@index([sampledAt])
+  @@map("market_samples")
+  @@schema("indexed")
+}

@@ -1,0 +1,20 @@
+// gov_proposals (app-spec §9.1): indexed mirror of `x/group` proposal state for
+// history and per-member status. `proposer`/`metadata`/`messages` are the
+// on-chain proposal payload (public); `metadata` is the chain's free-form
+// proposal metadata string, not off-chain identity.
+
+model GovProposal {
+  proposalId         BigInt   @id
+  groupPolicyAddress String
+  proposer           String
+  status             String
+  metadata           String?
+  messages           Json
+  submitTime         DateTime
+  height             BigInt
+  txhash             String
+
+  @@index([groupPolicyAddress])
+  @@map("gov_proposals")
+  @@schema("indexed")
+}

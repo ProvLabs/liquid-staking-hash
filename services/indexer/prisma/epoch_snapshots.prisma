@@ -1,0 +1,37 @@
+// epoch_snapshots (app-spec §9.1): canonical program history, backfilled from
+// genesis-of-contract (§9.3). Fields mirror the contract §9.10 snapshot
+// decomposition plus the gross/net APR bps from the `Apr {}` query — the exact
+// shapes captured in @nvhash/fixtures (queries/contract/epoch-snapshot.json,
+// apr.json). `netDeposits` is signed (app-spec §13); Decimal(39,0) holds it.
+
+model EpochSnapshot {
+  epochIndex             BigInt   @id
+  startedAtSeconds       BigInt
+  endedAtSeconds         BigInt
+  endHeight              BigInt
+  tvvBefore              Decimal  @db.Decimal(39, 0)
+  tvvAfter               Decimal  @db.Decimal(39, 0)
+  totalShares            Decimal  @db.Decimal(39, 0)
+  rewardsClaimed         Decimal  @db.Decimal(39, 0)
+  commissionReceived     Decimal  @db.Decimal(39, 0)
+  tipsReceived           Decimal  @db.Decimal(39, 0)
+  rewardsDeposited       Decimal  @db.Decimal(39, 0)
+  settled                Decimal  @db.Decimal(39, 0)
+  writeDown              Decimal  @db.Decimal(39, 0)
+  deployed               Decimal  @db.Decimal(39, 0)
+  rebalanced             Decimal  @db.Decimal(39, 0)
+  unbondedForRedemptions Decimal  @db.Decimal(39, 0)
+  aumFeeEstimate         Decimal  @db.Decimal(39, 0)
+  netDeposits            Decimal  @db.Decimal(39, 0)
+  redemptionsExpedited   Int
+  validatorsPurged       Int
+  eligibleCount          Int
+  grossAprBps            Int
+  netAprBps              Int
+  txhash                 String
+  height                 BigInt
+  observedAt             DateTime
+
+  @@map("epoch_snapshots")
+  @@schema("indexed")
+}

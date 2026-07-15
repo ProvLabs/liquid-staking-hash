@@ -1,0 +1,42 @@
+// incidents (app-spec §9.6): computed from indexed facts, never hand-entered.
+// `dedupeKey` makes derivation idempotent (re-derivation upserts, never
+// duplicates — SECURITY.md idempotency rule). The optional admin acknowledgment
+// is an `app`-schema `incident_acks` row (ADR-001 Decision 1) — NOT here: the
+// web tier never writes `incidents`.
+
+model Incident {
+  id           BigInt           @id @default(autoincrement())
+  kind         IncidentKind
+  severity     IncidentSeverity
+  dedupeKey    String
+  openedAt     DateTime
+  closedAt     DateTime?
+  openedHeight BigInt?
+  payload      Json
+
+  @@unique([kind, dedupeKey])
+  @@index([kind])
+  @@map("incidents")
+  @@schema("indexed")
+}
+
+enum IncidentKind {
+  contract_halted
+  vault_paused
+  slash_write_down
+  redemption_refund
+  jail_report
+  epoch_overdue
+  reconciler_divergence
+  indexer_lag
+
+  @@schema("indexed")
+}
+
+enum IncidentSeverity {
+  info
+  warning
+  critical
+
+  @@schema("indexed")
+}
