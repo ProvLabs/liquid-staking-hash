@@ -171,8 +171,10 @@ Devnet lifecycle, bootstrap, and per-operation action scripts are organized
 under [`infra/devnet/`](../infra/devnet/); drills under
 [`drills/`](drills/). Facts that carry over:
 
-- The dev node needs a `provenance-io/blockchain-dev:latest` image built with
-  the settlement-era vault module: from a Provenance checkout with a `go.mod`
+- The dev node uses `ghcr.io/provlabs/vault-dev-node:latest` (pulled
+  automatically by `infra/devnet/dev-node.sh`), an image built with the
+  settlement-era vault module. To build an equivalent image locally instead
+  (set `IMAGE` to its tag): from a Provenance checkout with a `go.mod`
   replace pointing `github.com/provlabs/vault` at a vault checkout on main,
   plus an `app/app.go` patch wiring vault main's new keeper deps (Name,
   Attribute, and a small `vaultExchangeAdapter` for the exchange keeper's

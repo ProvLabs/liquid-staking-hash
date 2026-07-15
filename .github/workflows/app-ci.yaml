@@ -7,9 +7,9 @@
 # automatically as packages define typecheck/test scripts.
 #
 # Deliberately NOT here: anything needing the devnet node — the
-# provenance-io/blockchain-dev image contains the pre-release vault module
-# and is built locally (no registry copy). Fixture capture/generation and
-# live drills stay local/scheduled until PR 8.0 pins a released vault.
+# ghcr.io/provlabs/vault-dev-node image contains the pre-release vault
+# module. Fixture capture/generation and live drills stay local/scheduled
+# until PR 8.0 pins a released vault.
 name: app-ci
 
 on:

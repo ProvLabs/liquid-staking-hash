@@ -9,18 +9,17 @@
 #   infra/devnet/dev-node.sh bootstrap   up (if needed) + nvhash-deploy-p2p.sh
 #   infra/devnet/dev-node.sh status      container + block height
 #
-# IMAGE REQUIREMENT (documented, not automated here): a locally built
-# `provenance-io/blockchain-dev:latest` containing the settlement-era vault
-# module (AcceptAsset). Build it once from a provenance checkout whose go.mod
-# points at pre-release vault main — no tagged vault release ships AcceptAsset
-# yet (`make docker-build-dev`); afterwards this
-# script needs no provenance repo at all: the image's entrypoint generates
-# genesis/config into the mounted state dir on first run.
+# IMAGE: defaults to `ghcr.io/provlabs/vault-dev-node:latest`, pulled
+# automatically when absent. It contains the settlement-era vault module
+# (AcceptAsset); no provenance repo is needed — the image's entrypoint
+# generates genesis/config into the mounted state dir on first run. To use a
+# locally built image instead (e.g. `make docker-build-dev` from a provenance
+# checkout wired to pre-release vault main), set IMAGE to its tag.
 #
 # Environment overrides:
 #   DEVNET_HOME=infra/devnet/state  state dir (bind-mounted at /provenance)
 #   CONTAINER=dev-node         container name
-#   IMAGE=provenance-io/blockchain-dev:latest
+#   IMAGE=ghcr.io/provlabs/vault-dev-node:latest
 #   UNBONDING=120s             staking unbonding_time patched into genesis
 #   PUBLISH_PORTS=1            expose 26657/9090/1317 on localhost (0 = off)
 #   SLASH_WINDOW=              if set, slashing signed_blocks_window patched
@@ -35,7 +34,7 @@ set -euo pipefail
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEVNET_HOME="${DEVNET_HOME:-$SDIR/state}"
 CONTAINER="${CONTAINER:-dev-node}"
-IMAGE="${IMAGE:-provenance-io/blockchain-dev:latest}"
+IMAGE="${IMAGE:-ghcr.io/provlabs/vault-dev-node:latest}"
 UNBONDING="${UNBONDING:-120s}"
 PUBLISH_PORTS="${PUBLISH_PORTS:-1}"
 CMD="${1:-up}"
@@ -46,12 +45,14 @@ height() {
 }
 
 require_image() {
-  docker image inspect "$IMAGE" >/dev/null 2>&1 || {
-    echo "image '$IMAGE' not found locally." >&2
-    echo "Build it once from a provenance checkout wired to the settlement-era" >&2
-    echo "vault module: make docker-build-dev  (see header of this script)." >&2
-    exit 1
-  }
+  docker image inspect "$IMAGE" >/dev/null 2>&1 && return 0
+  echo "== image '$IMAGE' not found locally; pulling =="
+  docker pull "$IMAGE" && return 0
+  echo "pull of '$IMAGE' failed." >&2
+  echo "Either authenticate to the registry (docker login ghcr.io) or build a" >&2
+  echo "local image from a provenance checkout wired to the settlement-era" >&2
+  echo "vault module (make docker-build-dev) and set IMAGE to its tag." >&2
+  exit 1
 }
 
 generate_config() {
