@@ -266,6 +266,7 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `LCD_URL` | program-operated node | Server-side reads; the browser never needs LCD CORS. |
 | `CONTRACT_ADDRESS` / `VAULT_ADDRESS` | deployed addresses | Vault address cross-checked against `Config {}` at boot; mismatch fails startup. |
 | `CONSOLE_URL` | the same-environment Console origin | Verify-link base (§12.2). One console per environment; links never cross environments. |
+| `CONSOLE_CHAIN_ID` | chain id of the configured console profile | Added 2026-07-15 (PR 1.3): the operator-declared chain id the `CONSOLE_URL` console serves. Must equal `CHAIN_ID` or boot fails — the §12.2 "checked at boot" cross-environment guard needs the console profile's chain id as an explicit config fact (the console is a static app with no endpoint to ask). |
 | `DATABASE_URL` | PostgreSQL | Indexer + app state. |
 | `BASE_RPC_URL` / `ETH_RPC_URL` | EVM read endpoints | Market + bridge-supply sampling (§5.3). |
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
@@ -276,9 +277,20 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `RECONCILE_TOLERANCE` / cadence | tolerance per metric; ~1 min cadence | §12 reconciler thresholds. |
 | `APP_ENV` | `development` \| `staging` \| `production` | nuva convention; drives the environment badge. |
 
----
-
-## 8. Information Architecture & Pages
+> **Revision 2026-07-15 (PR 1.3, `apps/web` scaffold):** the web tier's config
+> boundary now exists and is enforced. The scaffold consumes only what it uses
+> (`APP_ENV`, `CHAIN_ID`, `LCD_URL`, `CONTRACT_ADDRESS`, `VAULT_ADDRESS`,
+> `CONSOLE_URL`, `CONSOLE_CHAIN_ID` — all zod-bounded at load); the remaining
+> table rows are documented `.env.example` placeholders consumed by their own
+> PRs. Both boot checks are wired and fail startup loudly: console chain-id
+> match (`CONSOLE_CHAIN_ID` row above) and the vault-address cross-check
+> against `Config {}`. The **client-safe subset** is now a concrete allowlist
+> (`appEnv`, `chainId`, `contractAddress`, `vaultAddress`, `consoleUrl` —
+> `apps/web/app/config/client.ts`), enforced by a standing bundle-secret CI
+> gate (build with sentinels in every server-only var, scan the client bundle)
+> plus a unit test on the root-loader projection and an e2e assertion that no
+> server-only value reaches the rendered page. Adding a client-visible config
+> key amends this section and that allowlist in the same change.
 
 ### 8.0 Site map & global chrome
 

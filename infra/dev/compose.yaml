@@ -14,6 +14,7 @@ networks:
 
 volumes:
   tools-home: # corepack cache + tool config — survives runs
+  playwright-home: # corepack cache for the e2e runner — survives runs
   pgdata:
 
 services:
@@ -33,6 +34,24 @@ services:
       - tools-home:/home/dev
     environment:
       HOME: /home/dev
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      CI: "${CI:-}"
+    networks: [nvhash-dev]
+
+  # Playwright e2e runner (ADR-002 "out of scope" note, resolved at PR 1.3):
+  # browsers ship baked into the official image, so e2e is as pinned as the
+  # tools plane. The image tag moves in LOCKSTEP with the exact
+  # @playwright/test pin in apps/web/package.json — bump both in one change.
+  # Driven by `./dev pw …`.
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.61.1-noble
+    profiles: ["e2e"]
+    working_dir: /repo
+    volumes:
+      - ../..:/repo
+      - playwright-home:/home/pw
+    environment:
+      HOME: /home/pw
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       CI: "${CI:-}"
     networks: [nvhash-dev]

@@ -1,0 +1,46 @@
+{
+  "name": "@nvhash/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "nvHASH Program App web tier (app plan PR 1.3). React Router 7 SSR, $lang+ i18n routing, Auto/Light/Dark themes, env config with boot checks (vault-address cross-check, console chain-id match), MSW harness over the @nvhash/fixtures corpus. Owns the `app` schema per ADR-001 (Prisma lands with the session/alert PRs); indexed history is read only through services/api, never the tables.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "react-router typegen && tsc --noEmit",
+    "test": "vitest run",
+    "dev": "react-router dev",
+    "build": "react-router build",
+    "start": "react-router-serve ./build/server/index.js",
+    "test:e2e": "react-router build && playwright test",
+    "check:palette": "node scripts/check-palette.mjs",
+    "check:bundle": "node scripts/check-bundle-secrets.mjs"
+  },
+  "dependencies": {
+    "@nvhash/chain-client": "workspace:*",
+    "@radix-ui/react-slot": "^1.1.1",
+    "@react-router/node": "^7.18.1",
+    "@react-router/serve": "^7.18.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "isbot": "^5.1.17",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^7.18.1",
+    "tailwind-merge": "^3.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "@nvhash/fixtures": "workspace:*",
+    "@playwright/test": "1.61.1",
+    "@react-router/dev": "^7.18.1",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "msw": "^2.15.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vitest": "^4.1.0"
+  }
+}

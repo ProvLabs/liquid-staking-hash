@@ -1,0 +1,80 @@
+/*
+ * Web-local design tokens (ADR-001 Decision 4 / app-spec §14.8): the token
+ * VALUES are this app's own; the VALIDATION METHOD is shared with the console
+ * (the repo dataviz method's validate_palette.js, run in CI on both themes by
+ * scripts/check-palette.mjs — parse contract below).
+ *
+ * PR 1.3 ships the validated dataviz reference palette and neutral chrome as
+ * placeholders; the program-specific brand pass (nuva accent/status tuning,
+ * Funnel Sans / Space Grotesk / Geist Mono) is PR 1.4 and must re-run the
+ * palette gate on any change.
+ *
+ * Theming: every token is a single `light-dark()` pair. `color-scheme` on
+ * :root makes "auto" follow the OS; an explicit `data-theme` pins it.
+ *
+ * check-palette.mjs parse contract: `--viz-cat-<n>: light-dark(#xxxxxx, #xxxxxx)`
+ * and `--viz-surface: light-dark(#xxxxxx, #xxxxxx)` — keep those literal hex
+ * pairs on one line each.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── UI chrome (semantic, shadcn/ui naming) ─────────────────────────── */
+  --background: light-dark(#f9f9f7, #0d0d0d);
+  --foreground: light-dark(#0b0b0b, #ffffff);
+  --card: light-dark(#fcfcfb, #1a1a19);
+  --card-foreground: light-dark(#0b0b0b, #ffffff);
+  --popover: light-dark(#fcfcfb, #1a1a19);
+  --popover-foreground: light-dark(#0b0b0b, #ffffff);
+  --primary: light-dark(#0b0b0b, #ffffff);
+  --primary-foreground: light-dark(#ffffff, #0b0b0b);
+  --secondary: light-dark(#f0efec, #383835);
+  --secondary-foreground: light-dark(#0b0b0b, #ffffff);
+  --muted: light-dark(#f0efec, #2c2c2a);
+  --muted-foreground: light-dark(#52514e, #c3c2b7);
+  --accent: light-dark(#f0efec, #383835);
+  --accent-foreground: light-dark(#0b0b0b, #ffffff);
+  --destructive: light-dark(#d03b3b, #d03b3b);
+  --destructive-foreground: light-dark(#ffffff, #ffffff);
+  --border: light-dark(rgba(11, 11, 11, 0.1), rgba(255, 255, 255, 0.1));
+  --input: light-dark(rgba(11, 11, 11, 0.15), rgba(255, 255, 255, 0.15));
+  --ring: light-dark(#2a78d6, #3987e5);
+  --radius: 0.625rem;
+
+  /* ── Dataviz (repo dataviz method; validated in CI, both themes) ────── */
+  --viz-surface: light-dark(#fcfcfb, #1a1a19);
+  /* Categorical slots — fixed order, never cycled; the ordering is the
+     CVD-safety mechanism. Dark steps sit in the floor band (worst adjacent
+     ΔE ≈ 10.3): 4+ series in dark mode require direct labels or texture. */
+  --viz-cat-1: light-dark(#2a78d6, #3987e5);
+  --viz-cat-2: light-dark(#1baf7a, #199e70);
+  --viz-cat-3: light-dark(#eda100, #c98500);
+  --viz-cat-4: light-dark(#008300, #008300);
+  --viz-cat-5: light-dark(#4a3aa7, #9085e9);
+  --viz-cat-6: light-dark(#e34948, #e66767);
+  --viz-cat-7: light-dark(#e87ba4, #d55181);
+  --viz-cat-8: light-dark(#eb6834, #d95926);
+  /* Diverging pair (signed measures: net deposits, premium/discount):
+     blue ↔ red arms, neutral gray midpoint. */
+  --viz-div-neg: light-dark(#2a78d6, #3987e5);
+  --viz-div-mid: light-dark(#f0efec, #383835);
+  --viz-div-pos: light-dark(#e34948, #e66767);
+  /* Status — reserved for state, never "series 4"; always icon + label. */
+  --viz-status-good: #0ca30c;
+  --viz-status-warning: #fab219;
+  --viz-status-serious: #ec835a;
+  --viz-status-critical: #d03b3b;
+  /* Chart chrome */
+  --viz-grid: light-dark(#e1e0d9, #2c2c2a);
+  --viz-axis: light-dark(#c3c2b7, #383835);
+  --viz-ink-muted: #898781;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
