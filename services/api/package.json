@@ -1,0 +1,23 @@
+{
+  "name": "@nvhash/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "nvHASH read-only query API (app plan PR 1.2). Versioned /api/v1 over indexed data with the freshness envelope on every route, zod-bounded query params, and rate limiting. Reads only (api_reader role, ADR-001 Decision 1); serves no write endpoint of any kind, holds no keys, signs nothing.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@nvhash/api-types": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0"
+  }
+}

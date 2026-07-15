@@ -8,6 +8,18 @@ importers:
 
   .: {}
 
+  packages/api-types:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(jiti@2.7.0))
+
   packages/chain-client:
     devDependencies:
       '@nvhash/fixtures':
@@ -24,6 +36,25 @@ importers:
         version: 4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(jiti@2.7.0))
 
   packages/fixtures: {}
+
+  services/api:
+    dependencies:
+      '@nvhash/api-types':
+        specifier: workspace:*
+        version: link:../../packages/api-types
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(jiti@2.7.0))
 
   services/indexer:
     dependencies:
@@ -612,6 +643,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@emnapi/core@1.11.1':
@@ -1067,3 +1101,5 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  zod@3.25.76: {}
