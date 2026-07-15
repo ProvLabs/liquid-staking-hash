@@ -45,7 +45,7 @@ addr_of() { pexec keys show "$1" -a -t --home "$HOME_DIR" --keyring-backend test
 # the same drone can't race the account sequence. Logs ok/REJECTED/FAIL; never aborts the loop.
 fire() {
   local from="$1"; shift
-  local out code hash res j
+  local out code hash res
   out="$(pexec tx "$@" --from "$from" $COMMON 2>/dev/null)"
   code="$(echo "$out" | jq -r '.code // empty' 2>/dev/null)"
   hash="$(echo "$out" | jq -r '.txhash // empty' 2>/dev/null)"
@@ -57,7 +57,7 @@ fire() {
     echo "    REJECTED code=$code $(echo "$out" | jq -r '.raw_log // empty' | head -c 140)"
     return
   fi
-  for j in $(seq 1 15); do
+  for _ in $(seq 1 15); do
     res="$(qj tx "$hash")"
     code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null)"
     [ -n "$code" ] && break

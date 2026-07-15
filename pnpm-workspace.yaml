@@ -1,0 +1,8 @@
+# Workspace membership per ADR-001 Decision 4
+# (docs/architecture/2026-07-14-adr-001-app-component-architecture.md):
+# apps/web, services/*, and shared packages/*. apps/console stays a
+# standalone npm project until its own migration opts it in.
+packages:
+  - apps/web
+  - services/*
+  - packages/*

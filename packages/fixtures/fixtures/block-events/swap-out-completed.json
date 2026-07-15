@@ -1,0 +1,958 @@
+{
+  "height": "7810",
+  "txs_results": [
+    {
+      "code": 0,
+      "data": "Ei4KLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNl",
+      "log": "",
+      "info": "",
+      "gas_wanted": "4000000",
+      "gas_used": "256716",
+      "events": [
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "spender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            },
+            {
+              "key": "amount",
+              "value": "1nhash",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+              "index": true
+            },
+            {
+              "key": "amount",
+              "value": "1nhash",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+              "index": true
+            },
+            {
+              "key": "sender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            },
+            {
+              "key": "amount",
+              "value": "1nhash",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "sender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "fee",
+              "value": "4000000nhash",
+              "index": true
+            },
+            {
+              "key": "fee_payer",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "min_fee_charged",
+              "value": "1nhash",
+              "index": true
+            },
+            {
+              "key": "fee_payer",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "acc_seq",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk/30",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "signature",
+              "value": "F7PLHISkQUjtpSWB62cfUgXMIShxBmkLdYzfBXxFKxIQ7OZQidiDaR1JBEd+X4d10u/Fa2fsnnMbpRKE9kYiaQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "action",
+              "value": "/cosmwasm.wasm.v1.MsgExecuteContract",
+              "index": true
+            },
+            {
+              "key": "sender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            },
+            {
+              "key": "module",
+              "value": "wasm",
+              "index": true
+            },
+            {
+              "key": "msg_index",
+              "value": "0",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "execute",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
+              "index": true
+            },
+            {
+              "key": "msg_index",
+              "value": "0",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "wasm",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
+              "index": true
+            },
+            {
+              "key": "action",
+              "value": "service_redemptions",
+              "index": true
+            },
+            {
+              "key": "msg_index",
+              "value": "0",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "provlabs.vault.v1.EventPendingSwapOutExpedited",
+          "attributes": [
+            {
+              "key": "authority",
+              "value": "\"tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8\"",
+              "index": true
+            },
+            {
+              "key": "request_id",
+              "value": "\"3\"",
+              "index": true
+            },
+            {
+              "key": "vault",
+              "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+              "index": true
+            },
+            {
+              "key": "msg_index",
+              "value": "0",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "spender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            },
+            {
+              "key": "amount",
+              "value": "3999999nhash",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+              "index": true
+            },
+            {
+              "key": "amount",
+              "value": "3999999nhash",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+              "index": true
+            },
+            {
+              "key": "sender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            },
+            {
+              "key": "amount",
+              "value": "3999999nhash",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "sender",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "fee_payer",
+              "value": "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk",
+              "index": true
+            },
+            {
+              "key": "basefee",
+              "value": "1nhash",
+              "index": true
+            },
+            {
+              "key": "additionalfee",
+              "value": "1nhash",
+              "index": true
+            },
+            {
+              "key": "fee_overage",
+              "value": "3999998nhash",
+              "index": true
+            },
+            {
+              "key": "total",
+              "value": "4000000nhash",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "codespace": ""
+    }
+  ],
+  "finalize_block_events": [
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1m3h30wlvsf8llruxtpukdvsy0km2kum8j5f3gk",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "mint",
+      "attributes": [
+        {
+          "key": "bonded_ratio",
+          "value": "0.000000417717717287",
+          "index": true
+        },
+        {
+          "key": "inflation",
+          "value": "0.000000000000000000",
+          "index": true
+        },
+        {
+          "key": "annual_provisions",
+          "value": "0.000000000000000000",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "0",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "liveness",
+      "attributes": [
+        {
+          "key": "address",
+          "value": "tpvalcons1j5let8haqjhwe5esvj6l7axx37zs20fh5l3ll9",
+          "index": true
+        },
+        {
+          "key": "missed_blocks",
+          "value": "7776",
+          "index": true
+        },
+        {
+          "key": "height",
+          "value": "7810",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "liveness",
+      "attributes": [
+        {
+          "key": "address",
+          "value": "tpvalcons1zddd2z785yfp592jyp9nve0ys735gxrrv5h5f6",
+          "index": true
+        },
+        {
+          "key": "missed_blocks",
+          "value": "7600",
+          "index": true
+        },
+        {
+          "key": "height",
+          "value": "7810",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provlabs.vault.v1.EventVaultReconcile",
+      "attributes": [
+        {
+          "key": "interest_earned",
+          "value": "\"0nhash\"",
+          "index": true
+        },
+        {
+          "key": "principal_after",
+          "value": "\"315387632233nhash\"",
+          "index": true
+        },
+        {
+          "key": "principal_before",
+          "value": "\"315387632233nhash\"",
+          "index": true
+        },
+        {
+          "key": "rate",
+          "value": "\"0.0\"",
+          "index": true
+        },
+        {
+          "key": "time",
+          "value": "\"13723\"",
+          "index": true
+        },
+        {
+          "key": "vault_address",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "205863nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_received",
+      "attributes": [
+        {
+          "key": "receiver",
+          "value": "tp1evyv7neax9qtxxzuexnhylxyz4guvsyjptn4ha",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "205863nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "transfer",
+      "attributes": [
+        {
+          "key": "recipient",
+          "value": "tp1evyv7neax9qtxxzuexnhylxyz4guvsyjptn4ha",
+          "index": true
+        },
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "205863nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provlabs.vault.v1.EventVaultFeeCollected",
+      "attributes": [
+        {
+          "key": "aum_snapshot",
+          "value": "\"315387632233nhash\"",
+          "index": true
+        },
+        {
+          "key": "collected_amount",
+          "value": "\"205863nhash\"",
+          "index": true
+        },
+        {
+          "key": "duration_seconds",
+          "value": "\"13723\"",
+          "index": true
+        },
+        {
+          "key": "outstanding_amount",
+          "value": "\"0nhash\"",
+          "index": true
+        },
+        {
+          "key": "requested_amount",
+          "value": "\"205863nhash\"",
+          "index": true
+        },
+        {
+          "key": "vault_address",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provenance.marker.v1.EventSetNetAssetValue",
+      "attributes": [
+        {
+          "key": "denom",
+          "value": "\"nvhash\"",
+          "index": true
+        },
+        {
+          "key": "price",
+          "value": "\"315387426370nhash\"",
+          "index": true
+        },
+        {
+          "key": "source",
+          "value": "\"vault\"",
+          "index": true
+        },
+        {
+          "key": "volume",
+          "value": "\"310000000000000000\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36852482nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_received",
+      "attributes": [
+        {
+          "key": "receiver",
+          "value": "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36852482nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "transfer",
+      "attributes": [
+        {
+          "key": "recipient",
+          "value": "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          "index": true
+        },
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36852482nhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_received",
+      "attributes": [
+        {
+          "key": "receiver",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "transfer",
+      "attributes": [
+        {
+          "key": "recipient",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "sender",
+          "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_received",
+      "attributes": [
+        {
+          "key": "receiver",
+          "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "transfer",
+      "attributes": [
+        {
+          "key": "recipient",
+          "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
+          "index": true
+        },
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1z4504j0h9u0exse3n46ufh4l2ymcx6lcrn6jdd",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "coin_spent",
+      "attributes": [
+        {
+          "key": "spender",
+          "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "burn",
+      "attributes": [
+        {
+          "key": "burner",
+          "value": "tp1a4dczgrqzequ29ks9mvacep6t9jg2fpy8z2qxa",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "36222971000000nvhash",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provenance.marker.v1.EventMarkerBurn",
+      "attributes": [
+        {
+          "key": "administrator",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "\"36222971000000\"",
+          "index": true
+        },
+        {
+          "key": "denom",
+          "value": "\"nvhash\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "provlabs.vault.v1.EventSwapOutCompleted",
+      "attributes": [
+        {
+          "key": "assets",
+          "value": "\"36852482nhash\"",
+          "index": true
+        },
+        {
+          "key": "owner",
+          "value": "\"tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0\"",
+          "index": true
+        },
+        {
+          "key": "request_id",
+          "value": "\"3\"",
+          "index": true
+        },
+        {
+          "key": "vault_address",
+          "value": "\"tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad\"",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    }
+  ],
+  "validator_updates": null,
+  "consensus_param_updates": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "60000000"
+    },
+    "evidence": {
+      "max_age_num_blocks": "100000",
+      "max_age_duration": "172800000000000",
+      "max_bytes": "1048576"
+    },
+    "validator": {
+      "pub_key_types": [
+        "ed25519"
+      ]
+    },
+    "version": {},
+    "abci": {}
+  },
+  "app_hash": "zZB816zN5PCI6tJH1oOkeMaHwYTXUZMdrJGOS4pYmIQ="
+}

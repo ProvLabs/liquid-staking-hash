@@ -1,0 +1,31 @@
+{
+  "status": "PROVISIONAL — captured against a pre-release vault development build identified by feature probe (AcceptAsset present); no upstream version exists to pin. Re-capture and diff against the formal vault release before certifying any App release (app plan PR 8.0).",
+  "feature_probe": {
+    "name": "AcceptAsset",
+    "result": "present"
+  },
+  "chain_id": "chain-dev",
+  "captured_at": "2026-07-14T20:05:30Z",
+  "head_height": 7988,
+  "node_image": "sha256:0d5813910f8c0b2cdc2500ff34aa25b3a4c7002f8bd0a2b0540b87491ff63a73",
+  "vault": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+  "contract": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
+  "pinned_facts": [
+    "vault msg type URLs carry a Request suffix (MsgSwapInRequest, MsgSwapOutRequest)",
+    "vault event attribute values are JSON-encoded strings (one extra quoting layer)",
+    "payout and refund are EndBlocker events (finalize_block_events via RPC block_results); they never appear in tx-search",
+    "block_search indexes EndBlocker events on this build (kv indexer)",
+    "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
+    "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
+    "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events"
+  ],
+  "sources": {
+    "swap_in_tx": "6FA31385639A253B1F5FB999A6B9D4E9E7AA792D1DAF749381F6F98AE5DBFF0F",
+    "swap_out_tx": "D7B37F4F27A8D02BF2CE25075FCF9C1968ACD7628AF353297826B57406DED8C3",
+    "deploy_settlement_tx": "EC763EF0AFDC920F429BB4CE595C6AC39DCF0E89E5675B44DDBCCE975130CF45",
+    "return_settlement_tx": "B315EB020BFBAD4F595A65BD98517B6FC4F8DAFB3222CE80C0422F74F2E0F5DE",
+    "expedite_tx": "29AA9EF271ACEE0A1C0292F2C734B03A0358CBCA795C05D28A811DE2A9CC8219",
+    "payout_block": 7810,
+    "refund_block": 392
+  }
+}

@@ -87,6 +87,8 @@ implies — no "docs later" PRs.
 | 0.1 | **ADR: App component architecture.** The §1 split, DB topology, personal-read auth path, notifier home. Amends `app-spec.md` §6/§9.4 and the `services/*/CLAUDE.md` command sections. | — |
 | 0.2 [P] | **Devnet fixture corpus** (spec §14.2 VERIFY). Capture scripts driven by `contracts/drills/`: vault `MsgSwapIn`/`MsgSwapOut` shapes, swap/expedite/payout/refund event attributes, `RunEpoch` snapshot events, query response shapes. Fixtures land in a shared location consumed by both indexer decode tests and MSW mocks. **Completeness is verified, not assumed:** the capture script checks the corpus against the full event inventory (swap in/out, enqueue, expedite, payout, refund, `RunEpoch` settlement) and fails if any terminal state is missing. Captured fixtures are **provisional against the pre-release vault** (§1 upstream status): they pin assumptions for drift detection and are re-vetted at PR 8.0. | a devnet vault deployment that passes the **settlement-feature probe** (`AcceptAsset` present ⇒ development build ahead of the latest formal vault release; no upstream version exists yet to pin — see §1 upstream status and `contracts/IMPLEMENTATION-STATUS.md`), not merely "devnet up" |
 | 0.3 [P] | **Shared typed LCD client package** (contract + vault + staking + group queries, `BigInt` amount discipline), fixture-backed tests. | 0.2 for fixtures (can scaffold before) |
+| 0.4 | **Containerized dev toolchain** (ADR-002, added 2026-07-14): all JS task execution in pinned containers via the repo-root `./dev` wrapper over `infra/dev/compose.yaml` — node/pnpm tools runner, disposable postgres (profile `db`), shared `nvhash-dev` network joined by the dev node. Host toolchain versions stop being load-bearing before M1 bakes commands into scaffolds and CI; PR 1.5's full-stack wiring extends this compose file rather than introducing a new mechanism. | 0.1 (workspace shape); amends M1 scaffold expectations (scripts run under `./dev`, CI uses the same images) |
+| 0.5 | **PR quality gates in GitHub Actions** (added 2026-07-14): `app-ci` workflow running in the ADR-002 image — frozen-lockfile install (lockfile discipline per `SECURITY.md`), `pnpm -r` typecheck + test (new packages join automatically as M1+ scaffolds define scripts), the fixture-corpus completeness gate (`--check`), and shellcheck at warning severity over all tracked shell scripts + `./dev`. Devnet-dependent work (capture, drills) stays local/scheduled — the blockchain-dev image with the pre-release vault has no registry copy until PR 8.0 pins a release. | 0.4 |
 
 ### M1 — Scaffolds & CI (three parallel lanes open here)
 
@@ -209,6 +211,12 @@ Each layer is introduced in the milestone that creates its subject and then
 | Degradation drills | Playwright scenarios (8.1) | M8 | The honesty machinery works under failure: reconciler alarm, indexer outage, LCD outage each produce the specified labeled degradation, never silence |
 | Load | k6 (or team standard) | M8 | Public API under load with rate limits; indexer keeps lag under the DATA DEGRADED threshold during backfill |
 
+A workspace-level gate runs **from M0** (PR 0.5, `.github/workflows/app-ci.yaml`,
+in the ADR-002 image): frozen-lockfile install, `pnpm -r` typecheck/test,
+the fixture-corpus completeness check, and shellcheck. Component scaffolds
+(M1) attach their suites to it by defining package scripts — the per-component
+gates below describe what those suites must contain.
+
 CI gate summary per component — the **security-executable layer is a standing
 gate in every component's CI from the milestone that introduces each check**,
 never a one-time audit:
@@ -239,13 +247,13 @@ and recorded in `app-spec.md` §14.
 | Item | Status | Consumed by |
 | --- | --- | --- |
 | §14.1 wallet vendor set | DECIDE — needed before 5.1; coordinate with console §14.1 | PR 5.1 |
-| §14.2 vault msg/event shapes | VERIFY — **two-stage:** dev-build capture by feature probe (PR 0.2, provisional); re-vetted against the formal vault release (PR 8.0) | 0.2, 2.1, 5.2; release gate 8.0 |
+| §14.2 vault msg/event shapes | VERIFY — **two-stage:** stage 1 captured 2026-07-14 (PR 0.2, provisional, `packages/fixtures`); stage 2 re-vets against the formal vault release (PR 8.0) | 0.2, 2.1, 5.2; release gate 8.0 |
 | §14.3 pool/bridge facts | VERIFY — external (NUVA bridge deployment) | 2.4, 3.2 config |
 | §14.4 bridge transit UX | DECIDE — v1 assumption: hand-off, no in-app transit | 5.4 |
 | §14.5 indexer transport/depth | DECIDE/VERIFY — resolved inside 2.1 (tx-search primary, ws optional) | 2.1 |
 | §14.6 governance composer scope | DECIDE — needed before 7.4 only; 7.1–7.3 unaffected | 7.4 |
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
-| §14.8 design-system packaging | DECIDE — resolved by ADR 0.1 + PR 1.4 | 0.3, 1.4 |
+| §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages; brand pass remains PR 1.4) | 0.3, 1.4 |
 | §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
 | §14.10 analytics taxonomy | DECIDE — needed before 7.6 | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |
@@ -287,6 +295,16 @@ prerequisite hardened to a verified settlement-era vault build with a
 fixture-completeness check; §14 decision items wired as blocking dependencies
 in §2 (PRs 1.4, 3.3, 5.1, 5.4, 6.1, 6.2, 7.6); CI gate summary now enumerates
 the security-executable checks per component; §6 conformance table added.*
+
+*2026-07-14 (rev 4): M0 PR 0.4 added per Ira's direction — containerized dev
+toolchain (ADR-002) established before M1 so host machine state never leaks
+into builds, tests, or CI; M1 scaffolds and PR 1.5 build on the
+`infra/dev/compose.yaml` substrate.*
+
+*2026-07-14 (rev 5): M0 PR 0.5 added per Ira's direction — the `app-ci`
+GitHub Actions workflow puts the M0 quality gates on every PR (same image as
+`./dev`); §4 notes the workspace-level gate that M1 component suites attach
+to.*
 
 *2026-07-13 (rev 3): upstream vault dependency status clarified per Ira —
 `AcceptAsset` detection is a **feature probe against an unreleased development

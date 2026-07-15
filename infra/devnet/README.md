@@ -41,10 +41,17 @@ image itself and patched for drill pacing (short unbonding, tx indexing on).
 
 ## Typical session
 
-    infra/devnet/dev-node.sh reset      # fresh chain
+    SLASH_WINDOW=10000000 infra/devnet/dev-node.sh reset   # fresh chain (the
+                                        # window patch keeps the p2p drill's
+                                        # anchor validator bonded; omit it for
+                                        # jail-drill sessions)
     infra/devnet/dev-node.sh bootstrap  # vault/contract bootstrap
     contracts/drills/p2p-drill.sh       # full money path with per-phase assertions
     infra/devnet/dev-node.sh down       # stop
+
+The App's fixture corpus is generated and captured from this same environment:
+`packages/fixtures/scripts/generate-corpus.sh` (reset + bootstrap + drill +
+refund scenario), then `packages/fixtures/scripts/capture-fixtures.sh`.
 
 Environment notes (fees, genesis tweaks, image build details) are recorded in
 [`contracts/IMPLEMENTATION-STATUS.md`](../../contracts/IMPLEMENTATION-STATUS.md) §5.

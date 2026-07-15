@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# ./dev — containerized dev toolchain entrypoint (ADR-002).
+#
+# All JS task execution runs in pinned containers so host machine state never
+# leaks into builds or tests; the host needs Docker and bash, nothing else.
+# node_modules is installed by the Linux container and is NOT runnable from
+# the host by design — editors read sources/types, tasks run through here.
+#
+#   ./dev pnpm <args…>     pnpm in the tools container (install, -r test, --filter …)
+#   ./dev node <args…>     node in the tools container
+#   ./dev sh               interactive shell in the tools container
+#   ./dev pg up|down|reset|logs|psql
+#                          dev postgres (host port 5433; reset wipes data)
+#   ./dev ps               compose service status
+#   ./dev down             stop everything compose-managed
+set -euo pipefail
+
+SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE=(docker compose -f "$SDIR/infra/dev/compose.yaml")
+NETWORK="nvhash-dev"
+
+ensure_network() {
+  docker network inspect "$NETWORK" >/dev/null 2>&1 \
+    || docker network create "$NETWORK" >/dev/null
+}
+
+tools_run() {
+  ensure_network
+  # `compose run` targets the service explicitly, so its profile need not be
+  # enabled; --rm keeps one-off task containers from accumulating.
+  exec "${COMPOSE[@]}" run --rm tools "$@"
+}
+
+CMD="${1:-help}"; shift || true
+case "$CMD" in
+  pnpm) tools_run corepack pnpm "$@" ;;
+  node) tools_run node "$@" ;;
+  sh)   tools_run bash ;;
+  pg)
+    ensure_network
+    SUB="${1:-up}"; shift || true
+    case "$SUB" in
+      up)    "${COMPOSE[@]}" --profile db up -d --wait postgres ;;
+      down)  "${COMPOSE[@]}" --profile db stop postgres ;;
+      reset) "${COMPOSE[@]}" --profile db rm -sf postgres >/dev/null
+             docker volume rm -f nvhash-dev_pgdata >/dev/null
+             echo "postgres data wiped" ;;
+      logs)  "${COMPOSE[@]}" --profile db logs -f postgres ;;
+      psql)  exec "${COMPOSE[@]}" --profile db exec postgres psql -U nvhash -d nvhash "$@" ;;
+      *) echo "usage: ./dev pg [up|down|reset|logs|psql]" >&2; exit 1 ;;
+    esac
+    ;;
+  ps)   "${COMPOSE[@]}" --profile db --profile tools ps ;;
+  down) "${COMPOSE[@]}" --profile db --profile tools down ;;
+  help|*)
+    awk 'NR==1{next} /^set -euo/{exit} /^#/{sub(/^# ?/,""); print}' "${BASH_SOURCE[0]}"
+    ;;
+esac

@@ -23,6 +23,13 @@
 #   IMAGE=provenance-io/blockchain-dev:latest
 #   UNBONDING=120s             staking unbonding_time patched into genesis
 #   PUBLISH_PORTS=1            expose 26657/9090/1317 on localhost (0 = off)
+#   SLASH_WINDOW=              if set, slashing signed_blocks_window patched
+#                              into genesis. A huge value (e.g. 10000000) keeps
+#                              the p2p drill's never-signing anchor validator
+#                              bonded (needed since the 2026-07-13 cap bounding:
+#                              a single-validator chain has zero concentration
+#                              headroom). Leave unset for jail-drill sessions —
+#                              that drill needs real downtime jailing.
 set -euo pipefail
 
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -69,6 +76,11 @@ generate_config() {
   local g="$DEVNET_HOME/nodedev/config/genesis.json"
   jq --arg u "$UNBONDING" '.app_state.staking.params.unbonding_time = $u' "$g" > "$g.tmp" \
     && mv "$g.tmp" "$g"
+  if [ -n "${SLASH_WINDOW:-}" ]; then
+    echo "== patching genesis (signed_blocks_window=$SLASH_WINDOW) =="
+    jq --arg w "$SLASH_WINDOW" '.app_state.slashing.params.signed_blocks_window = $w' "$g" > "$g.tmp" \
+      && mv "$g.tmp" "$g"
+  fi
   # Tx indexing is off by default; the drills and action scripts poll by hash.
   sed -i '' 's/^indexer = .*/indexer = "kv"/' "$DEVNET_HOME/nodedev/config/config.toml" 2>/dev/null \
     || sed -i 's/^indexer = .*/indexer = "kv"/' "$DEVNET_HOME/nodedev/config/config.toml"
@@ -93,9 +105,15 @@ up() {
 
   local ports=()
   [ "$PUBLISH_PORTS" = "1" ] && ports=(-p 26657:26657 -p 9090:9090 -p 1317:1317)
+  # Join the shared dev network (ADR-002) so containerized tooling and, later,
+  # the indexer/api services reach the chain as http://dev-node:1317 without
+  # depending on published host ports.
+  docker network inspect nvhash-dev >/dev/null 2>&1 \
+    || docker network create nvhash-dev >/dev/null
   echo "== starting $CONTAINER ($IMAGE) =="
   docker run -d --name "$CONTAINER" \
     -v "$DEVNET_HOME:/provenance" \
+    --network nvhash-dev \
     ${ports[@]+"${ports[@]}"} \
     "$IMAGE" start >/dev/null
 

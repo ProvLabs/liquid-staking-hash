@@ -1,0 +1,74 @@
+# App-side PR quality gates (app plan M0 PR 0.5).
+#
+# Runs in the SAME image as the local `./dev` toolchain (ADR-002,
+# docs/architecture/2026-07-14-adr-002-containerized-dev-toolchain.md), so
+# "works in ./dev" and "works in CI" are the same claim. Gates in force from
+# M0; M1+ component scaffolds add their own suites, which `pnpm -r` picks up
+# automatically as packages define typecheck/test scripts.
+#
+# Deliberately NOT here: anything needing the devnet node — the
+# provenance-io/blockchain-dev image contains the pre-release vault module
+# and is built locally (no registry copy). Fixture capture/generation and
+# live drills stay local/scheduled until PR 8.0 pins a released vault.
+name: app-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: app-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    name: workspace · typecheck · test · fixtures gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: ${{ github.workspace }}/.corepack
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore pnpm store + corepack cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pnpm-store
+            .corepack
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      # --frozen-lockfile doubles as the lockfile-discipline gate
+      # (SECURITY.md: lockfiles are committed for every workspace).
+      - name: Install (frozen lockfile)
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Typecheck (all workspace packages)
+        run: corepack pnpm -r run typecheck
+
+      - name: Test (all workspace packages)
+        run: corepack pnpm -r run test
+
+      # The corpus must always carry every terminal state (swap in, enqueue,
+      # expedite, payout, refund, both settlement legs) — a PR that drops or
+      # truncates a fixture fails here, not in M2 decode tests.
+      - name: Fixture corpus completeness gate
+        run: packages/fixtures/scripts/capture-fixtures.sh --check
+
+  shell-lint:
+    name: shellcheck (devnet + tooling scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck at warning severity
+        run: |
+          # gate every tracked shell script plus the ./dev wrapper
+          git ls-files '*.sh' | xargs shellcheck --severity=warning dev

@@ -49,13 +49,13 @@ tx() { # tx <from> <gasargs...> -- <tx subcommand...>
   local from="$1"; shift
   local gas=()
   while [ "$1" != "--" ]; do gas+=("$1"); shift; done; shift
-  local out txhash code res i
+  local out txhash code res
   echo "+ tx $* (from $from)" >&2
   out="$(pexec tx "$@" $TXFLAGS "${gas[@]}" --from "$from" 2>/dev/null)"
   txhash="$(echo "$out" | jq -r '.txhash // empty')"
   [ -n "$txhash" ] || { echo "BROADCAST FAILED: $out" >&2; exit 1; }
   [ "$(echo "$out" | jq -r '.code')" = "0" ] || { echo "REJECTED: $(echo "$out" | jq -r '.raw_log')" >&2; exit 1; }
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     res="$(pexec query tx "$txhash" -t --home "$HOME_DIR" -o json 2>/dev/null || true)"
     code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null || true)"
     [ -n "$code" ] && break; sleep 1
@@ -106,6 +106,46 @@ assert_receipt_invariant() {
 
 echo "vault=$VAULT principal=$PRINCIPAL contract=$CONTRACT valoper=$VALOPER"
 
+# PHASE 0 — standing "anchor" chain validator. Since the 2026-07-13 input
+# bounding, max_bonded_cap_bps is clamped to <= 10000 (100%), so on a
+# single-validator chain the enrolled validator already holds the whole bonded
+# pool and its concentration headroom is zero BY ARITHMETIC — the engine then
+# correctly defers every delegation and no settlement ever deploys. The old
+# workaround (widening the cap to 300%) is now rejected by the contract, as it
+# should be. The drill therefore needs a second, never-signing, never-enrolled
+# chain validator whose self-bond becomes v1's headroom. It stays bonded only
+# on a chain reset with a huge slashing window:
+#   SLASH_WINDOW=10000000 infra/devnet/dev-node.sh reset && infra/devnet/dev-node.sh bootstrap
+# Self-bond stays well under half of the genesis validator's 100k HASH so the
+# signing validator keeps > 2/3 voting power (BFT liveness).
+ANCHOR_SELFBOND="${ANCHOR_SELFBOND:-20000000000000}"   # 20,000 HASH
+echo; echo "== PHASE 0: anchor validator (concentration headroom) =="
+ACTIVE="$(qj staking validators | jq '[.validators[] | select(.jailed != true)] | length')"
+if [ "$ACTIVE" -ge 2 ]; then
+  echo "  active set already >= 2 ($ACTIVE)"
+else
+  WINDOW="$(qj slashing params | jq -r '.params.signed_blocks_window')"
+  if [ "$WINDOW" -lt 1000000 ]; then
+    echo "  FAIL: slashing signed_blocks_window=$WINDOW — a never-signing anchor" >&2
+    echo "  validator would be downtime-jailed mid-drill. Reset the chain with:" >&2
+    echo "    SLASH_WINDOW=10000000 infra/devnet/dev-node.sh reset && infra/devnet/dev-node.sh bootstrap" >&2
+    exit 1
+  fi
+  pexec keys show anchor -a -t --home "$HOME_DIR" --keyring-backend test >/dev/null 2>&1 \
+    || pexec keys add anchor -t --home "$HOME_DIR" --keyring-backend test >/dev/null
+  ANCHOR_ADDR="$(addr_of anchor)"
+  ADMIN_ADDR="$(addr_of "$ADMIN")"
+  tx "$ADMIN" --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- \
+    bank send "$ADMIN_ADDR" "$ANCHOR_ADDR" "$((ANCHOR_SELFBOND + 100000000000))${UNDERLYING}" >/dev/null
+  AKEY="$(openssl rand -base64 32)"
+  docker exec -i "$CONTAINER" sh -c "cat > /tmp/drill-anchor.json" <<JSON
+{"pubkey":{"@type":"/cosmos.crypto.ed25519.PubKey","key":"$AKEY"},"amount":"${ANCHOR_SELFBOND}${UNDERLYING}","moniker":"drill-anchor","commission-rate":"0.9","commission-max-rate":"0.9","commission-max-change-rate":"0.01","min-self-delegation":"1"}
+JSON
+  tx anchor --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- \
+    staking create-validator /tmp/drill-anchor.json >/dev/null
+  echo "  OK   anchor created: self-bond ${ANCHOR_SELFBOND}${UNDERLYING} (never signs, never program-enrolled)"
+fi
+
 echo; echo "== PHASE 1: enroll =="
 if smart '{"validators":{}}' '.data.validators | length' | grep -qv '^0$'; then
   echo "  already enrolled"
@@ -115,13 +155,21 @@ else
 fi
 ELIG="$(smart '{"validators":{}}' '.data.validators[0].eligible')"
 assert_eq "validator eligible" "$ELIG" "true"
-# Single/dual-validator devnets: the chain's concentration hook is inactive
-# below 4 active validators, so widen the contract's cap mirrors for the drill.
+# Small devnets: lift the cap mirrors to their bounded maximum (100%, no
+# offset). Values beyond 10000 bps are rejected since the 2026-07-13 input
+# bounding — real headroom comes from the phase-0 anchor validator, whose
+# self-bond is exactly what v1 may still take under the 100% cap.
 HEADROOM="$(smart '{"validators":{}}' '.data.validators[0].headroom' | tr -d '"')"
 if [ "$HEADROOM" = "0" ]; then
-  echo "  widening cap mirrors for a small devnet validator set"
+  echo "  lifting cap mirrors to the bounded maximum (10000 bps, offset 0)"
   tx "$ADMIN" --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- \
-    wasm execute "$CONTRACT" '{"update_config":{"max_bonded_cap_bps":30000,"concentration_safety_offset_bps":0}}' >/dev/null
+    wasm execute "$CONTRACT" '{"update_config":{"max_bonded_cap_bps":10000,"concentration_safety_offset_bps":0}}' >/dev/null
+  HEADROOM="$(smart '{"validators":{}}' '.data.validators[0].headroom' | tr -d '"')"
+  if [ "$HEADROOM" = "0" ]; then
+    echo "  FAIL: headroom still 0 at the 100% cap — is the phase-0 anchor bonded?" >&2
+    exit 1
+  fi
+  echo "  OK   headroom restored: $HEADROOM"
 fi
 
 echo; echo "== PHASE 2: deposit =="
@@ -278,9 +326,10 @@ echo; echo "== PHASE 9: uniform-slot rebalance (RC1 §9.2/§9.3/§9.4) =="
 del_of() { qj staking delegation "$CONTRACT" "$1" 2>/dev/null | jq -r '.delegation_response.balance.amount // "0"' || echo 0; }
 U_BEFORE="$(unbonding_total)"
 
-# Stand up a second validator (operator = admin account) and enroll it. Its
-# synthetic consensus key never signs, so keep this phase brisk: the chain
-# downtime-jails it roughly a minute after creation.
+# Stand up another program validator (operator = admin account) and enroll
+# it. Its synthetic consensus key never signs; on a default chain it would be
+# downtime-jailed within minutes, but under the SLASH_WINDOW-patched genesis
+# this drill requires (phase 0) it simply stays bonded.
 KEY="$(openssl rand -base64 32)"
 docker exec -i "$CONTAINER" sh -c "cat > /tmp/drill-rb.json" <<JSON
 {"pubkey":{"@type":"/cosmos.crypto.ed25519.PubKey","key":"$KEY"},"amount":"5000000000000${UNDERLYING}","moniker":"drill-rb","commission-rate":"0.6","commission-max-rate":"0.6","commission-max-change-rate":"0.01","min-self-delegation":"1"}
@@ -328,9 +377,10 @@ echo "  waiting out the redelegation lock (unbonding period)..."
 sleep 130
 
 # With the lock expired the next epoch redirects v2's stake back to v1 via
-# redelegation (§9.4: never crash-unbonded). By now v2 has been downtime
-# jailed and 1%-slashed (it never signs), so the same crank also recognizes
-# the slash write-down; unbonding stays untouched throughout.
+# redelegation (§9.4: never crash-unbonded); unbonding stays untouched
+# throughout. (Under the phase-0 slashing window v2 is never jailed, so no
+# slash write-down occurs here — slash recognition is jail-drill.sh's job,
+# on a default-window chain.)
 tx "$ADMIN" --gas 4000000 --fees "$CRANK_FEES" -- \
   wasm execute "$CONTRACT" '{"run_epoch":{}}' >/dev/null
 assert_eq "unregistered validator fully drained" "$(del_of "$VAL2")" "0"

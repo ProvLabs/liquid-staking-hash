@@ -12,6 +12,8 @@ dist/
 build/
 .next/
 *.tsbuildinfo
+.pnpm-store/
+.corepack/
 
 # Devnet runtime state
 infra/devnet/state/

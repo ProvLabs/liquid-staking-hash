@@ -38,13 +38,13 @@ tx() { # tx <from> <gasargs...> -- <tx subcommand...>
   local from="$1"; shift
   local gas=()
   while [ "$1" != "--" ]; do gas+=("$1"); shift; done; shift
-  local out txhash code res i
+  local out txhash code res
   echo "+ tx $* (from $from)" >&2
   out="$(pexec tx "$@" $TXFLAGS "${gas[@]}" --from "$from" 2>/dev/null)"
   txhash="$(echo "$out" | jq -r '.txhash // empty')"
   [ -n "$txhash" ] || { echo "BROADCAST FAILED: $out" >&2; exit 1; }
   [ "$(echo "$out" | jq -r '.code')" = "0" ] || { echo "REJECTED: $(echo "$out" | jq -r '.raw_log')" >&2; exit 1; }
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     res="$(pexec query tx "$txhash" -t --home "$HOME_DIR" -o json 2>/dev/null || true)"
     code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null || true)"
     [ -n "$code" ] && break; sleep 1
@@ -57,11 +57,11 @@ tx() { # tx <from> <gasargs...> -- <tx subcommand...>
 # the failure lands on-chain instead of dying in simulation.
 tx_expect_fail() { # tx_expect_fail <pattern> <from> -- <tx subcommand...>
   local pattern="$1" from="$2"; shift 2; [ "$1" = "--" ] && shift
-  local out txhash code res i
+  local out txhash code res
   out="$(pexec tx "$@" $TXFLAGS --gas 3000000 --gas-prices 1nhash --from "$from" 2>/dev/null)"
   txhash="$(echo "$out" | jq -r '.txhash // empty')"
   [ -n "$txhash" ] || { echo "BROADCAST FAILED: $out" >&2; exit 1; }
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     res="$(pexec query tx "$txhash" -t --home "$HOME_DIR" -o json 2>/dev/null || true)"
     code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null || true)"
     [ -n "$code" ] && break; sleep 1

@@ -44,7 +44,7 @@ resolve() {
 tx() {
   local gas=()
   while [ "$1" != "--" ]; do gas+=("$1"); shift; done; shift
-  local errf out txhash code res i
+  local errf out txhash code res
   errf="$(mktemp)"
   # stderr kept apart: the CLI prints gas estimates there, which would corrupt
   # the JSON we parse for the tx hash.
@@ -68,7 +68,7 @@ tx() {
   [ -n "$txhash" ] || { echo "BROADCAST FAILED: $out" | head -c 400 >&2; exit 1; }
   [ "$(echo "$out" | jq -r '.code')" = "0" ] || {
     echo "REJECTED: $(echo "$out" | jq -r '.raw_log')" >&2; exit 1; }
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     res="$(pexec query tx "$txhash" -t --home "$HOME_DIR" -o json 2>/dev/null || true)"
     code="$(echo "$res" | jq -r '.code // empty' 2>/dev/null || true)"
     [ -n "$code" ] && break; sleep 1

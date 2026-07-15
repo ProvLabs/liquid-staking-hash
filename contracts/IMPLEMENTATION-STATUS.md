@@ -181,6 +181,18 @@ under [`infra/devnet/`](../infra/devnet/); drills under
 - Drill genesis tweaks (applied by the lifecycle script):
   `staking.params.unbonding_time = "120s"`; `config.toml indexer = "kv"`
   (tx indexing is off by default and the scripts poll by tx hash).
+- **p2p drill needs a two-validator chain since the cap bounding
+  (2026-07-14).** The 2026-07-13 input bounding correctly rejects the drill's
+  old 300% cap widen (`max_bonded_cap_bps` is clamped to `1..=10000`), and at
+  a 100% cap a single-validator chain has zero concentration headroom by
+  arithmetic — the engine defers every delegation and no settlement deploys.
+  `p2p-drill.sh` phase 0 now stands up a never-signing, never-enrolled
+  "anchor" validator (20k HASH self-bond; the genesis validator keeps > 2/3
+  power), which requires resetting with
+  `SLASH_WINDOW=10000000 infra/devnet/dev-node.sh reset` so the anchor is not
+  downtime-jailed. `jail-drill.sh` still needs a default-window chain (real
+  downtime jailing); under the patched window no incidental slash write-down
+  occurs in p2p phase 9.
 - Exchange default params charge 10 HASH create / 8 HASH accept payment fees,
   assessed on the crank caller's tx: attach flat `--fees` (30 HASH covers an
   epoch with both legs).

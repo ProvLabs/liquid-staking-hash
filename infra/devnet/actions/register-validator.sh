@@ -4,6 +4,7 @@
 # validator). The tx is signed by that key; the valoper is derived from it.
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 KEY="${1:-validator}"
+# shellcheck disable=SC2034  # FROM is consumed by the sourced _common.sh tx()
 FROM="$KEY"
 VALOPER="$(valoper_of "$KEY")"
 echo "registering $VALOPER (operator key: $KEY)"

@@ -1,0 +1,59 @@
+# Containerized dev toolchain (ADR-002,
+# docs/architecture/2026-07-14-adr-002-containerized-dev-toolchain.md).
+# Driven by the repo-root `./dev` wrapper — see `./dev help`.
+#
+# The `nvhash-dev` network is shared with the devnet node container
+# (infra/devnet/dev-node.sh joins it), so services here reach the chain as
+# http://dev-node:1317 / :26657 / :9090 without published-port coupling.
+# PR 1.5 grows this file with indexer/api/web services.
+name: nvhash-dev
+
+networks:
+  nvhash-dev:
+    external: true
+
+volumes:
+  tools-home: # corepack cache + tool config — survives runs
+  pgdata:
+
+services:
+  # One-off JS task runner: `./dev pnpm …`, `./dev node …`, `./dev sh`.
+  # Node major matches the workspace `engines` floor; pnpm resolves through
+  # the image's corepack honoring the root packageManager pin.
+  tools:
+    image: node:22-bookworm-slim
+    profiles: ["tools"]
+    working_dir: /repo
+    volumes:
+      - ../..:/repo
+      # HOME on a named volume: corepack's pnpm download and tool config
+      # persist across runs. pnpm itself places its content-addressable store
+      # at the gitignored repo-root .pnpm-store — its same-device preference,
+      # which keeps installs hardlinked and fast.
+      - tools-home:/home/dev
+    environment:
+      HOME: /home/dev
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      CI: "${CI:-}"
+    networks: [nvhash-dev]
+
+  # Disposable dev/test database (M1+: Prisma migrations, the ADR-001
+  # grant-boundary test, PR 1.5 full stack). Credentials are throwaway
+  # local-dev values (SECURITY.md devnet rule); `./dev pg reset` wipes data.
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["db"]
+    environment:
+      POSTGRES_USER: nvhash
+      POSTGRES_PASSWORD: nvhash-dev
+      POSTGRES_DB: nvhash
+    ports:
+      - "5433:5432" # 5433 on the host to avoid colliding with a local postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [nvhash-dev]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nvhash -d nvhash"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

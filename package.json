@@ -1,0 +1,9 @@
+{
+  "name": "nvhash",
+  "private": true,
+  "description": "nvHASH liquid staking monorepo — pnpm workspace root (ADR-001 Decision 4). apps/console is intentionally standalone until its own migration opts it in.",
+  "packageManager": "pnpm@11.13.0",
+  "engines": {
+    "node": ">=22"
+  }
+}
