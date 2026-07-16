@@ -82,6 +82,27 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       Deliverables: production `min_capture_interval_secs` (bootstrap +
       UpdateConfig), keeper schedule entry in the ops runbook, spec §10.4
       note documenting the derivation.
+- [ ] **Calendar-month epoch alignment (app-spec §14.12; contract behavior
+      change)** [MEDIUM, CONTRACT + SIM + DOCS]
+      Replace the `RunEpoch` eligibility gate: `min_run_interval_secs`
+      (fixed-duration minimum since `last_run`) is **retired** in favor of
+      "the calendar month of block time is later than `last_run`'s"
+      (`env.block.time`, the consensus-agreed BFT timestamp — the only valid
+      deterministic clock; Unix/UTC-based but authoritative by consensus,
+      never wall-clock UTC). The gate is an eligibility floor, not a trigger:
+      the epoch still ends only when a permissionless caller cranks, so epoch
+      durations were always variable — the change makes the earliest-valid
+      boundary calendar-deterministic and caller-independent (no interval
+      guard remains; after a run the predicate itself rejects until the next
+      rollover). Same change (SECURITY.md): extend the simulation domain
+      (crank jitter incl. compressed gaps from a late run before a rollover —
+      safe by the plan-time defensive deferral guards, asserted, not assumed;
+      all month lengths; skipped-month catch-up) with per-epoch invariant
+      assertions, re-pin `withdrawal_delay_seconds`, and amend the spec. Full
+      breakdown in
+      [`docs/plans/2026-07-15-calendar-month-epoch-alignment.md`](../docs/plans/2026-07-15-calendar-month-epoch-alignment.md).
+      Likely v1-launch-blocking (the App displays calendar alignment);
+      confirm when scheduling E-CAL.1.
 - [ ] **Dual x/group policies (spec §12.1)** [SMALL]
       Split single `admin` into `admin_group_policy` (fund administration,
       pause/halt/clear) and `ops_group_policy` (`UpdateConfig`).
