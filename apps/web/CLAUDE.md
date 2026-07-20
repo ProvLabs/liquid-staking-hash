@@ -21,7 +21,14 @@ End-user web interface. Production quality.
   `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client
   bundle.
 - Design tokens are web-local for v1 (spec §14.8); every token change re-runs
-  the shared palette validation on both themes in CI.
+  the shared validation method on both themes in CI — the categorical chart
+  palette via `check:palette` and the brand accent/status contrast via
+  `test/brand-tokens.test.ts` (both call `scripts/validate_palette.js`). The
+  program accent is the NUVA mint-green primary CTA / focus ring; the semantic
+  UI status set (`--status-good`/`-warning`/`-serious`/`-critical`) is a fixed
+  family, never themed, always paired with an icon + label. The §11 type stack
+  (Funnel Sans / Space Grotesk / Geist Mono) is not yet self-hosted — its
+  webfonts are a separate change (no committed binaries).
 - Accessibility and responsive layout are requirements, not nice-to-haves.
 - Security ([`SECURITY.md`](../../SECURITY.md)): never touch private keys or
   mnemonics — wallet adapters own signing; everything in the client bundle
@@ -41,7 +48,7 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
 - `typecheck` — `react-router typegen && tsc --noEmit` (strict).
 - `test` — Vitest (node env): i18n key coverage, config bounding + boot-check
   behavior (against the MSW fixture harness), client-config allowlist, theme
-  cookie parsing.
+  cookie parsing, and brand-token contrast (`test/brand-tokens.test.ts`).
 - `test:e2e` — production build + Playwright against `react-router-serve`
   with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
   fully offline). Includes the axe accessibility scans on both themes and the
@@ -78,7 +85,11 @@ Playwright suite in the pinned Playwright image. Security-executable gates
 - **i18n key coverage** (`test/i18n-coverage.test.ts`): locale catalogs are
   key-identical to `en`; every `t()` call site resolves.
 - **Palette validation** (`check:palette`): both theme token sets pass the
-  shared dataviz method on every change.
+  shared dataviz method (categorical chart palette) on every change.
+- **Brand-token contrast** (`test/brand-tokens.test.ts`): the mint-green
+  primary CTA / focus ring clear their WCAG floors and the fixed status set
+  stays on its family values in both themes — computed with the shared
+  `validate_palette.js` `contrast`, so a token edit that fails AA fails CI.
 - **axe** (`e2e/axe.spec.ts`): WCAG A/AA scans on both themes; new routes are
   added to its route list.
 

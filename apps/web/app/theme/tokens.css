@@ -4,17 +4,31 @@
  * (the repo dataviz method's validate_palette.js, run in CI on both themes by
  * scripts/check-palette.mjs — parse contract below).
  *
- * PR 1.3 ships the validated dataviz reference palette and neutral chrome as
- * placeholders; the program-specific brand pass (nuva accent/status tuning,
- * Funnel Sans / Space Grotesk / Geist Mono) is PR 1.4 and must re-run the
- * palette gate on any change.
+ * PR 1.3 shipped the validated dataviz reference palette and neutral chrome as
+ * placeholders. PR 1.4 (this change, app-spec §14.8 brand pass) tunes the
+ * program-specific pieces over that base: the NUVA mint-green accent on the
+ * primary CTA / focus ring, and the semantic UI status set. Every change here
+ * re-runs the shared validation method — check-palette.mjs (categorical viz,
+ * both themes) and test/brand-tokens.test.ts (accent + status contrast, both
+ * themes, via validate_palette.js's `contrast`).
  *
- * Theming: every token is a single `light-dark()` pair. `color-scheme` on
- * :root makes "auto" follow the OS; an explicit `data-theme` pins it.
+ * The type stack (Funnel Sans body / Space Grotesk display / Geist Mono for
+ * addresses, app-spec §11) is NOT set here: self-hosting the webfonts without
+ * committing binaries (no-binary-artifacts rule) is its own change and is not
+ * part of the §14.8 accent/status brand pass — tracked separately.
+ *
+ * Theming: chrome/accent tokens are a single `light-dark()` pair. `color-scheme`
+ * on :root makes "auto" follow the OS; an explicit `data-theme` pins it. The
+ * status set is FIXED — one value per role, never themed and never re-declared
+ * under a `data-theme` scope (dataviz method: status colors are reserved for
+ * state and shipped with icon + label, so they must read identically in both
+ * themes).
  *
  * check-palette.mjs parse contract: `--viz-cat-<n>: light-dark(#xxxxxx, #xxxxxx)`
  * and `--viz-surface: light-dark(#xxxxxx, #xxxxxx)` — keep those literal hex
- * pairs on one line each.
+ * pairs on one line each. brand-tokens.test.ts parse contract: `--primary`,
+ * `--primary-foreground`, `--ring` as `light-dark(#hex, #hex)`; `--status-*` as
+ * a single `#hex`.
  */
 
 :root {
@@ -27,8 +41,11 @@
   --card-foreground: light-dark(#0b0b0b, #ffffff);
   --popover: light-dark(#fcfcfb, #1a1a19);
   --popover-foreground: light-dark(#0b0b0b, #ffffff);
-  --primary: light-dark(#0b0b0b, #ffffff);
-  --primary-foreground: light-dark(#ffffff, #0b0b0b);
+  /* Primary CTA carries the NUVA mint-green accent (app-spec §11, §14.8).
+     Dark green-black ink both themes: 5.58:1 (light) / 10.16:1 (dark) — AA text.
+     The mint clears 3:1 vs --background both themes (UI-component boundary). */
+  --primary: light-dark(#0e9f6e, #2fd6a6);
+  --primary-foreground: light-dark(#04140d, #04140d);
   --secondary: light-dark(#f0efec, #383835);
   --secondary-foreground: light-dark(#0b0b0b, #ffffff);
   --muted: light-dark(#f0efec, #2c2c2a);
@@ -39,8 +56,22 @@
   --destructive-foreground: light-dark(#ffffff, #ffffff);
   --border: light-dark(rgba(11, 11, 11, 0.1), rgba(255, 255, 255, 0.1));
   --input: light-dark(rgba(11, 11, 11, 0.15), rgba(255, 255, 255, 0.15));
-  --ring: light-dark(#2a78d6, #3987e5);
+  /* Focus ring follows the brand accent (>=3:1 vs --background both themes;
+     ring-offset separates it from a mint CTA). */
+  --ring: light-dark(#0e9f6e, #2fd6a6);
   --radius: 0.625rem;
+
+  /* ── UI status (semantic; app-spec §11 "this product's status set") ───
+     Distinct layer from the dataviz --viz-status-* chart tokens below; these
+     drive banners, badges, and inline state (paused/halted/degraded, §12.1).
+     FIXED family values, never themed — always shipped with icon + label, so
+     `warning`/`serious` are legal below 3:1 on the light surface (relief rule).
+     `good` (3.27:1) and `critical` (4.68:1) clear 3:1 on light; all four clear
+     3:1 on the dark surface. Enforced in test/brand-tokens.test.ts. */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
 
   /* ── Dataviz (repo dataviz method; validated in CI, both themes) ────── */
   --viz-surface: light-dark(#fcfcfb, #1a1a19);
