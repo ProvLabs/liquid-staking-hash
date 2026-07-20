@@ -62,8 +62,13 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
   reaches `build/client`.
 - `dev` / `build` / `start` — standard React Router dev server / build /
   serve. `NVHASH_MOCK=1` makes the server read chain state from the fixture
-  corpus (dev without a devnet). There is no full-stack `./dev` wiring yet —
-  that is PR 1.5.
+  corpus (dev without a devnet). The full stack against a real dev node is
+  `infra/devnet/stack.sh up` (PR 1.5): it resolves the deployed contract/vault
+  addresses from chain, points this tier at `http://dev-node:1317` with
+  `NVHASH_MOCK` unset, and waits for the `GET /healthz` readiness probe —
+  `app/routes/healthz.tsx`, a locale-independent resource route that runs the
+  same boot checks (console chain-id match, vault-address cross-check) and
+  returns 503 on failure.
 
 Config is validated and bounded at the boundary (`app/config/config.server.ts`);
 copy `.env.example` to `.env` for local values. Boot checks (console chain-id

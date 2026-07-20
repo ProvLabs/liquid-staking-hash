@@ -204,7 +204,10 @@ To revisit:
    `@nvhash/fixtures` and `@nvhash/chain-client`.
 3. [ ] PR 1.1/1.2/1.3: scaffolds implement the role split (`indexer_writer`,
    `api_reader`, `app_writer`) and `@nvhash/api-types`/`@nvhash/db-indexed`.
-4. [ ] PR 1.5: grant-boundary integration test; standing in `services/*` CI.
+4. [x] PR 1.5: grant-boundary integration test
+   (`services/indexer/test/integration/grant-boundary.test.ts`), standing in
+   `services/*` CI via the app-ci `db-grants` job; role/schema split in
+   `infra/dev/postgres/roles.sql`.
 5. [ ] PR 3.3: cross-address-rejection contract tests; standing in
    `services/api` CI.
 6. [ ] PR 6.2: notifier internal read surface under `internal:notifier` scope.

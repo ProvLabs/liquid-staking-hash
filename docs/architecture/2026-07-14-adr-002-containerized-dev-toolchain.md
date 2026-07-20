@@ -110,5 +110,6 @@ contributors join.
    CI uses the same images.
 3. [x] PR 1.3: Playwright service on this compose file (`./dev pw …`, image
    tag pinned in lockstep with the `@playwright/test` version).
-4. [ ] PR 1.5: indexer/api/web services join `infra/dev/compose.yaml`;
-   grant-boundary test runs against the `postgres` service.
+4. [x] PR 1.5: indexer/api/web services join `infra/dev/compose.yaml` (the
+   `app` profile), driven as one command by `infra/devnet/stack.sh`;
+   grant-boundary test runs against the `postgres` service (app-ci `db-grants`).

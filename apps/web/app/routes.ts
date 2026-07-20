@@ -5,5 +5,8 @@
 import { index, route, type RouteConfig } from "@react-router/dev/routes";
 
 export default [
+  // Operational readiness probe (PR 1.5) — a static, locale-independent path,
+  // declared before the `:lang?` segment so it is never parsed as a locale.
+  route("healthz", "routes/healthz.tsx"),
   route(":lang?", "routes/locale.tsx", [index("routes/home.tsx")]),
 ] satisfies RouteConfig;

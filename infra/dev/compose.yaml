@@ -15,6 +15,7 @@ networks:
 volumes:
   tools-home: # corepack cache + tool config — survives runs
   playwright-home: # corepack cache for the e2e runner — survives runs
+  app-home: # corepack cache for the full-stack app services (PR 1.5)
   pgdata:
 
 services:
@@ -76,3 +77,131 @@ services:
       interval: 2s
       timeout: 3s
       retries: 15
+
+  # ── Full-stack app services (PR 1.5) ──────────────────────────────────────
+  # profile "app": indexer + api + web wired to the dev Postgres and the dev
+  # node (http://dev-node:1317 on the shared network). Driven as one command by
+  # infra/devnet/stack.sh, which resolves the deployed CONTRACT/VAULT addresses
+  # from chain and applies roles.sql + migrations BEFORE these come up. Raw
+  # `docker compose --profile db --profile app up` works too, but stack.sh is
+  # the intended entry (it does the chain/DB ordering).
+  #
+  # All three run the SAME pinned node image as the tools plane (ADR-002), over
+  # the same bind-mounted repo, so `node_modules` (installed by `./dev pnpm
+  # install`) and the generated Prisma client are shared from disk. They run
+  # TypeScript sources directly on Node 22's type stripping — no build step for
+  # the services; the web tier builds its client bundle as normal.
+  #
+  # DEVNET TARGETS ONLY (SECURITY.md): every endpoint below is a dev-network
+  # service name or a throwaway local credential. No non-devnet endpoint appears
+  # here or is accepted — the web tier's boot check refuses to start if the
+  # chain it is pointed at does not match its configured environment.
+
+  # Sole writer of the `indexed` schema, as the indexer_writer role (ADR-001
+  # Decision 1). Serves NO HTTP (plan §1) — liveness is the heartbeat file the
+  # supervisor writes after each DB ping, read by scripts/healthcheck.mjs.
+  indexer:
+    image: node:22-bookworm-slim
+    profiles: ["app"]
+    working_dir: /repo
+    command: ["corepack", "pnpm", "--filter", "@nvhash/indexer", "run", "start"]
+    volumes:
+      - ../..:/repo
+      - app-home:/home/app
+    environment:
+      HOME: /home/app
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      DATABASE_URL: "postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed"
+      LCD_URL: "http://dev-node:1317"
+      CHAIN_ID: "${CHAIN_ID:-chain-dev}"
+      # Empty unless infra/devnet/stack.sh set them (it resolves the deployed
+      # addresses from chain). Empty => the service fails closed: the indexer's
+      # bounded config rejects a blank CONTRACT/VAULT, and the web boot check
+      # rejects a non-bech32 address — neither serves against an unknown chain.
+      CONTRACT_ADDRESS: "${CONTRACT_ADDRESS:-}"
+      VAULT_ADDRESS: "${VAULT_ADDRESS:-}"
+    networks: [nvhash-dev]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "services/indexer/scripts/healthcheck.mjs"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+  # Read-only /api/v1 (api_reader role lands with the M3 data endpoints; the
+  # scaffold reads no DB). Liveness: GET /api/v1/health.
+  api:
+    image: node:22-bookworm-slim
+    profiles: ["app"]
+    working_dir: /repo
+    command: ["corepack", "pnpm", "--filter", "@nvhash/api", "run", "start"]
+    volumes:
+      - ../..:/repo
+      - app-home:/home/app
+    environment:
+      HOME: /home/app
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      APP_ENV: "development"
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    networks: [nvhash-dev]
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://127.0.0.1:8080/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # SSR web tier: live LCD reads against the dev node, boot checks enforced at
+  # startup. CONTRACT/VAULT come from stack.sh (resolved from chain); CONSOLE_*
+  # is the same-environment console profile (chain-id must match — verify links
+  # never cross environments, app-spec §12.2). NVHASH_MOCK is deliberately
+  # unset: this is the real-chain full stack, not the offline MSW harness.
+  web:
+    image: node:22-bookworm-slim
+    profiles: ["app"]
+    working_dir: /repo
+    command:
+      - "sh"
+      - "-c"
+      - "corepack pnpm --filter @nvhash/web run build && exec corepack pnpm --filter @nvhash/web run start"
+    volumes:
+      - ../..:/repo
+      - app-home:/home/app
+    environment:
+      HOME: /home/app
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      APP_ENV: "development"
+      CHAIN_ID: "${CHAIN_ID:-chain-dev}"
+      LCD_URL: "http://dev-node:1317"
+      # Empty unless infra/devnet/stack.sh set them (it resolves the deployed
+      # addresses from chain). Empty => the service fails closed: the indexer's
+      # bounded config rejects a blank CONTRACT/VAULT, and the web boot check
+      # rejects a non-bech32 address — neither serves against an unknown chain.
+      CONTRACT_ADDRESS: "${CONTRACT_ADDRESS:-}"
+      VAULT_ADDRESS: "${VAULT_ADDRESS:-}"
+      CONSOLE_URL: "${CONSOLE_URL:-http://localhost:5173}"
+      CONSOLE_CHAIN_ID: "${CONSOLE_CHAIN_ID:-chain-dev}"
+    ports:
+      - "3000:3000"
+    networks: [nvhash-dev]
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s

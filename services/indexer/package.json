@@ -11,6 +11,8 @@
     "generate": "prisma generate",
     "typecheck": "prisma generate && tsc --noEmit",
     "test": "vitest run",
+    "test:grants": "vitest run --config vitest.integration.config.ts",
+    "start": "prisma generate && node src/index.ts",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:reset": "prisma migrate reset --force",
@@ -21,6 +23,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "pg": "^8.13.0",
     "prisma": "^6.7.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.0"

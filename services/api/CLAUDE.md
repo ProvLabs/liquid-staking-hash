@@ -40,9 +40,11 @@ Package scripts (`./dev pnpm --filter @nvhash/api run <script>`):
 - `test` — Vitest. Unit tests + the envelope contract harness below; no DB, no
   listening dependency (the harness starts the server on an ephemeral port).
 
-The scaffold has **no runnable `start`** yet, by the same convention as the
-indexer scaffold: live invocation under `./dev` is wired with the PR 1.5
-full-stack compose. CI here needs neither a socket nor a database.
+- `start` — run the read-only server (`node src/index.ts`) on `PORT`. Live
+  invocation is wired by the PR 1.5 full-stack compose (`infra/devnet/stack.sh
+  up`, the `app` profile); liveness is `GET /api/v1/health`. CI here still needs
+  neither a socket nor a database — the unit + contract suites cover the server
+  as a pure function.
 
 Config (`src/config.ts`) is validated and bounded at the boundary; copy
 `.env.example` to `.env` for local values. The scaffold reads only serving
