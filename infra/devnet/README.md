@@ -9,6 +9,14 @@ verifies against: the contract drills, the console's devnet profile, and
 - `dev-node.sh` — chain lifecycle: `reset` (wipe state, generate genesis,
   patch, start), `bootstrap` (start if needed + full vault/contract
   bootstrap), `up` / `down` / `status`.
+- `stack.sh` — local full-stack wiring (app plan PR 1.5): one command to bring
+  up Postgres + indexer + api + web against this dev node
+  (`up`/`verify`/`status`/`logs`/`down`). It ensures the node is up, resolves
+  the deployed contract/vault addresses from chain, applies the two-domain
+  Postgres role split (`infra/dev/postgres/roles.sql`), migrates the `indexed`
+  schema as `indexer_writer`, and waits for each component healthy. Requires the
+  node to be **bootstrapped** (contract deployed) — run `dev-node.sh bootstrap`
+  first if `stack.sh up` reports no vault found. Devnet targets only.
 - `bootstrap/` — vault + receipt marker + contract bootstrap scripts
   (`nvhash-deploy-p2p.sh`): share-denom metadata, `nvhash.pb` attribute
   grants, marker permissions (including the contract's Transfer on the

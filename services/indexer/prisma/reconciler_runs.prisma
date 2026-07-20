@@ -1,0 +1,19 @@
+// reconciler_runs (app-spec §9.5.6, ADR-001 Decision 1): one record per
+// reconciler pass storing the indexed-vs-live deltas (NAV inputs, total shares,
+// epoch index, queue length) that feed the honesty surface (§12.1). When a
+// delta exceeds tolerance the run opens an `Incident` (reconciler_divergence)
+// and references it. No PII — purely operational reconciliation facts.
+
+model ReconcilerRun {
+  id              BigInt   @id @default(autoincrement())
+  ranAt           DateTime
+  chainHeight     BigInt
+  indexedHeight   BigInt
+  deltas          Json
+  withinTolerance Boolean
+  incidentId      BigInt?
+
+  @@index([ranAt])
+  @@map("reconciler_runs")
+  @@schema("indexed")
+}

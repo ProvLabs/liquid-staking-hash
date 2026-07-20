@@ -1,0 +1,33 @@
+// transactions (app-spec §9.1): per-address chain movements the indexer decodes
+// from vault/contract events. Idempotent upsert key is (txhash, msgIndex).
+// `address` is a bech32 account — public chain data, not off-chain identity.
+
+model Transaction {
+  txhash      String
+  msgIndex    Int
+  address     String
+  kind        TransactionKind
+  // amounts in shares (nvhash) and nhash; NAV current at the ingestion height
+  shares      Decimal  @db.Decimal(39, 0)
+  nhash       Decimal  @db.Decimal(39, 0)
+  navAtHeight Decimal  @db.Decimal(39, 0)
+  height      BigInt
+  blockTime   DateTime
+
+  @@id([txhash, msgIndex])
+  @@index([address])
+  @@index([height])
+  @@map("transactions")
+  @@schema("indexed")
+}
+
+enum TransactionKind {
+  swap_in
+  swap_out_request
+  redemption_payout
+  redemption_refund
+  transfer_in
+  transfer_out
+
+  @@schema("indexed")
+}

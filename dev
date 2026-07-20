@@ -9,6 +9,8 @@
 #   ./dev pnpm <args…>     pnpm in the tools container (install, -r test, --filter …)
 #   ./dev node <args…>     node in the tools container
 #   ./dev sh               interactive shell in the tools container
+#   ./dev pw <args…>       pnpm in the Playwright e2e container (browsers baked
+#                          in; e.g. ./dev pw --filter @nvhash/web run test:e2e)
 #   ./dev pg up|down|reset|logs|psql
 #                          dev postgres (host port 5433; reset wipes data)
 #   ./dev ps               compose service status
@@ -36,6 +38,10 @@ case "$CMD" in
   pnpm) tools_run corepack pnpm "$@" ;;
   node) tools_run node "$@" ;;
   sh)   tools_run bash ;;
+  pw)
+    ensure_network
+    exec "${COMPOSE[@]}" run --rm playwright corepack pnpm "$@"
+    ;;
   pg)
     ensure_network
     SUB="${1:-up}"; shift || true

@@ -1,0 +1,19 @@
+{
+  "name": "@nvhash/api-types",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared freshness-envelope and endpoint response types for the nvHASH App (app plan PR 1.2, ADR-001 Decision 4). One source of truth for the `{ data, meta }` contract so services/api cannot drift from what apps/web renders. Zero runtime dependencies.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@nvhash/indexer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "nvHASH chain-event indexer (app plan PR 1.1). Sole writer of the `indexed` Postgres schema (ADR-001 Decision 1); serves no HTTP, holds no keys, signs nothing. Prisma multi-file schema for the indexed tables (app-spec §9.1).",
+  "type": "module",
+  "prisma": {
+    "schema": "prisma"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "test": "vitest run",
+    "test:grants": "vitest run --config vitest.integration.config.ts",
+    "start": "prisma generate && node src/index.ts",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:reset": "prisma migrate reset --force",
+    "migrate:status": "prisma migrate status"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "pg": "^8.13.0",
+    "prisma": "^6.7.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0"
+  }
+}

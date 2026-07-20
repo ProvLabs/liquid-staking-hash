@@ -6,3 +6,23 @@ packages:
   - apps/web
   - services/*
   - packages/*
+
+# Dependency build-script allowlist (pnpm blocks all install scripts by
+# default — SECURITY.md: "avoid install-script-heavy packages"). Prisma is the
+# chosen ORM for the indexed/app schemas (app-spec §5.3, §9.1); its postinstall
+# fetches the query/schema engine binaries that `prisma generate` needs. This
+# is the reviewed decision to permit exactly those scripts, nothing else. Added
+# with the services/indexer scaffold (app plan PR 1.1).
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  # esbuild's postinstall stages its platform-native binary for vite /
+  # react-router builds (apps/web scaffold, app plan PR 1.3). Reviewed:
+  # first-party install script, no network beyond the already-resolved
+  # platform optional dependency.
+  esbuild: true
+  # msw (the apps/web offline mock harness) uses only the Node interceptor;
+  # its postinstall is a support banner / browser-worker convenience. Denied
+  # explicitly rather than left unreviewed.
+  msw: false
+  prisma: true

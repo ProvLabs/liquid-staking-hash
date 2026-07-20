@@ -1,0 +1,24 @@
+// validator_epochs (app-spec §9.1): per-validator, per-epoch economics and
+// eligibility. Natural key is (valoper, epochIndex). `failingReasons` and
+// `jailedEvents` are structured public chain facts. All amounts Decimal(39,0).
+
+model ValidatorEpoch {
+  valoper           String
+  epochIndex        BigInt
+  uptimeBps         Int
+  eligible          Boolean
+  failingReasons    String[]
+  tip               Decimal  @db.Decimal(39, 0)
+  commissionAccrued Decimal  @db.Decimal(39, 0)
+  commissionPaid    Decimal  @db.Decimal(39, 0)
+  commissionDue     Decimal  @db.Decimal(39, 0)
+  programDelegation Decimal  @db.Decimal(39, 0)
+  jailedEvents      Json?
+  height            BigInt
+  observedAt        DateTime
+
+  @@id([valoper, epochIndex])
+  @@index([epochIndex])
+  @@map("validator_epochs")
+  @@schema("indexed")
+}

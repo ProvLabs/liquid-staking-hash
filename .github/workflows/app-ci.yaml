@@ -62,6 +62,117 @@ jobs:
       - name: Fixture corpus completeness gate
         run: packages/fixtures/scripts/capture-fixtures.sh --check
 
+  # apps/web gates that live outside `pnpm -r test` (app plan PR 1.3):
+  # the dataviz palette validator (both themes) and the bundle-secret check
+  # (SECURITY.md: nothing beyond the app-spec §7 client-safe subset in the
+  # client bundle) — both standing security/design-executable gates.
+  web-gates:
+    name: web · palette validator · bundle-secret check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: ${{ github.workspace }}/.corepack
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore pnpm store + corepack cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pnpm-store
+            .corepack
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install (frozen lockfile)
+        run: corepack pnpm install --frozen-lockfile
+      - name: Dataviz palette validator (light + dark token sets)
+        run: corepack pnpm --filter @nvhash/web run check:palette
+      - name: Bundle-secret check (§7 client-safe subset only)
+        run: corepack pnpm --filter @nvhash/web run check:bundle
+
+  # Offline e2e (Playwright + axe + MSW over @nvhash/fixtures). Runs in the
+  # official Playwright image — the tag moves in LOCKSTEP with the exact
+  # @playwright/test pin in apps/web/package.json and the
+  # infra/dev/compose.yaml playwright service.
+  web-e2e:
+    name: web · Playwright e2e + axe (offline, MSW)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: mcr.microsoft.com/playwright:v1.61.1-noble
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: ${{ github.workspace }}/.corepack
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore pnpm store + corepack cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pnpm-store
+            .corepack
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install (frozen lockfile)
+        run: corepack pnpm install --frozen-lockfile
+      - name: Playwright e2e (build + serve with NVHASH_MOCK=1)
+        run: corepack pnpm --filter @nvhash/web run test:e2e
+
+  # Grant-boundary gate (ADR-001 Decision 1, action item 4; app plan PR 1.5) —
+  # a standing services/* security-executable check (plan §4). It stands up the
+  # two-domain role split (infra/dev/postgres/roles.sql), migrates the `indexed`
+  # schema AS indexer_writer, and asserts the boundary: api_reader may read but
+  # not write indexed; app_writer may not read indexed; indexer_writer holds no
+  # privileges on `app`. Needs Postgres only (no devnet node), so it runs on
+  # every PR — unlike the live-devnet suite. A regression in roles.sql fails here.
+  db-grants:
+    name: services · grant-boundary (roles.sql + migrate + test:grants)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    services:
+      postgres:
+        image: postgres:17-alpine # keep in lockstep with infra/dev/compose.yaml postgres image
+        env:
+          POSTGRES_USER: nvhash
+          POSTGRES_PASSWORD: nvhash-dev
+          POSTGRES_DB: nvhash
+        options: >-
+          --health-cmd "pg_isready -U nvhash -d nvhash"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: ${{ github.workspace }}/.corepack
+      # Superuser URL the grant-boundary test SET ROLEs from; `postgres` is the
+      # service hostname inside the job container.
+      ADMIN_DATABASE_URL: postgresql://nvhash:nvhash-dev@postgres:5432/nvhash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore pnpm store + corepack cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pnpm-store
+            .corepack
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install (frozen lockfile)
+        run: corepack pnpm install --frozen-lockfile
+      - name: Install psql client (to apply roles.sql)
+        run: apt-get update -qq && apt-get install -y --no-install-recommends postgresql-client >/dev/null
+      - name: Apply role/schema boundary (roles.sql)
+        run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f infra/dev/postgres/roles.sql
+      - name: Migrate indexed schema (as indexer_writer)
+        run: corepack pnpm --filter @nvhash/indexer run migrate:deploy
+        env:
+          DATABASE_URL: postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed
+      - name: Grant SELECT on pre-existing tables (new tables inherit via default privs)
+        run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT ON ALL TABLES IN SCHEMA indexed TO api_reader;"
+      - name: Grant-boundary test (test:grants)
+        run: corepack pnpm --filter @nvhash/indexer run test:grants
+
   shell-lint:
     name: shellcheck (devnet + tooling scripts)
     runs-on: ubuntu-latest

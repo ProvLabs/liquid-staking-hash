@@ -1,0 +1,20 @@
+{
+  "comment": "Server-only env vars for the bundle-secret gate (SECURITY.md / app-spec §7): the gate builds with a sentinel value in each of these and fails if any sentinel reaches build/client. Includes vars documented but not yet consumed, so the gate is already standing when they land. test/client-config.test.ts asserts every uncommented .env.example key is classified either here or as client-safe.",
+  "serverOnly": [
+    "LCD_URL",
+    "CONSOLE_CHAIN_ID",
+    "DATABASE_URL",
+    "SESSION_SECRET",
+    "API_SERVICE_ASSERTION_KEY",
+    "API_URL",
+    "WEB_PUSH_VAPID_PRIVATE_KEY"
+  ],
+  "clientSafeEnv": [
+    "APP_ENV",
+    "CHAIN_ID",
+    "CONTRACT_ADDRESS",
+    "VAULT_ADDRESS",
+    "CONSOLE_URL"
+  ],
+  "toolingOnly": ["NVHASH_MOCK", "PORT"]
+}

@@ -106,8 +106,10 @@ contributors join.
 2. [x] PR 0.5: workspace-level GitHub Actions gate (`app-ci`) in the same
    image — frozen-lockfile install, `-r` typecheck/test, fixture completeness
    check, shellcheck.
-3. [ ] PR 1.1/1.2/1.3: scaffolds define their scripts to run under `./dev`;
+3. [x] PR 1.1/1.2/1.3: scaffolds define their scripts to run under `./dev`;
    CI uses the same images.
-3. [ ] PR 1.3: Playwright service on this compose file.
-4. [ ] PR 1.5: indexer/api/web services join `infra/dev/compose.yaml`;
-   grant-boundary test runs against the `postgres` service.
+3. [x] PR 1.3: Playwright service on this compose file (`./dev pw …`, image
+   tag pinned in lockstep with the `@playwright/test` version).
+4. [x] PR 1.5: indexer/api/web services join `infra/dev/compose.yaml` (the
+   `app` profile), driven as one command by `infra/devnet/stack.sh`;
+   grant-boundary test runs against the `postgres` service (app-ci `db-grants`).

@@ -31,5 +31,51 @@ Query API over the indexer's data store.
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
 containerized toolchain (ADR-002): `./dev pnpm --filter @nvhash/api <script>`.
-Dev database via `./dev pg up` (host port 5433). Concrete scripts land with
-the PR 1.2 scaffold.
+Dev database via `./dev pg up` (host port 5433).
+
+Package scripts (`./dev pnpm --filter @nvhash/api run <script>`):
+
+- `typecheck` — `tsc --noEmit`. No database needed (the scaffold performs no
+  DB reads; the `api_reader` client lands with the M3 data endpoints).
+- `test` — Vitest. Unit tests + the envelope contract harness below; no DB, no
+  listening dependency (the harness starts the server on an ephemeral port).
+
+- `start` — run the read-only server (`node src/index.ts`) on `PORT`. Live
+  invocation is wired by the PR 1.5 full-stack compose (`infra/devnet/stack.sh
+  up`, the `app` profile); liveness is `GET /api/v1/health`. CI here still needs
+  neither a socket nor a database — the unit + contract suites cover the server
+  as a pure function.
+
+Config (`src/config.ts`) is validated and bounded at the boundary; copy
+`.env.example` to `.env` for local values. The scaffold reads only serving
+knobs (`PORT`, `RATE_LIMIT_*`, `TRUST_PROXY`); `DATABASE_URL` (the `api_reader`
+role) and `API_SERVICE_ASSERTION_KEY` are documented there as placeholders but
+consumed only by later PRs (3.1 / 3.3).
+
+### CI gates (standing from PR 1.2)
+
+`pnpm -r run typecheck` and `pnpm -r run test` in the `app-ci` workflow pick
+these up automatically. `test` includes the API-contract and
+security-executable gates (SECURITY.md, plan §4), which fail CI on violation:
+
+- **Envelope contract** (`test/envelope-contract.test.ts`): registry-driven —
+  it iterates the actual route table, so every route (now and future) is held
+  to the freshness-envelope shape on enveloped routes, the read-only method
+  gate, and its zod query bounds. A new route is covered automatically; it
+  cannot slip past the harness.
+- **Read-only guarantee** (same suite): the route registry holds only GET
+  routes and every write verb (`POST`/`PUT`/`PATCH`/`DELETE`) on every route
+  returns 405. This is how "no write endpoint of any kind" (plan §1) is
+  enforced structurally, not by review.
+- **Query-param bounding** (`test/query.test.ts` + the contract harness): every
+  query param is parsed through a bounded zod schema; out-of-range input is
+  rejected (400), never clamped silently.
+- **Rate limiting** (`test/rate-limit.test.ts` + the contract harness): the
+  fixed-window limiter refuses over the ceiling (429 + `Retry-After`); the
+  client key is not spoofable via `X-Forwarded-For` unless proxy trust is on
+  (`test/client-key.test.ts`).
+
+The **cross-address-rejection** gate for address-scoped endpoints (ADR-001
+Decision 2) is a standing `services/api` gate **from PR 3.3**, when those
+endpoints and the service-assertion verification land — not part of this
+scaffold.

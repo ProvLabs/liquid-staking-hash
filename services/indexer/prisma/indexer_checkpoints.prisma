@@ -1,0 +1,14 @@
+// indexer_checkpoints (app-spec §9.1, §9.2): one row per worker stream holding
+// its durable cursor (the nuva precedent). The cursor advances only after a
+// block window commits in one DB transaction, so a restart resumes without
+// gaps or double-processing (SECURITY.md idempotency/resumability).
+
+model IndexerCheckpoint {
+  stream       String   @id
+  cursorHeight BigInt
+  cursorPage   String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("indexer_checkpoints")
+  @@schema("indexed")
+}

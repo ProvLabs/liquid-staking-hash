@@ -1,0 +1,14 @@
+// bridge_supply_samples (app-spec §9.1): remote-chain nvHASH supply readings
+// (chain/remote supply/sampled_at) via the bridge, sampled with viem. Public
+// on-chain totals; no PII.
+
+model BridgeSupplySample {
+  id           BigInt   @id @default(autoincrement())
+  chain        String
+  remoteSupply Decimal  @db.Decimal(39, 0)
+  sampledAt    DateTime
+
+  @@index([sampledAt])
+  @@map("bridge_supply_samples")
+  @@schema("indexed")
+}

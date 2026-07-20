@@ -15,6 +15,11 @@ build/
 .pnpm-store/
 .corepack/
 
+# React Router typegen + Playwright run artifacts (apps/web)
+.react-router/
+test-results/
+playwright-report/
+
 # Devnet runtime state
 infra/devnet/state/
 

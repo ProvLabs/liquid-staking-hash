@@ -1,0 +1,14 @@
+// validator_registry (app-spec §9.1): enrollment lifecycle of program
+// validators. valoper/operator are public chain identifiers; `moniker` is the
+// operator's self-declared on-chain label (public), not off-chain identity.
+
+model ValidatorRegistry {
+  valoper        String    @id
+  operator       String
+  moniker        String
+  enrolledAt     DateTime
+  unregisteredAt DateTime?
+
+  @@map("validator_registry")
+  @@schema("indexed")
+}

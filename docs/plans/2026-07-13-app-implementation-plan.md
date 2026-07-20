@@ -137,7 +137,7 @@ waiting for implementations.
 
 | PR | Scope | Depends on |
 | --- | --- | --- |
-| 5.1 [P] | **WalletConnect v2 + sessions:** pairing, nonce-signature session (HttpOnly/SameSite cookie), role detection re-checked on-chain per refresh. | 1.3; **§14.1 wallet-set decision (blocking)** |
+| 5.1 [P] | **WalletConnect v2 + sessions:** pairing, nonce-signature session (HttpOnly/SameSite cookie), role detection re-checked on-chain per refresh. Runs the §14.1 certification checklist against **both v1 vendors — Figure (WC v2 mobile + extension) and Arculus (WC v2 mobile)** — as its acceptance gate; the shared WC v2 path uses standard pairing/Cosmos-namespace methods only, vendor-specific workarounds live behind per-vendor adapter entries recorded in §14.1. | 1.3; §14.1 wallet-set decision (DECIDED + amended 2026-07-14: Figure + Arculus v1) |
 | 5.2 | **Transaction lifecycle framework** (§10.2): build → preflight (reasons on every disabled control) → simulate → confirm (consumer summary + exact JSON disclosure) → sign/broadcast → track, with optimistic pending rows and indexer fast-poll reconcile. | 5.1, 0.3 |
 | 5.3 [P] | **Stake flow** (§8.3): inline education, amount entry with limits and vesting-lock preflight, preview at execution-time NAV, land-on-Portfolio. | 5.2 |
 | 5.4 [P] | **Redeem & Exit** (§8.4): exit-path comparison table (guaranteed-vs-typical framing is normative), native redemption flow, redemption tracker (queue position, funded state, countdown), DEX path hand-off. e2e must render every terminal state — expedite, matured payout, unfunded-maturity refund — from real drill history. | 5.2, 3.3, 2.1; **§14.4 DEX hand-off and §14.12 sample-threshold decisions (blocking)** |
@@ -246,14 +246,14 @@ and recorded in `app-spec.md` §14.
 
 | Item | Status | Consumed by |
 | --- | --- | --- |
-| §14.1 wallet vendor set | DECIDE — needed before 5.1; coordinate with console §14.1 | PR 5.1 |
+| §14.1 wallet vendor set | DECIDED 2026-07-14, amended same day (v1: **Figure** — WC v2 mobile + extension — **and Arculus** — WC v2 mobile, App-only — dual-vendor as WC v2 standards-conformance guard; console §14.1 resolved same change — Figure extension + devnet key mode; Keplr/Leap fast-follow behind the certification checklist, which PR 5.1 runs against both v1 vendors as its acceptance gate) | PR 5.1 |
 | §14.2 vault msg/event shapes | VERIFY — **two-stage:** stage 1 captured 2026-07-14 (PR 0.2, provisional, `packages/fixtures`); stage 2 re-vets against the formal vault release (PR 8.0) | 0.2, 2.1, 5.2; release gate 8.0 |
 | §14.3 pool/bridge facts | VERIFY — external (NUVA bridge deployment) | 2.4, 3.2 config |
 | §14.4 bridge transit UX | DECIDE — v1 assumption: hand-off, no in-app transit | 5.4 |
 | §14.5 indexer transport/depth | DECIDE/VERIFY — resolved inside 2.1 (tx-search primary, ws optional) | 2.1 |
 | §14.6 governance composer scope | DECIDE — needed before 7.4 only; 7.1–7.3 unaffected | 7.4 |
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
-| §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages; brand pass remains PR 1.4) | 0.3, 1.4 |
+| §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages); **brand pass DELIVERED 2026-07-17 (PR 1.4): web-local accent/status tokens, both themes validated by `check:palette` + `test/brand-tokens.test.ts`** | 0.3, 1.4 |
 | §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
 | §14.10 analytics taxonomy | DECIDE — needed before 7.6 | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |

@@ -1,0 +1,17 @@
+// gov_votes (app-spec §9.1): indexed mirror of `x/group` votes for per-member
+// status. Natural key is (proposalId, voter); `voter` is a public group-member
+// address. No PII.
+
+model GovVote {
+  proposalId BigInt
+  voter      String
+  option     String
+  submitTime DateTime
+  height     BigInt
+  txhash     String
+
+  @@id([proposalId, voter])
+  @@index([voter])
+  @@map("gov_votes")
+  @@schema("indexed")
+}
