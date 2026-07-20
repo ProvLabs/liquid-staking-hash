@@ -23,11 +23,13 @@
 # Environment (defaults match infra/devnet):
 #   CONTAINER=dev-node  LCD=http://localhost:1317  RPC=http://localhost:26657
 #   HOME_DIR=/provenance/nodedev  SHARE=nvhash
+#   IMAGE=ghcr.io/provlabs/vault-dev-node:latest  (manifest provenance only)
 set -euo pipefail
 
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${OUT:-$SDIR/../fixtures}"
 CONTAINER="${CONTAINER:-dev-node}"
+IMAGE="${IMAGE:-ghcr.io/provlabs/vault-dev-node:latest}"
 LCD="${LCD:-http://localhost:1317}"
 RPC="${RPC:-http://localhost:26657}"
 HOME_DIR="${HOME_DIR:-/provenance/nodedev}"
@@ -222,7 +224,7 @@ capture() {
     --arg chain_id "$chain_id" \
     --arg height "$height" \
     --arg captured_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg image "$(docker image inspect provenance-io/blockchain-dev:latest --format '{{.Id}}' 2>/dev/null || echo unknown)" \
+    --arg image "$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null || echo unknown)" \
     --arg vault "$vault" --arg contract "$contract" \
     --arg tx_swap_in "$h_swap_in" --arg tx_swap_out "$h_swap_out" \
     --arg tx_deploy "$h_deploy" --arg tx_return "$h_return" \
