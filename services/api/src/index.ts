@@ -13,10 +13,10 @@
 // listening socket or a database.
 
 import { loadConfig } from "./config.ts";
-import { createApiServer } from "./http-server.ts";
+import { createApiServer, scheduleWindowSweep } from "./http-server.ts";
 
 export { loadConfig, type ApiConfig } from "./config.ts";
-export { createApiServer, clientKey, type ApiServer } from "./http-server.ts";
+export { createApiServer, clientKey, scheduleWindowSweep, type ApiServer } from "./http-server.ts";
 export { createHandler, type HandlerDeps, type RequestMeta } from "./handler.ts";
 export { RateLimiter, type RateLimitResult } from "./rate-limit.ts";
 export { routes, findRoute, API_BASE, type Route } from "./routes.ts";
@@ -24,7 +24,10 @@ export { paginationSchema, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_PAGE_OFFSET }
 
 export function main(): void {
   const config = loadConfig();
-  const { server } = createApiServer(config);
+  const { server, limiter } = createApiServer(config);
+  // Long-lived process: evict expired rate-limit windows so the limiter's map
+  // does not grow unbounded with unique client keys over the process lifetime.
+  scheduleWindowSweep(limiter, config.rateLimitWindowMs);
   server.listen(config.port, () => {
     // One structured line; no client identifiers (SECURITY.md data minimization).
     process.stdout.write(JSON.stringify({ level: "info", message: "api scaffold listening", port: config.port, env: config.appEnv }) + "\n");

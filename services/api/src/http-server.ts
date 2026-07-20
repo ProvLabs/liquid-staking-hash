@@ -41,8 +41,14 @@ export function createApiServer(config: ApiConfig, now?: () => Date): ApiServer 
 
   async function serve(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
-      const host = req.headers.host ?? "localhost";
-      const request = new Request(`http://${host}${req.url ?? "/"}`, { method: req.method ?? "GET" });
+      // Build the request URL from the request-target ONLY, resolved against a
+      // fixed internal base. The `Host` header is client-controlled and must
+      // never influence routing: a value like `x/api/v1` would otherwise inject
+      // a path prefix into `url.pathname` (misrouting a legitimate path to a
+      // 404, or steering `GET /status` at the wrong handler). The authority is
+      // irrelevant here — the handler reads only pathname/search.
+      const url = new URL(req.url ?? "/", "http://api.internal");
+      const request = new Request(url, { method: req.method ?? "GET" });
       const meta: RequestMeta = { clientKey: clientKey(req, config.trustProxy) };
       const response = await handle(request, meta);
 
@@ -61,4 +67,20 @@ export function createApiServer(config: ApiConfig, now?: () => Date): ApiServer 
   }
 
   return { server, limiter };
+}
+
+/**
+ * Periodically evict expired rate-limit windows for a LONG-LIVED server. The
+ * limiter only refreshes a window on the next hit for the SAME key, so without
+ * this the window map grows without bound as unique client keys accumulate over
+ * the process lifetime (their entries persist after the window expires) — a slow
+ * memory leak on a public API. `main()` schedules this; short-lived/test servers
+ * that never call it simply never accrue idle keys. The timer is `unref`'d so it
+ * never by itself keeps the process alive. Returns the timer so callers may
+ * clear it on shutdown.
+ */
+export function scheduleWindowSweep(limiter: RateLimiter, windowMs: number): ReturnType<typeof setInterval> {
+  const timer = setInterval(() => limiter.sweep(), windowMs);
+  timer.unref();
+  return timer;
 }
