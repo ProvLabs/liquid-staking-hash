@@ -23,6 +23,41 @@ Chain-event indexer feeding the query store used by `services/api/`.
   input; never hold keys or sign. Schema lint (no PII columns) and the
   log-scrubbing check gate CI (plan §4).
 
+## Runtime & workers (M2.0)
+
+The shared runtime the M2 ingestion workers slot into lives under `src/`
+(plan [`docs/plans/2026-07-20-app-m2.0-indexer-shared-infra.md`](../../docs/plans/2026-07-20-app-m2.0-indexer-shared-infra.md)).
+Every worker uses these — none re-implements a cursor, a decode, or a transport:
+
+- **`runtime/checkpoint.ts`** — `runWindow(prisma, stream, window, fn)` runs a
+  worker's data upserts AND the `indexer_checkpoints` cursor advance in ONE
+  `prisma.$transaction`; the cursor advances only after the window commits
+  (spec §9.2). Workers never write their checkpoint directly. `trailingTarget`
+  applies the confirmation depth (default 0 — Provenance instant finality).
+- **`runtime/worker.ts`** — the loop shell (`runWorker`) and the
+  `registerWorker` seam. A worker declares `{ stream, startHeight?, process }`;
+  the runner polls the head, pages the un-processed range into bounded windows,
+  and commits per window. The head source, config knobs, and supervisor startup
+  of registered workers are wired by the first worker (PR 2.1).
+- **`runtime/streams.ts`** — the `STREAMS` names and `assertChainIsolation`, the
+  per-`(chain_id, contract)` boot check (spec §9.3) run from `src/index.ts`: the
+  process fails closed if the DB holds a foreign history. The identity marker is
+  a reserved `meta:provenance` row in `indexer_checkpoints` (no schema change);
+  `meta:`-prefixed rows are markers, not worker cursors — lag accounting (PR 2.5)
+  excludes them.
+- **`decode/attributes.ts`** — the single place the pinned "extra JSON-string
+  quoting layer" fact lives (`packages/fixtures/manifest.json`): `dequote`,
+  `attr`/`optionalAttr`, `coinAttr`. Amount discipline mirrors
+  `packages/chain-client/src/amounts.ts`; kept local so the indexer runtime has
+  a zero cross-package dependency surface (SECURITY.md supply chain).
+- **`transport/rpc.ts`** — the transports chain-client (REST-only) lacks:
+  `RpcClient` (`block_results` for EndBlocker payout/refund/NAV, `tx_search`,
+  `block_search`, `latestHeight`) and `PinnedLcdClient.smartAtHeight` (height-
+  pinned smart query via `x-cosmos-block-height`, for single-snapshot backfill).
+  First-party, fetch-based, zero runtime deps. `RPC_URL`/LCD config + compose
+  wiring lands with PR 2.1 (whether height-pinning promotes into
+  `@nvhash/chain-client` is a PR 2.2 decision).
+
 ## Commands
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the

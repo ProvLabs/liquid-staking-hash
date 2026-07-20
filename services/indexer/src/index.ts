@@ -14,11 +14,19 @@
 // listener, or signer here — liveness is proven by a database ping written to a
 // heartbeat file the container healthcheck reads (scripts/healthcheck.mjs), not
 // by exposing a port.
+//
+// M2.0 adds the per-(chain_id, contract) isolation boot check (spec §9.3) here:
+// the process fails closed if the database holds a history from a different
+// chain/contract than config. The worker run-loop runtime and the
+// `registerWorker` seam ship in this PR as tested library code
+// (src/runtime/*); the supervisor wiring that starts registered workers lands
+// with the first worker (PR 2.1), so no unused head-source wiring exists yet.
 
 import { writeFileSync } from "node:fs";
 import { loadConfig } from "./config.ts";
 import { db } from "./db.ts";
 import { logger } from "./logger.ts";
+import { assertChainIsolation } from "./runtime/streams.ts";
 
 /** How often the supervisor re-proves database reachability. */
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -43,6 +51,15 @@ export async function run(): Promise<void> {
   // Prove connectivity up front — a half-configured start is an error, not a
   // best-effort continue (SECURITY.md: bound inputs, fail loudly).
   await prisma.$queryRaw`SELECT 1`;
+
+  // Refuse to append to a history captured under a different chain/contract
+  // (spec §9.3): a devnet redeploy resets the DB with the chain, so a mismatch
+  // is a misconfiguration, not a resume. Fails closed before any worker runs.
+  await assertChainIsolation(prisma, {
+    chainId: config.chainId,
+    contractAddress: config.contractAddress,
+  });
+
   touchHeartbeat(Date.now());
   logger.info("indexer scaffold started");
 
@@ -73,8 +90,6 @@ export async function run(): Promise<void> {
     process.once("SIGTERM", () => shutdown("SIGTERM"));
     process.once("SIGINT", () => shutdown("SIGINT"));
   });
-
-  void config;
 }
 
 // Only run when executed directly (not when imported by tests).
