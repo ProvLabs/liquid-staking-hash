@@ -21,7 +21,12 @@ export function themeFromCookieHeader(header: string | null): Theme {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
     if (part.slice(0, eq).trim() !== THEME_COOKIE) continue;
-    const value = decodeURIComponent(part.slice(eq + 1).trim());
+    let value: string;
+    try {
+      value = decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return DEFAULT_THEME;
+    }
     return isTheme(value) ? value : DEFAULT_THEME;
   }
   return DEFAULT_THEME;
