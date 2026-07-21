@@ -250,13 +250,24 @@ export class PinnedLcdClient {
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
 
+  /** Any LCD REST GET pinned to `height`; returns the full parsed body. Used
+   * for module queries (e.g. x/staking moniker + program delegations) that are
+   * not cosmwasm smart queries. */
+  getAtHeight(
+    path: string,
+    params: Record<string, string | number | bigint | undefined>,
+    height: bigint | number,
+  ): Promise<unknown> {
+    return fetchJson(this.base, path, params, this.fetchImpl, this.timeoutMs, {
+      "x-cosmos-block-height": String(height),
+    });
+  }
+
   /** Smart query `contract` with `query` as it was AT `height`; returns `data`. */
   async smartAtHeight(contract: string, query: Record<string, unknown>, height: bigint | number): Promise<unknown> {
     const b64 = toBase64(JSON.stringify(query));
     const path = `cosmwasm/wasm/v1/contract/${contract}/smart/${encodeURIComponent(b64)}`;
-    const body = await fetchJson(this.base, path, {}, this.fetchImpl, this.timeoutMs, {
-      "x-cosmos-block-height": String(height),
-    });
+    const body = await this.getAtHeight(path, {}, height);
     return asRecord(body, path)["data"];
   }
 }

@@ -357,3 +357,17 @@ moot**: the indexer runs raw `.ts` on Node, which refuses to type-strip a `.ts`
 under `node_modules` (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, verified 2026-07-21), so
 chain-client cannot be imported at runtime — smart-query decoders are a local
 mirror (`decode/scalars.ts`, fixture-locked). Next: 2.3, then 2.5.*
+
+*2026-07-21 (rev 9): **M2.2 open fork resolved** — height-pinned smart query
+stays App-local (the runtime-import constraint above makes promotion moot).
+**M2.3 delivered** — the `validator-sampler` worker → `validator_registry` +
+`validator_epochs`. Design refinement vs the plan's "continuous sampler": it is
+**anchored to epoch cranks and read height-pinned** (finalized per-epoch
+economics, structurally a sibling of epoch-history) so it backfills and replays
+deterministically. Combines contract `validators()`/`jail_reports()` with
+x/staking moniker + program delegation (new generic `PinnedLcdClient.getAtHeight`);
+`failingReasons` derived from status flags; registry enrollment set-once with
+forward-deterministic departure marking. Fixture-decode + fast-check convergence
+(incl. departures) gates. Uptime comes from the contract's own SigningInfo-derived
+`uptimeBps` (contract §10.3), so no separate slashing reader is needed — the
+`SlashingClient` open question is closed as unnecessary. Next: 2.5 (reconciler).*

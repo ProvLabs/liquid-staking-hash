@@ -90,6 +90,19 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   App-local for now (promotion into `@nvhash/chain-client` is a still-open call —
   moot at runtime anyway: the indexer can't import that package's `.ts`).
 
+- **`workers/validator-sampler/`** (stream `validator-sampler`, PR 2.3) →
+  `validator_registry` + `validator_epochs`. Anchored to epoch cranks like
+  epoch-history: at each crank height it reads, height-pinned, the contract
+  `validators()`/`jail_reports()` plus x/staking moniker + program delegation
+  (generic `PinnedLcdClient.getAtHeight`), keying the epoch rows by the epoch
+  that closed there. `failingReasons` is derived from the status flags;
+  `uptimeBps` null (no capture yet) stores as 0 (read with `eligible`, not as an
+  asserted 0%). Registry enrollment is set-once (`enrolledAt` from the contract);
+  a validator absent from the set at a crank is marked `unregisteredAt` — the one
+  stateful bit, forward-deterministic so replay converges. Writes facts only;
+  2.5 derives jail/arrears incidents from them. Tests:
+  `test/workers/validator-sampler-decode` (corpus) and `-replay` (fast-check).
+
 ## Commands
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the

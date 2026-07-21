@@ -33,6 +33,7 @@ import { runWorker, type Worker, type WorkerRuntimeDeps } from "./runtime/worker
 import { PinnedLcdClient, RpcClient } from "./transport/rpc.ts";
 import { createChainEventsWorker } from "./workers/chain-events/index.ts";
 import { createEpochHistoryWorker } from "./workers/epoch-history/index.ts";
+import { createValidatorSamplerWorker } from "./workers/validator-sampler/index.ts";
 
 /** How often the supervisor re-proves database reachability. */
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -96,6 +97,7 @@ export async function run(): Promise<void> {
       scope: { vaultAddress: config.vaultAddress, receiptDenom: config.receiptDenom },
     }),
     createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
+    createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),
   ];
 
   const deps: WorkerRuntimeDeps = {
