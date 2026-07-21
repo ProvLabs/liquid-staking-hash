@@ -103,6 +103,31 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   2.5 derives jail/arrears incidents from them. Tests:
   `test/workers/validator-sampler-decode` (corpus) and `-replay` (fast-check).
 
+## Reconciler (PR 2.5)
+
+`src/reconciler/` is the honesty alarm (spec §9.6/§12.1) and the **sole writer of
+`incidents`**. It runs as its OWN loop (cadence `RECONCILE_INTERVAL_MS`, default
+30 s) **independent of the workers**, so it keeps running and sees growing
+lag/divergence even if ingestion stalls (§12.1.3). Each pass reads the live plane
+(chain's retained latest snapshot + halted, via pinned-at-head smart queries) and
+the indexed plane (DB), then `deriveActions` — a **pure** function of both planes
+— yields the `reconciler_runs` row plus incidents to open/close, applied in one
+transaction. Purity is what lets the alarm be unit-tested without Postgres.
+
+- **`tolerances.ts`** — per-metric tolerances, in-code and **not env-tunable**
+  (widening one would silence the alarm, §12.1.3). Copied snapshot values use
+  exact (0); `lagHeights` bounds trailing before DATA DEGRADED.
+- **Incidents:** `reconciler_divergence` (indexed copy ≠ chain), `indexer_lag`
+  (per-stream checkpoint lag), `contract_halted` (closeable); `slash_write_down`,
+  `redemption_refund` (point-in-time, opened once). Deferred fast-follow (need
+  more live decoders): `vault_paused`, `jail_report`, `epoch_overdue`, and the
+  queue-length delta.
+- **Tests:** `test/reconciler/reconciler.test.ts` (pure, Postgres-free — deltas,
+  lag, derivation incl. the corrupt-value alarm) and
+  `test/integration/reconciler-alarm.test.ts` (the Postgres-backed acceptance
+  gate: corrupt an indexed row → incident opens; fix → closes), in the
+  `db-grants` job alongside grant-boundary.
+
 ## Commands
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
@@ -118,8 +143,9 @@ Package scripts (`./dev pnpm --filter @nvhash/indexer run <script>`):
 - `test` — Vitest (default config). Includes the two security-executable gates
   below; no DB (the DB-backed grant-boundary test is a separate config/script,
   so `pnpm -r run test` stays Postgres-free).
-- `test:grants` — the grant-boundary integration test (needs Postgres, see
-  "Full-stack wiring" below).
+- `test:grants` — the Postgres-backed integration tests (needs Postgres, see
+  "Full-stack wiring" below): the grant-boundary gate and the PR 2.5 reconciler
+  alarm acceptance gate (`test/integration/`).
 - `generate` — regenerate the Prisma client from `prisma/`.
 - `start` — `prisma generate` then run the scaffold supervisor (`src/index.ts`):
   it connects to the `indexed` schema as `indexer_writer`, proves the connection

@@ -34,6 +34,7 @@ import { PinnedLcdClient, RpcClient } from "./transport/rpc.ts";
 import { createChainEventsWorker } from "./workers/chain-events/index.ts";
 import { createEpochHistoryWorker } from "./workers/epoch-history/index.ts";
 import { createValidatorSamplerWorker } from "./workers/validator-sampler/index.ts";
+import { runReconciler } from "./reconciler/index.ts";
 
 /** How often the supervisor re-proves database reachability. */
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -113,16 +114,31 @@ export async function run(): Promise<void> {
   touchHeartbeat(Date.now());
   logger.info("indexer started", { count: workers.length });
 
+  const onLoopCrash = (stream: string) => (cause: unknown): void => {
+    logger.error("worker crashed", {
+      stream,
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
+    process.exitCode = 1;
+    controller.abort();
+  };
+
   // Start each worker; a crash is fatal (abort siblings, exit non-zero).
-  const loops = workers.map((worker) =>
-    runWorker(worker, deps).catch((cause: unknown) => {
-      logger.error("worker crashed", {
-        stream: worker.stream,
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
-      process.exitCode = 1;
-      controller.abort();
-    }),
+  const loops = workers.map((worker) => runWorker(worker, deps).catch(onLoopCrash(worker.stream)));
+
+  // The reconciler runs as its own independent loop (§12.1.3): it must keep
+  // running even if the ingestion workers stall, so it can see the growing lag.
+  loops.push(
+    runReconciler({
+      prisma,
+      rpc,
+      pinned,
+      contractAddress: config.contractAddress,
+      cadenceMs: config.reconcileIntervalMs,
+      sleep: (ms) => sleep(ms, controller.signal),
+      signal: controller.signal,
+      now: () => new Date(),
+    }).catch(onLoopCrash("reconciler")),
   );
 
   await new Promise<void>((resolve) => {

@@ -371,3 +371,19 @@ forward-deterministic departure marking. Fixture-decode + fast-check convergence
 (incl. departures) gates. Uptime comes from the contract's own SigningInfo-derived
 `uptimeBps` (contract §10.3), so no separate slashing reader is needed — the
 `SlashingClient` open question is closed as unnecessary. Next: 2.5 (reconciler).*
+
+*2026-07-21 (rev 10): **M2.5 delivered — M2 milestone complete.** The reconciler
+(`services/indexer/src/reconciler/`) runs as its own loop independent of the
+workers (survives an indexer outage, §12.1.3), comparing the chain's retained
+latest snapshot against the indexed copy. `deriveActions` is a pure function of
+the live/indexed planes → the `reconciler_runs` row + incidents to open/close,
+applied in one transaction; the reconciler is the **sole writer of `incidents`**.
+Delivered incident kinds: `reconciler_divergence`, `indexer_lag`,
+`contract_halted` (closeable), `slash_write_down`, `redemption_refund`
+(point-in-time). **Acceptance gate proven** by a Postgres-backed test (corrupt an
+indexed row → incident opens; fix → closes), in the `db-grants` job. Per-metric
+tolerances live in code and are **not env-tunable** (§12.1.3) — recorded in
+`app-spec.md` §9.5.6/§12.1. Deferred fast-follow (need more live decoders):
+`vault_paused`, `jail_report`, `epoch_overdue`, and the queue-length delta —
+recorded in §9.6. The services-lane honesty machinery for M2 is now in place; M3
+(query API) builds on it.*
