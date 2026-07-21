@@ -41,7 +41,11 @@ describe("planWindows", () => {
 describe("registration seam", () => {
   afterEach(() => clearRegisteredWorkers());
 
-  const stub = (stream: string): Worker => ({ stream, process: async () => {} });
+  const stub = (stream: string): Worker => ({
+    stream,
+    collect: async () => undefined,
+    write: async () => {},
+  });
 
   it("registers workers and rejects duplicate streams", () => {
     registerWorker(stub("chain-events"));
@@ -71,11 +75,12 @@ describe("runWorker (one guarded pass)", () => {
       controller.abort(); // stop after the first caught-up pass
     });
 
-    const worker: Worker = {
+    const worker: Worker<Window> = {
       stream: "chain-events",
       startHeight: 100n,
-      process: async (_tx, window) => {
-        processed.push(window);
+      collect: async (window) => window,
+      write: async (_tx, _window, batch) => {
+        processed.push(batch);
       },
     };
 
@@ -105,11 +110,12 @@ describe("runWorker (one guarded pass)", () => {
     } as unknown as PrismaClient;
 
     const controller = new AbortController();
-    const worker: Worker = {
+    const worker: Worker<Window> = {
       stream: "chain-events",
       startHeight: 0n,
-      process: async (_tx, window) => {
-        processed.push(window);
+      collect: async (window) => window,
+      write: async (_tx, _window, batch) => {
+        processed.push(batch);
       },
     };
     await runWorker(worker, {

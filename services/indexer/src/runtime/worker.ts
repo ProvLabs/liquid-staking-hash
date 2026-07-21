@@ -11,17 +11,31 @@
 // live chain. Full supervisor wiring of the head source lands with the first
 // worker (PR 2.1); this PR ships the runtime and its tests.
 
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { logger } from "../logger.ts";
 import { readCheckpoint, runWindow, trailingTarget, type Window } from "./checkpoint.ts";
 
-export interface Worker {
+/**
+ * A worker is two-phase so chain I/O never happens inside a DB transaction:
+ *
+ *  1. `collect(window)` — read the chain (RPC/LCD) and decode a `Batch` of the
+ *     window's facts. NO database access. Runs outside any transaction.
+ *  2. `write(tx, window, batch)` — apply that batch to the `indexed` schema on
+ *     the given transaction client. NO network access.
+ *
+ * The runner wraps `write` and the cursor advance in one `runWindow`
+ * transaction, so a Postgres transaction is only ever open for local writes,
+ * never across a network round-trip.
+ */
+export interface Worker<Batch = unknown> {
   /** durable checkpoint key (use a `STREAMS` constant) */
   readonly stream: string;
   /** first height to ingest when there is no checkpoint yet (default 0) */
   readonly startHeight?: bigint;
-  /** all data upserts for one window, on the given transaction client */
-  process: import("./checkpoint.ts").WindowFn;
+  /** read + decode the window's facts from chain (no DB) */
+  collect(window: Window): Promise<Batch>;
+  /** apply the batch + advance nothing (the runner advances the cursor) */
+  write(tx: Prisma.TransactionClient, window: Window, batch: Batch): Promise<void>;
 }
 
 /**
@@ -95,7 +109,11 @@ export async function runWorker(worker: Worker, deps: WorkerRuntimeDeps): Promis
     if (target >= next) {
       for (const window of planWindows(next, target, deps.maxWindowSpan)) {
         if (deps.signal.aborted) return;
-        await runWindow(deps.prisma, worker.stream, window, worker.process);
+        // Phase 1: read+decode the chain OUTSIDE any transaction.
+        const batch = await worker.collect(window);
+        if (deps.signal.aborted) return;
+        // Phase 2: apply the batch and advance the cursor in one transaction.
+        await runWindow(deps.prisma, worker.stream, window, (tx, w) => worker.write(tx, w, batch));
         next = window.to + 1n;
         logger.info("window committed", {
           stream: worker.stream,

@@ -35,10 +35,12 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   (spec §9.2). Workers never write their checkpoint directly. `trailingTarget`
   applies the confirmation depth (default 0 — Provenance instant finality).
 - **`runtime/worker.ts`** — the loop shell (`runWorker`) and the
-  `registerWorker` seam. A worker declares `{ stream, startHeight?, process }`;
-  the runner polls the head, pages the un-processed range into bounded windows,
-  and commits per window. The head source, config knobs, and supervisor startup
-  of registered workers are wired by the first worker (PR 2.1).
+  `registerWorker` seam. A worker is **two-phase** so chain I/O never happens
+  inside a DB transaction: `collect(window)` reads+decodes from chain (no DB),
+  `write(tx, window, batch)` applies to the `indexed` schema (no network). The
+  runner polls the head, pages the un-processed range into bounded windows, and
+  commits each via `runWindow`. `src/index.ts` builds the head source
+  (`RpcClient.latestHeight`) and starts the workers (PR 2.1).
 - **`runtime/streams.ts`** — the `STREAMS` names and `assertChainIsolation`, the
   per-`(chain_id, contract)` boot check (spec §9.3) run from `src/index.ts`: the
   process fails closed if the DB holds a foreign history. The identity marker is
@@ -54,9 +56,26 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   `RpcClient` (`block_results` for EndBlocker payout/refund/NAV, `tx_search`,
   `block_search`, `latestHeight`) and `PinnedLcdClient.smartAtHeight` (height-
   pinned smart query via `x-cosmos-block-height`, for single-snapshot backfill).
-  First-party, fetch-based, zero runtime deps. `RPC_URL`/LCD config + compose
-  wiring lands with PR 2.1 (whether height-pinning promotes into
+  First-party, fetch-based, zero runtime deps. `RPC_URL` is wired in config +
+  compose from PR 2.1 (whether height-pinning promotes into
   `@nvhash/chain-client` is a PR 2.2 decision).
+
+### Workers
+
+- **`workers/chain-events/`** (stream `chain-events`, PR 2.1) — vault/contract
+  event ingestion → `transactions`, `redemption_requests`. Dual source:
+  tx-search (swap in/out request, expedite) + `block_results` per height
+  (EndBlocker payout/refund + NAV marker). `decode.ts` maps raw events to typed
+  `DomainEvent`s (scoped to the program's vault/receipt denom); `reduce.ts` is a
+  pure fold over an abstract `Store` (Postgres via `store.ts`, in-memory in the
+  replay property test) applying the redemption status lattice and the running
+  marker NAV. Idempotency: `Transaction` upserts by `(txhash, msgIndex)` with a
+  deterministic synthetic txhash (`blk:{height}:{requestId}:{payout|refund}`)
+  for txless EndBlocker rows; `RedemptionRequest` by `requestId`. The running
+  NAV persists across windows in a reserved `meta:chain-events:nav` checkpoint
+  row (no schema change). Tests: `test/workers/chain-events-decode` (fixture
+  corpus) and `test/workers/chain-events-replay` (fast-check: replay from 0 ==
+  resume from any height; idempotent re-apply).
 
 ## Commands
 

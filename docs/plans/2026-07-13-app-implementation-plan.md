@@ -328,3 +328,17 @@ with no bridged nvHASH/live DEX in v1 (`app-spec.md` §13), it is deferred until
 §14.3 resolves, at which point it reuses the 2.0 infra. M2 PR rows above are
 unchanged; these notes refine sequencing and scope. Per-PR delivery lines are
 appended here as each M2 PR lands.*
+
+*2026-07-20 (rev 7): **M2.0 delivered** — indexer shared runtime
+(`services/indexer/src/runtime/{checkpoint,worker,streams}.ts`,
+`decode/attributes.ts`, `transport/rpc.ts`): atomic block-window cursor,
+two-phase worker loop, `(chain_id, contract)` isolation boot check, the
+JSON-string attribute decoder, and the RPC/height-pinned transports; unit gates
+Postgres-free. **M2.1 delivered** — the `chain-events` worker (dual-source
+tx-search + `block_results` ingestion → `transactions`/`redemption_requests`,
+redemption status lattice, running marker NAV, synthetic PKs for txless
+EndBlocker rows), with a fixture-decode gate over the corpus and a fast-check
+replay-convergence property (replay from 0 == resume from any height). Resolves
+`app-spec.md` §14.5 (dual-source transport, confirmation depth 0). Adds
+`fast-check` (dev), `RPC_URL`/`RECEIPT_DENOM` config + compose env. Next:
+2.2/2.3 (parallel) then 2.5.*

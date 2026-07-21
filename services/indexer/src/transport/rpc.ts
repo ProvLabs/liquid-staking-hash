@@ -151,6 +151,22 @@ export class RpcClient {
     return toBigint(sync["latest_block_height"], "status.result.sync_info.latest_block_height");
   }
 
+  /** Consensus block time at a height (`/block?height=` → header.time). */
+  async blockTime(height: bigint | number): Promise<Date> {
+    const result = resultOf(await this.get("block", { height }), "block");
+    const header = asRecord(
+      asRecord(result["block"], "block.result.block")["header"],
+      "block.result.block.header",
+    );
+    const time = header["time"];
+    if (typeof time !== "string") {
+      throw new RpcError(0, "block", `expected header.time string, got ${JSON.stringify(time)}`);
+    }
+    const parsed = new Date(time);
+    if (Number.isNaN(parsed.getTime())) throw new RpcError(0, "block", `unparseable header.time: ${time}`);
+    return parsed;
+  }
+
   /** Block EndBlocker + per-tx events at a height (`/block_results?height=`). */
   async blockResults(height: bigint | number): Promise<BlockResults> {
     const result = resultOf(await this.get("block_results", { height }), "block_results");
