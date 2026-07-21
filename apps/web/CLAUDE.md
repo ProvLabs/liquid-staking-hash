@@ -48,12 +48,19 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
 - `typecheck` — `react-router typegen && tsc --noEmit` (strict).
 - `test` — Vitest (node env): i18n key coverage, config bounding + boot-check
   behavior (against the MSW fixture harness), client-config allowlist, theme
-  cookie parsing, and brand-token contrast (`test/brand-tokens.test.ts`).
+  cookie parsing, brand-token contrast (`test/brand-tokens.test.ts`),
+  chrome-state banner/freshness honesty (`test/chrome-state.test.ts`, MSW
+  harness with fixture overrides), and the environment-locked verify-link map
+  (`test/verify-link.test.ts`).
 - `test:e2e` — production build + Playwright against `react-router-serve`
   with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
-  fully offline). Includes the axe accessibility scans on both themes and the
-  runtime server-only-leak assertion. Run via `./dev pw`, not `./dev pnpm`
-  (needs browsers).
+  fully offline). Includes the axe accessibility scans on both themes (route
+  list covers `/` plus the PR 4.1 stub routes `/stake`, `/portfolio`,
+  `/market`, `/validators`, `/governance`; new routes join the list), the
+  runtime server-only-leak assertion, and a second server instance with
+  `NVHASH_MOCK_LIVE_DOWN=1` that proves failed live reads degrade honestly
+  (`e2e/chrome.spec.ts`). Run via `./dev pw`, not `./dev pnpm` (needs
+  browsers).
 - `check:palette` — the shared dataviz validation method
   (`scripts/validate_palette.js`) over both theme token sets in
   `app/theme/tokens.css` (ADR-001 Decision 4 gate).

@@ -8,5 +8,15 @@ export default [
   // Operational readiness probe (PR 1.5) — a static, locale-independent path,
   // declared before the `:lang?` segment so it is never parsed as a locale.
   route("healthz", "routes/healthz.tsx"),
-  route(":lang?", "routes/locale.tsx", [index("routes/home.tsx")]),
+  route(":lang?", "routes/locale.tsx", [
+    index("routes/home.tsx"),
+    // §8.0 nav targets (plan 4.1): stubs until their real pages land in
+    // 4.2–4.4 / M5 / M7, because the nav must never 404. New routes join the
+    // axe scan route list (e2e/axe.spec.ts).
+    route("stake", "routes/stake.tsx"),
+    route("portfolio", "routes/portfolio.tsx"),
+    route("market", "routes/market.tsx"),
+    route("validators", "routes/validators.tsx"),
+    route("governance", "routes/governance.tsx"),
+  ]),
 ] satisfies RouteConfig;

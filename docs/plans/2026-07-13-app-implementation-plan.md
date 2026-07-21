@@ -342,3 +342,18 @@ replay-convergence property (replay from 0 == resume from any height). Resolves
 `app-spec.md` §14.5 (dual-source transport, confirmation depth 0). Adds
 `fast-check` (dev), `RPC_URL`/`RECEIPT_DENOM` config + compose env. Next:
 2.2/2.3 (parallel) then 2.5.*
+
+*2026-07-21 (rev 8): **M4.1 delivered** (working plan
+`app-m4.1-global-chrome`): the §8.0 global chrome in `apps/web`:
+`app/chrome/chrome.server.ts` (root-loader ChromeState: paused/halted banner
+from live vault `get` + `epoch_status`, degraded from status-envelope lag or
+open `reconciler_divergence`/`indexer_lag` incidents, freshness meta), the
+chrome components (nav, env badge, banner, alerts advert, freshness footer)
+plus the environment-locked `VerifyLink` closed map, five honest stub routes so
+the nav never 404s (all in the axe scan), and the server-only `API_URL` config
+row (spec §7 amended). Gates added: `test/chrome-state.test.ts`,
+`test/verify-link.test.ts`, and an e2e live-down server instance proving
+"program status unavailable" with no fabricated banner. Deliberate deltas
+recorded in the spec: footer docs link deferred (no docs URL exists) and no
+`governance` verify target (console panel does not exist yet); both are
+follow-ons, not dead links. Next: 4.2–4.4 render inside this chrome.*

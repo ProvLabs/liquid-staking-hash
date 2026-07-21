@@ -23,7 +23,19 @@ export function resolveLocale(param: string | undefined): Locale | null {
   return isLocale(param) ? param : null;
 }
 
-/** Translate a key for a locale. Keys are typed against the `en` catalog. */
-export function t(locale: Locale, key: MessageKey): string {
-  return catalogs[locale][key];
+/**
+ * Translate a key for a locale. Keys are typed against the `en` catalog.
+ * `{name}` placeholders are filled from `params`; an unknown placeholder is
+ * left verbatim (a visible bug beats a silent blank).
+ */
+export function t(
+  locale: Locale,
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): string {
+  const message = catalogs[locale][key];
+  if (params === undefined) return message;
+  return message.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in params ? String(params[name]) : match,
+  );
 }

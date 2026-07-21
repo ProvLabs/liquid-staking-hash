@@ -10,6 +10,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@nvhash/api-types':
+        specifier: workspace:*
+        version: link:../../packages/api-types
       '@nvhash/chain-client':
         specifier: workspace:*
         version: link:../../packages/chain-client
