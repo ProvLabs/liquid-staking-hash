@@ -20,47 +20,57 @@ interface MarkerRow {
 function fakeStore(initial?: MarkerRow) {
   const rows = new Map<string, MarkerRow>();
   if (initial) rows.set(initial.stream, initial);
-  const creates: MarkerRow[] = [];
+  const upserts: string[] = [];
   const prisma = {
     indexerCheckpoint: {
       findUnique: async ({ where }: { where: { stream: string } }) => rows.get(where.stream) ?? null,
-      create: async ({ data }: { data: MarkerRow }) => {
-        rows.set(data.stream, data);
-        creates.push(data);
-        return data;
+      // Models Postgres INSERT ... ON CONFLICT DO UPDATE: create if absent, else
+      // apply `update` (here empty → leave the existing row untouched).
+      upsert: async ({ where, create }: { where: { stream: string }; create: MarkerRow; update: unknown }) => {
+        upserts.push(where.stream);
+        if (!rows.has(where.stream)) rows.set(where.stream, create);
+        return rows.get(where.stream)!;
       },
     },
   } as unknown as PrismaClient;
-  return { prisma, rows, creates };
+  return { prisma, rows, upserts };
 }
 
 const identity = { chainId: "chain-dev", contractAddress: "tp1contract" };
 
 describe("assertChainIsolation", () => {
-  it("records the identity marker on first run", async () => {
-    const { prisma, creates } = fakeStore();
+  it("records the identity marker on first run (atomic upsert, not create)", async () => {
+    const { prisma, rows, upserts } = fakeStore();
     await assertChainIsolation(prisma, identity);
-    expect(creates).toEqual([
-      { stream: PROVENANCE_MARKER_STREAM, cursorHeight: 0n, cursorPage: "chain-dev|tp1contract" },
-    ]);
+    expect(upserts).toEqual([PROVENANCE_MARKER_STREAM]);
+    expect(rows.get(PROVENANCE_MARKER_STREAM)).toMatchObject({ cursorPage: "chain-dev|tp1contract" });
   });
 
   it("is a no-op when the persisted identity matches", async () => {
-    const { prisma, creates } = fakeStore({
+    const { prisma, rows } = fakeStore({
       stream: PROVENANCE_MARKER_STREAM,
       cursorHeight: 0n,
       cursorPage: "chain-dev|tp1contract",
     });
     await expect(assertChainIsolation(prisma, identity)).resolves.toBeUndefined();
-    expect(creates).toEqual([]); // no re-create
+    // upsert leaves the existing row untouched (no overwrite).
+    expect(rows.get(PROVENANCE_MARKER_STREAM)?.cursorPage).toBe("chain-dev|tp1contract");
   });
 
-  it("fails closed when the persisted identity differs", async () => {
-    const { prisma } = fakeStore({
+  it("fails closed when the persisted identity differs, without overwriting it", async () => {
+    const { prisma, rows } = fakeStore({
       stream: PROVENANCE_MARKER_STREAM,
       cursorHeight: 0n,
       cursorPage: "chain-other|tp1different",
     });
     await expect(assertChainIsolation(prisma, identity)).rejects.toBeInstanceOf(ChainIsolationError);
+    // The foreign marker is preserved (empty `update`), not clobbered.
+    expect(rows.get(PROVENANCE_MARKER_STREAM)?.cursorPage).toBe("chain-other|tp1different");
+  });
+
+  it("is idempotent across repeated boots with the same identity", async () => {
+    const { prisma } = fakeStore();
+    await assertChainIsolation(prisma, identity);
+    await expect(assertChainIsolation(prisma, identity)).resolves.toBeUndefined();
   });
 });

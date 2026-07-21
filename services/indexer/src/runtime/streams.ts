@@ -55,14 +55,24 @@ function markerValue(id: ChainIdentity): string {
  */
 export async function assertChainIsolation(prisma: PrismaClient, id: ChainIdentity): Promise<void> {
   const value = markerValue(id);
+
+  // Atomic create-if-absent: `upsert` compiles to INSERT ... ON CONFLICT DO
+  // UPDATE, so two processes booting concurrently (a Compose restart where the
+  // old container has not fully exited) cannot both create the marker and
+  // collide on the unique `stream` key — one inserts, the other no-ops. The
+  // empty `update` deliberately leaves any EXISTING row untouched, so a foreign
+  // identity is preserved for the mismatch check below rather than overwritten.
+  await prisma.indexerCheckpoint.upsert({
+    where: { stream: PROVENANCE_MARKER_STREAM },
+    create: { stream: PROVENANCE_MARKER_STREAM, cursorHeight: 0n, cursorPage: value },
+    update: {},
+  });
+
+  // Read back and assert identity. On first boot this is the row we just wrote;
+  // on a later boot (or a concurrent one) it is whatever is persisted — a
+  // mismatch means the DB holds a foreign chain/contract's history.
   const marker = await prisma.indexerCheckpoint.findUnique({ where: { stream: PROVENANCE_MARKER_STREAM } });
-  if (marker === null) {
-    await prisma.indexerCheckpoint.create({
-      data: { stream: PROVENANCE_MARKER_STREAM, cursorHeight: 0n, cursorPage: value },
-    });
-    return;
-  }
-  if (marker.cursorPage !== value) {
-    throw new ChainIsolationError(marker.cursorPage ?? "(unset)", value);
+  if (marker?.cursorPage !== value) {
+    throw new ChainIsolationError(marker?.cursorPage ?? "(unset)", value);
   }
 }

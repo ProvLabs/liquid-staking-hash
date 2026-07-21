@@ -25,6 +25,15 @@ const RELEVANT_BLOCK_TYPES = new Set<string>([
   NAV_EVENT,
 ]);
 
+/** DeliverTx event types worth decoding — the only reason to fetch a tx's block
+ * time. A tx with no event of these types is skipped without a round-trip, so
+ * block-time fetches stay coupled to heights that actually produce events. */
+const RELEVANT_TX_TYPES = new Set<string>([
+  VAULT_EVENT.swapIn,
+  VAULT_EVENT.swapOutRequested,
+  VAULT_EVENT.expedited,
+]);
+
 /** The subset of RpcClient the collector needs (injectable for tests). */
 export interface EventSource {
   txSearch(
@@ -68,11 +77,13 @@ export async function collectWindow(
   for (;;) {
     const res = await rpc.txSearch(`tx.height>=${window.from} AND tx.height<=${window.to}`, page, PER_PAGE);
     for (const tx of res.txs) {
-      let blockTime: Date | undefined;
-      for (const raw of tx.events) {
-        // Only fetch the block time once we have an in-scope event to stamp.
-        const ctxTime = blockTime ?? (blockTime = await timeOf(tx.height));
-        const de = decodeTxEvent(raw, { height: tx.height, blockTime: ctxTime, txhash: tx.hash }, scope);
+      // Cheap type pre-pass: skip txs with no candidate event BEFORE fetching
+      // the block time, so a height of purely non-vault txs costs no round-trip.
+      const candidates = tx.events.filter((e) => RELEVANT_TX_TYPES.has(e.type));
+      if (candidates.length === 0) continue;
+      const blockTime = await timeOf(tx.height);
+      for (const raw of candidates) {
+        const de = decodeTxEvent(raw, { height: tx.height, blockTime, txhash: tx.hash }, scope);
         if (de) ranked.push({ ev: de, phase: 0, seq: seq++ });
       }
     }
