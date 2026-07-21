@@ -113,7 +113,10 @@ services:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       DATABASE_URL: "postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed"
       LCD_URL: "http://dev-node:1317"
+      RPC_URL: "http://dev-node:26657"
       CHAIN_ID: "${CHAIN_ID:-chain-dev}"
+      # Vault share denom — scopes NAV markers to this program (PR 2.1).
+      RECEIPT_DENOM: "${RECEIPT_DENOM:-nvhash}"
       # Empty unless infra/devnet/stack.sh set them (it resolves the deployed
       # addresses from chain). Empty => the service fails closed: the indexer's
       # bounded config rejects a blank CONTRACT/VAULT, and the web boot check
