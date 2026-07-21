@@ -77,6 +77,19 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   corpus) and `test/workers/chain-events-replay` (fast-check: replay from 0 ==
   resume from any height; idempotent re-apply).
 
+- **`workers/epoch-history/`** (stream `epoch-history`, PR 2.2) → `epoch_snapshots`.
+  The contract keeps only the latest snapshot on chain (spec §13/§9.10), so
+  history is read by **height-pinned smart query** (`PinnedLcdClient.smartAtHeight`,
+  `x-cosmos-block-height`) at each `run_epoch` crank height — `boundaries.ts`
+  locates cranks via tx-search, `snapshot.ts` fetches epoch_snapshot + apr AS OF
+  that height, `decode.ts` maps them (local mirror of chain-client parsers, since
+  raw-Node can't import that package — see `decode/scalars.ts`). Idempotent:
+  upsert by `epochIndex`; genesis backfill and resume converge because past-height
+  state is deterministic. Tests: `test/workers/epoch-history-decode` (fixtures +
+  crank detection) and `-replay` (fast-check convergence). Height-pinned query is
+  App-local for now (promotion into `@nvhash/chain-client` is a still-open call —
+  moot at runtime anyway: the indexer can't import that package's `.ts`).
+
 ## Commands
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the

@@ -342,3 +342,18 @@ replay-convergence property (replay from 0 == resume from any height). Resolves
 `app-spec.md` §14.5 (dual-source transport, confirmation depth 0). Adds
 `fast-check` (dev), `RPC_URL`/`RECEIPT_DENOM` config + compose env. Next:
 2.2/2.3 (parallel) then 2.5.*
+
+*2026-07-21 (rev 8): **M2.1 review fixes** (PR #8, both Greptile P2s valid) —
+`assertChainIsolation` made atomic (`upsert` + read-back, was a `findUnique`/`create`
+race), and the chain-events collector now fetches block time only for heights
+that produce events (type pre-pass, mirroring the block phase). **M2.2 delivered**
+— the `epoch-history` worker → `epoch_snapshots`: tx-search locates `run_epoch`
+cranks, a **height-pinned smart query** (`x-cosmos-block-height`) at each crank
+height recovers the epoch the contract no longer retains (single-snapshot,
+§13/§9.10), upsert by `epochIndex`; fixture-decode + fast-check convergence gates.
+Resolves the §9.3 backfill mechanism + retention caveat. The recurring
+"height-pinned query → promote into `@nvhash/chain-client`?" fork is **settled as
+moot**: the indexer runs raw `.ts` on Node, which refuses to type-strip a `.ts`
+under `node_modules` (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, verified 2026-07-21), so
+chain-client cannot be imported at runtime — smart-query decoders are a local
+mirror (`decode/scalars.ts`, fixture-locked). Next: 2.3, then 2.5.*

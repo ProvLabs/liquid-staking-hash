@@ -422,7 +422,9 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 
 ### 9.3 Backfill
 
-On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3).
+On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3), enforced as a fail-closed boot check (PR 2.0, `services/indexer/src/runtime/streams.ts`).
+
+**Epoch-history backfill mechanism (PR 2.2):** the contract retains only the *latest* epoch snapshot on chain (§13, contract §9.10), so history is recovered by a **height-pinned smart query at each `run_epoch` crank height** — querying `epoch_snapshot`/`apr` with `x-cosmos-block-height: H` returns the epoch that closed at H. Cranks are located by tx-search (`wasm action=run_epoch`); rows upsert by `epoch_index`, so replay from genesis and resume from a checkpoint converge to the same `epoch_snapshots`. **Retention caveat (documented, not silent):** height-pinned queries work for any past height on a full-state node; a node that has *pruned* state below a crank height cannot serve that epoch — a config/retention limit, surfaced rather than hidden.
 
 ### 9.4 API surface
 

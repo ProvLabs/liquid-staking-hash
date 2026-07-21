@@ -30,8 +30,9 @@ import { db } from "./db.ts";
 import { logger } from "./logger.ts";
 import { assertChainIsolation } from "./runtime/streams.ts";
 import { runWorker, type Worker, type WorkerRuntimeDeps } from "./runtime/worker.ts";
-import { RpcClient } from "./transport/rpc.ts";
+import { PinnedLcdClient, RpcClient } from "./transport/rpc.ts";
 import { createChainEventsWorker } from "./workers/chain-events/index.ts";
+import { createEpochHistoryWorker } from "./workers/epoch-history/index.ts";
 
 /** How often the supervisor re-proves database reachability. */
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -83,6 +84,7 @@ export async function run(): Promise<void> {
 
   const controller = new AbortController();
   const rpc = new RpcClient(config.rpcUrl);
+  const pinned = new PinnedLcdClient(config.lcdUrl);
 
   // Composition root: the workers the supervisor runs. Explicit list (the
   // `registerWorker` seam is available for self-registration; kept explicit
@@ -93,6 +95,7 @@ export async function run(): Promise<void> {
       rpc,
       scope: { vaultAddress: config.vaultAddress, receiptDenom: config.receiptDenom },
     }),
+    createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
   ];
 
   const deps: WorkerRuntimeDeps = {
