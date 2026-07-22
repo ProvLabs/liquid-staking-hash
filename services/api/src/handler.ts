@@ -14,6 +14,7 @@
 import { envelope, type FreshnessSource } from "@nvhash/api-types";
 import type { ApiConfig } from "./config.ts";
 import type { RateLimiter } from "./rate-limit.ts";
+import type { IndexedReader } from "./reader.ts";
 import { findRoute, type EnvelopedPayload, type Route } from "./routes.ts";
 import { searchParamsToRecord } from "./query.ts";
 
@@ -22,6 +23,10 @@ const ALLOWED_METHODS = ["GET", "HEAD"] as const;
 export interface HandlerDeps {
   readonly limiter: RateLimiter;
   readonly appEnv: ApiConfig["appEnv"];
+  /** The indexed-data port (PR 3.1). `emptyReader` when no DB is configured. */
+  readonly reader: IndexedReader;
+  /** What `/status` reports as the wired data source — never a fabrication. */
+  readonly dataSource: "unwired" | "api_reader";
   /** Injectable clock; defaults to wall clock. Drives `generated_at`. */
   readonly now?: () => Date;
 }
@@ -120,7 +125,7 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
     }
 
     // 5. Dispatch.
-    const ctx = { query, url, now, appEnv: deps.appEnv };
+    const ctx = { query, url, now, appEnv: deps.appEnv, reader: deps.reader, dataSource: deps.dataSource };
     let response: Response;
     if (route.enveloped) {
       response = await runEnvelopedRoute(route, ctx, headers);

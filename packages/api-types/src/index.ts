@@ -16,4 +16,8 @@ export {
   type IncidentRow,
   type IncidentSeverity,
   type ProgramMetrics,
+  type ValidatorRow,
+  type ValidatorSetHealth,
+  type ValidatorsPayload,
 } from "./rows.ts";
+export { HASH_EXPONENT, SHARE_EXPONENT, navHashPerShare } from "./amounts.ts";

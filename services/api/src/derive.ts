@@ -1,0 +1,190 @@
+// Pure derivations: indexed facts → the frozen @nvhash/api-types shapes.
+//
+// The same pattern as the indexer's reducer (pure fold, thin store): every
+// mapping from database rows to API rows lives here as a pure function over
+// structural fact types (bigint/Date — no Prisma imports), so the whole
+// derivation layer is unit-testable without Postgres, and the Prisma reader
+// (reader-prisma.ts) stays a thin query-and-convert shell.
+//
+// Amount discipline (app-spec §5.8): base-unit amounts arrive as bigint and
+// leave as decimal strings; NAV uses the shared scale-then-floor helper
+// ([R1], docs/plans/2026-07-22-app-m3-query-api.md). Heights and counts are
+// JS safe integers, guarded loudly ([R7a]): a height that cannot be a safe
+// integer is corrupt, and serializing it would ship a lie — throw instead.
+
+import {
+  navHashPerShare,
+  type EpochRow,
+  type IncidentKind,
+  type IncidentRow,
+  type IncidentSeverity,
+  type ProgramMetrics,
+  type ValidatorRow,
+  type ValidatorSetHealth,
+  type ValidatorsPayload,
+} from "@nvhash/api-types";
+
+/** Envelope heights as the reader reports them (null = honestly unknown). */
+export interface Heads {
+  readonly chainHeight: number | null;
+  readonly indexedHeight: number | null;
+}
+
+// --- guards -----------------------------------------------------------------
+
+/**
+ * bigint → non-negative safe integer, or a loud RangeError ([R7a]). Applied
+ * to every height/index/count crossing into the JSON number domain, so a
+ * corrupt value fails the request instead of reaching a consumer.
+ */
+export function toSafeInt(value: bigint, label: string): number {
+  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError(`${label} must be a non-negative safe integer, got ${value}`);
+  }
+  return Number(value);
+}
+
+// --- fact shapes (structural; satisfied by converted Prisma rows) -----------
+
+export interface EpochSnapshotFacts {
+  readonly epochIndex: bigint;
+  readonly endedAtSeconds: bigint;
+  readonly tvvAfter: bigint;
+  readonly totalShares: bigint;
+  readonly netAprBps: number;
+}
+
+export interface IncidentFacts {
+  readonly kind: IncidentKind;
+  readonly severity: IncidentSeverity;
+  readonly openedAt: Date;
+  readonly closedAt: Date | null;
+  readonly openedHeight: bigint | null;
+}
+
+export interface ValidatorRegistryFacts {
+  readonly valoper: string;
+  readonly moniker: string;
+  readonly unregisteredAt: Date | null;
+}
+
+export interface ValidatorEpochFacts {
+  readonly valoper: string;
+  readonly epochIndex: bigint;
+  readonly uptimeBps: number;
+  readonly eligible: boolean;
+  readonly failingReasons: readonly string[];
+  readonly programDelegation: bigint;
+  readonly commissionDue: bigint;
+}
+
+export interface MetricsFacts {
+  /** Has any (non-`meta:`) worker stream committed a window yet? */
+  readonly indexed: boolean;
+  readonly participantCount: number;
+  readonly firstActivityAt: Date | null;
+  readonly epochCount: number;
+}
+
+// --- derivations ------------------------------------------------------------
+
+export function deriveHeads(
+  reconcilerRun: { readonly chainHeight: bigint; readonly indexedHeight: bigint } | null,
+  maxCheckpointHeight: bigint | null,
+): Heads {
+  if (reconcilerRun !== null) {
+    return {
+      chainHeight: toSafeInt(reconcilerRun.chainHeight, "chain_height"),
+      indexedHeight: toSafeInt(reconcilerRun.indexedHeight, "indexed_height"),
+    };
+  }
+  // The reconciler has never run: the checkpoints certify indexed progress,
+  // but nothing in the store knows the chain head — report null, never guess.
+  if (maxCheckpointHeight !== null) {
+    return { chainHeight: null, indexedHeight: toSafeInt(maxCheckpointHeight, "indexed_height") };
+  }
+  return { chainHeight: null, indexedHeight: null };
+}
+
+/**
+ * `/metrics` (§8.1 proof strip). `participant_count` is pinned as distinct
+ * addresses across ALL transaction kinds ([R5], recorded in the §9.4 revision
+ * note). All-null until a worker stream has committed — after that, zero is
+ * an honest count, not a cold-start artifact.
+ */
+export function deriveMetrics(facts: MetricsFacts): ProgramMetrics {
+  if (!facts.indexed) {
+    return { participant_count: null, program_started_at: null, epoch_count: null };
+  }
+  return {
+    participant_count: facts.participantCount,
+    program_started_at: facts.firstActivityAt === null ? null : facts.firstActivityAt.toISOString(),
+    epoch_count: facts.epochCount,
+  };
+}
+
+export function toEpochRow(s: EpochSnapshotFacts): EpochRow {
+  return {
+    epoch_index: toSafeInt(s.epochIndex, "epoch_index"),
+    ended_at: new Date(toSafeInt(s.endedAtSeconds, "ended_at_seconds") * 1000).toISOString(),
+    // Shared scale-then-floor helper [R1]; null for a zero-share epoch (an
+    // empty vault has no NAV — the honest state, never a fabricated "0").
+    nav: navHashPerShare(s.tvvAfter, s.totalShares),
+    tvv: s.tvvAfter.toString(),
+    net_apr_bps: s.netAprBps,
+  };
+}
+
+export function toIncidentRow(f: IncidentFacts): IncidentRow {
+  return {
+    kind: f.kind,
+    severity: f.severity,
+    opened_at: f.openedAt.toISOString(),
+    closed_at: f.closedAt === null ? null : f.closedAt.toISOString(),
+    height: f.openedHeight === null ? null : toSafeInt(f.openedHeight, "incident height"),
+  };
+}
+
+/**
+ * One `/validators` row: registry enrollment joined with the validator's
+ * latest sampled epoch (null per-epoch fields before the first sample — the
+ * honest "no sample yet" state).
+ */
+export function toValidatorRow(
+  reg: ValidatorRegistryFacts,
+  latest: ValidatorEpochFacts | null,
+): ValidatorRow {
+  return {
+    valoper: reg.valoper,
+    moniker: reg.moniker,
+    active: reg.unregisteredAt === null,
+    epoch_index: latest === null ? null : toSafeInt(latest.epochIndex, "epoch_index"),
+    uptime_bps: latest === null ? null : latest.uptimeBps,
+    eligible: latest === null ? null : latest.eligible,
+    failing_reasons: latest === null ? [] : [...latest.failingReasons],
+    program_delegation: latest === null ? null : latest.programDelegation.toString(),
+    commission_due: latest === null ? null : latest.commissionDue.toString(),
+  };
+}
+
+/** Set-health aggregates over the full row set (semantics per rows.ts). */
+export function deriveSetHealth(rows: readonly ValidatorRow[]): ValidatorSetHealth {
+  const active = rows.filter((r) => r.active);
+  return {
+    total: rows.length,
+    active: active.length,
+    eligible: active.filter((r) => r.eligible === true).length,
+    in_arrears: active.filter((r) => r.commission_due !== null && BigInt(r.commission_due) > 0n)
+      .length,
+  };
+}
+
+export function deriveValidatorsPayload(
+  registry: readonly ValidatorRegistryFacts[],
+  latestEpochByValoper: ReadonlyMap<string, ValidatorEpochFacts>,
+): ValidatorsPayload {
+  const validators = registry.map((reg) =>
+    toValidatorRow(reg, latestEpochByValoper.get(reg.valoper) ?? null),
+  );
+  return { validators, set_health: deriveSetHealth(validators) };
+}

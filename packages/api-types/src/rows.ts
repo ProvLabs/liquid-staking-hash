@@ -4,7 +4,9 @@
 // waiting). Producer: services/api. Consumers: services/api and apps/web.
 // PR 3.1 implements the real derivations against exactly these shapes; a
 // field change is a spec-level amendment (app-spec §9.4 revision note), never
-// a silent edit. `/validators` rows are deliberately absent until PR 4.3.
+// a silent edit. PR 3.1 also freezes the `/validators` shapes below (master
+// plan §2 places the endpoint in 3.1; PR 4.3's public page consumes them —
+// confirmed 2026-07-22, docs/plans/2026-07-22-app-m3-query-api.md §7).
 //
 // Scale conventions follow the repo amount rules: token amounts and NAV are
 // DECIMAL STRINGS (BigInt/Decimal domain, never JS floats); block heights and
@@ -60,6 +62,56 @@ export interface ProgramMetrics {
 }
 
 /**
+ * One row of `GET /api/v1/validators` (public set view, app-spec §8.6):
+ * enrollment facts from `validator_registry` joined with the validator's
+ * latest `validator_epochs` sample. Per-epoch fields are null before the
+ * first sampled epoch — the honest "no sample yet" state, never a fabricated
+ * zero. Caveat carried from the sampler (services/indexer/CLAUDE.md): uptime
+ * capture is not wired yet, so `uptime_bps` may read 0 for a validator whose
+ * uptime was simply not measured — read it alongside `eligible`.
+ */
+export interface ValidatorRow {
+  /** Operator (valoper) address — public chain identifier. */
+  valoper: string;
+  /** Self-declared on-chain moniker (public), not off-chain identity. */
+  moniker: string;
+  /** Enrolled and not unregistered. */
+  active: boolean;
+  /** Epoch index the per-epoch fields reflect, or null before any sample. */
+  epoch_index: number | null;
+  /** Uptime in bps at that epoch, or null before any sample (see caveat). */
+  uptime_bps: number | null;
+  /** Eligibility at that epoch, or null before any sample. */
+  eligible: boolean | null;
+  /** Reasons the validator failed eligibility checks (empty when eligible). */
+  failing_reasons: string[];
+  /** Program delegation in nhash base units, decimal string, or null. */
+  program_delegation: string | null;
+  /** Commission currently due in nhash, decimal string, or null. */
+  commission_due: string | null;
+}
+
+/**
+ * Set-health aggregates over the `/api/v1/validators` rows (app-spec §8.6):
+ * counts are over the CURRENT set (`active` rows) except `total`, which
+ * counts every enrollment the program has seen (registry rows, including
+ * unregistered). `in_arrears` counts active validators with a positive
+ * `commission_due` in their latest sampled epoch.
+ */
+export interface ValidatorSetHealth {
+  total: number;
+  active: number;
+  eligible: number;
+  in_arrears: number;
+}
+
+/** `GET /api/v1/validators` payload: the set plus its health aggregates. */
+export interface ValidatorsPayload {
+  validators: ValidatorRow[];
+  set_health: ValidatorSetHealth;
+}
+
+/**
  * One row of `GET /api/v1/epochs` (newest first): the per-epoch series behind
  * the Learn NAV step chart and the §8.5 history views. NAV and TVV are
  * decimal strings in base units (contract §5 stepwise NAV: values change only
@@ -69,8 +121,13 @@ export interface EpochRow {
   epoch_index: number;
   /** ISO-8601 settlement time of this epoch. */
   ended_at: string;
-  /** NAV in HASH per nvHASH at settlement, decimal string. */
-  nav: string;
+  /**
+   * NAV in HASH per nvHASH at settlement, decimal string — or null for an
+   * epoch settled with zero shares (an empty vault has no NAV; null is the
+   * honest state, never a fabricated "0"). Widened from `string` by PR 3.1,
+   * recorded in the app-spec §9.4 revision note.
+   */
+  nav: string | null;
   /** Total vault value in base units at settlement, decimal string. */
   tvv: string;
   /** Net APR for the window ending at this epoch, bps, or null below window. */

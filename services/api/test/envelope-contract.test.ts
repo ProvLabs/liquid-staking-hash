@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { API_BASE, routes } from "../src/index.ts";
 import { startServer } from "./helpers.ts";
+import { fakeReader, type FakeFacts } from "./reader-fake.ts";
 
 const WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"] as const;
 
@@ -89,7 +90,7 @@ describe("envelope + method contract on every route", () => {
   });
 });
 
-describe("frozen 4.2 contract shapes (/metrics, /epochs, /incidents scaffolds)", () => {
+describe("honest-empty state (default reader: no data plane wired)", () => {
   it("/metrics reports the exact ProgramMetrics field set, all honestly null", async () => {
     const server = await startServer();
     try {
@@ -136,6 +137,163 @@ describe("frozen 4.2 contract shapes (/metrics, /epochs, /incidents scaffolds)",
         const res = await fetch(`${server.baseUrl}${API_BASE}/epochs${qs}`);
         expect(res.status, qs).toBe(400);
       }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/validators reports an empty set and /status says unwired", async () => {
+    const server = await startServer();
+    try {
+      const validators = await fetch(`${server.baseUrl}${API_BASE}/validators`);
+      expect(validators.status).toBe(200);
+      const vBody = (await validators.json()) as {
+        data: { validators: unknown[]; set_health: Record<string, number> };
+        meta: { indexed_height: unknown };
+      };
+      expect(vBody.data.validators).toEqual([]);
+      expect(vBody.data.set_health).toEqual({ total: 0, active: 0, eligible: 0, in_arrears: 0 });
+      expect(vBody.meta.indexed_height).toBeNull();
+
+      const status = await fetch(`${server.baseUrl}${API_BASE}/status`);
+      const sBody = (await status.json()) as { data: { data_source: string } };
+      expect(sBody.data.data_source).toBe("unwired");
+    } finally {
+      await server.close();
+    }
+  });
+});
+
+describe("populated reader (PR 3.1: real derivations behind the frozen shapes)", () => {
+  // Corpus NAV goldens (@nvhash/fixtures queries/vault/get.json) — the same
+  // values pinning the shared helper, now proven through the HTTP surface.
+  const FIXTURE_TVV = 315397882283n;
+  const FIXTURE_SHARES = 309963777029000000n;
+
+  const facts: FakeFacts = {
+    reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
+    metrics: {
+      indexed: true,
+      participantCount: 3,
+      firstActivityAt: new Date("2026-06-01T00:00:00Z"),
+      epochCount: 2,
+    },
+    epochs: [
+      { epochIndex: 11n, endedAtSeconds: 1_764_547_200n, tvvAfter: 300_000_000_000n, totalShares: FIXTURE_SHARES, netAprBps: 410 },
+      { epochIndex: 12n, endedAtSeconds: 1_767_225_600n, tvvAfter: FIXTURE_TVV, totalShares: FIXTURE_SHARES, netAprBps: 431 },
+    ],
+    incidents: [
+      { kind: "indexer_lag", severity: "warning", openedAt: new Date("2026-07-01T00:00:00Z"), closedAt: null, openedHeight: 900n },
+    ],
+    registry: [
+      { valoper: "pbvaloper1aaa", moniker: "alpha", unregisteredAt: null },
+      { valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null },
+    ],
+    validatorEpochs: [
+      { valoper: "pbvaloper1aaa", epochIndex: 11n, uptimeBps: 9000, eligible: false, failingReasons: ["uptime"], programDelegation: 1n, commissionDue: 9n },
+      { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1_000_000_000n, commissionDue: 5n },
+      // pbvaloper1bbb: enrolled, never sampled — per-epoch fields must be null.
+    ],
+  };
+
+  it("serves real envelope heights from the reconciler run on every data route", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      for (const path of ["/status", "/metrics", "/epochs", "/incidents", "/validators"]) {
+        const res = await fetch(`${server.baseUrl}${API_BASE}${path}`);
+        const body = (await res.json()) as { meta: { chain_height: number; indexed_height: number } };
+        expect(body.meta.chain_height, path).toBe(4242);
+        expect(body.meta.indexed_height, path).toBe(4200);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/status reports the wired data source", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/status`);
+      const body = (await res.json()) as { data: { data_source: string } };
+      expect(body.data.data_source).toBe("api_reader");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/metrics serves the derived aggregates", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/metrics`);
+      const body = (await res.json()) as { data: Record<string, unknown> };
+      expect(body.data).toEqual({
+        participant_count: 3,
+        program_started_at: "2026-06-01T00:00:00.000Z",
+        epoch_count: 2,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/epochs serves newest-first rows with the corpus NAV golden value", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/epochs`);
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> };
+      expect(body.data.map((r) => r.epoch_index)).toEqual([12, 11]);
+      expect(body.data[0]).toEqual({
+        epoch_index: 12,
+        ended_at: "2026-01-01T00:00:00.000Z",
+        nav: "1.0175", // the shared-helper golden ([R1]) through the HTTP surface
+        tvv: FIXTURE_TVV.toString(),
+        net_apr_bps: 431,
+      });
+
+      const limited = await fetch(`${server.baseUrl}${API_BASE}/epochs?limit=1&offset=1`);
+      const page = (await limited.json()) as { data: Array<Record<string, unknown>> };
+      expect(page.data.map((r) => r.epoch_index)).toEqual([11]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/incidents serves derived rows", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/incidents`);
+      const body = (await res.json()) as { data: Array<Record<string, unknown>> };
+      expect(body.data).toEqual([
+        { kind: "indexer_lag", severity: "warning", opened_at: "2026-07-01T00:00:00.000Z", closed_at: null, height: 900 },
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/validators joins latest samples, nulls the unsampled, aggregates health", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/validators`);
+      const body = (await res.json()) as {
+        data: { validators: Array<Record<string, unknown>>; set_health: Record<string, number> };
+      };
+      const alpha = body.data.validators.find((v) => v.valoper === "pbvaloper1aaa");
+      expect(alpha).toEqual({
+        valoper: "pbvaloper1aaa",
+        moniker: "alpha",
+        active: true,
+        epoch_index: 12,
+        uptime_bps: 9990,
+        eligible: true,
+        failing_reasons: [],
+        program_delegation: "1000000000",
+        commission_due: "5",
+      });
+      const bravo = body.data.validators.find((v) => v.valoper === "pbvaloper1bbb");
+      expect(bravo?.epoch_index).toBeNull();
+      expect(bravo?.eligible).toBeNull();
+      expect(body.data.set_health).toEqual({ total: 2, active: 2, eligible: 1, in_arrears: 1 });
     } finally {
       await server.close();
     }

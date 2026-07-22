@@ -14,6 +14,7 @@
 
 import { loadConfig } from "./config.ts";
 import { createApiServer, scheduleWindowSweep } from "./http-server.ts";
+import type { IndexedReader } from "./reader.ts";
 
 export { loadConfig, type ApiConfig } from "./config.ts";
 export { createApiServer, clientKey, scheduleWindowSweep, type ApiServer } from "./http-server.ts";
@@ -21,20 +22,30 @@ export { createHandler, type HandlerDeps, type RequestMeta } from "./handler.ts"
 export { RateLimiter, type RateLimitResult } from "./rate-limit.ts";
 export { routes, findRoute, API_BASE, type Route } from "./routes.ts";
 export { paginationSchema, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_PAGE_OFFSET } from "./query.ts";
+export { emptyReader, type IndexedReader, type Heads } from "./reader.ts";
 
-export function main(): void {
+export async function main(): Promise<void> {
   const config = loadConfig();
-  const { server, limiter } = createApiServer(config);
+  // The Prisma reader is dynamically imported so a dataless process (and the
+  // DB-free test suite) never loads the generated client. DATABASE_URL is the
+  // SELECT-only `api_reader` role (ADR-001 Decision 1).
+  let reader: IndexedReader | undefined;
+  if (config.databaseUrl !== undefined) {
+    const { createPrismaReader } = await import("./reader-prisma.ts");
+    reader = createPrismaReader(config.databaseUrl);
+  }
+  const { server, limiter } = createApiServer(config, undefined, reader);
   // Long-lived process: evict expired rate-limit windows so the limiter's map
   // does not grow unbounded with unique client keys over the process lifetime.
   scheduleWindowSweep(limiter, config.rateLimitWindowMs);
   server.listen(config.port, () => {
-    // One structured line; no client identifiers (SECURITY.md data minimization).
-    process.stdout.write(JSON.stringify({ level: "info", message: "api scaffold listening", port: config.port, env: config.appEnv }) + "\n");
+    // One structured line; no client identifiers, no connection string
+    // (SECURITY.md data minimization / secrets via environment only).
+    process.stdout.write(JSON.stringify({ level: "info", message: "api listening", port: config.port, env: config.appEnv, data_source: reader === undefined ? "unwired" : "api_reader" }) + "\n");
   });
 }
 
 // Only run when executed directly (not when imported by tests).
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  void main();
 }

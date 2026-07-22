@@ -3,11 +3,11 @@
 // safely is an error, never a best-effort continue). Secrets come from the
 // environment only; `.env.example` carries placeholders.
 //
-// The M1 scaffold consumes only serving knobs (port, rate limit, proxy trust).
-// The indexed-data reader credential (`api_reader`, ADR-001 Decision 1) and the
-// service-assertion key (`API_SERVICE_ASSERTION_KEY`, ADR-001 Decision 2) are
-// deliberately NOT read here yet — there are no data or address-scoped routes
-// in the scaffold. They land with PR 3.1 / PR 3.3 so config never claims to
+// PR 3.1 wires `DATABASE_URL` (the SELECT-only `api_reader` role, ADR-001
+// Decision 1) as an OPTIONAL knob: absent, the server runs dataless with the
+// honest empty reader (null heights — the scaffold behavior). The
+// service-assertion key (`API_SERVICE_ASSERTION_KEY`, ADR-001 Decision 2)
+// lands with the PR 3.3 address-scoped routes so config never claims to
 // consume a secret the code does not use.
 
 import { z } from "zod";
@@ -16,6 +16,16 @@ import { z } from "zod";
 export const configSchema = z.object({
   /** App environment, drives the environment badge (app-spec §7). */
   appEnv: z.enum(["development", "staging", "production"]).default("development"),
+  /**
+   * `api_reader` connection string (postgres scheme only — bounded at the
+   * boundary). Optional: absent means no data plane is wired and every route
+   * reports the honest empty state; present, main() constructs the Prisma
+   * reader. Never logged, never serialized into any response.
+   */
+  databaseUrl: z
+    .string()
+    .regex(/^postgres(ql)?:\/\/\S+$/, "must be a postgresql:// connection URL")
+    .optional(),
   /** TCP port to listen on when run as a server. */
   port: z.coerce.number().int().min(1).max(65535).default(8080),
   /** Max requests per window per client, before 429 (rate limiting, §9.4). */
@@ -39,6 +49,7 @@ export type ApiConfig = z.infer<typeof configSchema>;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const parsed = configSchema.safeParse({
     appEnv: env.APP_ENV,
+    databaseUrl: env.DATABASE_URL,
     port: env.PORT,
     rateLimitMax: env.RATE_LIMIT_MAX,
     rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,

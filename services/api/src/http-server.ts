@@ -7,6 +7,7 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import type { ApiConfig } from "./config.ts";
 import { createHandler, type RequestMeta } from "./handler.ts";
 import { RateLimiter } from "./rate-limit.ts";
+import { emptyReader, type IndexedReader } from "./reader.ts";
 
 /**
  * Derive an opaque client key for rate limiting. `x-forwarded-for` is trusted
@@ -30,10 +31,20 @@ export interface ApiServer {
   readonly limiter: RateLimiter;
 }
 
-/** Build (but do not start) the node:http server for the given config. */
-export function createApiServer(config: ApiConfig, now?: () => Date): ApiServer {
+/**
+ * Build (but do not start) the node:http server for the given config.
+ * `reader` is the indexed-data port (PR 3.1): absent, the honest empty
+ * reader serves the dataless null/empty state and `/status` says "unwired".
+ */
+export function createApiServer(config: ApiConfig, now?: () => Date, reader?: IndexedReader): ApiServer {
   const limiter = new RateLimiter({ max: config.rateLimitMax, windowMs: config.rateLimitWindowMs, ...(now ? { now: () => now().getTime() } : {}) });
-  const handle = createHandler({ limiter, appEnv: config.appEnv, ...(now ? { now } : {}) });
+  const handle = createHandler({
+    limiter,
+    appEnv: config.appEnv,
+    reader: reader ?? emptyReader,
+    dataSource: reader === undefined ? "unwired" : "api_reader",
+    ...(now ? { now } : {}),
+  });
 
   const server = createHttpServer((req: IncomingMessage, res: ServerResponse) => {
     void serve(req, res);

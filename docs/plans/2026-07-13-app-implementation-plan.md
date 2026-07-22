@@ -398,7 +398,7 @@ distinct rendered state, not a DATA-DEGRADED incident. (3) Corrected misleading
 decode-error path labels in `parseProgramDelegations`. Also fixed a stray NUL
 byte that had crept into the incident dedupe-key separator (caught by the new
 bounded-work test).*
-*2026-07-21 (rev 8): **M4.1 delivered** (working plan
+*2026-07-21 (rev 12): **M4.1 delivered** (working plan
 `app-m4.1-global-chrome`): the §8.0 global chrome in `apps/web`:
 `app/chrome/chrome.server.ts` (root-loader ChromeState: paused/halted banner
 from live vault `get` + `epoch_status`, degraded from status-envelope lag or
@@ -413,7 +413,7 @@ recorded in the spec: footer docs link deferred (no docs URL exists) and no
 `governance` verify target (console panel does not exist yet); both are
 follow-ons, not dead links. Next: 4.2–4.4 render inside this chrome.*
 
-*2026-07-22 (rev 9): **M4.2 delivered** (working plan
+*2026-07-22 (rev 13): **M4.2 delivered** (working plan
 `app-m4.2-learn-page`): the §8.1 Learn page in `apps/web`, plus the
 Learn-facing subset of the 3.1 contracts frozen first per the M3
 contracts-first note (Carlton, 2026-07-22): `ProgramMetrics`/`EpochRow`/
@@ -429,3 +429,23 @@ states, a dependency-free step-after NAV chart with table view, the typed
 envelope-contract suite, `e2e/learn.spec.ts`. PR 3.1's remaining scope:
 implement derivations against the frozen shapes; add `/validators` (4.3)
 and `/market` (3.2). Next: 4.3/4.4 in parallel.*
+
+*2026-07-22 (rev 14): **M3.1 delivered** (working plan `app-m3-query-api`,
+which also records the M3 delivery shape — 3.1/3.2/3.3 as three commits on
+one services-only branch, one PR/CI cycle — and the folded-in review
+resolutions [R1]–[R7]): the public program endpoints serve real indexed data.
+`@nvhash/db-indexed` (client GENERATED from the indexer's canonical schema
+via a second generator block; read-only enforced by the `api_reader` role,
+not the client), the injectable `IndexedReader` port (unit/contract suite
+stays Postgres-free; honest empty reader when no `DATABASE_URL`), envelope
+heights from the latest `reconciler_runs` with non-`meta:` checkpoint
+fallback, real `/metrics` (`participant_count` = distinct addresses across
+all kinds) / `/epochs` (shared golden-pinned `navHashPerShare` lifted into
+`@nvhash/api-types`; `EpochRow.nav` widened `string|null` for zero-share
+epochs) / `/incidents`, and `/validators` + frozen
+`ValidatorRow`/`ValidatorSetHealth` (endpoint owned by 3.1, amending the
+rev-13 note; 4.3 consumes). `/status` reports the wired data source with real
+heights. Gates added: populated + honest-empty contract cases,
+`derive.test.ts`, and the DB-backed reader gate (`test:db`, real queries as
+`api_reader`) joining the app-ci `db-grants` job. Spec §9.4 amended in the
+same change. Next: 3.2 ∥ 3.3 on the same branch.*

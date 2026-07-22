@@ -5,6 +5,18 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.ts";
 
 describe("loadConfig", () => {
+  it("accepts a postgres DATABASE_URL and rejects other schemes (bounded)", () => {
+    const url = "postgresql://api_reader:pw@postgres:5432/nvhash?schema=indexed";
+    expect(loadConfig({ DATABASE_URL: url }).databaseUrl).toBe(url);
+    expect(loadConfig({ DATABASE_URL: "postgres://u:p@h:5432/db" }).databaseUrl).toBeDefined();
+    expect(() => loadConfig({ DATABASE_URL: "mysql://u:p@h/db" })).toThrow(/configuration/i);
+    expect(() => loadConfig({ DATABASE_URL: "not a url" })).toThrow(/configuration/i);
+  });
+
+  it("leaves databaseUrl unset when absent (dataless is a valid state)", () => {
+    expect(loadConfig({}).databaseUrl).toBeUndefined();
+  });
+
   it("applies safe defaults on an empty environment", () => {
     const config = loadConfig({});
     expect(config).toEqual({

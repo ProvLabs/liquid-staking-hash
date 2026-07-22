@@ -493,6 +493,36 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > exactly these shapes (a field change is a revision here, never a silent
 > edit) and adds `/validators` with PR 4.3.
 
+> **Revision 2026-07-22 (PR 3.1, public program endpoints — working plan
+> `docs/plans/2026-07-22-app-m3-query-api.md`):** the real derivations are
+> live behind the frozen shapes. `services/api` reads the `indexed` schema
+> through `@nvhash/db-indexed` — a client GENERATED from the indexer's
+> canonical Prisma schema (no schema copy; read-only enforced by the
+> `api_reader` role, not the client) — behind an injectable reader port, so
+> the unit/contract suite stays Postgres-free while a DB-backed reader gate
+> (`test:db`, in the app-ci `db-grants` job) proves the real queries and the
+> Decimal→decimal-string round trip. Envelope heights come from the latest
+> `reconciler_runs` row, falling back to the max non-`meta:` worker
+> checkpoint (`chain_height: null`) when the reconciler has not run; cold
+> start stays null/0, never fabricated. Recorded decisions: (a)
+> `/validators` is OWNED by PR 3.1 (amending the 4.2 note above): rows are
+> `ValidatorRow` + `ValidatorSetHealth` in `@nvhash/api-types` — registry
+> enrollment joined to the validator's latest sampled epoch, per-epoch
+> fields null before the first sample — with PR 4.3 consuming them; (b)
+> `/metrics.participant_count` is **distinct addresses across all
+> transaction kinds** (any participation, not depositors-only); (c)
+> `EpochRow.nav` widened to `string | null` — an epoch settled with zero
+> shares has no NAV and null is the honest state; (d) the NAV formula is the
+> shared scale-then-floor helper `navHashPerShare` lifted into
+> `@nvhash/api-types` and golden-pinned to the web implementation's fixture
+> values (the web's switch to the shared copy is a recorded follow-on); (e)
+> `/status.data_source` now reports what is wired (`api_reader` |
+> `unwired`) with real heights — the §8.0 chrome's freshness source.
+> `DATABASE_URL` (the `api_reader` role) is consumed as an OPTIONAL bounded
+> config: absent, every route serves the honest empty/null state. `/market`
+> remains PR 3.2; address-scoped endpoints and the cross-address gate remain
+> PR 3.3.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.

@@ -115,7 +115,11 @@ What already exists on `main` (this plan builds on it, not around it):
     function) and the API consumes it; a **golden test pins its output to the
     web implementation's golden values** (`apps/web/test/amounts.test.ts`).
     The web-side switch to the shared helper is a recorded follow-on (this
-    branch stays services-only).
+    branch stays services-only). *Delivery note (3.1):* widening
+    `EpochRow.nav` to `string | null` (empty-vault epoch) forced one minimal
+    web accommodation in the same change — `nav-step-chart.tsx` filters
+    null-NAV rows out of its plottable series (an epoch with no NAV has no
+    point on a NAV chart); the helper migration itself remains the follow-on.
   - `/incidents` → `IncidentRow[]` from `incidents` (`opened_at`←`openedAt`,
     `closed_at`←`closedAt`, `height`←`openedHeight`).
 - **Add `/validators`:** freeze `ValidatorRow` in `@nvhash/api-types` —
