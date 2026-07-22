@@ -46,9 +46,11 @@ export function IncidentHistory({
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {incidents.data.map((incident) => (
+          {incidents.data.map((incident, index) => (
             <li
-              key={`${incident.kind}-${incident.opened_at}`}
+              // The wire row has no id; the index disambiguates same-kind,
+              // same-block incidents and is stable in this render-only list.
+              key={`${incident.kind}-${incident.opened_at}-${index}`}
               className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-card p-3 text-sm"
             >
               <svg

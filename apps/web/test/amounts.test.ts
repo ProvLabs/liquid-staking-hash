@@ -26,6 +26,10 @@ describe("navHashPerShare (fixture golden values)", () => {
     expect(navHashPerShare(FIXTURE_TVV, 0n)).toBeNull();
   });
 
+  it("returns null for a negative TVV instead of a mangled string", () => {
+    expect(navHashPerShare(-1n, FIXTURE_SHARES)).toBeNull();
+  });
+
   it("truncates rather than rounds up (display must not overstate)", () => {
     // 1.999999999 HASH over exactly one nvHASH: displays 1.9999, never 2.0000
     expect(navHashPerShare(1_999_999_999n, 10n ** 15n)).toBe("1.9999");

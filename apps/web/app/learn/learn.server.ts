@@ -80,6 +80,13 @@ export async function loadLearnData(
 
   const aprMature = apr !== null && apr.epochIndex >= MIN_APR_EPOCHS;
 
+  // Defense in depth for the never-crash invariant (PR #11 review): today the
+  // chain client's parseU64Number guarantees safe-integer bps, but this
+  // formatting runs outside every .catch guard, so a malformed value must
+  // degrade to null here rather than 500 the page.
+  const safeBpsPercent = (bps: number): string | null =>
+    Number.isSafeInteger(bps) ? bpsToPercent(bps) : null;
+
   return {
     live: {
       nav:
@@ -87,8 +94,8 @@ export async function loadLearnData(
           ? null
           : navHashPerShare(vaultState.totalVaultValue.amount, vaultState.vault.totalShares.amount),
       tvl: vaultState === null ? null : formatHashCompact(vaultState.totalVaultValue.amount),
-      netAprPercent: aprMature ? bpsToPercent(apr.netAprBps) : null,
-      grossAprPercent: aprMature ? bpsToPercent(apr.grossAprBps) : null,
+      netAprPercent: aprMature ? safeBpsPercent(apr.netAprBps) : null,
+      grossAprPercent: aprMature ? safeBpsPercent(apr.grossAprBps) : null,
       aprWindowSeconds: aprMature ? apr.windowSeconds : null,
       aprInsufficientHistory: apr !== null && !aprMature,
       yieldSources:

@@ -43,7 +43,9 @@ export function navHashPerShare(
   sharesBase: bigint,
   fractionDigits = 4,
 ): string | null {
-  if (sharesBase <= 0n) return null;
+  // Negative TVV is impossible on chain (Uint128) but must not format as a
+  // mangled string if a corrupted value ever reaches here (PR #11 review).
+  if (sharesBase <= 0n || tvvBase < 0n) return null;
   const scaled = (tvvBase * pow10(SHARE_EXPONENT - HASH_EXPONENT + fractionDigits)) / sharesBase;
   const whole = scaled / pow10(fractionDigits);
   const fraction = scaled % pow10(fractionDigits);
