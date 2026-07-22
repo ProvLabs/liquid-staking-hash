@@ -23,6 +23,8 @@ export interface IndexerConfig {
   indexWindowSpan: number;
   /** delay between polls when a worker is caught up. */
   pollIntervalMs: number;
+  /** reconciler pass cadence (slower than the workers; §12.1 honesty alarm). */
+  reconcileIntervalMs: number;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -58,5 +60,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig 
     confirmationDepth: boundedInt(env, "CONFIRMATION_DEPTH", 0, 0),
     indexWindowSpan: boundedInt(env, "INDEX_WINDOW_SPAN", 500, 1),
     pollIntervalMs: boundedInt(env, "POLL_INTERVAL_MS", 5000, 100),
+    reconcileIntervalMs: boundedInt(env, "RECONCILE_INTERVAL_MS", 30000, 1000),
   };
 }
