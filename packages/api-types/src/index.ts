@@ -11,10 +11,14 @@ export {
   type FreshnessSource,
 } from "./envelope.ts";
 export {
+  type BridgedSupplyRow,
   type EpochRow,
   type IncidentKind,
   type IncidentRow,
   type IncidentSeverity,
+  type MarketDepthBand,
+  type MarketSample,
+  type MarketSummary,
   type ProgramMetrics,
   type ValidatorRow,
   type ValidatorSetHealth,

@@ -523,6 +523,32 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > remains PR 3.2; address-scoped endpoints and the cross-address gate remain
 > PR 3.3.
 
+> **Revision 2026-07-22 (PR 3.2, `/market` — shape-complete, honest-empty):**
+> `/api/v1/market` is registered with its contract frozen in
+> `@nvhash/api-types` (`MarketSummary` / `MarketSample` / `MarketDepthBand`
+> / `BridgedSupplyRow`) AHEAD of the data: with the market sampler (plan PR
+> 2.4) parked pending §14.3 and no bridged nvHASH in v1 (§13 decision 4), it
+> serves the honest empty state (`sample: null`, `bridged_supply: []`) under
+> the full contract gates — the "coming soon" shell is structural, never a
+> fabrication. Recorded decisions: (a) venue + pool + `sampled_at` ride IN
+> the payload — market data has no chain-canonical plane (§12.1), so a
+> market figure is never served without where/when it was sampled; (b)
+> `premium_discount_bps` is signed, truncated toward zero, and computed
+> against the **NAV current at the sample's time** (the last epoch settled
+> at or before `sampled_at`, per §9.5(4)) — a newer NAV never retroactively
+> reprices an older sample; null when no epoch had settled (no NAV → no
+> premium, never a fabricated 0); (c) `price` is pinned as **nhash per whole
+> nvHASH** (base-unit integer, decimal string); (d) the supply split serves
+> the **bridged side only** (latest `bridge_supply_samples` reading per
+> chain) — LOCAL supply is a live chain read owned by the web tier (§5.1)
+> and is deliberately not fabricated from indexed samples (amending §8.5's
+> "local vs bridged" wording: the API provides bridged; the page composes
+> local from the live plane); (e) `MarketDepthBand`
+> (`side`/`slippage_bps`/`amount`) is a PROVISIONAL frozen shape — PR 2.4
+> must write `market_samples.depthBands` in exactly this shape or amend it
+> here; stored band JSON is boundary-validated on read and fails loudly on
+> mismatch, never a best-effort passthrough.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.

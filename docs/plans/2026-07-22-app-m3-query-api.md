@@ -155,6 +155,16 @@ What already exists on `main` (this plan builds on it, not around it):
   contract tests (shape, empty state, bounds). The same-change spec note
   records the §14.3/§8.5 deferral and that the shape is stable ahead of the
   sampler.
+- *Delivery notes (3.2):* (a) the supply split serves the **bridged side
+  only** (latest `bridge_supply_samples` per chain) — local supply is a live
+  chain read owned by the web tier (§5.1); fabricating it from indexed
+  samples would claim a plane this API does not have (recorded as a §8.5
+  amendment in the §9.4 note). (b) `MarketDepthBand`
+  (`side`/`slippage_bps`/`amount`) is a provisional frozen shape with no
+  producer yet: PR 2.4 must write `depthBands` in exactly this shape or
+  amend the spec; stored band JSON is boundary-validated on read and fails
+  loudly. (c) `price` pinned as nhash per whole nvHASH so the premium
+  integer math shares NAV's unit (`navPriceNhash` = tvv·10^15/shares).
 
 ### 3.3 — address-scoped endpoints + in-process authorization
 

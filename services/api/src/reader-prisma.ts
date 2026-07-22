@@ -17,14 +17,23 @@ import {
   deriveHeads,
   deriveMetrics,
   deriveValidatorsPayload,
+  navPriceNhash,
+  toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
+  toMarketSample,
   toSafeInt,
   type ValidatorEpochFacts,
 } from "./derive.ts";
 import type { Heads, IndexedReader } from "./reader.ts";
 import type { Pagination } from "./query.ts";
-import type { EpochRow, IncidentRow, ProgramMetrics, ValidatorsPayload } from "@nvhash/api-types";
+import type {
+  EpochRow,
+  IncidentRow,
+  MarketSummary,
+  ProgramMetrics,
+  ValidatorsPayload,
+} from "@nvhash/api-types";
 
 /** Prisma Decimal(39,0) → bigint (always integral; no float is ever built). */
 function toBigint(value: { toFixed(dp: number): string }): bigint {
@@ -157,6 +166,50 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         ]),
       );
       return deriveValidatorsPayload(registry, byValoper);
+    },
+
+    async latestMarket(): Promise<MarketSummary> {
+      const raw = await prisma.marketSample.findFirst({
+        orderBy: [{ sampledAt: "desc" }, { id: "desc" }],
+        select: { venue: true, pool: true, price: true, depthBands: true, sampledAt: true },
+      });
+      // Latest reading per remote chain (ordered desc within each chain,
+      // `distinct` keeps the first = latest — the validators pattern).
+      const bridged = await prisma.bridgeSupplySample.findMany({
+        orderBy: [{ chain: "asc" }, { sampledAt: "desc" }, { id: "desc" }],
+        distinct: ["chain"],
+        select: { chain: true, remoteSupply: true, sampledAt: true },
+      });
+      let sample = null;
+      if (raw !== null) {
+        // [R6] the premium denominator is the NAV current AT THE SAMPLE'S
+        // time: the last epoch settled at or before sampledAt — never a
+        // newer NAV retroactively applied to an older price.
+        const sampledAtSeconds = BigInt(Math.floor(raw.sampledAt.getTime() / 1000));
+        const navEpoch = await prisma.epochSnapshot.findFirst({
+          where: { endedAtSeconds: { lte: sampledAtSeconds } },
+          orderBy: { epochIndex: "desc" },
+          select: { tvvAfter: true, totalShares: true },
+        });
+        const nav =
+          navEpoch === null ? null : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
+        sample = toMarketSample(
+          {
+            venue: raw.venue,
+            pool: raw.pool,
+            priceNhash: toBigint(raw.price),
+            depthBands: raw.depthBands,
+            sampledAt: raw.sampledAt,
+          },
+          nav,
+        );
+      }
+      return {
+        sample,
+        bridged_supply: bridged.map((row) =>
+          toBridgedSupplyRow({ chain: row.chain, remoteSupply: toBigint(row.remoteSupply), sampledAt: row.sampledAt }),
+        ),
+      };
     },
 
     close: () => prisma.$disconnect(),

@@ -55,6 +55,8 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     await writer.validatorRegistry.deleteMany();
     await writer.transaction.deleteMany();
     await writer.epochSnapshot.deleteMany();
+    await writer.marketSample.deleteMany();
+    await writer.bridgeSupplySample.deleteMany();
     await writer.indexerCheckpoint.deleteMany();
 
     await writer.indexerCheckpoint.createMany({
@@ -109,6 +111,25 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], tip: "0", commissionAccrued: "0", commissionPaid: "0", commissionDue: "5", programDelegation: "1000000000", height: 4100n, observedAt: new Date("2026-07-01T00:00:00Z") },
       ],
     });
+    // Market plane (PR 3.2): the sample predates every settled epoch, so the
+    // [R6] NAV-at-sample-time lookup finds none and the premium is honestly
+    // null; depth bands round-trip through JSONB shape validation.
+    await writer.marketSample.create({
+      data: {
+        venue: "uniswap-v3",
+        pool: "0xpool",
+        price: "1030000000",
+        depthBands: [{ side: "buy", slippage_bps: 50, amount: "1000000000000000" }],
+        sampledAt: new Date("2025-12-01T00:00:00Z"),
+      },
+    });
+    await writer.bridgeSupplySample.createMany({
+      data: [
+        { chain: "base", remoteSupply: "1000", sampledAt: new Date("2026-07-01T00:00:00Z") },
+        { chain: "base", remoteSupply: "2000", sampledAt: new Date("2026-07-10T00:00:00Z") },
+        { chain: "ethereum", remoteSupply: "500", sampledAt: new Date("2026-07-05T00:00:00Z") },
+      ],
+    });
   });
 
   afterAll(async () => {
@@ -148,6 +169,22 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
       { valoper: "pbvaloper1bbb", moniker: "bravo", active: true, epoch_index: null, uptime_bps: null, eligible: null, failing_reasons: [], program_delegation: null, commission_due: null },
     ]);
     expect(payload.set_health).toEqual({ total: 2, active: 2, eligible: 1, in_arrears: 1 });
+  });
+
+  it("serves the market summary: JSONB bands round-trip, null premium pre-NAV, latest per chain", async () => {
+    const summary = await reader.latestMarket();
+    expect(summary.sample).toEqual({
+      venue: "uniswap-v3",
+      pool: "0xpool",
+      price: "1030000000",
+      premium_discount_bps: null, // no epoch had settled by the sample's time
+      depth_bands: [{ side: "buy", slippage_bps: 50, amount: "1000000000000000" }],
+      sampled_at: "2025-12-01T00:00:00.000Z",
+    });
+    expect(summary.bridged_supply).toEqual([
+      { chain: "base", supply: "2000", sampled_at: "2026-07-10T00:00:00.000Z" },
+      { chain: "ethereum", supply: "500", sampled_at: "2026-07-05T00:00:00.000Z" },
+    ]);
   });
 
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {

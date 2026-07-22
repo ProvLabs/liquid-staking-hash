@@ -112,6 +112,75 @@ export interface ValidatorsPayload {
 }
 
 /**
+ * One depth-at-slippage band of a sampled DEX pool (app-spec §5.3/§8.5).
+ * PROVISIONAL SHAPE: the market sampler (plan PR 2.4) is parked pending the
+ * §14.3 pool facts, so no producer pins these fields yet — when PR 2.4 lands
+ * it writes `market_samples.depthBands` in exactly this shape, and any
+ * adjustment it needs is an app-spec §9.4 revision, never a silent edit.
+ */
+export interface MarketDepthBand {
+  /** Trade direction the band measures. */
+  side: "buy" | "sell";
+  /** Slippage tolerance the depth is quoted at, bps. */
+  slippage_bps: number;
+  /** Executable size within that slippage, nvHASH base units, decimal string. */
+  amount: string;
+}
+
+/**
+ * The latest DEX pool observation (`GET /api/v1/market`). Market data has no
+ * chain-canonical plane (app-spec §12.1), so its labeling is load-bearing:
+ * `venue`, `pool`, and `sampled_at` ride IN the payload — a market figure is
+ * never shown without where and when it was sampled.
+ */
+export interface MarketSample {
+  /** Venue identifier (e.g. the DEX name); public configuration, not PII. */
+  venue: string;
+  /** Pool contract address on the sampled chain (public). */
+  pool: string;
+  /** Pool price in nhash per whole nvHASH, decimal string (base-unit price). */
+  price: string;
+  /**
+   * `(market_price − NAV) / NAV` in bps, signed (negative = discount),
+   * truncated toward zero — computed against the NAV current AT THIS
+   * SAMPLE'S TIME (the last epoch settled at or before `sampled_at`;
+   * app-spec §9.5(4)). Null when no epoch had settled by then (no NAV means
+   * no honest premium — never a fabricated 0).
+   */
+  premium_discount_bps: number | null;
+  /** Depth-at-slippage bands as sampled (provisional shape, see above). */
+  depth_bands: MarketDepthBand[];
+  /** ISO-8601 sample time. */
+  sampled_at: string;
+}
+
+/** Latest bridged-supply reading for one remote chain (`bridge_supply_samples`). */
+export interface BridgedSupplyRow {
+  /** Remote chain identifier. */
+  chain: string;
+  /** nvHASH supply on that chain, base units, decimal string. */
+  supply: string;
+  /** ISO-8601 sample time. */
+  sampled_at: string;
+}
+
+/**
+ * `GET /api/v1/market` payload (app-spec §8.5). In v1 the DEX plane ships as
+ * a labeled "coming soon" shell (§13 decision 4): with the sampler parked,
+ * `sample` is null and `bridged_supply` is empty — the honest empty state,
+ * with the shape stable ahead of the data. The LOCAL side of the supply
+ * split is deliberately absent: local supply is a live chain read (the
+ * canonical plane, §5.1) owned by the web tier, not derivable from indexed
+ * samples — serving it here would fabricate a plane this API does not have.
+ */
+export interface MarketSummary {
+  /** Latest pool observation, or null while no market data exists. */
+  sample: MarketSample | null;
+  /** Latest reading per remote chain (empty until the bridge is live). */
+  bridged_supply: BridgedSupplyRow[];
+}
+
+/**
  * One row of `GET /api/v1/epochs` (newest first): the per-epoch series behind
  * the Learn NAV step chart and the §8.5 history views. NAV and TVV are
  * decimal strings in base units (contract §5 stepwise NAV: values change only

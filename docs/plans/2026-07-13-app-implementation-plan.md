@@ -449,3 +449,19 @@ heights. Gates added: populated + honest-empty contract cases,
 `derive.test.ts`, and the DB-backed reader gate (`test:db`, real queries as
 `api_reader`) joining the app-ci `db-grants` job. Spec §9.4 amended in the
 same change. Next: 3.2 ∥ 3.3 on the same branch.*
+
+*2026-07-22 (rev 15): **M3.2 delivered** (second commit of the
+`app-m3-query-api` branch): `/api/v1/market` shape-complete and
+honest-empty — `MarketSummary`/`MarketSample`/`MarketDepthBand`/
+`BridgedSupplyRow` frozen in `@nvhash/api-types` ahead of the parked PR 2.4
+sampler (§14.3), venue + `sampled_at` labeling in the payload,
+`premium_discount_bps` signed/truncated against the **NAV current at the
+sample's time** ([R6], §9.5(4); null before any settled epoch), `price`
+pinned as nhash per whole nvHASH, bridged-supply-only split (local = live
+plane, web's job — recorded §8.5 amendment), and stored `depthBands` JSON
+boundary-validated on read (loud failure, provisional shape PR 2.4 must
+match). Gates: derive units (signed bps, band validation, NAV-price cross-pin),
+honest-empty + populated contract cases (the populated sample proves the
+[R6] epoch selection), and market seeds in the `test:db` reader gate (JSONB
+round trip, latest-per-chain, null premium pre-NAV). Spec §9.4 amended in
+the same change. Next: 3.3 closes the branch.*

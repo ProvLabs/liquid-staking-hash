@@ -20,6 +20,12 @@ Query API over the indexer's data store.
   the shared `navHashPerShare` in `@nvhash/api-types`. Envelope heights come
   from the latest `reconciler_runs` row (fallback: max non-`meta:` worker
   checkpoint with a null chain head).
+- `/market` (PR 3.2) is shape-complete but honest-empty until the market
+  sampler (plan PR 2.4, parked on spec §14.3) produces data: venue +
+  `sampled_at` ride in the payload, the premium is computed against the NAV
+  current at the sample's time (§9.5(4)), the supply split is bridged-side
+  only (local = the web tier's live read), and stored `depthBands` JSON is
+  boundary-validated on read (loud failure on shape drift).
 - **Address-scoped and admin endpoints are authorized in-process** (ADR-001
   Decision 2): a short-lived HMAC service assertion from the web tier's
   session layer must carry an `address:<bech32>` scope matching the requested

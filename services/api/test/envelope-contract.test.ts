@@ -162,6 +162,23 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
       await server.close();
     }
   });
+
+  it("/market serves the honest 'coming soon' empty state (§13 decision 4)", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/market`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { sample: unknown; bridged_supply: unknown[] };
+        meta: { indexed_height: unknown };
+      };
+      expect(body.data.sample).toBeNull();
+      expect(body.data.bridged_supply).toEqual([]);
+      expect(body.meta.indexed_height).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
 });
 
 describe("populated reader (PR 3.1: real derivations behind the frozen shapes)", () => {
@@ -179,8 +196,26 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
       epochCount: 2,
     },
     epochs: [
-      { epochIndex: 11n, endedAtSeconds: 1_764_547_200n, tvvAfter: 300_000_000_000n, totalShares: FIXTURE_SHARES, netAprBps: 410 },
+      // Epoch 11's clean ratio (3e11 nhash over 3e17 shares) gives an exact
+      // 1 HASH/nvHASH NAV — the premium denominator the [R6] test pins.
+      { epochIndex: 11n, endedAtSeconds: 1_764_547_200n, tvvAfter: 300_000_000_000n, totalShares: 300_000_000_000_000_000n, netAprBps: 410 },
       { epochIndex: 12n, endedAtSeconds: 1_767_225_600n, tvvAfter: FIXTURE_TVV, totalShares: FIXTURE_SHARES, netAprBps: 431 },
+    ],
+    marketSamples: [
+      {
+        venue: "uniswap-v3",
+        pool: "0xpool",
+        priceNhash: 1_030_000_000n,
+        depthBands: [{ side: "buy", slippage_bps: 50, amount: "1000000000000000" }],
+        // Between epoch 11's and epoch 12's settlements: the [R6] rule must
+        // pick epoch 11's NAV (1e9) even though epoch 12 exists by now.
+        sampledAt: new Date(1_765_000_000 * 1000),
+      },
+    ],
+    bridgedSupply: [
+      { chain: "base", remoteSupply: 1_000n, sampledAt: new Date("2026-07-01T00:00:00Z") },
+      { chain: "base", remoteSupply: 2_000n, sampledAt: new Date("2026-07-10T00:00:00Z") },
+      { chain: "ethereum", remoteSupply: 500n, sampledAt: new Date("2026-07-05T00:00:00Z") },
     ],
     incidents: [
       { kind: "indexer_lag", severity: "warning", openedAt: new Date("2026-07-01T00:00:00Z"), closedAt: null, openedHeight: 900n },
@@ -199,7 +234,7 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
   it("serves real envelope heights from the reconciler run on every data route", async () => {
     const server = await startServer({}, undefined, fakeReader(facts));
     try {
-      for (const path of ["/status", "/metrics", "/epochs", "/incidents", "/validators"]) {
+      for (const path of ["/status", "/metrics", "/epochs", "/incidents", "/validators", "/market"]) {
         const res = await fetch(`${server.baseUrl}${API_BASE}${path}`);
         const body = (await res.json()) as { meta: { chain_height: number; indexed_height: number } };
         expect(body.meta.chain_height, path).toBe(4242);
@@ -265,6 +300,36 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
       const body = (await res.json()) as { data: Array<Record<string, unknown>> };
       expect(body.data).toEqual([
         { kind: "indexer_lag", severity: "warning", opened_at: "2026-07-01T00:00:00.000Z", closed_at: null, height: 900 },
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/market computes the premium against the NAV current at the SAMPLE's time ([R6])", async () => {
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/market`);
+      const body = (await res.json()) as {
+        data: {
+          sample: Record<string, unknown>;
+          bridged_supply: Array<Record<string, unknown>>;
+        };
+      };
+      expect(body.data.sample).toEqual({
+        venue: "uniswap-v3",
+        pool: "0xpool",
+        price: "1030000000",
+        // vs epoch 11's exact 1e9 NAV (the epoch settled before the sample),
+        // NOT epoch 12's — a newer NAV never retroactively reprices a sample.
+        premium_discount_bps: 300,
+        depth_bands: [{ side: "buy", slippage_bps: 50, amount: "1000000000000000" }],
+        sampled_at: new Date(1_765_000_000 * 1000).toISOString(),
+      });
+      // Latest reading per chain: base keeps only its newest sample.
+      expect(body.data.bridged_supply).toEqual([
+        { chain: "base", supply: "2000", sampled_at: "2026-07-10T00:00:00.000Z" },
+        { chain: "ethereum", supply: "500", sampled_at: "2026-07-05T00:00:00.000Z" },
       ]);
     } finally {
       await server.close();

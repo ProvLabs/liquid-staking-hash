@@ -211,6 +211,32 @@ const validatorsRoute = defineEnveloped<unknown>({
 });
 
 /**
+ * `GET /api/v1/market` — the §8.5 secondary-market summary (PR 3.2; shapes
+ * `MarketSummary`/`MarketSample` frozen in @nvhash/api-types). Market data
+ * has no chain-canonical plane, so venue + sample time ride IN the payload,
+ * and the premium/discount is computed against the NAV current at the
+ * sample's time ([R6], §9.5(4)). With the sampler (PR 2.4) parked pending
+ * §14.3, this serves the honest empty state — the v1 "coming soon" shell
+ * (§13 decision 4) with a stable shape ahead of the data.
+ */
+const marketRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/market`,
+  enveloped: true,
+  querySchema: null,
+  summary: "Secondary-market summary (latest sample + bridged supply)",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.latestMarket()]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
  * `GET /api/v1/health` — operational liveness for load balancers. Deliberately
  * NOT enveloped: it is not chain-derived data, so forcing a freshness envelope
  * onto it would misuse the contract. Registered as operational so the envelope
@@ -232,6 +258,7 @@ export const routes: readonly Route[] = [
   metricsRoute,
   epochsRoute,
   validatorsRoute,
+  marketRoute,
   healthRoute,
 ];
 

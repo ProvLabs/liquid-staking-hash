@@ -14,13 +14,19 @@
 // This split keeps `pnpm -r run test` Postgres-free (plan §4) while the
 // Postgres-backed integration gate exercises the real queries.
 
-import type { EpochRow, IncidentRow, ProgramMetrics, ValidatorsPayload } from "@nvhash/api-types";
+import type {
+  EpochRow,
+  IncidentRow,
+  MarketSummary,
+  ProgramMetrics,
+  ValidatorsPayload,
+} from "@nvhash/api-types";
 import type { Heads } from "./derive.ts";
 import type { Pagination } from "./query.ts";
 
 export type { Heads } from "./derive.ts";
 
-/** Reads the M3.1 public program endpoints need. 3.2/3.3 extend this. */
+/** Reads the M3.1/3.2 public program endpoints need. 3.3 extends this. */
 export interface IndexedReader {
   /** Envelope heights (latest reconciler run; checkpoint fallback; nulls). */
   heads(): Promise<Heads>;
@@ -30,6 +36,13 @@ export interface IndexedReader {
   /** Newest first, bounded by the shared pagination schema. */
   listIncidents(page: Pagination): Promise<IncidentRow[]>;
   listValidators(): Promise<ValidatorsPayload>;
+  /**
+   * Latest pool sample (premium computed against the NAV current at the
+   * sample's time, [R6]) + latest bridged supply per chain. Honest-empty
+   * `{ sample: null, bridged_supply: [] }` while the sampler (PR 2.4) is
+   * parked — the v1 "coming soon" state (app-spec §13 decision 4).
+   */
+  latestMarket(): Promise<MarketSummary>;
 }
 
 /**
@@ -48,4 +61,5 @@ export const emptyReader: IndexedReader = {
       validators: [],
       set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 },
     }),
+  latestMarket: () => Promise.resolve({ sample: null, bridged_supply: [] }),
 };

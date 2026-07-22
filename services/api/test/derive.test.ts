@@ -11,9 +11,14 @@ import {
   deriveMetrics,
   deriveSetHealth,
   deriveValidatorsPayload,
+  navPriceNhash,
+  parseDepthBands,
+  premiumDiscountBps,
   toEpochRow,
   toIncidentRow,
+  toMarketSample,
   toSafeInt,
+  toSafeSignedInt,
   toValidatorRow,
 } from "../src/derive.ts";
 
@@ -148,5 +153,62 @@ describe("validators derivation", () => {
     const payload = deriveValidatorsPayload([reg], new Map([[reg.valoper, epoch]]));
     expect(payload.validators).toHaveLength(1);
     expect(payload.set_health.total).toBe(1);
+  });
+});
+
+describe("market derivation (PR 3.2)", () => {
+  it("toSafeSignedInt admits negatives but rejects beyond-safe magnitudes", () => {
+    expect(toSafeSignedInt(-300n, "bps")).toBe(-300);
+    expect(() => toSafeSignedInt(-(BigInt(Number.MAX_SAFE_INTEGER) + 1n), "bps")).toThrow(RangeError);
+  });
+
+  it("navPriceNhash floors tvv·10^15/shares and nulls a zero-share epoch", () => {
+    expect(navPriceNhash(2n * 10n ** 9n, 2n * 10n ** 15n)).toBe(10n ** 9n);
+    expect(navPriceNhash(FIXTURE_TVV, FIXTURE_SHARES)?.toString().startsWith("10175")).toBe(true); // cross-pins the display golden "1.0175"
+    expect(navPriceNhash(FIXTURE_TVV, 0n)).toBeNull();
+  });
+
+  it("premiumDiscountBps is signed, truncated toward zero, null without a NAV", () => {
+    const nav = 1_000_000_000n;
+    expect(premiumDiscountBps(1_030_000_000n, nav)).toBe(300);
+    expect(premiumDiscountBps(970_000_000n, nav)).toBe(-300);
+    expect(premiumDiscountBps(1_000_000_100n, nav)).toBe(0); // sub-bps truncates, never rounds away from zero
+    expect(premiumDiscountBps(1_030_000_000n, null)).toBeNull();
+    expect(premiumDiscountBps(1_030_000_000n, 0n)).toBeNull();
+  });
+
+  it("parseDepthBands validates the stored JSON at the boundary", () => {
+    const bands = [{ side: "buy", slippage_bps: 50, amount: "1000000000000000" }];
+    expect(parseDepthBands(bands)).toEqual(bands);
+    expect(parseDepthBands([])).toEqual([]);
+    for (const bad of [
+      "not an array",
+      [{ side: "hold", slippage_bps: 50, amount: "1" }],
+      [{ side: "buy", slippage_bps: -1, amount: "1" }],
+      [{ side: "buy", slippage_bps: 50, amount: "1.5" }],
+    ]) {
+      expect(() => parseDepthBands(bad), JSON.stringify(bad)).toThrow(RangeError);
+    }
+  });
+
+  it("toMarketSample carries venue + sample time in the payload ([R6] labeled)", () => {
+    const sample = toMarketSample(
+      {
+        venue: "uniswap-v3",
+        pool: "0xpool",
+        priceNhash: 1_030_000_000n,
+        depthBands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
+        sampledAt: new Date("2026-07-10T12:00:00Z"),
+      },
+      1_000_000_000n,
+    );
+    expect(sample).toEqual({
+      venue: "uniswap-v3",
+      pool: "0xpool",
+      price: "1030000000",
+      premium_discount_bps: 300,
+      depth_bands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
+      sampled_at: "2026-07-10T12:00:00.000Z",
+    });
   });
 });

@@ -9,10 +9,15 @@ import {
   deriveHeads,
   deriveMetrics,
   deriveValidatorsPayload,
+  navPriceNhash,
+  toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
+  toMarketSample,
+  type BridgedSupplyFacts,
   type EpochSnapshotFacts,
   type IncidentFacts,
+  type MarketSampleFacts,
   type MetricsFacts,
   type ValidatorEpochFacts,
   type ValidatorRegistryFacts,
@@ -27,6 +32,8 @@ export interface FakeFacts {
   readonly incidents?: readonly IncidentFacts[] | undefined;
   readonly registry?: readonly ValidatorRegistryFacts[] | undefined;
   readonly validatorEpochs?: readonly ValidatorEpochFacts[] | undefined;
+  readonly marketSamples?: readonly MarketSampleFacts[] | undefined;
+  readonly bridgedSupply?: readonly BridgedSupplyFacts[] | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -67,6 +74,34 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         latest.set(row.valoper, row); // ascending walk: last write = latest epoch
       }
       return Promise.resolve(deriveValidatorsPayload(facts.registry ?? [], latest));
+    },
+    latestMarket: () => {
+      const samples = [...(facts.marketSamples ?? [])].sort(
+        (a, b) => b.sampledAt.getTime() - a.sampledAt.getTime(),
+      );
+      const raw = samples[0];
+      let sample = null;
+      if (raw !== undefined) {
+        // Mirror the Prisma reader's [R6] lookup: the last epoch settled at
+        // or before the sample's time supplies the premium denominator.
+        const sampledAtSeconds = BigInt(Math.floor(raw.sampledAt.getTime() / 1000));
+        const navEpoch = [...(facts.epochs ?? [])]
+          .filter((e) => e.endedAtSeconds <= sampledAtSeconds)
+          .sort((a, b) => (a.epochIndex < b.epochIndex ? 1 : -1))[0];
+        const nav =
+          navEpoch === undefined ? null : navPriceNhash(navEpoch.tvvAfter, navEpoch.totalShares);
+        sample = toMarketSample(raw, nav);
+      }
+      const latestByChain = new Map<string, BridgedSupplyFacts>();
+      for (const row of [...(facts.bridgedSupply ?? [])].sort(
+        (a, b) => a.sampledAt.getTime() - b.sampledAt.getTime(),
+      )) {
+        latestByChain.set(row.chain, row); // ascending walk: last write = latest
+      }
+      return Promise.resolve({
+        sample,
+        bridged_supply: [...latestByChain.values()].map(toBridgedSupplyRow),
+      });
     },
   };
 }
