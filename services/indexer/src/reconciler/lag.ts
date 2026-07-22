@@ -33,7 +33,15 @@ export function computeLag(
     lag: head - c.cursorHeight,
   }));
   const maxLag = perStream.reduce((m, s) => (s.lag > m ? s.lag : m), 0n);
-  // Freshness is bounded by the most-lagging stream (the smallest cursor).
-  const indexedHeight = perStream.reduce((min, s) => (s.indexedHeight < min ? s.indexedHeight : min), head);
+  // Freshness is bounded by the most-lagging stream (the smallest cursor). When
+  // NO worker stream has committed yet (cold start, before the first window),
+  // nothing is indexed — report indexedHeight 0, never the chain head, so the
+  // run table cannot claim it is caught up on an empty database (§12.1 "never
+  // lie about state"). Cold start is a distinct rendered state (§9.4/§17.1); it
+  // is signalled by indexedHeight 0, NOT by opening a DATA-DEGRADED
+  // (indexer_lag) incident — that banner means "was working, now behind", which
+  // would be the wrong signal on a fresh deployment.
+  const indexedHeight =
+    perStream.length === 0 ? 0n : perStream.reduce((min, s) => (s.indexedHeight < min ? s.indexedHeight : min), head);
   return { perStream, maxLag, indexedHeight, over: maxLag > tol.lagHeights };
 }

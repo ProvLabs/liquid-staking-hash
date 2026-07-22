@@ -33,6 +33,12 @@ export async function readIndexedPlane(prisma: PrismaClient, chainEpoch: bigint 
     where: { status: "refunded" },
     select: { requestId: true },
   });
+  // Point-in-time incidents already recorded — so we open only new facts each
+  // pass, not the whole lifetime history (bounded per-pass write work).
+  const existing = await prisma.incident.findMany({
+    where: { kind: { in: ["slash_write_down", "redemption_refund"] } },
+    select: { kind: true, dedupeKey: true },
+  });
 
   return {
     maxEpoch: maxRow?.epochIndex ?? null,
@@ -42,6 +48,7 @@ export async function readIndexedPlane(prisma: PrismaClient, chainEpoch: bigint 
     checkpoints: checkpoints.map((c) => ({ stream: c.stream, cursorHeight: c.cursorHeight })),
     writeDownEpochs: writeDownRows.map((r) => r.epochIndex),
     refundedRequestIds: refunded.map((r) => r.requestId),
+    existingPointInTimeKeys: new Set(existing.map((i) => `${i.kind} ${i.dedupeKey}`)),
   };
 }
 

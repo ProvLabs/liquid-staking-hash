@@ -23,6 +23,7 @@ const indexed = (over: Partial<IndexedPlane> = {}): IndexedPlane => ({
   checkpoints: [{ stream: "chain-events", cursorHeight: 1000n }],
   writeDownEpochs: [],
   refundedRequestIds: [],
+  existingPointInTimeKeys: new Set<string>(),
   ...over,
 });
 
@@ -69,6 +70,15 @@ describe("computeLag", () => {
   it("is within tolerance when caught up", () => {
     expect(computeLag([{ stream: "chain-events", cursorHeight: 1000n }], 1000n, TOLERANCES).over).toBe(false);
   });
+
+  it("reports indexedHeight 0 (not the head) on cold start with no worker streams", () => {
+    // Only meta: markers exist → nothing is indexed; must NOT claim the head.
+    const r = computeLag([{ stream: "meta:provenance", cursorHeight: 0n }], 1000n, TOLERANCES);
+    expect(r.perStream).toEqual([]);
+    expect(r.indexedHeight).toBe(0n);
+    // Cold start is signalled by indexedHeight 0, not a DATA-DEGRADED incident.
+    expect(r.over).toBe(false);
+  });
 });
 
 describe("deriveActions", () => {
@@ -102,6 +112,24 @@ describe("deriveActions", () => {
     expect(open(actions, "redemption_refund")).toMatchObject({ dedupeKey: "request:7" });
     // point-in-time kinds never appear as close actions
     expect(actions.close.some((c) => c.kind === "slash_write_down" || c.kind === "redemption_refund")).toBe(false);
+  });
+
+  it("does not re-open point-in-time incidents already recorded (bounded per-pass work)", () => {
+    const actions = deriveActions(
+      live(),
+      indexed({
+        writeDownEpochs: [3n, 4n],
+        refundedRequestIds: ["7", "8"],
+        // epoch:3 and request:7 already have incidents → only the new ones open.
+        existingPointInTimeKeys: new Set(["slash_write_down epoch:3", "redemption_refund request:7"]),
+      }),
+      TOLERANCES,
+      NOW,
+    );
+    const slash = actions.open.filter((o) => o.kind === "slash_write_down").map((o) => o.dedupeKey);
+    const refund = actions.open.filter((o) => o.kind === "redemption_refund").map((o) => o.dedupeKey);
+    expect(slash).toEqual(["epoch:4"]);
+    expect(refund).toEqual(["request:8"]);
   });
 
   it("produces JSON-safe payloads (no bigint) so they can persist to JSONB", () => {

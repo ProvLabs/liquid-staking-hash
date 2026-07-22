@@ -101,11 +101,11 @@ export function parseProgramDelegations(body: unknown, path = "$"): Map<string, 
   const map = new Map<string, bigint>();
   for (const d of expectArray(o["delegation_responses"], `${path}.delegation_responses`)) {
     const dr = expectObject(d, `${path}.delegation_responses[]`);
-    const del = expectObject(dr["delegation"], `${path}.delegation`);
-    const bal = expectObject(dr["balance"], `${path}.balance`);
+    const del = expectObject(dr["delegation"], `${path}.delegation_responses[].delegation`);
+    const bal = expectObject(dr["balance"], `${path}.delegation_responses[].balance`);
     map.set(
-      expectString(del["validator_address"], `${path}.delegation.validator_address`),
-      parseUint128(bal["amount"], `${path}.balance.amount`),
+      expectString(del["validator_address"], `${path}.delegation_responses[].delegation.validator_address`),
+      parseUint128(bal["amount"], `${path}.delegation_responses[].balance.amount`),
     );
   }
   return map;

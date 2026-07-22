@@ -44,6 +44,16 @@ export interface IndexedPlane {
   writeDownEpochs: bigint[];
   /** indexed redemption requests that terminated as a refund. */
   refundedRequestIds: string[];
+  /** `${kind} ${dedupeKey}` of point-in-time incidents already recorded.
+   * Point-in-time facts (slash/refund) never change once incident-ed, so we
+   * open ONLY genuinely-new ones each pass instead of re-upserting the entire
+   * lifetime history every 30 s (bounded per-pass work). */
+  existingPointInTimeKeys: Set<string>;
+}
+
+/** Composite membership key for a point-in-time incident. */
+function ptKey(kind: IncidentKind, dedupeKey: string): string {
+  return `${kind} ${dedupeKey}`;
 }
 
 export interface RunData {
@@ -149,19 +159,25 @@ export function deriveActions(
   }
 
   // --- point-in-time facts (opened once, never auto-closed) ---
+  // Only open facts not already recorded — these never change once incident-ed,
+  // so re-upserting the whole history every pass is wasted, growing work.
   for (const epoch of indexed.writeDownEpochs) {
+    const dedupeKey = `epoch:${epoch}`;
+    if (indexed.existingPointInTimeKeys.has(ptKey("slash_write_down", dedupeKey))) continue;
     open.push({
       kind: "slash_write_down",
-      dedupeKey: `epoch:${epoch}`,
+      dedupeKey,
       severity: "warning",
       openedHeight: null,
       payload: { epochIndex: epoch.toString() },
     });
   }
   for (const requestId of indexed.refundedRequestIds) {
+    const dedupeKey = `request:${requestId}`;
+    if (indexed.existingPointInTimeKeys.has(ptKey("redemption_refund", dedupeKey))) continue;
     open.push({
       kind: "redemption_refund",
-      dedupeKey: `request:${requestId}`,
+      dedupeKey,
       severity: "info",
       openedHeight: null,
       payload: { requestId },

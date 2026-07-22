@@ -387,3 +387,14 @@ tolerances live in code and are **not env-tunable** (§12.1.3) — recorded in
 `vault_paused`, `jail_report`, `epoch_overdue`, and the queue-length delta —
 recorded in §9.6. The services-lane honesty machinery for M2 is now in place; M3
 (query API) builds on it.*
+
+*2026-07-21 (rev 11): **PR #9 review fixes** (three Greptile P2s, all valid).
+(1) The reconciler now opens point-in-time incidents (`slash_write_down`,
+`redemption_refund`) only for facts not already recorded, so per-pass work stays
+bounded as history grows (was re-upserting the whole lifetime every 30 s).
+(2) Cold-start lag now reports `indexedHeight = 0` instead of the chain head — an
+empty checkpoint set must not read as "caught up" (§12.1); cold start stays a
+distinct rendered state, not a DATA-DEGRADED incident. (3) Corrected misleading
+decode-error path labels in `parseProgramDelegations`. Also fixed a stray NUL
+byte that had crept into the incident dedupe-key separator (caught by the new
+bounded-work test).*

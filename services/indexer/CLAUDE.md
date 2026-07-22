@@ -119,9 +119,12 @@ transaction. Purity is what lets the alarm be unit-tested without Postgres.
   exact (0); `lagHeights` bounds trailing before DATA DEGRADED.
 - **Incidents:** `reconciler_divergence` (indexed copy ≠ chain), `indexer_lag`
   (per-stream checkpoint lag), `contract_halted` (closeable); `slash_write_down`,
-  `redemption_refund` (point-in-time, opened once). Deferred fast-follow (need
-  more live decoders): `vault_paused`, `jail_report`, `epoch_overdue`, and the
-  queue-length delta.
+  `redemption_refund` (point-in-time — opened once, and only for facts not
+  already recorded, so per-pass work stays bounded as history grows). Cold start
+  (no worker stream committed yet) reports `indexedHeight = 0`, never the head
+  (§12.1 honesty), and does NOT fire a DATA-DEGRADED incident (that means "was
+  fresh, now behind"). Deferred fast-follow (need more live decoders):
+  `vault_paused`, `jail_report`, `epoch_overdue`, and the queue-length delta.
 - **Tests:** `test/reconciler/reconciler.test.ts` (pure, Postgres-free — deltas,
   lag, derivation incl. the corrupt-value alarm) and
   `test/integration/reconciler-alarm.test.ts` (the Postgres-backed acceptance
