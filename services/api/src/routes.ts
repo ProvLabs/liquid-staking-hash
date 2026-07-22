@@ -17,7 +17,7 @@
 // `/validators`, `/market`) and address-scoped endpoints land in M3 (PRs
 // 3.1–3.3) and register here.
 
-import type { FreshnessSource } from "@nvhash/api-types";
+import type { FreshnessSource, IncidentRow, ProgramMetrics, EpochRow } from "@nvhash/api-types";
 import type { z } from "zod";
 import { paginationSchema } from "./query.ts";
 import type { ApiConfig } from "./config.ts";
@@ -115,7 +115,55 @@ const incidentsRoute = defineEnveloped({
   querySchema: paginationSchema,
   summary: "Program incident history (paginated)",
   handle: () => ({
-    data: [] as unknown[],
+    // Row shape frozen by PR 4.2 (`IncidentRow`, @nvhash/api-types); PR 3.1
+    // fills in the real derivation and heights against it.
+    data: [] as IncidentRow[],
+    source: "indexed" as const,
+    chainHeight: null,
+    indexedHeight: null,
+  }),
+});
+
+/**
+ * `GET /api/v1/metrics` — enveloped program aggregates (participant count,
+ * program age, epoch count; app-spec §8.1 proof strip). Shape frozen by PR
+ * 4.2 (`ProgramMetrics`, @nvhash/api-types); every field null until PR 3.1
+ * wires the `api_reader` derivations — null is the honest "not yet indexed"
+ * state the UI renders as "n/a" (§12.1), never a fabricated number.
+ */
+const metricsRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/metrics`,
+  enveloped: true,
+  querySchema: null,
+  summary: "Program-level aggregates (participants, age, epochs)",
+  handle: () => ({
+    data: {
+      participant_count: null,
+      program_started_at: null,
+      epoch_count: null,
+    } satisfies ProgramMetrics,
+    source: "indexed" as const,
+    chainHeight: null,
+    indexedHeight: null,
+  }),
+});
+
+/**
+ * `GET /api/v1/epochs` — enveloped, paginated per-epoch history (newest
+ * first), the series behind the Learn NAV step chart and the §8.5 views.
+ * Row shape frozen by PR 4.2 (`EpochRow`, @nvhash/api-types); empty until
+ * PR 3.1 reads the indexer's `epoch_snapshots`. A fresh program legitimately
+ * has zero settled epochs, so an empty list is not a degraded state.
+ */
+const epochsRoute = defineEnveloped({
+  method: "GET",
+  path: `${API_BASE}/epochs`,
+  enveloped: true,
+  querySchema: paginationSchema,
+  summary: "Per-epoch program history (paginated, newest first)",
+  handle: () => ({
+    data: [] as EpochRow[],
     source: "indexed" as const,
     chainHeight: null,
     indexedHeight: null,
@@ -138,7 +186,13 @@ const healthRoute = defineOperational<unknown>({
 });
 
 /** The registry. Adding a route here opts it into every CI gate automatically. */
-export const routes: readonly Route[] = [statusRoute, incidentsRoute, healthRoute];
+export const routes: readonly Route[] = [
+  statusRoute,
+  incidentsRoute,
+  metricsRoute,
+  epochsRoute,
+  healthRoute,
+];
 
 /** Find a registered route by exact path, ignoring method (for 405 vs 404). */
 export function findRoute(path: string): Route | undefined {

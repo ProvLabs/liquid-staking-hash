@@ -190,7 +190,15 @@ describe("degraded banner (§8.0: indexer lagging or reconciler alarm)", () => {
       http.get("*/api/v1/incidents", () =>
         HttpResponse.json(
           envelope(
-            [{ kind: "reconciler_divergence", closed_at: null }],
+            [
+              {
+                kind: "reconciler_divergence",
+                severity: "critical",
+                opened_at: "2026-07-20T00:00:00Z",
+                closed_at: null,
+                height: 7811,
+              },
+            ],
             { source: "indexed" },
           ),
         ),
@@ -205,7 +213,15 @@ describe("degraded banner (§8.0: indexer lagging or reconciler alarm)", () => {
       http.get("*/api/v1/incidents", () =>
         HttpResponse.json(
           envelope(
-            [{ kind: "indexer_lag", closed_at: "2026-07-20T00:00:00Z" }],
+            [
+              {
+                kind: "indexer_lag",
+                severity: "warning",
+                opened_at: "2026-07-19T00:00:00Z",
+                closed_at: "2026-07-20T00:00:00Z",
+                height: null,
+              },
+            ],
             { source: "indexed" },
           ),
         ),
@@ -218,7 +234,20 @@ describe("degraded banner (§8.0: indexer lagging or reconciler alarm)", () => {
   it("an open incident of an unrelated kind does not degrade", async () => {
     server.use(
       http.get("*/api/v1/incidents", () =>
-        HttpResponse.json(envelope([{ kind: "jail_report", closed_at: null }], { source: "indexed" })),
+        HttpResponse.json(
+          envelope(
+            [
+              {
+                kind: "jail_report",
+                severity: "warning",
+                opened_at: "2026-07-20T00:00:00Z",
+                closed_at: null,
+                height: null,
+              },
+            ],
+            { source: "indexed" },
+          ),
+        ),
       ),
     );
     const state = await loadChromeState(config());
@@ -240,7 +269,18 @@ describe("degraded banner (§8.0: indexer lagging or reconciler alarm)", () => {
       vaultOverride({ paused: true, paused_reason: "maintenance" }),
       http.get("*/api/v1/incidents", () =>
         HttpResponse.json(
-          envelope([{ kind: "indexer_lag", closed_at: null }], { source: "indexed" }),
+          envelope(
+            [
+              {
+                kind: "indexer_lag",
+                severity: "warning",
+                opened_at: "2026-07-20T00:00:00Z",
+                closed_at: null,
+                height: null,
+              },
+            ],
+            { source: "indexed" },
+          ),
         ),
       ),
     );

@@ -357,3 +357,20 @@ row (spec §7 amended). Gates added: `test/chrome-state.test.ts`,
 recorded in the spec: footer docs link deferred (no docs URL exists) and no
 `governance` verify target (console panel does not exist yet); both are
 follow-ons, not dead links. Next: 4.2–4.4 render inside this chrome.*
+
+*2026-07-22 (rev 9): **M4.2 delivered** (working plan
+`app-m4.2-learn-page`): the §8.1 Learn page in `apps/web`, plus the
+Learn-facing subset of the 3.1 contracts frozen first per the M3
+contracts-first note (Carlton, 2026-07-22): `ProgramMetrics`/`EpochRow`/
+`IncidentRow` in `@nvhash/api-types`, honest all-null `/api/v1/metrics` and
+empty `/api/v1/epochs` scaffold routes in `services/api` under the
+registry-driven contract harness, MSW mocks in the web tier. The page
+assembles per-figure-degradable data in `app/learn/learn.server.ts` (BigInt
+NAV/TVL math in `amounts.ts`, golden-value gated; `MIN_APR_EPOCHS = 2`
+minimum-window rule), renders all seven §8.1 sections with cold-start
+states, a dependency-free step-after NAV chart with table view, the typed
+§5.4 trust module (pre-audit posture), and the incident feed. Gates:
+`test/learn-data.test.ts`, `test/amounts.test.ts`, extended
+envelope-contract suite, `e2e/learn.spec.ts`. PR 3.1's remaining scope:
+implement derivations against the frozen shapes; add `/validators` (4.3)
+and `/market` (3.2). Next: 4.3/4.4 in parallel.*

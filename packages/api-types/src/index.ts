@@ -10,3 +10,10 @@ export {
   type FreshnessMeta,
   type FreshnessSource,
 } from "./envelope.ts";
+export {
+  type EpochRow,
+  type IncidentKind,
+  type IncidentRow,
+  type IncidentSeverity,
+  type ProgramMetrics,
+} from "./rows.ts";

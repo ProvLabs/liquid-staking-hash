@@ -89,6 +89,59 @@ describe("envelope + method contract on every route", () => {
   });
 });
 
+describe("frozen 4.2 contract shapes (/metrics, /epochs, /incidents scaffolds)", () => {
+  it("/metrics reports the exact ProgramMetrics field set, all honestly null", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/metrics`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Record<string, unknown> };
+      expect(Object.keys(body.data).sort()).toEqual([
+        "epoch_count",
+        "participant_count",
+        "program_started_at",
+      ]);
+      expect(body.data.participant_count).toBeNull();
+      expect(body.data.program_started_at).toBeNull();
+      expect(body.data.epoch_count).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/epochs and /incidents return empty arrays with null heights (no fabrication)", async () => {
+    const server = await startServer();
+    try {
+      for (const path of [`${API_BASE}/epochs`, `${API_BASE}/incidents`]) {
+        const res = await fetch(`${server.baseUrl}${path}`);
+        expect(res.status, path).toBe(200);
+        const body = (await res.json()) as {
+          data: unknown[];
+          meta: { indexed_height: unknown };
+        };
+        expect(body.data, path).toEqual([]);
+        expect(body.meta.indexed_height, path).toBeNull();
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/epochs is pagination-bounded like every collection route", async () => {
+    const server = await startServer();
+    try {
+      const ok = await fetch(`${server.baseUrl}${API_BASE}/epochs?limit=48`);
+      expect(ok.status).toBe(200);
+      for (const qs of ["?limit=0", "?limit=201", "?offset=-1"]) {
+        const res = await fetch(`${server.baseUrl}${API_BASE}/epochs${qs}`);
+        expect(res.status, qs).toBe(400);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+});
+
 describe("zod query bounds on the paginated route (/incidents)", () => {
   const path = `${API_BASE}/incidents`;
 

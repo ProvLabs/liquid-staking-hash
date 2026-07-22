@@ -13,15 +13,19 @@
 //   drops the incidents input; it never fabricates a banner and never crashes
 //   the page.
 
-import type { FreshnessMeta } from "@nvhash/api-types";
+import type { FreshnessMeta, IncidentRow } from "@nvhash/api-types";
 import {
   LcdClient,
   NvhashContractClient,
   VaultClient,
   type FetchLike,
 } from "@nvhash/chain-client";
-import { z } from "zod";
 
+import {
+  fetchApiJson,
+  incidentsEnvelopeSchema,
+  statusEnvelopeSchema,
+} from "~/api/api.server";
 import type { WebConfig } from "~/config/config.server";
 import type { ChromeBanner, ChromeState } from "./types";
 
@@ -45,58 +49,10 @@ export const DEGRADED_LAG_BLOCKS = 30;
  */
 export const DEGRADED_INCIDENT_KINDS = ["reconciler_divergence", "indexer_lag"] as const;
 
-// @nvhash/api-types ships the envelope shapes but (deliberately zero-dep) no
-// untrusted-input parser, so these schemas are this tier's boundary
-// validation for API responses (SECURITY.md: inputs validated and bounded at
-// entry; a shape failure degrades to the null paths above, never a guess).
-const freshnessMetaSchema = z.object({
-  chain_height: z.number().int().nonnegative().nullable(),
-  indexed_height: z.number().int().nonnegative().nullable(),
-  generated_at: z
-    .string()
-    .refine((value) => Number.isFinite(Date.parse(value)), "expected an ISO-8601 timestamp"),
-  source: z.enum(["live", "indexed"]),
-}) satisfies z.ZodType<FreshnessMeta>;
-
-const statusEnvelopeSchema = z.object({
-  data: z.unknown(),
-  meta: freshnessMetaSchema,
-});
-
-// services/api's concrete incident row lands with PR 3.1; the chrome pins only
-// what it consumes (kind + open/closed) and bounds the rest. Unknown keys are
-// stripped; an unparseable payload drops the incidents input entirely.
-const incidentsEnvelopeSchema = z.object({
-  data: z
-    .array(
-      z.object({
-        kind: z.string().max(64),
-        closed_at: z.string().nullable().optional(),
-      }),
-    )
-    .max(200),
-  meta: freshnessMetaSchema,
-});
-
-type IncidentRow = z.infer<typeof incidentsEnvelopeSchema>["data"][number];
-
-async function fetchApiJson(
-  url: string,
-  fetchImpl: FetchLike,
-  timeoutMs: number,
-): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetchImpl(url, { signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`GET ${url}: HTTP ${response.status}`);
-    }
-    return JSON.parse(await response.text()) as unknown;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// Boundary validation lives in ~/api/api.server (shared with the Learn
+// loader): envelope + row schemas pinned to @nvhash/api-types with
+// `satisfies`, and the bounded-timeout transport. A shape failure still
+// degrades to the null paths above, never a guess.
 
 function isDegraded(freshness: FreshnessMeta | null, incidents: IncidentRow[] | null): boolean {
   const lagging =
