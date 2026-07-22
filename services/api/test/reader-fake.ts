@@ -107,7 +107,13 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
       }
       return Promise.resolve({
         sample,
-        bridged_supply: [...latestByChain.values()].map(toBridgedSupplyRow),
+        // Sort by chain ascending to MATCH the Prisma reader's ordering
+        // (PR #13 review): Map insertion order is first temporal appearance,
+        // which only coincidentally agrees with the real reader's
+        // `chain: "asc"` — the fake must not diverge from production order.
+        bridged_supply: [...latestByChain.values()]
+          .sort((a, b) => (a.chain < b.chain ? -1 : 1))
+          .map(toBridgedSupplyRow),
       });
     },
     portfolioFor: (address) => {

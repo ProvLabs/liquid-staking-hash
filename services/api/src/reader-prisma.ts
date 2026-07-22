@@ -85,14 +85,18 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       // COUNT(DISTINCT …) stays in SQL so the row set never crosses the wire
       // (a groupBy would materialize every address). Tagged template — no
       // string interpolation reaches the query (SECURITY.md input handling).
-      const distinct = await prisma.$queryRaw<Array<{ count: bigint }>>(
-        Prisma.sql`SELECT COUNT(DISTINCT "address")::bigint AS count FROM "indexed"."transactions"`,
-      );
-      const first = await prisma.transaction.findFirst({
-        orderBy: { blockTime: "asc" },
-        select: { blockTime: true },
-      });
-      const epochCount = await prisma.epochSnapshot.count();
+      // The three reads are independent, so they run concurrently (PR #13
+      // review): /metrics latency is the slowest of them, not their sum.
+      const [distinct, first, epochCount] = await Promise.all([
+        prisma.$queryRaw<Array<{ count: bigint }>>(
+          Prisma.sql`SELECT COUNT(DISTINCT "address")::bigint AS count FROM "indexed"."transactions"`,
+        ),
+        prisma.transaction.findFirst({
+          orderBy: { blockTime: "asc" },
+          select: { blockTime: true },
+        }),
+        prisma.epochSnapshot.count(),
+      ]);
       return deriveMetrics({
         indexed: true,
         participantCount: toSafeInt(distinct[0]?.count ?? 0n, "participant_count"),

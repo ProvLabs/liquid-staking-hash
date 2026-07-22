@@ -32,14 +32,39 @@ export async function main(): Promise<void> {
   // DB-free test suite) never loads the generated client. DATABASE_URL is the
   // SELECT-only `api_reader` role (ADR-001 Decision 1).
   let reader: IndexedReader | undefined;
+  let closeReader: (() => Promise<void>) | undefined;
   if (config.databaseUrl !== undefined) {
     const { createPrismaReader } = await import("./reader-prisma.ts");
-    reader = createPrismaReader(config.databaseUrl);
+    const prismaReader = createPrismaReader(config.databaseUrl);
+    reader = prismaReader;
+    closeReader = () => prismaReader.close();
   }
   const { server, limiter } = createApiServer(config, undefined, reader);
   // Long-lived process: evict expired rate-limit windows so the limiter's map
   // does not grow unbounded with unique client keys over the process lifetime.
   scheduleWindowSweep(limiter, config.rateLimitWindowMs);
+
+  // Graceful shutdown (PR #13 review): on SIGTERM/SIGINT (orchestrator pod
+  // drain, ctrl-c) stop accepting connections, let in-flight responses
+  // finish, then release the reader's connection pool via $disconnect so the
+  // database sees a clean close instead of an abrupt drop.
+  let shuttingDown = false;
+  const shutdown = (signal: NodeJS.Signals): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    server.close(() => {
+      void (async () => {
+        await closeReader?.();
+        process.stdout.write(JSON.stringify({ level: "info", message: "api stopped", signal }) + "\n");
+        process.exit(0);
+      })();
+    });
+    // Idle keep-alive sockets would otherwise hold `close` open indefinitely.
+    server.closeIdleConnections();
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+
   server.listen(config.port, () => {
     // One structured line; no client identifiers, no connection string
     // (SECURITY.md data minimization / secrets via environment only).
