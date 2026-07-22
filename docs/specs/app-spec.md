@@ -415,6 +415,18 @@ The secondary-market context page (register A3): NAV vs market price over time (
 ### 8.6 Validators (route `/validators`, public; `/validators/mine` for operators)
 
 - **Public view:** the validator set as consumer-legible cards/table — moniker, eligibility, uptime vs threshold, program delegation, tenure — plus set-health aggregates (eligible count trend, churn from indexed history). Framing: "who is staking your HASH and are they reliable," not the console's operational table. Verify links land on the Console validators page.
+> **Revision 2026-07-22 (PR 4.3, public view):** delivered in `apps/web`
+> (`app/validators/validators.server.ts`; components under
+> `app/components/validators/`), inside the 4.1 chrome. The uptime threshold
+> is read live from `Config {}` (`performance_threshold_bps`); program
+> delegation reads the asset-manager contract's x/staking delegations (the
+> captured corpus shows the contract as delegator). Set-health trend/churn
+> consume the `/api/v1/validators` contract frozen by this PR ("n/a"/empty
+> until PR 3.1 derives it). The client-crossing row is a CLOSED public
+> projection: operator economics (commission, TIP, headroom, arrears) never
+> leave the server, gated by `test/validators-data.test.ts`. The operator
+> view below is untouched and lands with its own milestone.
+
 - **Operator view ("my validator"):** the participation economics in consumer form — current + historical program delegation, rewards earned on it, commission owed (with the one-epoch grace state made plain), TIP paid vs rank effect, eligibility headroom on each threshold, and net-benefit-after-fees (personas §7's core question). Historical earnings and peer-rank context come from `validator_epochs` — history the console cannot show. **Every operator action is a first-class App transaction flow** (§14.6 decided): pay commission/TIP, enroll/unregister, and jailed-validator purge are built, previewed, signed, and tracked in the App per §10.2 — the Console keeps the same actions as an engineering surface, no longer the required path. The App's job is that Owen never *discovers* an obligation late (arrears alert rule is on by default for operator sessions). A **commission/TIP payment-history CSV** (amounts + times) is exportable here for the operator's own tax analysis (§14.11).
 
 ### 8.7 Governance (route `/governance`, public read; member write)
@@ -492,6 +504,13 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > envelope-contract harness. PR 3.1 implements the real derivations against
 > exactly these shapes (a field change is a revision here, never a silent
 > edit) and adds `/validators` with PR 4.3.
+
+> **Revision 2026-07-22 (PR 4.3):** `/api/v1/validators` joins the frozen
+> set (`ValidatorSetEpochRow`: per-settlement eligible/enrolled counts plus
+> joined/departed churn, derivable from the indexer's
+> `validator_epochs`/`validator_registry`). All Learn/Validators-facing 3.1
+> contracts are now frozen; 3.1's remaining scope is the derivations plus
+> the 3.2 `/market` surface.
 
 ### 9.5 Derived metrics (formulas)
 

@@ -87,6 +87,11 @@ export const handlers = [
   http.get("*/api/v1/epochs", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
+  // PR 4.3 tranche 1: the frozen /validators scaffold shape
+  // (@nvhash/api-types ValidatorSetEpochRow[]), honest empty like the rest.
+  http.get("*/api/v1/validators", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
 
   // /cosmwasm/wasm/v1/contract/{addr}/smart/{base64(query)}
   http.get("*/cosmwasm/wasm/v1/contract/:address/smart/:query", ({ params }) => {

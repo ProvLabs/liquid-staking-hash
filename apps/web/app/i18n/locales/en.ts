@@ -138,8 +138,38 @@ export default {
   "market.placeholder":
     "Market data for nvHASH arrives here in a later milestone. This deployment is a development scaffold.",
   "validators.title": "Validators",
-  "validators.placeholder":
-    "The program's validator set arrives here in a later milestone. This deployment is a development scaffold.",
+  "validators.lede":
+    "These validators stake the program's HASH. Their reliability is measured against the program's own thresholds, read live from chain.",
+  "validators.na": "n/a",
+
+  "validators.health-title": "Set health",
+  "validators.health-eligible-now": "Eligible now",
+  "validators.health-joined": "Joined last settlement",
+  "validators.health-departed": "Departed last settlement",
+  "validators.health-indexed-caption": "From indexed history",
+  "validators.health-trend-title": "Eligible validators by monthly settlement",
+  "validators.health-trend-empty":
+    "No monthly settlements are indexed yet. The trend appears as settlement history lands.",
+  "validators.health-trend-unavailable": "Set history is unavailable right now.",
+  "validators.trend-show-table": "Table view",
+  "validators.trend-show-chart": "Chart view",
+  "validators.trend-col-settlement": "Settlement",
+  "validators.trend-col-eligible": "Eligible",
+  "validators.trend-col-joined": "Joined",
+  "validators.trend-col-departed": "Departed",
+
+  "validators.table-unavailable": "The validator set is unavailable right now.",
+  "validators.col-validator": "Validator",
+  "validators.col-status": "Status",
+  "validators.col-uptime": "Uptime",
+  "validators.col-delegation": "Program delegation",
+  "validators.col-tenure": "In program for",
+  "validators.status-eligible": "Eligible",
+  "validators.status-ineligible": "Ineligible",
+  "validators.status-jailed": "Jailed",
+  "validators.status-tombstoned": "Tombstoned",
+  "validators.uptime-vs-threshold": "{uptime}% / {threshold}% required",
+  "validators.uptime-na": "n/a (no capture yet)",
   "governance.title": "Governance",
   "governance.placeholder":
     "Governance participation arrives here in a later milestone. This deployment is a development scaffold.",

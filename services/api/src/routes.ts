@@ -17,7 +17,13 @@
 // `/validators`, `/market`) and address-scoped endpoints land in M3 (PRs
 // 3.1–3.3) and register here.
 
-import type { FreshnessSource, IncidentRow, ProgramMetrics, EpochRow } from "@nvhash/api-types";
+import type {
+  FreshnessSource,
+  IncidentRow,
+  ProgramMetrics,
+  EpochRow,
+  ValidatorSetEpochRow,
+} from "@nvhash/api-types";
 import type { z } from "zod";
 import { paginationSchema } from "./query.ts";
 import type { ApiConfig } from "./config.ts";
@@ -185,12 +191,34 @@ const healthRoute = defineOperational<unknown>({
   handle: () => ({ status: "ok" }),
 });
 
+/**
+ * `GET /api/v1/validators` — enveloped, paginated per-settlement validator-set
+ * health (newest first), the §8.6 public aggregates. Row shape frozen by PR
+ * 4.3 (`ValidatorSetEpochRow`, @nvhash/api-types); empty until PR 3.1 derives
+ * it from the indexer's validator tables. A fresh program legitimately has no
+ * settled history, so an empty list is not a degraded state.
+ */
+const validatorsRoute = defineEnveloped({
+  method: "GET",
+  path: `${API_BASE}/validators`,
+  enveloped: true,
+  querySchema: paginationSchema,
+  summary: "Per-settlement validator-set health (paginated, newest first)",
+  handle: () => ({
+    data: [] as ValidatorSetEpochRow[],
+    source: "indexed" as const,
+    chainHeight: null,
+    indexedHeight: null,
+  }),
+});
+
 /** The registry. Adding a route here opts it into every CI gate automatically. */
 export const routes: readonly Route[] = [
   statusRoute,
   incidentsRoute,
   metricsRoute,
   epochsRoute,
+  validatorsRoute,
   healthRoute,
 ];
 

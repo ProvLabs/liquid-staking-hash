@@ -109,10 +109,10 @@ describe("frozen 4.2 contract shapes (/metrics, /epochs, /incidents scaffolds)",
     }
   });
 
-  it("/epochs and /incidents return empty arrays with null heights (no fabrication)", async () => {
+  it("/epochs, /validators, and /incidents return empty arrays with null heights (no fabrication)", async () => {
     const server = await startServer();
     try {
-      for (const path of [`${API_BASE}/epochs`, `${API_BASE}/incidents`]) {
+      for (const path of [`${API_BASE}/epochs`, `${API_BASE}/validators`, `${API_BASE}/incidents`]) {
         const res = await fetch(`${server.baseUrl}${path}`);
         expect(res.status, path).toBe(200);
         const body = (await res.json()) as {
@@ -127,14 +127,16 @@ describe("frozen 4.2 contract shapes (/metrics, /epochs, /incidents scaffolds)",
     }
   });
 
-  it("/epochs is pagination-bounded like every collection route", async () => {
+  it("/epochs and /validators are pagination-bounded like every collection route", async () => {
     const server = await startServer();
     try {
-      const ok = await fetch(`${server.baseUrl}${API_BASE}/epochs?limit=48`);
-      expect(ok.status).toBe(200);
-      for (const qs of ["?limit=0", "?limit=201", "?offset=-1"]) {
-        const res = await fetch(`${server.baseUrl}${API_BASE}/epochs${qs}`);
-        expect(res.status, qs).toBe(400);
+      for (const base of [`${API_BASE}/epochs`, `${API_BASE}/validators`]) {
+        const ok = await fetch(`${server.baseUrl}${base}?limit=48`);
+        expect(ok.status, base).toBe(200);
+        for (const qs of ["?limit=0", "?limit=201", "?offset=-1"]) {
+          const res = await fetch(`${server.baseUrl}${base}${qs}`);
+          expect(res.status, `${base}${qs}`).toBe(400);
+        }
       }
     } finally {
       await server.close();

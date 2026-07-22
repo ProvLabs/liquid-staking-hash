@@ -13,6 +13,7 @@ import type {
   IncidentRow,
   IncidentSeverity,
   ProgramMetrics,
+  ValidatorSetEpochRow,
 } from "@nvhash/api-types";
 import type { FetchLike } from "@nvhash/chain-client";
 import { z } from "zod";
@@ -75,9 +76,21 @@ export const programMetricsSchema = z.object({
   epoch_count: z.number().int().nonnegative().nullable(),
 }) satisfies z.ZodType<ProgramMetrics>;
 
+export const validatorSetEpochRowSchema = z.object({
+  epoch_index: z.number().int().nonnegative(),
+  ended_at: isoTimestamp,
+  eligible_count: z.number().int().nonnegative(),
+  enrolled_count: z.number().int().nonnegative(),
+  joined: z.number().int().nonnegative(),
+  departed: z.number().int().nonnegative(),
+}) satisfies z.ZodType<ValidatorSetEpochRow>;
+
 /** Collections stay bounded at the boundary, mirroring the API's page cap. */
 export const incidentsEnvelopeSchema = envelopeSchema(z.array(incidentRowSchema).max(200));
 export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(200));
+export const validatorsEnvelopeSchema = envelopeSchema(
+  z.array(validatorSetEpochRowSchema).max(200),
+);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
 export const statusEnvelopeSchema = envelopeSchema(z.unknown());
 

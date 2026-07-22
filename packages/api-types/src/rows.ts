@@ -76,3 +76,24 @@ export interface EpochRow {
   /** Net APR for the window ending at this epoch, bps, or null below window. */
   net_apr_bps: number | null;
 }
+
+/**
+ * One row of `GET /api/v1/validators` (newest first): per-settlement
+ * validator-set health, the §8.6 public aggregates (eligible-count trend and
+ * churn). Frozen by PR 4.3; PR 3.1 derives it from the indexer's
+ * `validator_epochs`/`validator_registry` (per-epoch eligibility flags,
+ * set-once enrollment, forward-deterministic departure marks).
+ */
+export interface ValidatorSetEpochRow {
+  epoch_index: number;
+  /** ISO-8601 settlement time of this epoch. */
+  ended_at: string;
+  /** Validators meeting every eligibility threshold at this settlement. */
+  eligible_count: number;
+  /** Validators enrolled in the program at this settlement. */
+  enrolled_count: number;
+  /** Validators newly enrolled during this epoch. */
+  joined: number;
+  /** Validators marked departed during this epoch. */
+  departed: number;
+}

@@ -16,4 +16,5 @@ export {
   type IncidentRow,
   type IncidentSeverity,
   type ProgramMetrics,
+  type ValidatorSetEpochRow,
 } from "./rows.ts";

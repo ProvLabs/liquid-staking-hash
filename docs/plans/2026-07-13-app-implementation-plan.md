@@ -429,3 +429,18 @@ states, a dependency-free step-after NAV chart with table view, the typed
 envelope-contract suite, `e2e/learn.spec.ts`. PR 3.1's remaining scope:
 implement derivations against the frozen shapes; add `/validators` (4.3)
 and `/market` (3.2). Next: 4.3/4.4 in parallel.*
+
+*2026-07-22 (rev 12): **M4.3 delivered** (working plan
+`app-m4.3-validators-page`): the §8.6 public validators page in `apps/web`
+(`app/validators/validators.server.ts`; set-health strip with the indexed
+trend and the consumer table with icon+label reliability on the console
+§11.2 family), plus the last Learn/Validators-facing 3.1 contract frozen:
+`ValidatorSetEpochRow` in `@nvhash/api-types` with the empty
+`/api/v1/validators` scaffold route under the contract harness. The
+client-crossing row is a closed public projection (no operator economics;
+gated by `test/validators-data.test.ts`); program delegation reads the
+asset-manager contract's delegations live; the uptime threshold comes from
+`Config {}`. Also fixes the dev-profile `CONSOLE_URL` defaults (the console
+pins port 5273, not 5173, so local verify links finally land). Gates:
+`test/validators-data.test.ts`, extended envelope-contract suite,
+`e2e/validators.spec.ts`. Next: 4.4 (market/history), 3.1 derivations.*
