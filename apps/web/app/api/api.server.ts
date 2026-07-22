@@ -13,6 +13,9 @@ import type {
   IncidentRow,
   IncidentSeverity,
   ProgramMetrics,
+  ValidatorRow,
+  ValidatorSetHealth,
+  ValidatorsPayload,
 } from "@nvhash/api-types";
 import type { FetchLike } from "@nvhash/chain-client";
 import { z } from "zod";
@@ -64,7 +67,8 @@ const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "expected a decimal stri
 export const epochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
   ended_at: isoTimestamp,
-  nav: decimalString,
+  // null since PR 3.1: an epoch settled with zero shares has no NAV.
+  nav: decimalString.nullable(),
   tvv: decimalString,
   net_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
 }) satisfies z.ZodType<EpochRow>;
@@ -75,9 +79,36 @@ export const programMetricsSchema = z.object({
   epoch_count: z.number().int().nonnegative().nullable(),
 }) satisfies z.ZodType<ProgramMetrics>;
 
+// PR 3.1 owns /validators: ValidatorsPayload = per-validator rows (registry
+// enrollment joined to the latest sample) plus the set-health aggregates.
+export const apiValidatorRowSchema = z.object({
+  valoper: z.string().max(90),
+  moniker: z.string().max(128),
+  active: z.boolean(),
+  epoch_index: z.number().int().nonnegative().nullable(),
+  uptime_bps: z.number().int().min(0).max(1_000_000).nullable(),
+  eligible: z.boolean().nullable(),
+  failing_reasons: z.array(z.string().max(64)).max(32),
+  program_delegation: decimalString.nullable(),
+  commission_due: decimalString.nullable(),
+}) satisfies z.ZodType<ValidatorRow>;
+
+export const validatorSetHealthSchema = z.object({
+  total: z.number().int().nonnegative(),
+  active: z.number().int().nonnegative(),
+  eligible: z.number().int().nonnegative(),
+  in_arrears: z.number().int().nonnegative(),
+}) satisfies z.ZodType<ValidatorSetHealth>;
+
+export const validatorsPayloadSchema = z.object({
+  validators: z.array(apiValidatorRowSchema).max(500),
+  set_health: validatorSetHealthSchema,
+}) satisfies z.ZodType<ValidatorsPayload>;
+
 /** Collections stay bounded at the boundary, mirroring the API's page cap. */
 export const incidentsEnvelopeSchema = envelopeSchema(z.array(incidentRowSchema).max(200));
 export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(200));
+export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
 export const statusEnvelopeSchema = envelopeSchema(z.unknown());
 

@@ -282,3 +282,4 @@ export interface EpochRow {
   /** Net APR for the window ending at this epoch, bps, or null below window. */
   net_apr_bps: number | null;
 }
+

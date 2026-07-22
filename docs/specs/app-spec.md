@@ -415,6 +415,22 @@ The secondary-market context page (register A3): NAV vs market price over time (
 ### 8.6 Validators (route `/validators`, public; `/validators/mine` for operators)
 
 - **Public view:** the validator set as consumer-legible cards/table — moniker, eligibility, uptime vs threshold, program delegation, tenure — plus set-health aggregates (eligible count trend, churn from indexed history). Framing: "who is staking your HASH and are they reliable," not the console's operational table. Verify links land on the Console validators page.
+> **Revision 2026-07-22 (PR 4.3, public view):** delivered in `apps/web`
+> (`app/validators/validators.server.ts`; components under
+> `app/components/validators/`), inside the 4.1 chrome. The uptime threshold
+> is read live from `Config {}` (`performance_threshold_bps`); program
+> delegation reads the asset-manager contract's x/staking delegations (the
+> captured corpus shows the contract as delegator). Set-health aggregates
+> consume PR 3.1's `/api/v1/validators` contract (`ValidatorsPayload`
+> `set_health`, per the §9.4 ownership note); the page projects only the
+> total/active/eligible counts to the client. The per-settlement
+> eligible-count TREND and churn named above have no serving endpoint yet
+> and are a recorded follow-on (a history endpoint or a `/validators`
+> extension, with PR 3.1's owner). The client-crossing row is a CLOSED
+> public projection: operator economics (commission, TIP, headroom, arrears)
+> never leave the web server, gated by `test/validators-data.test.ts`. The
+> operator view below is untouched and lands with its own milestone.
+
 - **Operator view ("my validator"):** the participation economics in consumer form — current + historical program delegation, rewards earned on it, commission owed (with the one-epoch grace state made plain), TIP paid vs rank effect, eligibility headroom on each threshold, and net-benefit-after-fees (personas §7's core question). Historical earnings and peer-rank context come from `validator_epochs` — history the console cannot show. **Every operator action is a first-class App transaction flow** (§14.6 decided): pay commission/TIP, enroll/unregister, and jailed-validator purge are built, previewed, signed, and tracked in the App per §10.2 — the Console keeps the same actions as an engineering surface, no longer the required path. The App's job is that Owen never *discovers* an obligation late (arrears alert rule is on by default for operator sessions). A **commission/TIP payment-history CSV** (amounts + times) is exportable here for the operator's own tax analysis (§14.11).
 
 ### 8.7 Governance (route `/governance`, public read; member write)

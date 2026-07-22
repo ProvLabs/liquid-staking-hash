@@ -26,12 +26,16 @@ function stepPath(rows: PlottableEpoch[]): string {
   const navs = rows.map((row) => Number.parseFloat(row.nav));
   const min = Math.min(...navs);
   const max = Math.max(...navs);
-  const span = max - min || max * 0.01 || 1;
   const x0 = PAD.left;
   const innerW = WIDTH - PAD.left - PAD.right;
   const innerH = HEIGHT - PAD.top - PAD.bottom;
   const stepW = innerW / rows.length;
-  const y = (nav: number) => PAD.top + innerH - ((nav - min) / span) * innerH;
+  // A constant series must center, not sit on the axis reading as zero
+  // (same fix as the validators trend, PR #12 review).
+  const y = (nav: number) =>
+    max === min
+      ? PAD.top + innerH / 2
+      : PAD.top + innerH - ((nav - min) / (max - min)) * innerH;
 
   let d = "";
   navs.forEach((nav, i) => {

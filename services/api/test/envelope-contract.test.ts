@@ -134,6 +134,8 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
   });
 
   it("/epochs and /incidents return empty arrays with null heights (no fabrication)", async () => {
+    // /validators is covered by its own case below: since PR 3.1 it returns a
+    // ValidatorsPayload object, not a bare array.
     const server = await startServer();
     try {
       for (const path of [`${API_BASE}/epochs`, `${API_BASE}/incidents`]) {
@@ -152,6 +154,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
   });
 
   it("/epochs is pagination-bounded like every collection route", async () => {
+    // /validators takes no pagination since PR 3.1 (whole current set).
     const server = await startServer();
     try {
       const ok = await fetch(`${server.baseUrl}${API_BASE}/epochs?limit=48`);

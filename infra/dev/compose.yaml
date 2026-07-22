@@ -153,6 +153,7 @@ services:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       APP_ENV: "development"
       PORT: "8080"
+      DATABASE_URL: "postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed"
     ports:
       - "8080:8080"
     networks: [nvhash-dev]
@@ -197,7 +198,8 @@ services:
       # rejects a non-bech32 address — neither serves against an unknown chain.
       CONTRACT_ADDRESS: "${CONTRACT_ADDRESS:-}"
       VAULT_ADDRESS: "${VAULT_ADDRESS:-}"
-      CONSOLE_URL: "${CONSOLE_URL:-http://localhost:5173}"
+      # The console dev server pins port 5273 (apps/console/vite.config.ts).
+      CONSOLE_URL: "${CONSOLE_URL:-http://localhost:5273}"
       CONSOLE_CHAIN_ID: "${CONSOLE_CHAIN_ID:-chain-dev}"
       # services/api base for the chrome's indexed-plane reads (PR 4.1);
       # required config since API_URL landed, server-only by classification.

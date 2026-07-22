@@ -52,8 +52,10 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
   chrome-state banner/freshness honesty (`test/chrome-state.test.ts`, MSW
   harness with fixture overrides), the environment-locked verify-link map
   (`test/verify-link.test.ts`), Learn-page per-figure degradation and
-  envelope bounding (`test/learn-data.test.ts`), and BigInt amount display
-  golden values (`test/amounts.test.ts`; floats never touch amounts).
+  envelope bounding (`test/learn-data.test.ts`), BigInt amount display
+  golden values (`test/amounts.test.ts`; floats never touch amounts), and
+  the Validators public projection (`test/validators-data.test.ts`: honest
+  degradation plus the closed no-operator-economics key set).
 - `test:e2e` — production build + Playwright against `react-router-serve`
   with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
   fully offline). Includes the axe accessibility scans on both themes (route

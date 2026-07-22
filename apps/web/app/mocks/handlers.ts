@@ -87,6 +87,16 @@ export const handlers = [
   http.get("*/api/v1/epochs", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
+  // PR 3.1's /validators shape (ValidatorsPayload), honest-empty exactly as
+  // the real route serves with no reader wired.
+  http.get("*/api/v1/validators", () =>
+    HttpResponse.json(
+      envelope(
+        { validators: [], set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 } },
+        { source: "indexed" },
+      ),
+    ),
+  ),
 
   // /cosmwasm/wasm/v1/contract/{addr}/smart/{base64(query)}
   http.get("*/cosmwasm/wasm/v1/contract/:address/smart/:query", ({ params }) => {

@@ -486,3 +486,20 @@ CSV under the same gate — plus address-plane seeds in `test:db`. Spec §9.4
 + ADR-001 amended in the same change. M3 exits on one branch as three
 commits (3.1/3.2/3.3), one PR/CI cycle; next in the services lane: 8.2
 load-testing when M8 opens.*
+
+*2026-07-22 (rev 17): **M4.3 delivered** (working plan
+`app-m4.3-validators-page`, reconciled with the M3 merge): the §8.6 public
+validators page in `apps/web` (`app/validators/validators.server.ts`;
+set-health strip and the consumer table with icon+label reliability on the
+console §11.2 family). The live table joins contract `validators()` with
+x/staking monikers and the asset-manager contract's delegations; the uptime
+threshold comes from `Config {}`. Set-health aggregates consume PR 3.1's
+`/api/v1/validators` (`ValidatorsPayload` `set_health`; only
+total/active/eligible cross to the client). The per-settlement trend/churn
+view has no serving endpoint and is a recorded follow-on (spec §8.6 note).
+The client-crossing row is a closed public projection (no operator
+economics; gated by `test/validators-data.test.ts`). Also fixes the
+dev-profile `CONSOLE_URL` defaults (the console pins port 5273, not 5173,
+so local verify links finally land). Gates: `test/validators-data.test.ts`,
+`e2e/validators.spec.ts`. Next: 4.4 (market/history) on the delivered 3.2
+contract.*

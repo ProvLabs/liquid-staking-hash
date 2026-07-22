@@ -18,7 +18,12 @@
 // fallback). `/market` lands with PR 3.2; the address-scoped endpoints with
 // PR 3.3.
 
-import type { FreshnessSource, IncidentRow, ProgramMetrics, EpochRow } from "@nvhash/api-types";
+import type {
+  FreshnessSource,
+  IncidentRow,
+  ProgramMetrics,
+  EpochRow,
+} from "@nvhash/api-types";
 import type { z } from "zod";
 import { transactionsCsv } from "./csv.ts";
 import {
