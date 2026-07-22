@@ -16,5 +16,5 @@
     "VAULT_ADDRESS",
     "CONSOLE_URL"
   ],
-  "toolingOnly": ["NVHASH_MOCK", "PORT"]
+  "toolingOnly": ["NVHASH_MOCK", "NVHASH_MOCK_LIVE_DOWN", "PORT"]
 }

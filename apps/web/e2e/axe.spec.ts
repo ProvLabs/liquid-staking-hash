@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // standing in CI from the scaffold on. Pages added later are covered by
 // adding their routes here.
 
-const ROUTES = ["/"];
+const ROUTES = ["/", "/stake", "/portfolio", "/market", "/validators", "/governance"];
 
 for (const route of ROUTES) {
   test(`axe: ${route} (light)`, async ({ page, context }) => {

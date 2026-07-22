@@ -20,6 +20,7 @@ const SAMPLE_ENV = {
   VAULT_ADDRESS: "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
   CONSOLE_URL: "https://console.example",
   CONSOLE_CHAIN_ID: "chain-dev",
+  API_URL: "http://api.internal.example:8787",
 } as NodeJS.ProcessEnv;
 
 describe("client-safe config subset (§7)", () => {
@@ -32,7 +33,9 @@ describe("client-safe config subset (§7)", () => {
     const client = toClientConfig(loadConfig(SAMPLE_ENV));
     const serialized = JSON.stringify(client);
     expect(serialized).not.toContain(SAMPLE_ENV.LCD_URL);
+    expect(serialized).not.toContain(SAMPLE_ENV.API_URL);
     expect(Object.keys(client)).not.toContain("lcdUrl");
+    expect(Object.keys(client)).not.toContain("apiUrl");
     expect(Object.keys(client)).not.toContain("consoleChainId");
   });
 

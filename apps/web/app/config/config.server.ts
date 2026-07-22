@@ -3,9 +3,10 @@
 // safely is an error, never a best-effort continue). Secrets come from the
 // environment only; `.env.example` carries placeholders.
 //
-// The M1 scaffold consumes only what it uses: the client-safe identity subset
+// This tier consumes only what it uses: the client-safe identity subset
 // (app-spec §7) plus the server-only LCD endpoint and console profile chain id
-// needed by the boot checks. `DATABASE_URL` (the `app_writer` role),
+// needed by the boot checks, and (PR 4.1) the server-only services/api base
+// URL for the chrome's indexed-plane reads. `DATABASE_URL` (the `app_writer` role),
 // `SESSION_SECRET`, `API_SERVICE_ASSERTION_KEY`, `WALLETCONNECT_PROJECT_ID`,
 // and `WEB_PUSH_VAPID_*` are documented in `.env.example` but deliberately NOT
 // read here — they land with the PRs that consume them (5.1 / 3.3 / 6.3), so
@@ -43,6 +44,12 @@ export const configSchema = z.object({
   /** Same-environment Console origin — verify-link base (app-spec §12.2). */
   consoleUrl: z.string().url(),
   /**
+   * services/api base URL for indexed-plane reads (app-spec §7, PR 4.1).
+   * Server-only: the browser reads indexed data only through this server's
+   * loaders, never the API directly (classified in scripts/server-only-env.json).
+   */
+  apiUrl: z.string().url().refine((u) => /^https?:\/\//.test(u), "expected an http(s) URL"),
+  /**
    * Chain id of the configured console profile (app-spec §7, revision
    * 2026-07-15). Must equal `chainId` or boot fails: one console per
    * environment, links never cross environments (§12.2).
@@ -61,6 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     contractAddress: env.CONTRACT_ADDRESS,
     vaultAddress: env.VAULT_ADDRESS,
     consoleUrl: env.CONSOLE_URL,
+    apiUrl: env.API_URL,
     consoleChainId: env.CONSOLE_CHAIN_ID,
   });
   if (!parsed.success) {

@@ -13,6 +13,7 @@
 // address the corpus was not captured from is a 404/error, like the real LCD
 // — mocks must not invent state (SECURITY.md: never lie about state).
 
+import { envelope } from "@nvhash/api-types";
 import { http, HttpResponse } from "msw";
 
 import manifest from "@nvhash/fixtures/manifest";
@@ -49,7 +50,30 @@ function lcdError(status: number, message: string) {
   return HttpResponse.json({ code: 2, message, details: [] }, { status });
 }
 
+// Test-harness-only failure injection (classified toolingOnly): with
+// NVHASH_MOCK_LIVE_DOWN=1 the two chrome live reads (vault `get`,
+// `epoch_status`) return 503 while everything else (notably the `config`
+// smart query the boot check needs) keeps working. This is how the e2e suite
+// exercises the "program status unavailable" footer honestly (plan 4.1 §3).
+const liveReadsDown = () => process.env.NVHASH_MOCK_LIVE_DOWN === "1";
+
 export const handlers = [
+  // services/api scaffold responses (PR 1.2 shape): enveloped, honest null
+  // heights until M2.5/M3 wire real ones. Built with the same
+  // @nvhash/api-types producers the real API uses, not hand-written shapes.
+  // Tests exercising heights/lag/incidents override these with server.use().
+  http.get("*/api/v1/status", () =>
+    HttpResponse.json(
+      envelope(
+        { service: "nvhash-api", api_version: "v1", environment: "development", data_source: "unwired" },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/incidents", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
+
   // /cosmwasm/wasm/v1/contract/{addr}/smart/{base64(query)}
   http.get("*/cosmwasm/wasm/v1/contract/:address/smart/:query", ({ params }) => {
     if (params["address"] !== FIXTURE_CONTRACT_ADDRESS) {
@@ -66,17 +90,24 @@ export const handlers = [
     if (fixture === undefined) {
       return lcdError(400, `unknown variant \`${String(key)}\`: query wasm contract failed`);
     }
+    if (key === "epoch_status" && liveReadsDown()) {
+      return lcdError(503, "injected failure: NVHASH_MOCK_LIVE_DOWN");
+    }
     return HttpResponse.json(fixture);
   }),
 
   // vault module REST (under /vault/v1 — pinned fact, app-spec §14.2)
   http.get("*/vault/v1/vaults", () => HttpResponse.json(vaultList)),
   http.get("*/vault/v1/params", () => HttpResponse.json(vaultParams)),
-  http.get("*/vault/v1/vaults/:id", ({ params }) =>
-    params["id"] === FIXTURE_VAULT_ADDRESS
-      ? HttpResponse.json(vaultGet)
-      : lcdError(404, `vault ${String(params["id"])} not found`),
-  ),
+  http.get("*/vault/v1/vaults/:id", ({ params }) => {
+    if (params["id"] !== FIXTURE_VAULT_ADDRESS) {
+      return lcdError(404, `vault ${String(params["id"])} not found`);
+    }
+    if (liveReadsDown()) {
+      return lcdError(503, "injected failure: NVHASH_MOCK_LIVE_DOWN");
+    }
+    return HttpResponse.json(vaultGet);
+  }),
   http.get("*/vault/v1/vaults/:id/pending_swap_outs", ({ params }) =>
     params["id"] === FIXTURE_VAULT_ADDRESS
       ? HttpResponse.json(vaultPendingSwapOuts)

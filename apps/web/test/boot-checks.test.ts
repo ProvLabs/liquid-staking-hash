@@ -25,6 +25,7 @@ const GOOD_ENV = {
   VAULT_ADDRESS: FIXTURE_VAULT_ADDRESS,
   CONSOLE_URL: "https://console.example",
   CONSOLE_CHAIN_ID: FIXTURE_CHAIN_ID,
+  API_URL: "http://api.mock:8787",
 } as NodeJS.ProcessEnv;
 
 describe("config loading (bounded at the boundary)", () => {
@@ -37,6 +38,8 @@ describe("config loading (bounded at the boundary)", () => {
   it.each([
     ["missing CHAIN_ID", { ...GOOD_ENV, CHAIN_ID: undefined }],
     ["non-URL LCD_URL", { ...GOOD_ENV, LCD_URL: "not a url" }],
+    ["non-URL API_URL", { ...GOOD_ENV, API_URL: "not a url" }],
+    ["non-http API_URL", { ...GOOD_ENV, API_URL: "ftp://api.example" }],
     ["non-bech32 contract", { ...GOOD_ENV, CONTRACT_ADDRESS: "0xdeadbeef" }],
     ["non-bech32 vault", { ...GOOD_ENV, VAULT_ADDRESS: "vault" }],
     ["unknown APP_ENV", { ...GOOD_ENV, APP_ENV: "prod" }],
