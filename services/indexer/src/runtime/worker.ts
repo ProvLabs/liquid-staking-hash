@@ -101,6 +101,11 @@ export interface WorkerRuntimeDeps {
 export async function runWorker(worker: Worker, deps: WorkerRuntimeDeps): Promise<void> {
   const committed = await readCheckpoint(deps.prisma, worker.stream);
   let next = committed === null ? (worker.startHeight ?? 0n) : committed + 1n;
+  // CometBFT block heights are 1-based — there is no block 0, and
+  // `block_results?height=0` is a hard RPC error. An empty checkpoint with a
+  // 0 (or unset) startHeight would otherwise page from 0 and crash the worker
+  // on its first live read; floor the first ingested height at 1.
+  if (next < 1n) next = 1n;
 
   while (!deps.signal.aborted) {
     const head = await deps.headHeight();
