@@ -7,7 +7,7 @@
 // arrears fields must never appear here; test/validators-data.test.ts asserts
 // the serialized key set stays exactly this.
 
-import type { Envelope, ValidatorSetEpochRow } from "@nvhash/api-types";
+import type { FreshnessMeta } from "@nvhash/api-types";
 
 export interface ValidatorRow {
   valoper: string;
@@ -26,11 +26,23 @@ export interface ValidatorRow {
   enrolledAt: string;
 }
 
+/**
+ * The public projection of PR 3.1's `ValidatorSetHealth`: `in_arrears` is
+ * deliberately NOT projected (operator economics stay off this page even as
+ * an aggregate; the gating test forbids the substring).
+ */
+export interface SetHealthPublic {
+  total: number;
+  active: number;
+  eligible: number;
+}
+
 export interface ValidatorsData {
   /** null = the contract validators read failed (page says unavailable). */
   rows: ValidatorRow[] | null;
   /** Live eligible count from the latest epoch snapshot, or null. */
   eligibleCount: number | null;
-  /** Indexed per-settlement set health; null = API unreachable/off-shape. */
-  setHistory: Envelope<ValidatorSetEpochRow[]> | null;
+  /** Indexed set-health aggregates with their freshness meta; null = API
+   * unreachable or off-shape. */
+  setHealth: { data: SetHealthPublic; meta: FreshnessMeta } | null;
 }

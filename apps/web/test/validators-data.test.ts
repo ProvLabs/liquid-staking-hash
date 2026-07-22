@@ -153,44 +153,55 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
     expect(data.rows![0]!.uptimePercent).toBeNull();
   });
 
-  it("an unreachable API nulls only setHistory (distinct from empty)", async () => {
+  it("an unreachable API nulls only setHealth (distinct from empty)", async () => {
     server.use(
       http.get("*/api/v1/validators", () => HttpResponse.json({}, { status: 502 })),
     );
     const data = await loadValidatorsData(config());
-    expect(data.setHistory).toBeNull();
+    expect(data.setHealth).toBeNull();
     expect(data.rows).toHaveLength(1);
   });
 
-  it("pristine scaffold yields an EMPTY set history with null heights", async () => {
+  it("pristine scaffold yields zeroed set health with null heights", async () => {
     const data = await loadValidatorsData(config());
-    expect(data.setHistory?.data).toEqual([]);
-    expect(data.setHistory?.meta.indexed_height).toBeNull();
+    expect(data.setHealth?.data).toEqual({ total: 0, active: 0, eligible: 0 });
+    expect(data.setHealth?.meta.indexed_height).toBeNull();
   });
 
-  it("populated set-history envelopes parse through; off-shape degrades to null", async () => {
-    const row = {
-      epoch_index: 8,
-      ended_at: "2026-07-14T00:00:01Z",
-      eligible_count: 1,
-      enrolled_count: 1,
-      joined: 0,
-      departed: 0,
+  it("populated payloads project ONLY the public aggregates; off-shape degrades to null", async () => {
+    const payload = {
+      validators: [
+        {
+          valoper: FIXTURE_VALOPER,
+          moniker: "testing",
+          active: true,
+          epoch_index: 8,
+          uptime_bps: 10000,
+          eligible: true,
+          failing_reasons: [],
+          program_delegation: "315350396951",
+          commission_due: "44045121",
+        },
+      ],
+      set_health: { total: 3, active: 2, eligible: 1, in_arrears: 1 },
     };
     server.use(
       http.get("*/api/v1/validators", () =>
-        HttpResponse.json(envelope([row], { source: "indexed", indexedHeight: 7811 })),
+        HttpResponse.json(envelope(payload, { source: "indexed", indexedHeight: 7811 })),
       ),
     );
     const populated = await loadValidatorsData(config());
-    expect(populated.setHistory?.data).toEqual([row]);
+    // in_arrears and the API's per-validator rows must NOT cross (§8.6 split;
+    // the closed-projection gate above also forbids the substrings).
+    expect(populated.setHealth?.data).toEqual({ total: 3, active: 2, eligible: 1 });
+    expect(populated.setHealth?.meta.indexed_height).toBe(7811);
 
     server.use(
       http.get("*/api/v1/validators", () =>
-        HttpResponse.json(envelope([{ epoch_index: -1 }], { source: "indexed" })),
+        HttpResponse.json(envelope({ validators: [{}] }, { source: "indexed" })),
       ),
     );
     const offShape = await loadValidatorsData(config());
-    expect(offShape.setHistory).toBeNull();
+    expect(offShape.setHealth).toBeNull();
   });
 });

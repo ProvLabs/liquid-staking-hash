@@ -7,6 +7,7 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import type { ApiConfig } from "./config.ts";
 import { createHandler, type RequestMeta } from "./handler.ts";
 import { RateLimiter } from "./rate-limit.ts";
+import { emptyReader, type IndexedReader } from "./reader.ts";
 
 /**
  * Derive an opaque client key for rate limiting. `x-forwarded-for` is trusted
@@ -30,10 +31,21 @@ export interface ApiServer {
   readonly limiter: RateLimiter;
 }
 
-/** Build (but do not start) the node:http server for the given config. */
-export function createApiServer(config: ApiConfig, now?: () => Date): ApiServer {
+/**
+ * Build (but do not start) the node:http server for the given config.
+ * `reader` is the indexed-data port (PR 3.1): absent, the honest empty
+ * reader serves the dataless null/empty state and `/status` says "unwired".
+ */
+export function createApiServer(config: ApiConfig, now?: () => Date, reader?: IndexedReader): ApiServer {
   const limiter = new RateLimiter({ max: config.rateLimitMax, windowMs: config.rateLimitWindowMs, ...(now ? { now: () => now().getTime() } : {}) });
-  const handle = createHandler({ limiter, appEnv: config.appEnv, ...(now ? { now } : {}) });
+  const handle = createHandler({
+    limiter,
+    appEnv: config.appEnv,
+    reader: reader ?? emptyReader,
+    dataSource: reader === undefined ? "unwired" : "api_reader",
+    ...(config.assertionKey !== undefined ? { assertionKey: config.assertionKey } : {}),
+    ...(now ? { now } : {}),
+  });
 
   const server = createHttpServer((req: IncomingMessage, res: ServerResponse) => {
     void serve(req, res);
@@ -49,7 +61,14 @@ export function createApiServer(config: ApiConfig, now?: () => Date): ApiServer 
       // irrelevant here — the handler reads only pathname/search.
       const url = new URL(req.url ?? "/", "http://api.internal");
       const request = new Request(url, { method: req.method ?? "GET" });
-      const meta: RequestMeta = { clientKey: clientKey(req, config.trustProxy) };
+      // The Authorization header rides through RequestMeta like clientKey:
+      // the pure core stays transport-agnostic, and verification happens
+      // only in auth.ts (ADR-001 Decision 2).
+      const authHeader = req.headers.authorization;
+      const meta: RequestMeta = {
+        clientKey: clientKey(req, config.trustProxy),
+        ...(authHeader !== undefined ? { authorization: authHeader } : {}),
+      };
       const response = await handle(request, meta);
 
       res.statusCode = response.status;

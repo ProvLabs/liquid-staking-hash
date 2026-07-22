@@ -25,6 +25,35 @@ export const paginationSchema = z.object({
 
 export type Pagination = z.infer<typeof paginationSchema>;
 
+/**
+ * Bech32 account address, bounded at the boundary (SECURITY.md: "pagination
+ * limits, address formats"): lowercase HRP, the `1` separator, and the
+ * bech32 data charset (no `b`/`i`/`o`/`1`), within the spec's 90-char
+ * ceiling. Deliberately NOT a checksum verification — a well-formed address
+ * that doesn't exist simply matches no rows — but malformed input (path
+ * fragments, SQL-ish strings, mixed case) is rejected with 400 before any
+ * read runs.
+ */
+export const bech32AddressSchema = z
+  .string()
+  .max(90)
+  .regex(/^[a-z]{1,10}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/, "must be a bech32 account address");
+
+/** `GET /portfolio` query: the target address only. */
+export const portfolioQuerySchema = z.object({
+  address: bech32AddressSchema,
+});
+
+/** `GET /transactions` query: target address + pagination + output format. */
+export const transactionsQuerySchema = z.object({
+  address: bech32AddressSchema,
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  offset: z.coerce.number().int().min(0).max(MAX_PAGE_OFFSET).default(0),
+  format: z.enum(["json", "csv"]).default("json"),
+});
+
+export type TransactionsQuery = z.infer<typeof transactionsQuerySchema>;
+
 /** Convert a URLSearchParams into a plain record for zod parsing (last wins). */
 export function searchParamsToRecord(params: URLSearchParams): Record<string, string> {
   const record: Record<string, string> = {};

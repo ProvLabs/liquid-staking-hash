@@ -87,10 +87,15 @@ export const handlers = [
   http.get("*/api/v1/epochs", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
-  // PR 4.3 tranche 1: the frozen /validators scaffold shape
-  // (@nvhash/api-types ValidatorSetEpochRow[]), honest empty like the rest.
+  // PR 3.1's /validators shape (ValidatorsPayload), honest-empty exactly as
+  // the real route serves with no reader wired.
   http.get("*/api/v1/validators", () =>
-    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+    HttpResponse.json(
+      envelope(
+        { validators: [], set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 } },
+        { source: "indexed" },
+      ),
+    ),
   ),
 
   // /cosmwasm/wasm/v1/contract/{addr}/smart/{base64(query)}

@@ -34,7 +34,7 @@ export default function Validators({ loaderData }: Route.ComponentProps) {
       <SetHealth
         locale={locale}
         eligibleCount={data.eligibleCount}
-        setHistory={data.setHistory}
+        setHealth={data.setHealth}
       />
       <SetTable locale={locale} rows={data.rows} nowMs={nowMs} />
     </div>

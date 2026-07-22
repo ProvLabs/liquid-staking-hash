@@ -420,12 +420,16 @@ The secondary-market context page (register A3): NAV vs market price over time (
 > `app/components/validators/`), inside the 4.1 chrome. The uptime threshold
 > is read live from `Config {}` (`performance_threshold_bps`); program
 > delegation reads the asset-manager contract's x/staking delegations (the
-> captured corpus shows the contract as delegator). Set-health trend/churn
-> consume the `/api/v1/validators` contract frozen by this PR ("n/a"/empty
-> until PR 3.1 derives it). The client-crossing row is a CLOSED public
-> projection: operator economics (commission, TIP, headroom, arrears) never
-> leave the server, gated by `test/validators-data.test.ts`. The operator
-> view below is untouched and lands with its own milestone.
+> captured corpus shows the contract as delegator). Set-health aggregates
+> consume PR 3.1's `/api/v1/validators` contract (`ValidatorsPayload`
+> `set_health`, per the §9.4 ownership note); the page projects only the
+> total/active/eligible counts to the client. The per-settlement
+> eligible-count TREND and churn named above have no serving endpoint yet
+> and are a recorded follow-on (a history endpoint or a `/validators`
+> extension, with PR 3.1's owner). The client-crossing row is a CLOSED
+> public projection: operator economics (commission, TIP, headroom, arrears)
+> never leave the web server, gated by `test/validators-data.test.ts`. The
+> operator view below is untouched and lands with its own milestone.
 
 - **Operator view ("my validator"):** the participation economics in consumer form — current + historical program delegation, rewards earned on it, commission owed (with the one-epoch grace state made plain), TIP paid vs rank effect, eligibility headroom on each threshold, and net-benefit-after-fees (personas §7's core question). Historical earnings and peer-rank context come from `validator_epochs` — history the console cannot show. **Every operator action is a first-class App transaction flow** (§14.6 decided): pay commission/TIP, enroll/unregister, and jailed-validator purge are built, previewed, signed, and tracked in the App per §10.2 — the Console keeps the same actions as an engineering surface, no longer the required path. The App's job is that Owen never *discovers* an obligation late (arrears alert rule is on by default for operator sessions). A **commission/TIP payment-history CSV** (amounts + times) is exportable here for the operator's own tax analysis (§14.11).
 
@@ -505,12 +509,90 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > exactly these shapes (a field change is a revision here, never a silent
 > edit) and adds `/validators` with PR 4.3.
 
-> **Revision 2026-07-22 (PR 4.3):** `/api/v1/validators` joins the frozen
-> set (`ValidatorSetEpochRow`: per-settlement eligible/enrolled counts plus
-> joined/departed churn, derivable from the indexer's
-> `validator_epochs`/`validator_registry`). All Learn/Validators-facing 3.1
-> contracts are now frozen; 3.1's remaining scope is the derivations plus
-> the 3.2 `/market` surface.
+> **Revision 2026-07-22 (PR 3.1, public program endpoints — working plan
+> `docs/plans/2026-07-22-app-m3-query-api.md`):** the real derivations are
+> live behind the frozen shapes. `services/api` reads the `indexed` schema
+> through `@nvhash/db-indexed` — a client GENERATED from the indexer's
+> canonical Prisma schema (no schema copy; read-only enforced by the
+> `api_reader` role, not the client) — behind an injectable reader port, so
+> the unit/contract suite stays Postgres-free while a DB-backed reader gate
+> (`test:db`, in the app-ci `db-grants` job) proves the real queries and the
+> Decimal→decimal-string round trip. Envelope heights come from the latest
+> `reconciler_runs` row, falling back to the max non-`meta:` worker
+> checkpoint (`chain_height: null`) when the reconciler has not run; cold
+> start stays null/0, never fabricated. Recorded decisions: (a)
+> `/validators` is OWNED by PR 3.1 (amending the 4.2 note above): rows are
+> `ValidatorRow` + `ValidatorSetHealth` in `@nvhash/api-types` — registry
+> enrollment joined to the validator's latest sampled epoch, per-epoch
+> fields null before the first sample — with PR 4.3 consuming them; (b)
+> `/metrics.participant_count` is **distinct addresses across all
+> transaction kinds** (any participation, not depositors-only); (c)
+> `EpochRow.nav` widened to `string | null` — an epoch settled with zero
+> shares has no NAV and null is the honest state; (d) the NAV formula is the
+> shared scale-then-floor helper `navHashPerShare` lifted into
+> `@nvhash/api-types` and golden-pinned to the web implementation's fixture
+> values (the web's switch to the shared copy is a recorded follow-on); (e)
+> `/status.data_source` now reports what is wired (`api_reader` |
+> `unwired`) with real heights — the §8.0 chrome's freshness source.
+> `DATABASE_URL` (the `api_reader` role) is consumed as an OPTIONAL bounded
+> config: absent, every route serves the honest empty/null state. `/market`
+> remains PR 3.2; address-scoped endpoints and the cross-address gate remain
+> PR 3.3.
+
+> **Revision 2026-07-22 (PR 3.2, `/market` — shape-complete, honest-empty):**
+> `/api/v1/market` is registered with its contract frozen in
+> `@nvhash/api-types` (`MarketSummary` / `MarketSample` / `MarketDepthBand`
+> / `BridgedSupplyRow`) AHEAD of the data: with the market sampler (plan PR
+> 2.4) parked pending §14.3 and no bridged nvHASH in v1 (§13 decision 4), it
+> serves the honest empty state (`sample: null`, `bridged_supply: []`) under
+> the full contract gates — the "coming soon" shell is structural, never a
+> fabrication. Recorded decisions: (a) venue + pool + `sampled_at` ride IN
+> the payload — market data has no chain-canonical plane (§12.1), so a
+> market figure is never served without where/when it was sampled; (b)
+> `premium_discount_bps` is signed, truncated toward zero, and computed
+> against the **NAV current at the sample's time** (the last epoch settled
+> at or before `sampled_at`, per §9.5(4)) — a newer NAV never retroactively
+> reprices an older sample; null when no epoch had settled (no NAV → no
+> premium, never a fabricated 0); (c) `price` is pinned as **nhash per whole
+> nvHASH** (base-unit integer, decimal string); (d) the supply split serves
+> the **bridged side only** (latest `bridge_supply_samples` reading per
+> chain) — LOCAL supply is a live chain read owned by the web tier (§5.1)
+> and is deliberately not fabricated from indexed samples (amending §8.5's
+> "local vs bridged" wording: the API provides bridged; the page composes
+> local from the live plane); (e) `MarketDepthBand`
+> (`side`/`slippage_bps`/`amount`) is a PROVISIONAL frozen shape — PR 2.4
+> must write `market_samples.depthBands` in exactly this shape or amend it
+> here; stored band JSON is boundary-validated on read and fails loudly on
+> mismatch, never a best-effort passthrough.
+
+> **Revision 2026-07-22 (PR 3.3, address-scoped endpoints + in-process
+> authorization — M3 complete):** `/api/v1/portfolio?address=` and
+> `/api/v1/transactions?address=` (+`&format=csv`) are live behind the
+> ADR-001 Decision 2 mechanism, with the **cross-address-rejection contract
+> suite** (`services/api/test/cross-address.test.ts`) standing in CI from
+> this change on. The assertion wire format is recorded in the ADR-001
+> Decision 2 amendment (Bearer `b64url(payload).b64url(hmac)`, HMAC-SHA256,
+> `exp − iat ≤ 60 s`, 10 s forward-skew bound on `iat`, fail-closed without
+> a configured key); routes declare `public`/`address`/`internal:notifier`
+> in the route registry and the pipeline enforces credential validity
+> before query validation and the scope↔target match after it (401 → 400 →
+> 403). `?address=` is bounded by a bech32 schema (400 on malformed input).
+> Frozen shapes: `TransactionRow` (per-event facts with the NAV marker at
+> each height) and `PortfolioSummary`/`RedemptionRow`. Recorded decisions:
+> (a) `PortfolioSummary` deliberately has **no balance field** — the nvHASH
+> balance is the web tier's live read (§8.2); indexed transactions cannot
+> see bank transfers, so a transactions-sum balance would misstate holdings
+> (it serves first activity, event count, escrowed shares, and active
+> redemptions; cost basis/effective yield remain the M6.1 service); (b) the
+> chain's projected-payout `estimates` series is absent from
+> `RedemptionRow` — no indexer worker writes it yet; adding it is a
+> revision here when its producer lands; (c) the CSV export is the §14.11
+> statement-of-fact (pinned columns `datetime_utc, block_height, txhash,
+> msg_index, kind, shares, nhash, nav_at_height`, formula-injection
+> guarded) and — a recorded deviation from the "every response carries the
+> envelope" rule above — carries its freshness in `X-Chain-Height` /
+> `X-Indexed-Height` / `X-Generated-At` response headers, since a CSV body
+> cannot carry the JSON envelope.
 
 ### 9.5 Derived metrics (formulas)
 

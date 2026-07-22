@@ -16,16 +16,17 @@ test("renders the set table with the corpus validator", async ({ page }) => {
   await expect(table).toContainText("315.35"); // program delegation, HASH
 });
 
-test("set health shows the live eligible count and the honest indexed cold state", async ({
+test("set health shows the live eligible count and the indexed aggregates", async ({
   page,
 }) => {
   await page.goto("/validators");
   const health = page.getByLabel("Set health");
   await expect(health).toContainText("Eligible now");
   await expect(health).toContainText("1");
-  await expect(health).toContainText("No monthly settlements are indexed yet", {
-    useInnerText: true,
-  });
+  // Honest-empty indexed plane: zero counts from the unwired reader.
+  await expect(health).toContainText("Active in set");
+  await expect(health).toContainText("Enrollments all-time");
+  await expect(health).toContainText("From indexed history");
 });
 
 test("verify link stays under the booted console origin (§12.2)", async ({ page }) => {

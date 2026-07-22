@@ -27,9 +27,6 @@ import type { ValidatorRow, ValidatorsData } from "./types";
 
 export type { ValidatorRow, ValidatorsData } from "./types";
 
-/** How much set history the trend requests (one page, bounded). */
-export const SET_HISTORY_LIMIT = 48;
-
 export interface ValidatorsReadOptions {
   fetchImpl?: FetchLike;
 }
@@ -45,7 +42,7 @@ export async function loadValidatorsData(
   const staking = new StakingClient(lcd);
   const apiBase = config.apiUrl.replace(/\/+$/, "");
 
-  const [programValidators, contractConfig, stakingSet, delegations, snapshot, setHistory] =
+  const [programValidators, contractConfig, stakingSet, delegations, snapshot, indexedSet] =
     await Promise.all([
       contract.validators().catch(() => null),
       contract.config().catch(() => null),
@@ -54,11 +51,7 @@ export async function loadValidatorsData(
       // fixture corpus captures the delegator as the contract address).
       staking.delegations(config.contractAddress).catch(() => null),
       contract.epochSnapshot().catch(() => null),
-      fetchApiJson(
-        `${apiBase}/api/v1/validators?limit=${SET_HISTORY_LIMIT}`,
-        fetchImpl,
-        CHROME_READ_TIMEOUT_MS,
-      )
+      fetchApiJson(`${apiBase}/api/v1/validators`, fetchImpl, CHROME_READ_TIMEOUT_MS)
         .then((body) => validatorsEnvelopeSchema.parse(body))
         .catch(() => null),
     ]);
@@ -97,6 +90,20 @@ export async function loadValidatorsData(
   return {
     rows,
     eligibleCount: snapshot?.eligibleCount ?? null,
-    setHistory,
+    // Project ONLY the public aggregates (§8.6): the API's per-validator rows
+    // and the in_arrears count stay server-side — the live table is this
+    // page's per-validator source, and operator economics never cross, even
+    // aggregated (gated by test/validators-data.test.ts).
+    setHealth:
+      indexedSet === null
+        ? null
+        : {
+            data: {
+              total: indexedSet.data.set_health.total,
+              active: indexedSet.data.set_health.active,
+              eligible: indexedSet.data.set_health.eligible,
+            },
+            meta: indexedSet.meta,
+          },
   };
 }

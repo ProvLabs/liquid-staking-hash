@@ -17,7 +17,12 @@ const WIDTH = 560;
 const HEIGHT = 180;
 const PAD = { top: 12, right: 12, bottom: 22, left: 46 };
 
-function stepPath(rows: EpochRow[]): string {
+// An epoch settled with zero shares has a null NAV (PR 3.1, app-spec §9.4
+// revision): it has no point on a NAV series, so plottable rows are the ones
+// carrying a NAV string — filtered once where the series is built.
+type PlottableEpoch = EpochRow & { nav: string };
+
+function stepPath(rows: PlottableEpoch[]): string {
   const navs = rows.map((row) => Number.parseFloat(row.nav));
   const min = Math.min(...navs);
   const max = Math.max(...navs);
@@ -49,8 +54,12 @@ export function NavStepChart({
   epochs: Envelope<EpochRow[]> | null;
 }) {
   const [showTable, setShowTable] = useState(false);
-  // Newest-first from the API; the chart reads oldest → newest.
-  const series = epochs === null ? [] : [...epochs.data].reverse();
+  // Newest-first from the API; the chart reads oldest → newest. Null-NAV
+  // epochs (zero shares) carry no NAV to plot or tabulate here.
+  const series =
+    epochs === null
+      ? []
+      : epochs.data.filter((row): row is PlottableEpoch => row.nav !== null).reverse();
 
   if (series.length < 2) {
     // Two honest cold states, kept distinct (§12.1): the API being

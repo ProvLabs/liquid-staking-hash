@@ -144,21 +144,9 @@ export default {
 
   "validators.health-title": "Set health",
   "validators.health-eligible-now": "Eligible now",
-  "validators.health-joined": "Joined last settlement",
-  "validators.health-departed": "Departed last settlement",
+  "validators.health-active": "Active in set",
+  "validators.health-total": "Enrollments all-time",
   "validators.health-indexed-caption": "From indexed history",
-  "validators.health-trend-title": "Eligible validators by monthly settlement",
-  "validators.health-trend-empty":
-    "No monthly settlements are indexed yet. The trend appears as settlement history lands.",
-  "validators.health-trend-single":
-    "One monthly settlement is indexed so far. The trend appears as more history lands.",
-  "validators.health-trend-unavailable": "Set history is unavailable right now.",
-  "validators.trend-show-table": "Table view",
-  "validators.trend-show-chart": "Chart view",
-  "validators.trend-col-settlement": "Settlement",
-  "validators.trend-col-eligible": "Eligible",
-  "validators.trend-col-joined": "Joined",
-  "validators.trend-col-departed": "Departed",
 
   "validators.table-unavailable": "The validator set is unavailable right now.",
   "validators.table-empty": "No validators are enrolled in the program yet.",
