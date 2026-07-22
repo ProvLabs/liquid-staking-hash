@@ -153,9 +153,6 @@ services:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       APP_ENV: "development"
       PORT: "8080"
-      # SELECT-only api_reader over the indexed schema (PR 3.1): without this
-      # the API serves the honest-empty state and every indexed figure reads
-      # as zero/"n/a".
       DATABASE_URL: "postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed"
     ports:
       - "8080:8080"
