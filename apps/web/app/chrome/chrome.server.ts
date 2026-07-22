@@ -31,11 +31,12 @@ export const CHROME_READ_TIMEOUT_MS = 4_000;
 /**
  * Degraded-banner display threshold: how many blocks the indexed head may
  * trail the chain head before the chrome calls the data degraded (§8.0). The
- * §7 reconciler cadence is ~1 min; at Provenance's ~4 s block time that is
- * ~15 blocks. Display-only, honestly inert until M2.5/M3 report real heights;
- * revisit then (plan 4.1 open question; reviewer confirms the value).
+ * §7 reconciler cadence is ~1 min; at Provenance's ~4 s block time, 30 blocks
+ * is ~2 min, i.e. 2x the cadence, so one late cycle of jitter never flips the
+ * banner (PR 4.1 review). Display-only, honestly inert until M2.5/M3 report
+ * real heights; revisit then.
  */
-export const DEGRADED_LAG_BLOCKS = 15;
+export const DEGRADED_LAG_BLOCKS = 30;
 
 /**
  * Incident kinds whose open incidents flip the chrome to "data degraded"

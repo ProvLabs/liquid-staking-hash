@@ -36,6 +36,7 @@ export function VerifyLink({ locale, target }: { locale: Locale; target: VerifyT
       className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
       href={verifyHref(data.clientConfig.consoleUrl, target)}
       rel="noreferrer"
+      target="_blank"
     >
       {t(locale, "chrome.console-link")} ↗
     </a>

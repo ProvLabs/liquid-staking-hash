@@ -47,6 +47,7 @@ export function FreshnessFooter({
         className="underline underline-offset-4 hover:text-foreground"
         href={consoleUrl}
         rel="noreferrer"
+        target="_blank"
       >
         {t(locale, "chrome.console-link")} ↗
       </a>
