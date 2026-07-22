@@ -1,6 +1,7 @@
 pub mod contract;
 pub mod epoch;
 mod error;
+pub mod month;
 pub mod msg;
 pub mod plan;
 #[cfg(not(target_arch = "wasm32"))]

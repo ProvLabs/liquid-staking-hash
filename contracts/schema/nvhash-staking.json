@@ -86,12 +86,6 @@
         "format": "uint64",
         "minimum": 0.0
       },
-      "min_run_interval_secs": {
-        "default": 0,
-        "type": "integer",
-        "format": "uint64",
-        "minimum": 0.0
-      },
       "performance_threshold_bps": {
         "description": "Uptime eligibility threshold in bps (0 = uptime gating disabled).",
         "default": 0,
@@ -226,14 +220,6 @@
                 "minimum": 0.0
               },
               "min_capture_interval_secs": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "format": "uint64",
-                "minimum": 0.0
-              },
-              "min_run_interval_secs": {
                 "type": [
                   "integer",
                   "null"
@@ -670,7 +656,6 @@
         "max_delegations_per_run",
         "min_bonded_cap_bps",
         "min_capture_interval_secs",
-        "min_run_interval_secs",
         "performance_threshold_bps",
         "receipt_denom",
         "underlying_denom",
@@ -721,11 +706,6 @@
           "minimum": 0.0
         },
         "min_capture_interval_secs": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "min_run_interval_secs": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
