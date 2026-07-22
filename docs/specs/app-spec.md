@@ -158,6 +158,14 @@ The chain retains only the most recent `EpochSnapshot` (contract §9.10) and no 
 
 Audit reports (firm, scope, date, report links, covered commit/code-hash), program documentation, and the mechanism explainer are **build-reviewed content** (MDX/config in the repo, shipped with the App), not database rows — they change by pull request, which is the right auditability for trust claims (register C1). The displayed code-hash claim carries a verify link to the Console's deployed-build check so the "audited build is the live build" assertion is provable, not asserted.
 
+> **Revision 2026-07-22 (PR 4.2):** the content plane exists as a typed
+> build-reviewed module (`apps/web/app/content/trust.ts`, `AuditEntry[]`)
+> rather than MDX: there is no audit report yet, and MDX tooling would be
+> infrastructure for zero documents. The pre-audit posture renders honestly
+> (SECURITY.md project status) instead of the section being omitted. MDX
+> arrives with the first real report; the typed shape is the contract either
+> way.
+
 ---
 
 ## 6. Architecture Overview
@@ -343,7 +351,27 @@ The comprehension → due-diligence funnel (personas §5), and the program's pub
 6. **Exit explainer.** The two paths side by side: instant DEX trade at market price (with live premium/discount) vs native redemption at protocol rate (guaranteed ≤ 60 days, typically faster — the §8.4 framing, previewed here because "can I get out?" is a pre-deposit question).
 7. **CTA:** "Connect wallet to stake" → §8.3. The funnel steps (arrive → scroll depth → due-diligence sections → connect → first deposit) are counted as the aggregate funnel-stage tallies §8.8 consumes (first-party, aggregate-only; §3 decision 14).
 
-### 8.2 Portfolio (route `/portfolio`, wallet required)
+> **Revision 2026-07-22 (PR 4.2, Learn page):** delivered in `apps/web`
+> (`app/learn/learn.server.ts` assembles the data; components under
+> `app/components/learn/`), rendering inside the 4.1 chrome with every figure
+> independently degradable to an honest "n/a"/cold-start state (gated by
+> `test/learn-data.test.ts`). Deliberate deltas until their dependencies
+> land: the CTA routes to the Stake page (a labeled stub until M5) since no
+> wallet flow exists yet; the compare-to-self-staking panel is qualitative
+> (no fabricated numeric baseline; a real one is a recorded follow-on);
+> funnel counters stay with PR 7.6 (§14.10); the hero pipeline ships as a
+> static SVG with a reduced-motion-safe CSS pulse. The APR minimum-window
+> rule is `MIN_APR_EPOCHS = 2` in `learn.server.ts` (below it: "n/a
+> (insufficient history)", never an annualized single epoch). Indexed
+> figures (participants, program age, epoch chart, incidents) consume the
+> §9.4 contract shapes frozen by this PR and render "n/a"/empty until M2/M3
+> wire real data. **Vocabulary (PR 4.2 review, Ira):** consumer copy says
+> "monthly settlement" for the cadence (the program targets calendar
+> months); "epoch" appears exactly once, in the hero's mechanism sentence
+> above, matching this section's own phrasing. Data identities (epoch
+> indices, `EpochRow`) keep their names: on devnet an epoch is hours, so
+> copy must never claim "month" as the mechanism. Revisit the remaining
+> mention when the contract's calendar-month change lands.
 
 Priya's home. Composes additional roles additively (register F1): operator and admin cards append below the holder view when the address qualifies.
 
@@ -439,7 +467,9 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 
 ### 9.3 Backfill
 
-On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3).
+On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3), enforced as a fail-closed boot check (PR 2.0, `services/indexer/src/runtime/streams.ts`).
+
+**Epoch-history backfill mechanism (PR 2.2):** the contract retains only the *latest* epoch snapshot on chain (§13, contract §9.10), so history is recovered by a **height-pinned smart query at each `run_epoch` crank height** — querying `epoch_snapshot`/`apr` with `x-cosmos-block-height: H` returns the epoch that closed at H. Cranks are located by tx-search (`wasm action=run_epoch`); rows upsert by `epoch_index`, so replay from genesis and resume from a checkpoint converge to the same `epoch_snapshots`. **Retention caveat (documented, not silent):** height-pinned queries work for any past height on a full-state node; a node that has *pruned* state below a crank height cannot serve that epoch — a config/retention limit, surfaced rather than hidden.
 
 ### 9.4 API surface
 
@@ -452,6 +482,17 @@ Every response from either process carries the freshness envelope `{ data, meta:
 
 > **Revision 2026-07-14 (PR 1.2, `services/api` scaffold):** `@nvhash/api-types` and the read-only serving shell now exist. The scaffold registers `/api/v1/status` (enveloped service descriptor), `/api/v1/incidents` (enveloped, zod-bounded `?limit=&offset=` pagination — the seam PR 3.1 fills with real derivation and heights), and `/api/v1/health` (operational liveness, deliberately un-enveloped). All routes are GET-only (any write verb → 405), rate-limited, and — being dataless until M3 — report null heights. The `api_reader` client (`@nvhash/db-indexed`) and address-scoped endpoints are **not** wired here; they land in M3 (PRs 3.1–3.3) with the cross-address-rejection gate.
 
+> **Revision 2026-07-22 (PR 4.2, Learn-facing 3.1 contracts frozen):** the
+> M3 contracts-first step is done for the Learn page's subset. Row shapes
+> live in `@nvhash/api-types` (`ProgramMetrics`, `EpochRow`, `IncidentRow`
+> with closed kind/severity unions mirroring the indexer's incident schema);
+> `services/api` registers `/api/v1/metrics` (enveloped, all-null scaffold)
+> and `/api/v1/epochs` (enveloped, paginated, empty scaffold) and types
+> `/api/v1/incidents` rows accordingly, all gated by the registry-driven
+> envelope-contract harness. PR 3.1 implements the real derivations against
+> exactly these shapes (a field change is a revision here, never a silent
+> edit) and adds `/validators` with PR 4.3.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.
@@ -461,11 +502,13 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 3. **Typical time-to-payout:** per recent-epoch cohort of terminal `redemption_requests`, the median and p90 of (`expedited_at ?? matured_at`) − `enqueued_at`. Displayed only with **≥ 10 terminal requests** in the cohort (§14.12 decided); below it, the flow shows the 60-day guarantee alone — a small-sample "typical" would be a lie with extra steps. The statistic is physically bounded to the **~21-to-60-day band** (unbonding floor to guarantee ceiling); labeling never implies precision outside that band.
 4. **Premium/discount:** `(market_price − NAV) / NAV` in bps, computed at each market sample against the NAV current at that sample's time.
 5. **Upkeep lag:** for each crank kind, actual execution time − earliest-eligible time (from config intervals + prior state), distribution per epoch.
-6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run.
+6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run. **Per-metric tolerances live in code** (`services/indexer/src/reconciler/tolerances.ts`), reviewed like the schema allowlist and **not env-tunable** — a widened tolerance would silence the alarm, which §12.1.3 forbids (RESOLVED 2026-07-21, PR 2.5). The "live plane" the reconciler compares against is the chain's retained latest epoch snapshot (the authoritative current record); copied snapshot values use an exact (0) tolerance, so any indexed divergence trips `reconciler_divergence`. **Queue-length delta is deferred** to a fast-follow (it needs a vault `pending_swap_outs` decoder the indexer does not yet carry).
 
 ### 9.6 Incident derivation
 
 Incidents are **computed from indexed facts, never hand-entered**: contract halted/resumed; vault paused/unpaused (with reason); slash write-down > 0 in an epoch; redemption refund observed (unfunded maturity — contract §8's "failure mode is a refund"); jail report opened/purged; epoch overdue (now − last_run > interval + slack); reconciler divergence; indexer lag beyond threshold. Each maps to a severity aligned with the console's status semantics (console §11.2) and feeds banners, the Learn-page history (C2), holder/admin alerts (D1), and the admin feed (A4). Closure is likewise computed (the condition clearing), with optional admin acknowledgment for the record.
+
+> **PR 2.5 status (2026-07-21):** the reconciler is the **sole writer** of `incidents` (`services/indexer/src/reconciler/`). Delivered kinds: `reconciler_divergence` and `contract_halted` (closeable, live-derived), `indexer_lag` (closeable, from per-stream checkpoint lag), `slash_write_down` and `redemption_refund` (point-in-time, from indexed facts). The alarm is proven end-to-end by a Postgres-backed acceptance test (corrupt an indexed row → the incident opens; fix it → it closes). **Deferred to a fast-follow** (each needs an additional live decoder not yet built): `vault_paused` (vault query), `jail_report` (jail open/close lifecycle), `epoch_overdue` (config interval + the pending calendar-month change). Point-in-time kinds are opened once and not auto-closed; admin acknowledgment remains an `app`-schema concern.
 
 ---
 

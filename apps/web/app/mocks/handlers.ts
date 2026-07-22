@@ -73,6 +73,20 @@ export const handlers = [
   http.get("*/api/v1/incidents", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
+  // PR 4.2 tranche 1: the frozen /metrics and /epochs scaffold shapes
+  // (@nvhash/api-types ProgramMetrics / EpochRow[]), honest nulls/empty
+  // exactly like the services/api scaffold routes they mirror.
+  http.get("*/api/v1/metrics", () =>
+    HttpResponse.json(
+      envelope(
+        { participant_count: null, program_started_at: null, epoch_count: null },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/epochs", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
 
   // /cosmwasm/wasm/v1/contract/{addr}/smart/{base64(query)}
   http.get("*/cosmwasm/wasm/v1/contract/:address/smart/:query", ({ params }) => {

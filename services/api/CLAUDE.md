@@ -62,7 +62,10 @@ security-executable gates (SECURITY.md, plan §4), which fail CI on violation:
   it iterates the actual route table, so every route (now and future) is held
   to the freshness-envelope shape on enveloped routes, the read-only method
   gate, and its zod query bounds. A new route is covered automatically; it
-  cannot slip past the harness.
+  cannot slip past the harness. The suite also pins the PR 4.2-frozen
+  scaffold shapes: `/metrics` (exact `ProgramMetrics` field set, all null)
+  and `/epochs` (empty, pagination-bounded), with row types in
+  `@nvhash/api-types` that PR 3.1 implements against.
 - **Read-only guarantee** (same suite): the route registry holds only GET
   routes and every write verb (`POST`/`PUT`/`PATCH`/`DELETE`) on every route
   returns 405. This is how "no write endpoint of any kind" (plan §1) is

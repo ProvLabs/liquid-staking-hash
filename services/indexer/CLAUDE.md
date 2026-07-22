@@ -77,6 +77,60 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   corpus) and `test/workers/chain-events-replay` (fast-check: replay from 0 ==
   resume from any height; idempotent re-apply).
 
+- **`workers/epoch-history/`** (stream `epoch-history`, PR 2.2) → `epoch_snapshots`.
+  The contract keeps only the latest snapshot on chain (spec §13/§9.10), so
+  history is read by **height-pinned smart query** (`PinnedLcdClient.smartAtHeight`,
+  `x-cosmos-block-height`) at each `run_epoch` crank height — `boundaries.ts`
+  locates cranks via tx-search, `snapshot.ts` fetches epoch_snapshot + apr AS OF
+  that height, `decode.ts` maps them (local mirror of chain-client parsers, since
+  raw-Node can't import that package — see `decode/scalars.ts`). Idempotent:
+  upsert by `epochIndex`; genesis backfill and resume converge because past-height
+  state is deterministic. Tests: `test/workers/epoch-history-decode` (fixtures +
+  crank detection) and `-replay` (fast-check convergence). Height-pinned query is
+  App-local for now (promotion into `@nvhash/chain-client` is a still-open call —
+  moot at runtime anyway: the indexer can't import that package's `.ts`).
+
+- **`workers/validator-sampler/`** (stream `validator-sampler`, PR 2.3) →
+  `validator_registry` + `validator_epochs`. Anchored to epoch cranks like
+  epoch-history: at each crank height it reads, height-pinned, the contract
+  `validators()`/`jail_reports()` plus x/staking moniker + program delegation
+  (generic `PinnedLcdClient.getAtHeight`), keying the epoch rows by the epoch
+  that closed there. `failingReasons` is derived from the status flags;
+  `uptimeBps` null (no capture yet) stores as 0 (read with `eligible`, not as an
+  asserted 0%). Registry enrollment is set-once (`enrolledAt` from the contract);
+  a validator absent from the set at a crank is marked `unregisteredAt` — the one
+  stateful bit, forward-deterministic so replay converges. Writes facts only;
+  2.5 derives jail/arrears incidents from them. Tests:
+  `test/workers/validator-sampler-decode` (corpus) and `-replay` (fast-check).
+
+## Reconciler (PR 2.5)
+
+`src/reconciler/` is the honesty alarm (spec §9.6/§12.1) and the **sole writer of
+`incidents`**. It runs as its OWN loop (cadence `RECONCILE_INTERVAL_MS`, default
+30 s) **independent of the workers**, so it keeps running and sees growing
+lag/divergence even if ingestion stalls (§12.1.3). Each pass reads the live plane
+(chain's retained latest snapshot + halted, via pinned-at-head smart queries) and
+the indexed plane (DB), then `deriveActions` — a **pure** function of both planes
+— yields the `reconciler_runs` row plus incidents to open/close, applied in one
+transaction. Purity is what lets the alarm be unit-tested without Postgres.
+
+- **`tolerances.ts`** — per-metric tolerances, in-code and **not env-tunable**
+  (widening one would silence the alarm, §12.1.3). Copied snapshot values use
+  exact (0); `lagHeights` bounds trailing before DATA DEGRADED.
+- **Incidents:** `reconciler_divergence` (indexed copy ≠ chain), `indexer_lag`
+  (per-stream checkpoint lag), `contract_halted` (closeable); `slash_write_down`,
+  `redemption_refund` (point-in-time — opened once, and only for facts not
+  already recorded, so per-pass work stays bounded as history grows). Cold start
+  (no worker stream committed yet) reports `indexedHeight = 0`, never the head
+  (§12.1 honesty), and does NOT fire a DATA-DEGRADED incident (that means "was
+  fresh, now behind"). Deferred fast-follow (need more live decoders):
+  `vault_paused`, `jail_report`, `epoch_overdue`, and the queue-length delta.
+- **Tests:** `test/reconciler/reconciler.test.ts` (pure, Postgres-free — deltas,
+  lag, derivation incl. the corrupt-value alarm) and
+  `test/integration/reconciler-alarm.test.ts` (the Postgres-backed acceptance
+  gate: corrupt an indexed row → incident opens; fix → closes), in the
+  `db-grants` job alongside grant-boundary.
+
 ## Commands
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
@@ -92,8 +146,9 @@ Package scripts (`./dev pnpm --filter @nvhash/indexer run <script>`):
 - `test` — Vitest (default config). Includes the two security-executable gates
   below; no DB (the DB-backed grant-boundary test is a separate config/script,
   so `pnpm -r run test` stays Postgres-free).
-- `test:grants` — the grant-boundary integration test (needs Postgres, see
-  "Full-stack wiring" below).
+- `test:grants` — the Postgres-backed integration tests (needs Postgres, see
+  "Full-stack wiring" below): the grant-boundary gate and the PR 2.5 reconciler
+  alarm acceptance gate (`test/integration/`).
 - `generate` — regenerate the Prisma client from `prisma/`.
 - `start` — `prisma generate` then run the scaffold supervisor (`src/index.ts`):
   it connects to the `indexed` schema as `indexer_writer`, proves the connection

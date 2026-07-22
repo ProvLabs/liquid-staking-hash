@@ -343,6 +343,61 @@ replay-convergence property (replay from 0 == resume from any height). Resolves
 `fast-check` (dev), `RPC_URL`/`RECEIPT_DENOM` config + compose env. Next:
 2.2/2.3 (parallel) then 2.5.*
 
+*2026-07-21 (rev 8): **M2.1 review fixes** (PR #8, both Greptile P2s valid) —
+`assertChainIsolation` made atomic (`upsert` + read-back, was a `findUnique`/`create`
+race), and the chain-events collector now fetches block time only for heights
+that produce events (type pre-pass, mirroring the block phase). **M2.2 delivered**
+— the `epoch-history` worker → `epoch_snapshots`: tx-search locates `run_epoch`
+cranks, a **height-pinned smart query** (`x-cosmos-block-height`) at each crank
+height recovers the epoch the contract no longer retains (single-snapshot,
+§13/§9.10), upsert by `epochIndex`; fixture-decode + fast-check convergence gates.
+Resolves the §9.3 backfill mechanism + retention caveat. The recurring
+"height-pinned query → promote into `@nvhash/chain-client`?" fork is **settled as
+moot**: the indexer runs raw `.ts` on Node, which refuses to type-strip a `.ts`
+under `node_modules` (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, verified 2026-07-21), so
+chain-client cannot be imported at runtime — smart-query decoders are a local
+mirror (`decode/scalars.ts`, fixture-locked). Next: 2.3, then 2.5.*
+
+*2026-07-21 (rev 9): **M2.2 open fork resolved** — height-pinned smart query
+stays App-local (the runtime-import constraint above makes promotion moot).
+**M2.3 delivered** — the `validator-sampler` worker → `validator_registry` +
+`validator_epochs`. Design refinement vs the plan's "continuous sampler": it is
+**anchored to epoch cranks and read height-pinned** (finalized per-epoch
+economics, structurally a sibling of epoch-history) so it backfills and replays
+deterministically. Combines contract `validators()`/`jail_reports()` with
+x/staking moniker + program delegation (new generic `PinnedLcdClient.getAtHeight`);
+`failingReasons` derived from status flags; registry enrollment set-once with
+forward-deterministic departure marking. Fixture-decode + fast-check convergence
+(incl. departures) gates. Uptime comes from the contract's own SigningInfo-derived
+`uptimeBps` (contract §10.3), so no separate slashing reader is needed — the
+`SlashingClient` open question is closed as unnecessary. Next: 2.5 (reconciler).*
+
+*2026-07-21 (rev 10): **M2.5 delivered — M2 milestone complete.** The reconciler
+(`services/indexer/src/reconciler/`) runs as its own loop independent of the
+workers (survives an indexer outage, §12.1.3), comparing the chain's retained
+latest snapshot against the indexed copy. `deriveActions` is a pure function of
+the live/indexed planes → the `reconciler_runs` row + incidents to open/close,
+applied in one transaction; the reconciler is the **sole writer of `incidents`**.
+Delivered incident kinds: `reconciler_divergence`, `indexer_lag`,
+`contract_halted` (closeable), `slash_write_down`, `redemption_refund`
+(point-in-time). **Acceptance gate proven** by a Postgres-backed test (corrupt an
+indexed row → incident opens; fix → closes), in the `db-grants` job. Per-metric
+tolerances live in code and are **not env-tunable** (§12.1.3) — recorded in
+`app-spec.md` §9.5.6/§12.1. Deferred fast-follow (need more live decoders):
+`vault_paused`, `jail_report`, `epoch_overdue`, and the queue-length delta —
+recorded in §9.6. The services-lane honesty machinery for M2 is now in place; M3
+(query API) builds on it.*
+
+*2026-07-21 (rev 11): **PR #9 review fixes** (three Greptile P2s, all valid).
+(1) The reconciler now opens point-in-time incidents (`slash_write_down`,
+`redemption_refund`) only for facts not already recorded, so per-pass work stays
+bounded as history grows (was re-upserting the whole lifetime every 30 s).
+(2) Cold-start lag now reports `indexedHeight = 0` instead of the chain head — an
+empty checkpoint set must not read as "caught up" (§12.1); cold start stays a
+distinct rendered state, not a DATA-DEGRADED incident. (3) Corrected misleading
+decode-error path labels in `parseProgramDelegations`. Also fixed a stray NUL
+byte that had crept into the incident dedupe-key separator (caught by the new
+bounded-work test).*
 *2026-07-21 (rev 8): **M4.1 delivered** (working plan
 `app-m4.1-global-chrome`): the §8.0 global chrome in `apps/web`:
 `app/chrome/chrome.server.ts` (root-loader ChromeState: paused/halted banner
@@ -357,3 +412,20 @@ row (spec §7 amended). Gates added: `test/chrome-state.test.ts`,
 recorded in the spec: footer docs link deferred (no docs URL exists) and no
 `governance` verify target (console panel does not exist yet); both are
 follow-ons, not dead links. Next: 4.2–4.4 render inside this chrome.*
+
+*2026-07-22 (rev 9): **M4.2 delivered** (working plan
+`app-m4.2-learn-page`): the §8.1 Learn page in `apps/web`, plus the
+Learn-facing subset of the 3.1 contracts frozen first per the M3
+contracts-first note (Carlton, 2026-07-22): `ProgramMetrics`/`EpochRow`/
+`IncidentRow` in `@nvhash/api-types`, honest all-null `/api/v1/metrics` and
+empty `/api/v1/epochs` scaffold routes in `services/api` under the
+registry-driven contract harness, MSW mocks in the web tier. The page
+assembles per-figure-degradable data in `app/learn/learn.server.ts` (BigInt
+NAV/TVL math in `amounts.ts`, golden-value gated; `MIN_APR_EPOCHS = 2`
+minimum-window rule), renders all seven §8.1 sections with cold-start
+states, a dependency-free step-after NAV chart with table view, the typed
+§5.4 trust module (pre-audit posture), and the incident feed. Gates:
+`test/learn-data.test.ts`, `test/amounts.test.ts`, extended
+envelope-contract suite, `e2e/learn.spec.ts`. PR 3.1's remaining scope:
+implement derivations against the frozen shapes; add `/validators` (4.3)
+and `/market` (3.2). Next: 4.3/4.4 in parallel.*
