@@ -10,6 +10,12 @@ import {
 } from "react-router";
 
 import stylesheet from "./app.css?url";
+import { loadChromeState } from "~/chrome/chrome.server";
+import { AlertsBell } from "~/components/chrome/alerts-bell";
+import { Banner } from "~/components/chrome/banner";
+import { EnvBadge } from "~/components/chrome/env-badge";
+import { FreshnessFooter } from "~/components/chrome/freshness-footer";
+import { Nav } from "~/components/chrome/nav";
 import { ThemeToggle } from "~/components/theme-toggle";
 import { getBootedConfig, toClientConfig } from "~/config/config.server";
 import { DEFAULT_LOCALE, isLocale, t, type Locale } from "~/i18n";
@@ -23,11 +29,13 @@ export const links: Route.LinksFunction = () => [{ rel: "stylesheet", href: styl
 // allowlist-gated; see test/client-config.test.ts and check-bundle-secrets).
 // getBootedConfig has already run the boot checks — a failed boot means this
 // throws and the app serves nothing rather than something misconfigured.
+// ChromeState is public chain data (not config) and crosses alongside it.
 export async function loader({ request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
   return {
     clientConfig: toClientConfig(config),
     theme: themeFromCookieHeader(request.headers.get("Cookie")),
+    chrome: await loadChromeState(config),
   };
 }
 
@@ -51,27 +59,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body className="flex min-h-svh flex-col antialiased">
-        <header className="flex items-center justify-between border-b px-6 py-3">
-          <span className="font-semibold">{t(locale, "app.name")}</span>
-          <ThemeToggle locale={locale} initialTheme={theme} />
+        <header className="border-b">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
+            <span className="font-semibold">{t(locale, "app.name")}</span>
+            <Nav locale={locale} />
+            <div className="ml-auto flex items-center gap-3">
+              {data ? (
+                <EnvBadge
+                  locale={locale}
+                  appEnv={data.clientConfig.appEnv}
+                  chainId={data.clientConfig.chainId}
+                />
+              ) : null}
+              <AlertsBell locale={locale} />
+              <ThemeToggle locale={locale} initialTheme={theme} />
+            </div>
+          </div>
         </header>
+        <Banner locale={locale} banner={data?.chrome.banner ?? null} />
         <main className="flex-1">{children}</main>
-        <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-6 py-3 text-sm text-muted-foreground">
-          {data ? (
-            <>
-              <span>
-                {t(locale, "chrome.chain-label")}: {data.clientConfig.chainId}
-              </span>
-              <a
-                className="underline underline-offset-4 hover:text-foreground"
-                href={data.clientConfig.consoleUrl}
-                rel="noreferrer"
-              >
-                {t(locale, "chrome.console-link")} ↗
-              </a>
-            </>
-          ) : null}
-        </footer>
+        {data ? (
+          <FreshnessFooter
+            locale={locale}
+            chainId={data.clientConfig.chainId}
+            consoleUrl={data.clientConfig.consoleUrl}
+            chrome={data.chrome}
+          />
+        ) : (
+          <footer className="border-t px-6 py-3" />
+        )}
         <ScrollRestoration />
         <Scripts />
       </body>

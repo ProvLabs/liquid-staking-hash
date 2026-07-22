@@ -111,6 +111,10 @@ services:
     environment:
       HOME: /home/app
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      # The indexer sources use TS parameter properties (runtime/streams.ts),
+      # which Node's default strip-only type stripping rejects; transform
+      # mode runs them directly, keeping the no-build-step design.
+      NODE_OPTIONS: "--experimental-transform-types"
       DATABASE_URL: "postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed"
       LCD_URL: "http://dev-node:1317"
       RPC_URL: "http://dev-node:26657"
@@ -195,6 +199,9 @@ services:
       VAULT_ADDRESS: "${VAULT_ADDRESS:-}"
       CONSOLE_URL: "${CONSOLE_URL:-http://localhost:5173}"
       CONSOLE_CHAIN_ID: "${CONSOLE_CHAIN_ID:-chain-dev}"
+      # services/api base for the chrome's indexed-plane reads (PR 4.1);
+      # required config since API_URL landed, server-only by classification.
+      API_URL: "http://api:8080"
     ports:
       - "3000:3000"
     networks: [nvhash-dev]

@@ -39,7 +39,7 @@ describe("i18n key coverage", () => {
     const usage = new Map<string, string[]>();
     for (const file of sourceFiles(APP_DIR)) {
       const source = readFileSync(file, "utf8");
-      for (const match of source.matchAll(/\bt\(\s*[^,()]+,\s*["']([^"']+)["']\s*\)/g)) {
+      for (const match of source.matchAll(/\bt\(\s*[^,()]+,\s*["']([^"']+)["']\s*[,)]/g)) {
         const key = match[1]!;
         usage.set(key, [...(usage.get(key) ?? []), file]);
       }

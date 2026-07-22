@@ -267,6 +267,7 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `CONTRACT_ADDRESS` / `VAULT_ADDRESS` | deployed addresses | Vault address cross-checked against `Config {}` at boot; mismatch fails startup. |
 | `CONSOLE_URL` | the same-environment Console origin | Verify-link base (§12.2). One console per environment; links never cross environments. |
 | `CONSOLE_CHAIN_ID` | chain id of the configured console profile | Added 2026-07-15 (PR 1.3): the operator-declared chain id the `CONSOLE_URL` console serves. Must equal `CHAIN_ID` or boot fails — the §12.2 "checked at boot" cross-environment guard needs the console profile's chain id as an explicit config fact (the console is a static app with no endpoint to ask). |
+| `API_URL` | the same-environment `services/api` origin | Added 2026-07-21 (PR 4.1): server-only base URL for the web tier's indexed-plane reads (footer freshness, degraded banner; zod-bounded http/https at load). The browser never calls the API directly for chrome state; reads go through the web server's loaders, and the value is classified server-only in the bundle-secret gate. |
 | `DATABASE_URL` | PostgreSQL | Indexer + app state. |
 | `BASE_RPC_URL` / `ETH_RPC_URL` | EVM read endpoints | Market + bridge-supply sampling (§5.3). |
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
@@ -313,6 +314,22 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 - **Environment badge** is quiet on mainnet, loud (warning-tinted, labeled) on testnet/devnet.
 - **Footer freshness line** is global: the indexed head vs chain head, always visible — the consumer-calm analogue of the console's freshness footer.
 - Routes live under `$lang+` per the nuva i18n pattern; paths below omit the locale segment.
+
+> **Revision 2026-07-21 (PR 4.1, global chrome):** the chrome above is
+> implemented in `apps/web` (`app/chrome/chrome.server.ts` assembles the
+> banner/freshness state in the root loader; components under
+> `app/components/chrome/`). Deliberate deltas from the diagram, both recorded
+> follow-ons rather than dead affordances: the footer **docs** link is omitted
+> until a docs URL exists (no speculative config key), and the **wallet**
+> header slot waits for M5. The alerts bell ships as the anonymous advert
+> affordance only (M6 replaces it). Banner honesty is gated by
+> `test/chrome-state.test.ts`: paused/halted render only from successful live
+> reads (halted outranks paused), "data degraded" comes from the status
+> endpoint's height lag or an open `reconciler_divergence`/`indexer_lag`
+> incident, and a failed live read shows "program status unavailable" in the
+> footer with NO banner, never an implied all-clear. Nav targets that have no
+> real page yet (Stake, Portfolio, Market, Validators, Governance) are honest
+> scaffold stubs so the nav never 404s; all are in the axe scan.
 
 ### 8.1 Learn (route `/`, the Evaluator's home)
 
@@ -513,6 +530,18 @@ This section encodes boundary §5 as build requirements.
 
 - Link shape: `{CONSOLE_URL}/{route}` with the console's own view addressing; `CONSOLE_URL` is per-environment config, so **a link can never cross environments** — the App refuses to render verify links if its configured console profile's chain id mismatches its own (checked at boot).
 - Figure → console view mapping: NAV/APR/TVV → Overview; epoch decomposition → Epoch & Ops; a validator → Validators; a redemption → Redemptions; governance/config assertions → the relevant console panel. Entity-level anchors (e.g., a specific request id) require a small console addition — recorded as a console follow-on in §14.13, not silently assumed.
+
+> **Revision 2026-07-21 (PR 4.1, verify-link component):** the figure→view map
+> now exists as a CLOSED typed union in
+> `apps/web/app/components/verify-link.tsx` (`overview` → `/`, `epoch-ops` →
+> `/epoch`, `validators` → `/validators`, `redemptions` → `/redemptions`,
+> confirmed against the console's router). Totality is a compile-time
+> `satisfies` assertion, and `test/verify-link.test.ts` gates that every
+> target's href stays strictly under the booted `CONSOLE_URL` (whose chain id
+> the boot check verified). A `governance` target is deliberately absent: the
+> console has no governance panel yet, and a verify link must never be a dead
+> link; adding the panel and the target is a console follow-on alongside the
+> §14.13 entity-level anchors.
 
 ### 12.3 Application security
 

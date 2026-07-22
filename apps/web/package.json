@@ -15,6 +15,7 @@
     "check:bundle": "node scripts/check-bundle-secrets.mjs"
   },
   "dependencies": {
+    "@nvhash/api-types": "workspace:*",
     "@nvhash/chain-client": "workspace:*",
     "@radix-ui/react-slot": "^1.1.1",
     "@react-router/node": "^7.18.1",
