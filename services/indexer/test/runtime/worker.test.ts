@@ -101,6 +101,45 @@ describe("runWorker (one guarded pass)", () => {
     expect(sleep).toHaveBeenCalledOnce();
   });
 
+  it("floors the first ingested height at 1 on an empty checkpoint (no block 0)", async () => {
+    // Regression: CometBFT heights are 1-based and `block_results?height=0` is a
+    // hard RPC error. With no checkpoint and a 0/unset startHeight the runner
+    // must page from height 1, never 0, or the worker crashes on its first live
+    // read (surfaced by a fresh-DB devnet bring-up).
+    const collected: Window[] = [];
+    const tx = { indexerCheckpoint: { upsert: async () => {} } };
+    const prisma = {
+      $transaction: async (cb: (t: typeof tx) => Promise<void>) => cb(tx),
+      indexerCheckpoint: { findUnique: async () => null }, // no checkpoint
+    } as unknown as PrismaClient;
+
+    const controller = new AbortController();
+    const worker: Worker<Window> = {
+      stream: "chain-events",
+      startHeight: 0n, // the crashing default
+      collect: async (window) => {
+        collected.push(window);
+        return window;
+      },
+      write: async () => {},
+    };
+    await runWorker(worker, {
+      prisma,
+      headHeight: async () => 3n,
+      confirmationDepth: 0,
+      maxWindowSpan: 100n,
+      pollIntervalMs: 1_000,
+      sleep: async () => {
+        controller.abort();
+      },
+      signal: controller.signal,
+    });
+
+    // Empty checkpoint + startHeight 0 → first window starts at 1, not 0.
+    expect(collected).toEqual([{ from: 1n, to: 3n }]);
+    expect(collected.every((w) => w.from >= 1n)).toBe(true);
+  });
+
   it("resumes from the committed checkpoint + 1", async () => {
     const processed: Window[] = [];
     const tx = { indexerCheckpoint: { upsert: async () => {} } };

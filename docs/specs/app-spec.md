@@ -439,7 +439,9 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 
 ### 9.3 Backfill
 
-On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3).
+On first deployment (and after any reset) the epoch-history and chain-events workers walk from the contract's instantiation height to the head. Devnet redeploys reset the database with the environment — histories never mix across (chain_id, contract) pairs, the same isolation rule as the console's ledger keying (console §9.3), enforced as a fail-closed boot check (PR 2.0, `services/indexer/src/runtime/streams.ts`).
+
+**Epoch-history backfill mechanism (PR 2.2):** the contract retains only the *latest* epoch snapshot on chain (§13, contract §9.10), so history is recovered by a **height-pinned smart query at each `run_epoch` crank height** — querying `epoch_snapshot`/`apr` with `x-cosmos-block-height: H` returns the epoch that closed at H. Cranks are located by tx-search (`wasm action=run_epoch`); rows upsert by `epoch_index`, so replay from genesis and resume from a checkpoint converge to the same `epoch_snapshots`. **Retention caveat (documented, not silent):** height-pinned queries work for any past height on a full-state node; a node that has *pruned* state below a crank height cannot serve that epoch — a config/retention limit, surfaced rather than hidden.
 
 ### 9.4 API surface
 
@@ -461,11 +463,13 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 3. **Typical time-to-payout:** per recent-epoch cohort of terminal `redemption_requests`, the median and p90 of (`expedited_at ?? matured_at`) − `enqueued_at`. Displayed only with **≥ 10 terminal requests** in the cohort (§14.12 decided); below it, the flow shows the 60-day guarantee alone — a small-sample "typical" would be a lie with extra steps. The statistic is physically bounded to the **~21-to-60-day band** (unbonding floor to guarantee ceiling); labeling never implies precision outside that band.
 4. **Premium/discount:** `(market_price − NAV) / NAV` in bps, computed at each market sample against the NAV current at that sample's time.
 5. **Upkeep lag:** for each crank kind, actual execution time − earliest-eligible time (from config intervals + prior state), distribution per epoch.
-6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run.
+6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run. **Per-metric tolerances live in code** (`services/indexer/src/reconciler/tolerances.ts`), reviewed like the schema allowlist and **not env-tunable** — a widened tolerance would silence the alarm, which §12.1.3 forbids (RESOLVED 2026-07-21, PR 2.5). The "live plane" the reconciler compares against is the chain's retained latest epoch snapshot (the authoritative current record); copied snapshot values use an exact (0) tolerance, so any indexed divergence trips `reconciler_divergence`. **Queue-length delta is deferred** to a fast-follow (it needs a vault `pending_swap_outs` decoder the indexer does not yet carry).
 
 ### 9.6 Incident derivation
 
 Incidents are **computed from indexed facts, never hand-entered**: contract halted/resumed; vault paused/unpaused (with reason); slash write-down > 0 in an epoch; redemption refund observed (unfunded maturity — contract §8's "failure mode is a refund"); jail report opened/purged; epoch overdue (now − last_run > interval + slack); reconciler divergence; indexer lag beyond threshold. Each maps to a severity aligned with the console's status semantics (console §11.2) and feeds banners, the Learn-page history (C2), holder/admin alerts (D1), and the admin feed (A4). Closure is likewise computed (the condition clearing), with optional admin acknowledgment for the record.
+
+> **PR 2.5 status (2026-07-21):** the reconciler is the **sole writer** of `incidents` (`services/indexer/src/reconciler/`). Delivered kinds: `reconciler_divergence` and `contract_halted` (closeable, live-derived), `indexer_lag` (closeable, from per-stream checkpoint lag), `slash_write_down` and `redemption_refund` (point-in-time, from indexed facts). The alarm is proven end-to-end by a Postgres-backed acceptance test (corrupt an indexed row → the incident opens; fix it → it closes). **Deferred to a fast-follow** (each needs an additional live decoder not yet built): `vault_paused` (vault query), `jail_report` (jail open/close lifecycle), `epoch_overdue` (config interval + the pending calendar-month change). Point-in-time kinds are opened once and not auto-closed; admin acknowledgment remains an `app`-schema concern.
 
 ---
 
