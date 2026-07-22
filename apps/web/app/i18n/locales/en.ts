@@ -8,15 +8,15 @@ export default {
 
   "home.title": "nvHASH liquid staking",
   "home.lede":
-    "Deposit HASH, receive nvHASH, and redeem it for more HASH as staking rewards settle each epoch.",
+    "Deposit HASH, receive nvHASH, and redeem it for more HASH as staking rewards settle each month.",
 
   "learn.hero-step-note":
-    "Value lands in steps when each epoch settles. Between epochs your redemption value is flat, and that is normal.",
+    "Value lands in monthly steps when the epoch settles. Between settlements your redemption value is flat, and that is normal.",
   "learn.flow-label": "How nvHASH works",
   "learn.flow-deposit": "Deposit HASH",
   "learn.flow-pool": "Pooled vault",
   "learn.flow-stake": "Staked across validators",
-  "learn.flow-rewards": "Rewards return to the pool",
+  "learn.flow-rewards": "Rewards restaked to compound",
 
   "learn.proof-title": "The program right now",
   "learn.stat-nav": "NAV",
@@ -32,29 +32,29 @@ export default {
   "learn.stat-indexed-caption": "From indexed history",
   "learn.stat-na": "n/a",
 
-  "learn.chart-title": "Redemption value per epoch",
-  "learn.chart-caption": "HASH per nvHASH at each settlement; flat between epochs by design.",
+  "learn.chart-title": "Redemption value by monthly settlement",
+  "learn.chart-caption": "HASH per nvHASH at each monthly settlement; flat between settlements by design.",
   "learn.chart-empty":
-    "No settled epochs are indexed yet. The step chart appears as epoch history lands.",
-  "learn.chart-unavailable": "Epoch history is unavailable right now.",
+    "No monthly settlements are indexed yet. The step chart appears as settlement history lands.",
+  "learn.chart-unavailable": "Settlement history is unavailable right now.",
   "learn.chart-show-table": "Table view",
   "learn.chart-show-chart": "Chart view",
-  "learn.chart-col-epoch": "Epoch",
+  "learn.chart-col-settlement": "Settlement",
   "learn.chart-col-ended": "Settled",
   "learn.chart-col-nav": "NAV (HASH)",
 
   "learn.yield-title": "Where the yield comes from",
   "learn.yield-body":
-    "Each epoch, staking rewards, validator-paid commission, and tips flow into the vault, and the AUM fee is deducted. Validators fund commission and tips from their own pockets; that is why the vault can out-yield staking on your own.",
+    "At each monthly settlement, staking rewards, validator-paid commission, and tips flow into the vault, and the AUM fee is deducted. Validators fund commission and tips from their own pockets; that is why the vault can out-yield staking on your own.",
   "learn.yield-rewards": "Staking rewards",
   "learn.yield-commission": "Validator commission",
   "learn.yield-tips": "Tips",
   "learn.yield-fee": "AUM fee (deducted)",
-  "learn.yield-window-note": "Figures are from the current epoch window, in HASH.",
+  "learn.yield-window-note": "Figures are from the current settlement window, in HASH.",
   "learn.yield-unavailable": "The yield decomposition is unavailable right now.",
   "learn.compare-title": "Compared with self-staking",
   "learn.compare-body":
-    "Self-staking earns the base staking reward minus each validator's commission. nvHASH adds validator-paid commission and tips on top and handles delegation for you, at the cost of the AUM fee and epoch-stepped settlement. A numeric side-by-side arrives when indexed history can support one.",
+    "Self-staking earns the base staking reward minus each validator's commission. nvHASH adds validator-paid commission and tips on top and handles delegation for you, at the cost of the AUM fee and monthly stepped settlement. A numeric side-by-side arrives when indexed history can support one.",
 
   "learn.trust-title": "Security and trust",
   "learn.trust-preaudit":
@@ -65,7 +65,7 @@ export default {
   "learn.trust-risk-contract":
     "Smart-contract risk: a defect in the vault or staking contract could impair funds. The contract source is public and the deployed build is verifiable on the console.",
   "learn.trust-risk-slashing":
-    "Validator slashing: if a program validator is slashed, the loss is recognized immediately and NAV steps down. Write-downs appear in epoch history.",
+    "Validator slashing: if a program validator is slashed, the loss is recognized immediately and NAV steps down. Write-downs appear in settlement history.",
   "learn.trust-risk-bridge":
     "Bridge boundary: cross-chain holders trust the bridge operator for custody of bridged supply. Native holders on Provenance do not.",
 
@@ -80,7 +80,7 @@ export default {
   "learn.incident-slash-write-down": "Slash write-down",
   "learn.incident-redemption-refund": "Redemption refund",
   "learn.incident-jail-report": "Validator jail report",
-  "learn.incident-epoch-overdue": "Epoch overdue",
+  "learn.incident-epoch-overdue": "Settlement overdue",
   "learn.incident-reconciler-divergence": "Reconciler divergence",
   "learn.incident-indexer-lag": "Indexer lag",
 

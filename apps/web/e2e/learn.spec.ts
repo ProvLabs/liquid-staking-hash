@@ -34,7 +34,9 @@ test("cold-start renderings: empty epoch history and the proud incident empty st
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByText("No settled epochs are indexed yet", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("No monthly settlements are indexed yet", { exact: false }),
+  ).toBeVisible();
   await expect(
     page.getByText("generated from chain history, not curated", { exact: false }),
   ).toBeVisible();

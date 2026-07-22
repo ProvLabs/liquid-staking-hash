@@ -85,7 +85,7 @@ export function NavStepChart({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">{t(locale, "learn.chart-col-epoch")}</th>
+                <th className="px-3 py-2 font-medium">{t(locale, "learn.chart-col-settlement")}</th>
                 <th className="px-3 py-2 font-medium">{t(locale, "learn.chart-col-ended")}</th>
                 <th className="px-3 py-2 font-medium">{t(locale, "learn.chart-col-nav")}</th>
               </tr>

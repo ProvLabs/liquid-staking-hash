@@ -365,7 +365,13 @@ The comprehension → due-diligence funnel (personas §5), and the program's pub
 > (insufficient history)", never an annualized single epoch). Indexed
 > figures (participants, program age, epoch chart, incidents) consume the
 > §9.4 contract shapes frozen by this PR and render "n/a"/empty until M2/M3
-> wire real data.
+> wire real data. **Vocabulary (PR 4.2 review, Ira):** consumer copy says
+> "monthly settlement" for the cadence (the program targets calendar
+> months); "epoch" appears exactly once, in the hero's mechanism sentence
+> above, matching this section's own phrasing. Data identities (epoch
+> indices, `EpochRow`) keep their names: on devnet an epoch is hours, so
+> copy must never claim "month" as the mechanism. Revisit the remaining
+> mention when the contract's calendar-month change lands.
 
 Priya's home. Composes additional roles additively (register F1): operator and admin cards append below the holder view when the address qualifies.
 
