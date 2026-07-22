@@ -43,6 +43,7 @@ export function createApiServer(config: ApiConfig, now?: () => Date, reader?: In
     appEnv: config.appEnv,
     reader: reader ?? emptyReader,
     dataSource: reader === undefined ? "unwired" : "api_reader",
+    ...(config.assertionKey !== undefined ? { assertionKey: config.assertionKey } : {}),
     ...(now ? { now } : {}),
   });
 
@@ -60,7 +61,14 @@ export function createApiServer(config: ApiConfig, now?: () => Date, reader?: In
       // irrelevant here — the handler reads only pathname/search.
       const url = new URL(req.url ?? "/", "http://api.internal");
       const request = new Request(url, { method: req.method ?? "GET" });
-      const meta: RequestMeta = { clientKey: clientKey(req, config.trustProxy) };
+      // The Authorization header rides through RequestMeta like clientKey:
+      // the pure core stays transport-agnostic, and verification happens
+      // only in auth.ts (ADR-001 Decision 2).
+      const authHeader = req.headers.authorization;
+      const meta: RequestMeta = {
+        clientKey: clientKey(req, config.trustProxy),
+        ...(authHeader !== undefined ? { authorization: authHeader } : {}),
+      };
       const response = await handle(request, meta);
 
       res.statusCode = response.status;

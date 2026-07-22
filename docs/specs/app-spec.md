@@ -549,6 +549,35 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > here; stored band JSON is boundary-validated on read and fails loudly on
 > mismatch, never a best-effort passthrough.
 
+> **Revision 2026-07-22 (PR 3.3, address-scoped endpoints + in-process
+> authorization — M3 complete):** `/api/v1/portfolio?address=` and
+> `/api/v1/transactions?address=` (+`&format=csv`) are live behind the
+> ADR-001 Decision 2 mechanism, with the **cross-address-rejection contract
+> suite** (`services/api/test/cross-address.test.ts`) standing in CI from
+> this change on. The assertion wire format is recorded in the ADR-001
+> Decision 2 amendment (Bearer `b64url(payload).b64url(hmac)`, HMAC-SHA256,
+> `exp − iat ≤ 60 s`, 10 s forward-skew bound on `iat`, fail-closed without
+> a configured key); routes declare `public`/`address`/`internal:notifier`
+> in the route registry and the pipeline enforces credential validity
+> before query validation and the scope↔target match after it (401 → 400 →
+> 403). `?address=` is bounded by a bech32 schema (400 on malformed input).
+> Frozen shapes: `TransactionRow` (per-event facts with the NAV marker at
+> each height) and `PortfolioSummary`/`RedemptionRow`. Recorded decisions:
+> (a) `PortfolioSummary` deliberately has **no balance field** — the nvHASH
+> balance is the web tier's live read (§8.2); indexed transactions cannot
+> see bank transfers, so a transactions-sum balance would misstate holdings
+> (it serves first activity, event count, escrowed shares, and active
+> redemptions; cost basis/effective yield remain the M6.1 service); (b) the
+> chain's projected-payout `estimates` series is absent from
+> `RedemptionRow` — no indexer worker writes it yet; adding it is a
+> revision here when its producer lands; (c) the CSV export is the §14.11
+> statement-of-fact (pinned columns `datetime_utc, block_height, txhash,
+> msg_index, kind, shares, nhash, nav_at_height`, formula-injection
+> guarded) and — a recorded deviation from the "every response carries the
+> envelope" rule above — carries its freshness in `X-Chain-Height` /
+> `X-Indexed-Height` / `X-Generated-At` response headers, since a CSV body
+> cannot carry the JSON envelope.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.

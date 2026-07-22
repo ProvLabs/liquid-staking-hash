@@ -18,7 +18,9 @@ import type {
   EpochRow,
   IncidentRow,
   MarketSummary,
+  PortfolioSummary,
   ProgramMetrics,
+  TransactionRow,
   ValidatorsPayload,
 } from "@nvhash/api-types";
 import type { Heads } from "./derive.ts";
@@ -43,6 +45,15 @@ export interface IndexedReader {
    * parked — the v1 "coming soon" state (app-spec §13 decision 4).
    */
   latestMarket(): Promise<MarketSummary>;
+  /**
+   * Address-scoped reads (PR 3.3). Callers reach these ONLY through routes
+   * whose registry `auth: "address"` requirement passed the in-process
+   * scope↔target check (ADR-001 Decision 2) — the reader itself has no
+   * authorization role; the address arrives already authorized.
+   */
+  portfolioFor(address: string): Promise<PortfolioSummary>;
+  /** Per-event history for the address, newest first, paginated. */
+  transactionsFor(address: string, page: Pagination): Promise<TransactionRow[]>;
 }
 
 /**
@@ -62,4 +73,13 @@ export const emptyReader: IndexedReader = {
       set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 },
     }),
   latestMarket: () => Promise.resolve({ sample: null, bridged_supply: [] }),
+  portfolioFor: (address) =>
+    Promise.resolve({
+      address,
+      first_activity_at: null,
+      transaction_count: 0,
+      escrowed_shares: "0",
+      active_redemptions: [],
+    }),
+  transactionsFor: () => Promise.resolve([]),
 };

@@ -1,9 +1,11 @@
 # App M3 — Query API (PRs 3.1–3.3)
 
-**Status:** DRAFT 2026-07-22 (master plan §2 M3; delivery shape per Ira: the
-three PRs land as **three commits on one services-only branch**, merged in a
-single GitHub PR/CI cycle. Reviewed 2026-07-22 against spec/code; the review
-resolutions are folded in below, marked **[R1]–[R7]**.)
+**Status:** IMPLEMENTED 2026-07-22 (master plan §2 M3; delivery shape per
+Ira: the three PRs land as **three commits on one services-only branch**,
+merged in a single GitHub PR/CI cycle — delivered as revs 14–16 in the
+master plan's revision log. Reviewed 2026-07-22 against spec/code before
+implementation; the review resolutions are folded in below, marked
+**[R1]–[R7]**, with per-commit delivery notes inline.)
 **Epic:** the nvHASH App — [`app-spec.md`](../specs/app-spec.md) (v1.0-RC1)
 **Milestone:** M3 — Query API (services lane; contracts first),
 [master plan](2026-07-13-app-implementation-plan.md) §2
@@ -215,6 +217,16 @@ What already exists on `main` (this plan builds on it, not around it):
   msg_index, kind, shares, nhash, nav_at_height`. CSV-injection guard on
   field values (defensive; all fields are numeric/enum/hash/bech32).
 - **`?address=`** is bounded by a new bech32 zod schema in `query.ts`.
+- *Delivery notes (3.3):* (a) `RedemptionRow` omits the chain's
+  projected-payout `estimates` series — no indexer worker writes that column
+  yet, and freezing a shape with no producer would be invention (adding it
+  is a §9.4 revision with its producer). (b) `/portfolio` serves first
+  activity, event count, escrowed shares (active redemptions only, guarded),
+  and active redemptions — the full [R2] scope reduction, recorded in §9.4.
+  (c) The wire format is recorded in the ADR-001 Decision 2 amendment; the
+  verifier fails closed when `API_SERVICE_ASSERTION_KEY` is unset (every
+  non-public route → 401) and answers every verification failure with one
+  undifferentiated 401.
 
 ## 4. Security & invariants (enforced mechanisms with gating tests)
 

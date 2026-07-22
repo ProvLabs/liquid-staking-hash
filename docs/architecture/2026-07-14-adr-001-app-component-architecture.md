@@ -114,6 +114,29 @@ CI from PR 3.3 on (plan §4): assertion for address A requesting address B →
 403; absent/expired/bad-signature → 401; `internal:notifier` scope on a
 personal endpoint → 403; public endpoints accept no-credential requests.
 
+> **Amendment 2026-07-22 (PR 3.3, delivered):** the assertion **wire format**
+> is recorded so the web session layer (PR 5.1) and the API implement one
+> contract:
+>
+> ```
+> Authorization: Bearer <base64url(payload JSON)>.<base64url(hmac)>
+> payload = { "scope": "address:<bech32>" | "internal:notifier",
+>             "iat": <unix seconds>, "exp": <unix seconds> }
+> hmac    = HMAC-SHA256(API_SERVICE_ASSERTION_KEY, base64url(payload JSON))
+> ```
+>
+> Verification (`services/api/src/auth.ts`) is in-process: constant-time
+> signature compare, `exp` unexpired, `exp − iat ≤ 60 s` as decided above,
+> plus a 10 s forward-skew bound on `iat` (a token minted in the future is
+> refused). All verification failures answer one undifferentiated 401. The
+> key is bounded at config (≥32 chars); with no key configured the API
+> **fails closed** (every non-public route → 401). Routes declare their
+> requirement (`public` | `address` | `internal:notifier`) in the route
+> registry, and the handler pipeline enforces credential validity BEFORE
+> query validation and the scope↔target match after it (401 → 400 → 403) —
+> the gating-test matrix above now runs as
+> `services/api/test/cross-address.test.ts`, standing in CI.
+
 ## Decision 3 — Notifier: a worker process in `apps/web`, reading through the API
 
 The notifier (alert-rule evaluation on indexer ticks) is app-state machinery:

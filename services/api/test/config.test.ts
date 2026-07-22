@@ -17,6 +17,13 @@ describe("loadConfig", () => {
     expect(loadConfig({}).databaseUrl).toBeUndefined();
   });
 
+  it("bounds the assertion key (min length; optional = fail-closed downstream)", () => {
+    const key = "m3-test-assertion-key-0123456789abcdef";
+    expect(loadConfig({ API_SERVICE_ASSERTION_KEY: key }).assertionKey).toBe(key);
+    expect(loadConfig({}).assertionKey).toBeUndefined();
+    expect(() => loadConfig({ API_SERVICE_ASSERTION_KEY: "too-short" })).toThrow(/configuration/i);
+  });
+
   it("applies safe defaults on an empty environment", () => {
     const config = loadConfig({});
     expect(config).toEqual({

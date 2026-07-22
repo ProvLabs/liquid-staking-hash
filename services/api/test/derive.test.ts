@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveHeads,
   deriveMetrics,
+  derivePortfolio,
   deriveSetHealth,
   deriveValidatorsPayload,
   navPriceNhash,
@@ -153,6 +154,46 @@ describe("validators derivation", () => {
     const payload = deriveValidatorsPayload([reg], new Map([[reg.valoper, epoch]]));
     expect(payload.validators).toHaveLength(1);
     expect(payload.set_health.total).toBe(1);
+  });
+});
+
+describe("portfolio derivation (PR 3.3, [R2] indexed facts only)", () => {
+  const active = {
+    requestId: "req-1",
+    owner: "pb1walletaqq",
+    shares: 500n,
+    status: "enqueued" as const,
+    enqueuedAt: new Date("2026-06-03T00:00:00Z"),
+    expeditedAt: null,
+    maturedAt: null,
+    refundedAt: null,
+    lastHeight: 300n,
+    lastTxhash: "CC",
+  };
+
+  it("sums escrow over active redemptions with BigInt discipline", () => {
+    const summary = derivePortfolio("pb1walletaqq", new Date("2026-06-01T00:00:00Z"), 2, [
+      active,
+      { ...active, requestId: "req-2", shares: 250n, status: "expedited" },
+    ]);
+    expect(summary.escrowed_shares).toBe("750");
+    expect(summary.transaction_count).toBe(2);
+    expect(summary.first_activity_at).toBe("2026-06-01T00:00:00.000Z");
+    expect(summary.active_redemptions).toHaveLength(2);
+    // [R2]: the frozen shape carries NO balance field to misstate.
+    expect(Object.keys(summary).sort()).toEqual([
+      "active_redemptions",
+      "address",
+      "escrowed_shares",
+      "first_activity_at",
+      "transaction_count",
+    ]);
+  });
+
+  it("refuses a non-active redemption in the escrow set (defensive guard)", () => {
+    expect(() =>
+      derivePortfolio("pb1walletaqq", null, 0, [{ ...active, status: "matured" }]),
+    ).toThrow(RangeError);
   });
 });
 

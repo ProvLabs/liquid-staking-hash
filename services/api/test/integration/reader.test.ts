@@ -54,6 +54,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     await writer.validatorEpoch.deleteMany();
     await writer.validatorRegistry.deleteMany();
     await writer.transaction.deleteMany();
+    await writer.redemptionRequest.deleteMany();
     await writer.epochSnapshot.deleteMany();
     await writer.marketSample.deleteMany();
     await writer.bridgeSupplySample.deleteMany();
@@ -109,6 +110,14 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
       data: [
         { valoper: "pbvaloper1aaa", epochIndex: 11n, uptimeBps: 9000, eligible: false, failingReasons: ["uptime"], tip: "0", commissionAccrued: "0", commissionPaid: "0", commissionDue: "9", programDelegation: "1", height: 3000n, observedAt: new Date("2026-06-01T00:00:00Z") },
         { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], tip: "0", commissionAccrued: "0", commissionPaid: "0", commissionDue: "5", programDelegation: "1000000000", height: 4100n, observedAt: new Date("2026-07-01T00:00:00Z") },
+      ],
+    });
+    // Address plane (PR 3.3): one active (enqueued) and one terminal
+    // (matured) redemption — the portfolio read must escrow only the former.
+    await writer.redemptionRequest.createMany({
+      data: [
+        { requestId: "req-1", owner: "pb1alice", shares: "500", status: "enqueued", enqueuedAt: new Date("2026-06-03T00:00:00Z"), lastHeight: 300n, lastTxhash: "CC" },
+        { requestId: "req-0", owner: "pb1alice", shares: "100", status: "matured", enqueuedAt: new Date("2026-05-01T00:00:00Z"), maturedAt: new Date("2026-05-20T00:00:00Z"), lastHeight: 50n, lastTxhash: "OLD" },
       ],
     });
     // Market plane (PR 3.2): the sample predates every settled epoch, so the
@@ -185,6 +194,30 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
       { chain: "base", supply: "2000", sampled_at: "2026-07-10T00:00:00.000Z" },
       { chain: "ethereum", supply: "500", sampled_at: "2026-07-05T00:00:00.000Z" },
     ]);
+  });
+
+  it("serves address-scoped transactions newest first, only for that address", async () => {
+    const rows = await reader.transactionsFor("pb1alice", { limit: 50, offset: 0 });
+    expect(rows.map((r) => r.txhash)).toEqual(["CC", "AA"]); // pb1bob's BB absent
+    expect(rows[0]).toEqual({
+      txhash: "CC",
+      msg_index: 0,
+      kind: "swap_out_request",
+      shares: "500",
+      nhash: "0",
+      nav_at_height: "10175",
+      height: 300,
+      block_time: "2026-06-03T00:00:00.000Z",
+    });
+  });
+
+  it("derives the portfolio facts: first activity, count, active-only escrow", async () => {
+    const portfolio = await reader.portfolioFor("pb1alice");
+    expect(portfolio.address).toBe("pb1alice");
+    expect(portfolio.first_activity_at).toBe("2026-06-01T00:00:00.000Z");
+    expect(portfolio.transaction_count).toBe(2);
+    expect(portfolio.escrowed_shares).toBe("500"); // matured req-0 does not escrow
+    expect(portfolio.active_redemptions.map((r) => r.request_id)).toEqual(["req-1"]);
   });
 
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {

@@ -465,3 +465,24 @@ honest-empty + populated contract cases (the populated sample proves the
 [R6] epoch selection), and market seeds in the `test:db` reader gate (JSONB
 round trip, latest-per-chain, null premium pre-NAV). Spec §9.4 amended in
 the same change. Next: 3.3 closes the branch.*
+
+*2026-07-22 (rev 16): **M3.3 delivered — M3 milestone complete** (third
+commit of the `app-m3-query-api` branch): the address-scoped endpoints
+(`/portfolio?address=`, `/transactions?address=` + `format=csv`) behind the
+ADR-001 Decision 2 in-process authorization, delivered as machinery: an
+`auth.ts` verifier (HMAC-SHA256, constant-time compare, `exp − iat ≤ 60 s`,
+[R7d] 10 s `iat` forward-skew bound, fail-closed without a key; wire format
+recorded in the ADR-001 amendment and spec §9.4), a registry-declared
+`auth` requirement per route, and the [R4]-pinned pipeline
+(429→404→405→401→400→403→dispatch; bech32 bound on `?address=`).
+`/portfolio` serves indexed facts only ([R2]: no balance field — the live
+plane's job; `estimates` omitted, no producer). The CSV export carries the
+§14.11 pinned column set with formula-injection guarding and [R3] X-header
+freshness (recorded §9.4 deviation). **The cross-address-rejection suite
+(`test/cross-address.test.ts`) is a standing `services/api` CI gate from
+this change on** — A→B 403, absent/expired/mis-signed/future-minted 401,
+`internal:notifier` on personal routes 403, public routes credential-free,
+CSV under the same gate — plus address-plane seeds in `test:db`. Spec §9.4
++ ADR-001 amended in the same change. M3 exits on one branch as three
+commits (3.1/3.2/3.3), one PR/CI cycle; next in the services lane: 8.2
+load-testing when M8 opens.*

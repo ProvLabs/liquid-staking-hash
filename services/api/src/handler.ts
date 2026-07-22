@@ -4,14 +4,25 @@
 // testable without opening a socket, while the node:http adapter (http-server.ts)
 // exercises the same function over a real port for the supertest-style harness.
 //
-// Order of enforcement (all before any handler runs):
-//   1. Rate limit           → 429   (SECURITY.md: defensive, rate-limited)
-//   2. Path match           → 404
+// Order of enforcement, PINNED by the [R4] review resolution
+// (docs/plans/2026-07-22-app-m3-query-api.md) and encoded in the contract
+// tests (all before any handler runs):
+//   1. Rate limit            → 429   (SECURITY.md: defensive, rate-limited)
+//   2. Path match            → 404
 //   3. Read-only method gate → 405   (SECURITY.md/plan §1: no writes, ever)
-//   4. zod query bounds      → 400   (SECURITY.md: bound every query param)
-//   5. handler → envelope wrap / raw body
+//   4. Credential validity   → 401   (non-public routes; BEFORE query
+//        validation, so an unauthenticated probe learns nothing about
+//        parameter validity — ADR-001 Decision 2)
+//   5. zod query bounds      → 400   (SECURITY.md: bound every query param)
+//   6. Scope ↔ target match  → 403   (needs the parsed `?address=`, so it
+//        necessarily FOLLOWS zod; cross-address rejection is enforced here,
+//        in-process, never by topology)
+//   7. handler → envelope wrap / raw body (a route may return a raw
+//        Response — the CSV export path — which passes through with the
+//        defensive headers merged in)
 
 import { envelope, type FreshnessSource } from "@nvhash/api-types";
+import { verifyAssertion, type VerifiedScope } from "./auth.ts";
 import type { ApiConfig } from "./config.ts";
 import type { RateLimiter } from "./rate-limit.ts";
 import type { IndexedReader } from "./reader.ts";
@@ -27,6 +38,11 @@ export interface HandlerDeps {
   readonly reader: IndexedReader;
   /** What `/status` reports as the wired data source — never a fabrication. */
   readonly dataSource: "unwired" | "api_reader";
+  /**
+   * HMAC key for service-assertion verification (ADR-001 Decision 2).
+   * Absent = fail closed: every non-public route answers 401.
+   */
+  readonly assertionKey?: string;
   /** Injectable clock; defaults to wall clock. Drives `generated_at`. */
   readonly now?: () => Date;
 }
@@ -35,6 +51,8 @@ export interface HandlerDeps {
 export interface RequestMeta {
   /** Opaque client identifier for rate limiting (see http-server clientKey). */
   readonly clientKey: string;
+  /** Raw `Authorization` header value, if any (verified by auth.ts only). */
+  readonly authorization?: string;
 }
 
 /** JSON stringify with BigInt→string (amount discipline: never lose precision). */
@@ -72,7 +90,17 @@ function errorResponse(status: number, code: string, message: string, headers: H
 }
 
 async function runEnvelopedRoute(route: Extract<Route, { enveloped: true }>, ctx: Parameters<typeof route.handle>[0], headers: Headers): Promise<Response> {
-  const payload: EnvelopedPayload = await route.handle(ctx);
+  const payload: EnvelopedPayload | Response = await route.handle(ctx);
+  // A route may return a raw Response for non-JSON representations (the
+  // `?format=csv` export, [R3]): freshness rides in its X- headers instead
+  // of the JSON envelope — a recorded §9.4 deviation, not an exemption from
+  // the defensive headers, which are merged in (route-set values win).
+  if (payload instanceof Response) {
+    headers.forEach((value, key) => {
+      if (!payload.headers.has(key)) payload.headers.set(key, value);
+    });
+    return payload;
+  }
   const source: FreshnessSource = payload.source;
   const body = envelope(payload.data, {
     source,
@@ -112,7 +140,20 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
       return errorResponse(405, "method_not_allowed", `${request.method} is not allowed; this API is read-only.`, headers);
     }
 
-    // 4. Bound query params with zod (400 on out-of-range — never clamp silently).
+    // 4. Credential validity on non-public routes (ADR-001 Decision 2) —
+    //    BEFORE query validation ([R4]): absent/expired/invalid → 401 with a
+    //    single undifferentiated reason. The verified scope is held for the
+    //    post-zod target match; it is never derived from topology.
+    let scope: VerifiedScope | null = null;
+    if (route.auth !== "public") {
+      const result = verifyAssertion(meta.authorization, deps.assertionKey, Math.floor(nowMs / 1000));
+      if (!result.ok) {
+        return errorResponse(401, "unauthorized", "A valid service assertion is required.", headers);
+      }
+      scope = result.scope;
+    }
+
+    // 5. Bound query params with zod (400 on out-of-range — never clamp silently).
     let query: unknown = {};
     if (route.querySchema !== null) {
       const parsed = route.querySchema.safeParse(searchParamsToRecord(url.searchParams));
@@ -124,7 +165,25 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
       query = parsed.data;
     }
 
-    // 5. Dispatch.
+    // 6. Scope ↔ target match (403). The cross-address rejection: an
+    //    `address:` scope grants exactly ONE address, compared against the
+    //    zod-parsed target; any other scope kind on an address route (e.g.
+    //    `internal:notifier`) is refused — it never grants personal reads.
+    if (route.auth === "address") {
+      const target = (query as { address?: unknown }).address;
+      if (
+        scope === null ||
+        scope.kind !== "address" ||
+        typeof target !== "string" ||
+        scope.address !== target
+      ) {
+        return errorResponse(403, "forbidden", "The assertion scope does not grant this address.", headers);
+      }
+    } else if (route.auth === "internal:notifier" && (scope === null || scope.kind !== "internal")) {
+      return errorResponse(403, "forbidden", "The assertion scope does not grant this surface.", headers);
+    }
+
+    // 7. Dispatch.
     const ctx = { query, url, now, appEnv: deps.appEnv, reader: deps.reader, dataSource: deps.dataSource };
     let response: Response;
     if (route.enveloped) {

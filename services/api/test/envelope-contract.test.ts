@@ -5,11 +5,33 @@
 // the harness cannot silently skip a new route.
 
 import { describe, expect, it } from "vitest";
-import { API_BASE, routes } from "../src/index.ts";
+import { API_BASE, routes, type Route } from "../src/index.ts";
+import { mintAssertion, TEST_ASSERTION_KEY } from "./assertions.ts";
 import { startServer } from "./helpers.ts";
 import { fakeReader, type FakeFacts } from "./reader-fake.ts";
 
 const WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"] as const;
+
+// A bech32-charset-valid fixture address for exercising address-scoped
+// routes through the generic registry loops.
+const EXAMPLE_ADDRESS = "pb1walletaqq";
+
+/**
+ * Build a contract-valid GET for any registered route: public routes need
+ * nothing; address-scoped routes get a matching assertion + `?address=`.
+ * Registry-driven like the harness itself — a future route with a new auth
+ * kind fails here loudly instead of being silently skipped.
+ */
+function validRequest(route: Route, baseUrl: string): { url: string; init: RequestInit } {
+  if (route.auth === "public") return { url: `${baseUrl}${route.path}`, init: {} };
+  if (route.auth === "address") {
+    return {
+      url: `${baseUrl}${route.path}?address=${EXAMPLE_ADDRESS}`,
+      init: { headers: { authorization: mintAssertion(`address:${EXAMPLE_ADDRESS}`) } },
+    };
+  }
+  throw new Error(`no valid-request builder for auth kind ${route.auth} (${route.path})`);
+}
 
 function isValidEnvelope(body: unknown): string | null {
   if (typeof body !== "object" || body === null) return "body is not an object";
@@ -42,10 +64,11 @@ describe("route registry invariants", () => {
 
 describe("envelope + method contract on every route", () => {
   it("enveloped routes return a valid freshness envelope; operational routes do not", async () => {
-    const server = await startServer();
+    const server = await startServer({ assertionKey: TEST_ASSERTION_KEY });
     try {
       for (const route of routes) {
-        const res = await fetch(`${server.baseUrl}${route.path}`);
+        const { url, init } = validRequest(route, server.baseUrl);
+        const res = await fetch(url, init);
         expect(res.status, `${route.path} should 200`).toBe(200);
         expect(res.headers.get("content-type")).toMatch(/application\/json/);
         // Rate-limit headers are present on every response (defensive posture).
@@ -175,6 +198,36 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
       expect(body.data.sample).toBeNull();
       expect(body.data.bridged_supply).toEqual([]);
       expect(body.meta.indexed_height).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("address-scoped routes serve honest-empty facts for an unseen address", async () => {
+    const server = await startServer({ assertionKey: TEST_ASSERTION_KEY });
+    const auth = { authorization: mintAssertion(`address:${EXAMPLE_ADDRESS}`) };
+    try {
+      const portfolio = await fetch(
+        `${server.baseUrl}${API_BASE}/portfolio?address=${EXAMPLE_ADDRESS}`,
+        { headers: auth },
+      );
+      expect(portfolio.status).toBe(200);
+      const pBody = (await portfolio.json()) as { data: Record<string, unknown> };
+      expect(pBody.data).toEqual({
+        address: EXAMPLE_ADDRESS,
+        first_activity_at: null,
+        transaction_count: 0,
+        escrowed_shares: "0",
+        active_redemptions: [],
+      });
+
+      const transactions = await fetch(
+        `${server.baseUrl}${API_BASE}/transactions?address=${EXAMPLE_ADDRESS}`,
+        { headers: auth },
+      );
+      expect(transactions.status).toBe(200);
+      const tBody = (await transactions.json()) as { data: unknown[] };
+      expect(tBody.data).toEqual([]);
     } finally {
       await server.close();
     }

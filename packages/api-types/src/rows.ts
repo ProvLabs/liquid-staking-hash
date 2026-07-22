@@ -112,6 +112,86 @@ export interface ValidatorsPayload {
 }
 
 /**
+ * Transaction kinds, mirroring the indexer's Prisma enum
+ * (`services/indexer/prisma/transactions.prisma`). Closed union.
+ */
+export type TransactionKind =
+  | "swap_in"
+  | "swap_out_request"
+  | "redemption_payout"
+  | "redemption_refund"
+  | "transfer_in"
+  | "transfer_out";
+
+/** Redemption lifecycle states (`redemption_requests.prisma`). Closed union. */
+export type RedemptionStatus = "enqueued" | "expedited" | "matured" | "refunded";
+
+/**
+ * One row of `GET /api/v1/transactions` (address-scoped, newest first): a
+ * per-event fact from the indexed history — amounts as base-unit decimal
+ * strings, with the NAV marker current at the event's height (app-spec §8.2:
+ * "amounts, NAV at the time, txhash"). The CSV export serves exactly these
+ * rows (§14.11: a statement of fact, not a computed tax position).
+ */
+export interface TransactionRow {
+  txhash: string;
+  msg_index: number;
+  kind: TransactionKind;
+  /** nvHASH base units, decimal string. */
+  shares: string;
+  /** nhash, decimal string (0 where the event carries no nhash leg). */
+  nhash: string;
+  /** NAV marker at the event's height, nhash per whole nvHASH, decimal string. */
+  nav_at_height: string;
+  height: number;
+  /** ISO-8601 block time. */
+  block_time: string;
+}
+
+/**
+ * One active redemption of `GET /api/v1/portfolio` (app-spec §8.2): the
+ * escrowed `SwapOut` request with its lifecycle timestamps. The chain's
+ * projected-payout `estimates` series is deliberately ABSENT: no indexer
+ * worker writes it yet, and freezing a shape with no producer would be
+ * invention — adding it is a §9.4 revision when its producer lands.
+ */
+export interface RedemptionRow {
+  request_id: string;
+  /** Shares escrowed by this request, nvHASH base units, decimal string. */
+  shares: string;
+  status: RedemptionStatus;
+  enqueued_at: string;
+  expedited_at: string | null;
+  matured_at: string | null;
+  refunded_at: string | null;
+  /** Height/txhash of the last lifecycle event (verify-link anchor). */
+  last_height: number;
+  last_txhash: string;
+}
+
+/**
+ * `GET /api/v1/portfolio` (address-scoped, app-spec §8.2): the indexed facts
+ * for one address. Deliberately NO current-balance field ([R2],
+ * docs/plans/2026-07-22-app-m3-query-api.md): the nvHASH balance is an
+ * on-chain LIVE read owned by the web tier (§8.2, §5.1) — indexed
+ * transactions cannot see bank transfers, so a transactions-sum "balance"
+ * here would silently misstate holdings. Derived metrics (cost basis,
+ * effective yield) are the M6.1 service, not this endpoint.
+ */
+export interface PortfolioSummary {
+  /** The authorized address the facts belong to (echo of the query). */
+  address: string;
+  /** ISO-8601 time of the address's first indexed event, or null. */
+  first_activity_at: string | null;
+  /** Indexed events for this address (the /transactions row count). */
+  transaction_count: number;
+  /** Total shares escrowed in active (enqueued/expedited) redemptions. */
+  escrowed_shares: string;
+  /** Active redemptions, newest first. */
+  active_redemptions: RedemptionRow[];
+}
+
+/**
  * One depth-at-slippage band of a sampled DEX pool (app-spec §5.3/§8.5).
  * PROVISIONAL SHAPE: the market sampler (plan PR 2.4) is parked pending the
  * §14.3 pool facts, so no producer pins these fields yet — when PR 2.4 lands

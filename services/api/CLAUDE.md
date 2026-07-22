@@ -26,12 +26,21 @@ Query API over the indexer's data store.
   current at the sample's time (§9.5(4)), the supply split is bridged-side
   only (local = the web tier's live read), and stored `depthBands` JSON is
   boundary-validated on read (loud failure on shape drift).
-- **Address-scoped and admin endpoints are authorized in-process** (ADR-001
-  Decision 2): a short-lived HMAC service assertion from the web tier's
-  session layer must carry an `address:<bech32>` scope matching the requested
-  address exactly (mismatch → 403; absent/expired/invalid → 401). Never rely
-  on network topology or "the web app is the only caller" — the
-  cross-address-rejection contract tests gate this service's CI from PR 3.3.
+- **Address-scoped endpoints are authorized in-process** (ADR-001 Decision 2,
+  wire format in its 2026-07-22 amendment): a short-lived HMAC service
+  assertion from the web tier's session layer must carry an
+  `address:<bech32>` scope matching the requested address exactly (mismatch
+  → 403; absent/expired/invalid → 401; fail-closed 401 when
+  `API_SERVICE_ASSERTION_KEY` is unset). Verification lives in `src/auth.ts`
+  (constant-time compare, `exp − iat ≤ 60 s`, 10 s `iat` skew bound); each
+  route declares `auth: "public" | "address" | "internal:notifier"` in the
+  registry and the handler pipeline enforces it in the pinned order
+  429→404→405→401→400→403. Never rely on network topology or "the web app
+  is the only caller" — the **cross-address-rejection contract suite
+  (`test/cross-address.test.ts`) is a standing CI gate** since PR 3.3.
+  `/transactions?format=csv` serves the §14.11 export (pinned columns,
+  formula-injection guard) with freshness in X-Chain-Height /
+  X-Indexed-Height / X-Generated-At headers (recorded §9.4 deviation).
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.

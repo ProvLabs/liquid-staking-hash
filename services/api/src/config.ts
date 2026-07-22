@@ -26,6 +26,13 @@ export const configSchema = z.object({
     .string()
     .regex(/^postgres(ql)?:\/\/\S+$/, "must be a postgresql:// connection URL")
     .optional(),
+  /**
+   * HMAC key verifying the web tier's service assertions (ADR-001
+   * Decision 2), consumed since PR 3.3. Optional — absent, address-scoped
+   * routes fail closed (401). Bounded to a real secret length; never
+   * logged, never serialized into any response.
+   */
+  assertionKey: z.string().min(32).max(512).optional(),
   /** TCP port to listen on when run as a server. */
   port: z.coerce.number().int().min(1).max(65535).default(8080),
   /** Max requests per window per client, before 429 (rate limiting, §9.4). */
@@ -49,6 +56,7 @@ export type ApiConfig = z.infer<typeof configSchema>;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const parsed = configSchema.safeParse({
     appEnv: env.APP_ENV,
+    assertionKey: env.API_SERVICE_ASSERTION_KEY,
     databaseUrl: env.DATABASE_URL,
     port: env.PORT,
     rateLimitMax: env.RATE_LIMIT_MAX,

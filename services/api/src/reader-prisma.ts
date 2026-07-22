@@ -14,6 +14,7 @@
 
 import { Prisma, PrismaClient } from "@nvhash/db-indexed";
 import {
+  derivePortfolio,
   deriveHeads,
   deriveMetrics,
   deriveValidatorsPayload,
@@ -23,6 +24,7 @@ import {
   toIncidentRow,
   toMarketSample,
   toSafeInt,
+  toTransactionRow,
   type ValidatorEpochFacts,
 } from "./derive.ts";
 import type { Heads, IndexedReader } from "./reader.ts";
@@ -31,7 +33,10 @@ import type {
   EpochRow,
   IncidentRow,
   MarketSummary,
+  PortfolioSummary,
   ProgramMetrics,
+  TransactionKind,
+  TransactionRow,
   ValidatorsPayload,
 } from "@nvhash/api-types";
 
@@ -210,6 +215,60 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           toBridgedSupplyRow({ chain: row.chain, remoteSupply: toBigint(row.remoteSupply), sampledAt: row.sampledAt }),
         ),
       };
+    },
+
+    async portfolioFor(address: string): Promise<PortfolioSummary> {
+      const [first, count, active] = await Promise.all([
+        prisma.transaction.findFirst({
+          where: { address },
+          orderBy: { blockTime: "asc" },
+          select: { blockTime: true },
+        }),
+        prisma.transaction.count({ where: { address } }),
+        prisma.redemptionRequest.findMany({
+          where: { owner: address, status: { in: ["enqueued", "expedited"] } },
+          orderBy: { enqueuedAt: "desc" },
+        }),
+      ]);
+      return derivePortfolio(
+        address,
+        first?.blockTime ?? null,
+        count,
+        active.map((r) => ({
+          requestId: r.requestId,
+          owner: r.owner,
+          shares: toBigint(r.shares),
+          status: r.status,
+          enqueuedAt: r.enqueuedAt,
+          expeditedAt: r.expeditedAt,
+          maturedAt: r.maturedAt,
+          refundedAt: r.refundedAt,
+          lastHeight: r.lastHeight,
+          lastTxhash: r.lastTxhash,
+        })),
+      );
+    },
+
+    async transactionsFor(address: string, page: Pagination): Promise<TransactionRow[]> {
+      const rows = await prisma.transaction.findMany({
+        where: { address },
+        orderBy: [{ height: "desc" }, { msgIndex: "desc" }],
+        skip: page.offset,
+        take: page.limit,
+      });
+      return rows.map((r) =>
+        toTransactionRow({
+          txhash: r.txhash,
+          msgIndex: r.msgIndex,
+          address: r.address,
+          kind: r.kind as TransactionKind,
+          shares: toBigint(r.shares),
+          nhash: toBigint(r.nhash),
+          navAtHeight: toBigint(r.navAtHeight),
+          height: r.height,
+          blockTime: r.blockTime,
+        }),
+      );
     },
 
     close: () => prisma.$disconnect(),

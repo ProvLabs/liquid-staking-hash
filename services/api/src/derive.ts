@@ -22,7 +22,12 @@ import {
   type IncidentSeverity,
   type MarketDepthBand,
   type MarketSample,
+  type PortfolioSummary,
   type ProgramMetrics,
+  type RedemptionRow,
+  type RedemptionStatus,
+  type TransactionKind,
+  type TransactionRow,
   type ValidatorRow,
   type ValidatorSetHealth,
   type ValidatorsPayload,
@@ -282,5 +287,92 @@ export function toBridgedSupplyRow(facts: BridgedSupplyFacts): BridgedSupplyRow 
     chain: facts.chain,
     supply: facts.remoteSupply.toString(),
     sampled_at: facts.sampledAt.toISOString(),
+  };
+}
+
+// --- address-scoped (PR 3.3) ------------------------------------------------
+
+export interface TransactionFacts {
+  readonly txhash: string;
+  readonly msgIndex: number;
+  readonly address: string;
+  readonly kind: TransactionKind;
+  readonly shares: bigint;
+  readonly nhash: bigint;
+  readonly navAtHeight: bigint;
+  readonly height: bigint;
+  readonly blockTime: Date;
+}
+
+export interface RedemptionFacts {
+  readonly requestId: string;
+  readonly owner: string;
+  readonly shares: bigint;
+  readonly status: RedemptionStatus;
+  readonly enqueuedAt: Date;
+  readonly expeditedAt: Date | null;
+  readonly maturedAt: Date | null;
+  readonly refundedAt: Date | null;
+  readonly lastHeight: bigint;
+  readonly lastTxhash: string;
+}
+
+export function toTransactionRow(f: TransactionFacts): TransactionRow {
+  return {
+    txhash: f.txhash,
+    msg_index: f.msgIndex,
+    kind: f.kind,
+    shares: f.shares.toString(),
+    nhash: f.nhash.toString(),
+    nav_at_height: f.navAtHeight.toString(),
+    height: toSafeInt(f.height, "height"),
+    block_time: f.blockTime.toISOString(),
+  };
+}
+
+export function toRedemptionRow(f: RedemptionFacts): RedemptionRow {
+  return {
+    request_id: f.requestId,
+    shares: f.shares.toString(),
+    status: f.status,
+    enqueued_at: f.enqueuedAt.toISOString(),
+    expedited_at: f.expeditedAt === null ? null : f.expeditedAt.toISOString(),
+    matured_at: f.maturedAt === null ? null : f.maturedAt.toISOString(),
+    refunded_at: f.refundedAt === null ? null : f.refundedAt.toISOString(),
+    last_height: toSafeInt(f.lastHeight, "last_height"),
+    last_txhash: f.lastTxhash,
+  };
+}
+
+/** A redemption escrows shares while it is enqueued or expedited. */
+export function isActiveRedemption(status: RedemptionStatus): boolean {
+  return status === "enqueued" || status === "expedited";
+}
+
+/**
+ * `/portfolio` ([R2]): indexed facts only — first activity, event count,
+ * escrow, active redemptions. Deliberately no balance (a live read) and no
+ * derived metrics (M6.1). `activeRedemptions` must already be filtered to
+ * active states (the readers own the filter; asserted here defensively).
+ */
+export function derivePortfolio(
+  address: string,
+  firstActivityAt: Date | null,
+  transactionCount: number,
+  activeRedemptions: readonly RedemptionFacts[],
+): PortfolioSummary {
+  let escrowed = 0n;
+  for (const redemption of activeRedemptions) {
+    if (!isActiveRedemption(redemption.status)) {
+      throw new RangeError(`redemption ${redemption.requestId} is ${redemption.status}, not active`);
+    }
+    escrowed += redemption.shares;
+  }
+  return {
+    address,
+    first_activity_at: firstActivityAt === null ? null : firstActivityAt.toISOString(),
+    transaction_count: transactionCount,
+    escrowed_shares: escrowed.toString(),
+    active_redemptions: activeRedemptions.map(toRedemptionRow),
   };
 }

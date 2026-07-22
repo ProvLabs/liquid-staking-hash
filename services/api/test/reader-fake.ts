@@ -6,19 +6,24 @@
 
 import type { IndexedReader } from "../src/reader.ts";
 import {
+  derivePortfolio,
   deriveHeads,
   deriveMetrics,
   deriveValidatorsPayload,
+  isActiveRedemption,
   navPriceNhash,
   toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
   toMarketSample,
+  toTransactionRow,
   type BridgedSupplyFacts,
   type EpochSnapshotFacts,
   type IncidentFacts,
   type MarketSampleFacts,
   type MetricsFacts,
+  type RedemptionFacts,
+  type TransactionFacts,
   type ValidatorEpochFacts,
   type ValidatorRegistryFacts,
 } from "../src/derive.ts";
@@ -34,6 +39,8 @@ export interface FakeFacts {
   readonly validatorEpochs?: readonly ValidatorEpochFacts[] | undefined;
   readonly marketSamples?: readonly MarketSampleFacts[] | undefined;
   readonly bridgedSupply?: readonly BridgedSupplyFacts[] | undefined;
+  readonly transactions?: readonly TransactionFacts[] | undefined;
+  readonly redemptions?: readonly RedemptionFacts[] | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -103,5 +110,29 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         bridged_supply: [...latestByChain.values()].map(toBridgedSupplyRow),
       });
     },
+    portfolioFor: (address) => {
+      const mine = (facts.transactions ?? []).filter((t) => t.address === address);
+      const first = [...mine].sort((a, b) => a.blockTime.getTime() - b.blockTime.getTime())[0];
+      const active = (facts.redemptions ?? []).filter(
+        (r) => r.owner === address && isActiveRedemption(r.status),
+      );
+      return Promise.resolve(
+        derivePortfolio(
+          address,
+          first?.blockTime ?? null,
+          mine.length,
+          [...active].sort((a, b) => b.enqueuedAt.getTime() - a.enqueuedAt.getTime()),
+        ),
+      );
+    },
+    transactionsFor: (address, p) =>
+      Promise.resolve(
+        page(
+          [...(facts.transactions ?? [])]
+            .filter((t) => t.address === address)
+            .sort((a, b) => (a.height === b.height ? b.msgIndex - a.msgIndex : a.height < b.height ? 1 : -1)),
+          p,
+        ).map(toTransactionRow),
+      ),
   };
 }

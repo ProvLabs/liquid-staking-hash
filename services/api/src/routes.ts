@@ -20,7 +20,14 @@
 
 import type { FreshnessSource, IncidentRow, ProgramMetrics, EpochRow } from "@nvhash/api-types";
 import type { z } from "zod";
-import { paginationSchema, type Pagination } from "./query.ts";
+import { transactionsCsv } from "./csv.ts";
+import {
+  paginationSchema,
+  portfolioQuerySchema,
+  transactionsQuerySchema,
+  type Pagination,
+  type TransactionsQuery,
+} from "./query.ts";
 import type { ApiConfig } from "./config.ts";
 import type { IndexedReader } from "./reader.ts";
 
@@ -49,16 +56,37 @@ export interface EnvelopedPayload {
   readonly indexedHeight?: number | null;
 }
 
+/**
+ * Route authorization requirement (ADR-001 Decision 2), declared IN the
+ * registry so enforcement is structural like the envelope gate: the handler
+ * pipeline reads this field — a new address-scoped route cannot forget the
+ * check, and the cross-address contract tests iterate the registry.
+ * - "public": unauthenticated, read-only, rate-limited.
+ * - "address": requires an `address:<bech32>` assertion whose scope equals
+ *   the route's zod-parsed `?address=` target exactly (mismatch → 403;
+ *   absent/expired/invalid assertion → 401).
+ * - "internal:notifier": the notifier's read-only surface (ADR-001
+ *   Decision 3; no route uses it until M6.2) — never grants address routes.
+ */
+export type RouteAuth = "public" | "address" | "internal:notifier";
+
 interface BaseRoute<Q> {
   readonly method: "GET";
   readonly path: string;
-  readonly querySchema: z.ZodType<Q> | null;
+  readonly auth: RouteAuth;
+  /** Output type is `Q`; the input type is free so `.default()` fields fit. */
+  readonly querySchema: z.ZodType<Q, z.ZodTypeDef, unknown> | null;
   readonly summary: string;
 }
 
 export interface EnvelopedRoute<Q> extends BaseRoute<Q> {
   readonly enveloped: true;
-  handle(ctx: RouteContext<Q>): EnvelopedPayload | Promise<EnvelopedPayload>;
+  /**
+   * Returns the payload for envelope wrapping — or a raw `Response` for a
+   * non-JSON representation (the CSV export), which the handler passes
+   * through with the defensive headers merged ([R3] recorded deviation).
+   */
+  handle(ctx: RouteContext<Q>): EnvelopedPayload | Response | Promise<EnvelopedPayload | Response>;
 }
 
 export interface OperationalRoute<Q> extends BaseRoute<Q> {
@@ -89,6 +117,7 @@ function defineOperational<Q>(route: OperationalRoute<Q>): Route {
 const statusRoute = defineEnveloped<unknown>({
   method: "GET",
   path: `${API_BASE}/status`,
+  auth: "public",
   enveloped: true,
   querySchema: null,
   summary: "API service + freshness descriptor",
@@ -117,6 +146,7 @@ const statusRoute = defineEnveloped<unknown>({
 const incidentsRoute = defineEnveloped({
   method: "GET",
   path: `${API_BASE}/incidents`,
+  auth: "public",
   enveloped: true,
   querySchema: paginationSchema,
   summary: "Program incident history (paginated)",
@@ -144,6 +174,7 @@ const incidentsRoute = defineEnveloped({
 const metricsRoute = defineEnveloped<unknown>({
   method: "GET",
   path: `${API_BASE}/metrics`,
+  auth: "public",
   enveloped: true,
   querySchema: null,
   summary: "Program-level aggregates (participants, age, epochs)",
@@ -168,6 +199,7 @@ const metricsRoute = defineEnveloped<unknown>({
 const epochsRoute = defineEnveloped({
   method: "GET",
   path: `${API_BASE}/epochs`,
+  auth: "public",
   enveloped: true,
   querySchema: paginationSchema,
   summary: "Per-epoch program history (paginated, newest first)",
@@ -196,6 +228,7 @@ const epochsRoute = defineEnveloped({
 const validatorsRoute = defineEnveloped<unknown>({
   method: "GET",
   path: `${API_BASE}/validators`,
+  auth: "public",
   enveloped: true,
   querySchema: null,
   summary: "Program validator set + set-health aggregates",
@@ -222,6 +255,7 @@ const validatorsRoute = defineEnveloped<unknown>({
 const marketRoute = defineEnveloped<unknown>({
   method: "GET",
   path: `${API_BASE}/market`,
+  auth: "public",
   enveloped: true,
   querySchema: null,
   summary: "Secondary-market summary (latest sample + bridged supply)",
@@ -229,6 +263,78 @@ const marketRoute = defineEnveloped<unknown>({
     const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.latestMarket()]);
     return {
       data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/portfolio?address=` — address-scoped (PR 3.3, ADR-001
+ * Decision 2): the indexed facts for one address — first activity, event
+ * count, escrowed shares, active redemptions. Deliberately NO balance and no
+ * derived metrics ([R2]: balance is the web tier's live read; cost basis /
+ * effective yield are M6.1). The registry `auth: "address"` declaration is
+ * what the handler enforces — reaching this handler means the assertion's
+ * scope already equals `?address=` exactly.
+ */
+const portfolioRoute = defineEnveloped<z.infer<typeof portfolioQuerySchema>>({
+  method: "GET",
+  path: `${API_BASE}/portfolio`,
+  auth: "address",
+  enveloped: true,
+  querySchema: portfolioQuerySchema,
+  summary: "Address-scoped indexed portfolio facts",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.portfolioFor(ctx.query.address),
+    ]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/transactions?address=&format=` — address-scoped per-event
+ * history (newest first, paginated; app-spec §8.2). `format=csv` returns the
+ * §14.11 statement-of-fact export as `text/csv` with freshness in the
+ * X-Chain-Height / X-Indexed-Height / X-Generated-At headers — the [R3]
+ * recorded deviation from the JSON envelope (a CSV body cannot carry it).
+ */
+const transactionsRoute = defineEnveloped<TransactionsQuery>({
+  method: "GET",
+  path: `${API_BASE}/transactions`,
+  auth: "address",
+  enveloped: true,
+  querySchema: transactionsQuerySchema,
+  summary: "Address-scoped transaction history (paginated; CSV export)",
+  handle: async (ctx) => {
+    const [heads, rows] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.transactionsFor(ctx.query.address, {
+        limit: ctx.query.limit,
+        offset: ctx.query.offset,
+      }),
+    ]);
+    if (ctx.query.format === "csv") {
+      const headers = new Headers();
+      headers.set("content-type", "text/csv; charset=utf-8");
+      headers.set("content-disposition", 'attachment; filename="transactions.csv"');
+      // [R3]: freshness rides in headers for the non-JSON representation —
+      // same values the envelope would carry, never omitted.
+      if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
+      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      headers.set("x-generated-at", ctx.now().toISOString());
+      return new Response(transactionsCsv(rows), { status: 200, headers });
+    }
+    return {
+      data: rows,
       source: "indexed" as const,
       chainHeight: heads.chainHeight,
       indexedHeight: heads.indexedHeight,
@@ -245,6 +351,7 @@ const marketRoute = defineEnveloped<unknown>({
 const healthRoute = defineOperational<unknown>({
   method: "GET",
   path: `${API_BASE}/health`,
+  auth: "public",
   enveloped: false,
   querySchema: null,
   summary: "Liveness probe",
@@ -259,6 +366,8 @@ export const routes: readonly Route[] = [
   epochsRoute,
   validatorsRoute,
   marketRoute,
+  portfolioRoute,
+  transactionsRoute,
   healthRoute,
 ];
 
