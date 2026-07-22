@@ -150,6 +150,8 @@ export default {
   "validators.health-trend-title": "Eligible validators by monthly settlement",
   "validators.health-trend-empty":
     "No monthly settlements are indexed yet. The trend appears as settlement history lands.",
+  "validators.health-trend-single":
+    "One monthly settlement is indexed so far. The trend appears as more history lands.",
   "validators.health-trend-unavailable": "Set history is unavailable right now.",
   "validators.trend-show-table": "Table view",
   "validators.trend-show-chart": "Chart view",
@@ -159,6 +161,7 @@ export default {
   "validators.trend-col-departed": "Departed",
 
   "validators.table-unavailable": "The validator set is unavailable right now.",
+  "validators.table-empty": "No validators are enrolled in the program yet.",
   "validators.col-validator": "Validator",
   "validators.col-status": "Status",
   "validators.col-uptime": "Uptime",

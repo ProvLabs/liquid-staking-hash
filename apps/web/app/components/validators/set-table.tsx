@@ -67,6 +67,16 @@ export function SetTable({
     );
   }
 
+  // A brand-new program legitimately has zero enrollments; say so rather
+  // than rendering a headers-only table (PR #12 review).
+  if (rows.length === 0) {
+    return (
+      <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+        {t(locale, "validators.table-empty")}
+      </p>
+    );
+  }
+
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full text-sm">

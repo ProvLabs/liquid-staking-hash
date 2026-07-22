@@ -16,11 +16,15 @@ const PAD = { top: 8, right: 8, bottom: 16, left: 26 };
 function trendPath(counts: number[]): string {
   const min = Math.min(...counts);
   const max = Math.max(...counts);
-  const span = max - min || 1;
   const innerW = WIDTH - PAD.left - PAD.right;
   const innerH = HEIGHT - PAD.top - PAD.bottom;
   const stepW = innerW / counts.length;
-  const y = (count: number) => PAD.top + innerH - ((count - min) / span) * innerH;
+  // A constant series is the healthy steady state; center it so a flat line
+  // never sits on the axis reading as zero (PR #12 review).
+  const y = (count: number) =>
+    max === min
+      ? PAD.top + innerH / 2
+      : PAD.top + innerH - ((count - min) / (max - min)) * innerH;
   let d = "";
   counts.forEach((count, i) => {
     const x = PAD.left + i * stepW;
@@ -78,10 +82,15 @@ export function SetHealth({
         />
       </div>
       {series.length < 2 ? (
+        // Three honest cold states (PR #12 review): unreachable API, nothing
+        // indexed, and one settlement (whose data the tiles above already
+        // show, so the copy must not claim nothing is indexed).
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
           {setHistory === null
             ? t(locale, "validators.health-trend-unavailable")
-            : t(locale, "validators.health-trend-empty")}
+            : series.length === 1
+              ? t(locale, "validators.health-trend-single")
+              : t(locale, "validators.health-trend-empty")}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
