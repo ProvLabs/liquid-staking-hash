@@ -1,0 +1,22 @@
+{
+  "name": "@nvhash/db-indexed",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Read-only Prisma client over the `indexed` schema for services/api (app plan PR 3.1, ADR-001 Decision 1). Generated from the indexer's canonical schema (services/indexer/prisma) — this package holds NO schema copy and runs NO migrations; read-only is enforced by the SELECT-only `api_reader` database role (roles.sql + the grant-boundary CI gate), never by the client.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate --schema ../../services/indexer/prisma",
+    "typecheck": "prisma generate --schema ../../services/indexer/prisma && tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prisma": "^6.7.0",
+    "typescript": "^5.9.0"
+  }
+}

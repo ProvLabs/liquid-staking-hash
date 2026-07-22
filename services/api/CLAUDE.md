@@ -11,13 +11,36 @@ Query API over the indexer's data store.
   [`docs/architecture/2026-07-14-adr-001-app-component-architecture.md`](../../docs/architecture/2026-07-14-adr-001-app-component-architecture.md)):
   this service runs no migrations and performs no database writes of any
   kind. It consumes the `@nvhash/db-indexed` client generated from the
-  indexer's schema.
-- **Address-scoped and admin endpoints are authorized in-process** (ADR-001
-  Decision 2): a short-lived HMAC service assertion from the web tier's
-  session layer must carry an `address:<bech32>` scope matching the requested
-  address exactly (mismatch → 403; absent/expired/invalid → 401). Never rely
-  on network topology or "the web app is the only caller" — the
-  cross-address-rejection contract tests gate this service's CI from PR 3.3.
+  indexer's canonical schema (PR 3.1). All reads go through the injectable
+  `IndexedReader` port (`src/reader.ts`): the Prisma implementation
+  (`src/reader-prisma.ts`, dynamically imported by `main()` only when
+  `DATABASE_URL` is set) or the honest empty reader (dataless: null heights,
+  empty collections). Row mapping is the pure `src/derive.ts` layer — amounts
+  bigint → decimal string, heights through a loud safe-integer guard, NAV via
+  the shared `navHashPerShare` in `@nvhash/api-types`. Envelope heights come
+  from the latest `reconciler_runs` row (fallback: max non-`meta:` worker
+  checkpoint with a null chain head).
+- `/market` (PR 3.2) is shape-complete but honest-empty until the market
+  sampler (plan PR 2.4, parked on spec §14.3) produces data: venue +
+  `sampled_at` ride in the payload, the premium is computed against the NAV
+  current at the sample's time (§9.5(4)), the supply split is bridged-side
+  only (local = the web tier's live read), and stored `depthBands` JSON is
+  boundary-validated on read (loud failure on shape drift).
+- **Address-scoped endpoints are authorized in-process** (ADR-001 Decision 2,
+  wire format in its 2026-07-22 amendment): a short-lived HMAC service
+  assertion from the web tier's session layer must carry an
+  `address:<bech32>` scope matching the requested address exactly (mismatch
+  → 403; absent/expired/invalid → 401; fail-closed 401 when
+  `API_SERVICE_ASSERTION_KEY` is unset). Verification lives in `src/auth.ts`
+  (constant-time compare, `exp − iat ≤ 60 s`, 10 s `iat` skew bound); each
+  route declares `auth: "public" | "address" | "internal:notifier"` in the
+  registry and the handler pipeline enforces it in the pinned order
+  429→404→405→401→400→403. Never rely on network topology or "the web app
+  is the only caller" — the **cross-address-rejection contract suite
+  (`test/cross-address.test.ts`) is a standing CI gate** since PR 3.3.
+  `/transactions?format=csv` serves the §14.11 export (pinned columns,
+  formula-injection guard) with freshness in X-Chain-Height /
+  X-Indexed-Height / X-Generated-At headers (recorded §9.4 deviation).
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.
@@ -35,10 +58,19 @@ Dev database via `./dev pg up` (host port 5433).
 
 Package scripts (`./dev pnpm --filter @nvhash/api run <script>`):
 
-- `typecheck` — `tsc --noEmit`. No database needed (the scaffold performs no
-  DB reads; the `api_reader` client lands with the M3 data endpoints).
-- `test` — Vitest. Unit tests + the envelope contract harness below; no DB, no
-  listening dependency (the harness starts the server on an ephemeral port).
+- `typecheck` — `tsc --noEmit`. Needs the `@nvhash/db-indexed` client
+  generated first; `pnpm -r run typecheck` handles this via topological order
+  (the package's own typecheck generates), or run
+  `./dev pnpm --filter @nvhash/db-indexed run generate` once. No database.
+- `test` — Vitest (default config, excludes `test/integration/**`). Unit
+  tests + the envelope contract harness below over the in-memory reader; no
+  DB, no listening dependency (the harness starts the server on an ephemeral
+  port).
+- `test:db` — the DB-backed reader gate (`vitest.integration.config.ts`):
+  real `@nvhash/db-indexed` queries as `api_reader` against rows seeded as
+  `indexer_writer`. Needs a migrated Postgres with `roles.sql` applied and
+  `API_READER_DATABASE_URL` / `INDEXER_WRITER_DATABASE_URL` set; runs in the
+  app-ci `db-grants` job.
 
 - `start` — run the read-only server (`node src/index.ts`) on `PORT`. Live
   invocation is wired by the PR 1.5 full-stack compose (`infra/devnet/stack.sh
@@ -47,10 +79,12 @@ Package scripts (`./dev pnpm --filter @nvhash/api run <script>`):
   as a pure function.
 
 Config (`src/config.ts`) is validated and bounded at the boundary; copy
-`.env.example` to `.env` for local values. The scaffold reads only serving
-knobs (`PORT`, `RATE_LIMIT_*`, `TRUST_PROXY`); `DATABASE_URL` (the `api_reader`
-role) and `API_SERVICE_ASSERTION_KEY` are documented there as placeholders but
-consumed only by later PRs (3.1 / 3.3).
+`.env.example` to `.env` for local values. Serving knobs (`PORT`,
+`RATE_LIMIT_*`, `TRUST_PROXY`) plus, since PR 3.1, an OPTIONAL `DATABASE_URL`
+(the `api_reader` role, postgres scheme enforced): absent, the process runs
+dataless on the honest empty reader and `/status` reports
+`data_source: "unwired"`. `API_SERVICE_ASSERTION_KEY` remains a documented
+placeholder consumed by PR 3.3.
 
 ### CI gates (standing from PR 1.2)
 
@@ -62,10 +96,14 @@ security-executable gates (SECURITY.md, plan §4), which fail CI on violation:
   it iterates the actual route table, so every route (now and future) is held
   to the freshness-envelope shape on enveloped routes, the read-only method
   gate, and its zod query bounds. A new route is covered automatically; it
-  cannot slip past the harness. The suite also pins the PR 4.2-frozen
-  scaffold shapes: `/metrics` (exact `ProgramMetrics` field set, all null)
-  and `/epochs` (empty, pagination-bounded), with row types in
-  `@nvhash/api-types` that PR 3.1 implements against.
+  cannot slip past the harness. Since PR 3.1 the suite holds BOTH states of
+  the frozen shapes: honest-empty (default reader: all-null `/metrics`, empty
+  collections, null heights, `/status` unwired) and populated (injected
+  in-memory fake built through the real `derive.ts` mappers: real heights
+  from the reconciler run, the corpus NAV golden on `/epochs`, joined
+  `/validators` rows + set health). `test/derive.test.ts` unit-gates the
+  pure mappers; `test:db` proves the same derivations over real Postgres as
+  `api_reader`.
 - **Read-only guarantee** (same suite): the route registry holds only GET
   routes and every write verb (`POST`/`PUT`/`PATCH`/`DELETE`) on every route
   returns 405. This is how "no write endpoint of any kind" (plan §1) is

@@ -1,0 +1,3 @@
+# Generated Prisma client + engine binaries — built on demand via
+# `pnpm run generate` (repo rule: no binary artifacts in git).
+generated/

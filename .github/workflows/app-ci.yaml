@@ -125,8 +125,10 @@ jobs:
   # not write indexed; app_writer may not read indexed; indexer_writer holds no
   # privileges on `app`. Needs Postgres only (no devnet node), so it runs on
   # every PR — unlike the live-devnet suite. A regression in roles.sql fails here.
+  # Since PR 3.1 it also runs the API's DB-backed reader gate (test:db): real
+  # @nvhash/db-indexed queries as api_reader over rows seeded as indexer_writer.
   db-grants:
-    name: services · grant-boundary (roles.sql + migrate + test:grants)
+    name: services · grant-boundary + api reader (roles.sql + migrate + test:grants + test:db)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
@@ -172,6 +174,13 @@ jobs:
         run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT ON ALL TABLES IN SCHEMA indexed TO api_reader;"
       - name: Grant-boundary test (test:grants)
         run: corepack pnpm --filter @nvhash/indexer run test:grants
+      - name: Generate @nvhash/db-indexed client (from the indexer's canonical schema)
+        run: corepack pnpm --filter @nvhash/db-indexed run generate
+      - name: API reader gate (test:db — real queries as api_reader)
+        run: corepack pnpm --filter @nvhash/api run test:db
+        env:
+          API_READER_DATABASE_URL: postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed
+          INDEXER_WRITER_DATABASE_URL: postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed
 
   shell-lint:
     name: shellcheck (devnet + tooling scripts)

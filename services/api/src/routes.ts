@@ -10,17 +10,26 @@
 //      iterates THIS array, so a new route is automatically held to both the
 //      envelope and query-bounds gates — the harness cannot silently miss one.
 //
-// The M1 scaffold has no indexed data source wired (the `api_reader` client and
-// the workers land in M2/M3). Enveloped routes therefore report null heights —
-// the honest "not certified fresh" state (app-spec §12.1) — never a fabricated
-// height. The real public program endpoints (`/metrics`, `/epochs`,
-// `/validators`, `/market`) and address-scoped endpoints land in M3 (PRs
-// 3.1–3.3) and register here.
+// PR 3.1: the public program endpoints read real indexed data through the
+// injected `IndexedReader` port (reader.ts) — `emptyReader` when no database
+// is configured, so a dataless process still reports the honest null/empty
+// state (app-spec §12.1), never a fabricated height or row. Envelope heights
+// come from `reader.heads()` (latest reconciler run; worker-checkpoint
+// fallback). `/market` lands with PR 3.2; the address-scoped endpoints with
+// PR 3.3.
 
 import type { FreshnessSource, IncidentRow, ProgramMetrics, EpochRow } from "@nvhash/api-types";
 import type { z } from "zod";
-import { paginationSchema } from "./query.ts";
+import { transactionsCsv } from "./csv.ts";
+import {
+  paginationSchema,
+  portfolioQuerySchema,
+  transactionsQuerySchema,
+  type Pagination,
+  type TransactionsQuery,
+} from "./query.ts";
 import type { ApiConfig } from "./config.ts";
+import type { IndexedReader } from "./reader.ts";
 
 /** Everything under the versioned prefix lives beneath this base. */
 export const API_BASE = "/api/v1";
@@ -32,6 +41,10 @@ export interface RouteContext<Q> {
   /** Injectable clock (deterministic in tests); drives `generated_at`. */
   readonly now: () => Date;
   readonly appEnv: ApiConfig["appEnv"];
+  /** The indexed-data port (PR 3.1) — every data read goes through it. */
+  readonly reader: IndexedReader;
+  /** What `/status` reports as the wired data source. */
+  readonly dataSource: "unwired" | "api_reader";
 }
 
 /** What an enveloped route returns; the handler wraps it as `{ data, meta }`. */
@@ -43,16 +56,37 @@ export interface EnvelopedPayload {
   readonly indexedHeight?: number | null;
 }
 
+/**
+ * Route authorization requirement (ADR-001 Decision 2), declared IN the
+ * registry so enforcement is structural like the envelope gate: the handler
+ * pipeline reads this field — a new address-scoped route cannot forget the
+ * check, and the cross-address contract tests iterate the registry.
+ * - "public": unauthenticated, read-only, rate-limited.
+ * - "address": requires an `address:<bech32>` assertion whose scope equals
+ *   the route's zod-parsed `?address=` target exactly (mismatch → 403;
+ *   absent/expired/invalid assertion → 401).
+ * - "internal:notifier": the notifier's read-only surface (ADR-001
+ *   Decision 3; no route uses it until M6.2) — never grants address routes.
+ */
+export type RouteAuth = "public" | "address" | "internal:notifier";
+
 interface BaseRoute<Q> {
   readonly method: "GET";
   readonly path: string;
-  readonly querySchema: z.ZodType<Q> | null;
+  readonly auth: RouteAuth;
+  /** Output type is `Q`; the input type is free so `.default()` fields fit. */
+  readonly querySchema: z.ZodType<Q, z.ZodTypeDef, unknown> | null;
   readonly summary: string;
 }
 
 export interface EnvelopedRoute<Q> extends BaseRoute<Q> {
   readonly enveloped: true;
-  handle(ctx: RouteContext<Q>): EnvelopedPayload | Promise<EnvelopedPayload>;
+  /**
+   * Returns the payload for envelope wrapping — or a raw `Response` for a
+   * non-JSON representation (the CSV export), which the handler passes
+   * through with the defensive headers merged ([R3] recorded deviation).
+   */
+  handle(ctx: RouteContext<Q>): EnvelopedPayload | Response | Promise<EnvelopedPayload | Response>;
 }
 
 export interface OperationalRoute<Q> extends BaseRoute<Q> {
@@ -75,99 +109,237 @@ function defineOperational<Q>(route: OperationalRoute<Q>): Route {
 // --- Routes -----------------------------------------------------------------
 
 /**
- * `GET /api/v1/status` — enveloped service descriptor. Honest in a dataless
- * scaffold: service metadata with a null-height envelope (no chain read
- * performed). Proves the envelope on a route that cannot misstate chain state.
+ * `GET /api/v1/status` — enveloped service descriptor. `data_source` reports
+ * what is actually wired ("api_reader" | "unwired") and the heights come from
+ * the reader — the M4.1 chrome consumes this envelope for the footer
+ * freshness line, so it must never claim a plane that is not connected.
  */
 const statusRoute = defineEnveloped<unknown>({
   method: "GET",
   path: `${API_BASE}/status`,
+  auth: "public",
   enveloped: true,
   querySchema: null,
   summary: "API service + freshness descriptor",
-  handle: (ctx) => ({
-    data: {
-      service: "nvhash-api",
-      api_version: "v1",
-      environment: ctx.appEnv,
-      // No indexed reader or LCD is wired in the M1 scaffold; say so plainly
-      // rather than implying a live data plane exists (SECURITY.md honesty).
-      data_source: "unwired",
-    },
-    source: "indexed",
-    chainHeight: null,
-    indexedHeight: null,
-  }),
+  handle: async (ctx) => {
+    const heads = await ctx.reader.heads();
+    return {
+      data: {
+        service: "nvhash-api",
+        api_version: "v1",
+        environment: ctx.appEnv,
+        data_source: ctx.dataSource,
+      },
+      source: "indexed",
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
 });
 
 /**
- * `GET /api/v1/incidents` — enveloped, paginated collection. The demonstrator
- * for the query-bounds harness: `?limit=&offset=` are zod-bounded (400 on
- * out-of-range). A healthy program legitimately has zero incidents; the null
- * `indexed_height` marks that no indexer height certifies this list yet
- * (app-spec §12.1). PR 3.1 fills in the real derivation and heights; the shape
- * is unchanged.
+ * `GET /api/v1/incidents` — enveloped, paginated collection over the
+ * reconciler-derived `incidents` (app-spec §9.6; row shape frozen by PR 4.2).
+ * A healthy program legitimately has zero incidents; null heights mean no
+ * indexer height certifies the list yet (§12.1).
  */
 const incidentsRoute = defineEnveloped({
   method: "GET",
   path: `${API_BASE}/incidents`,
+  auth: "public",
   enveloped: true,
   querySchema: paginationSchema,
   summary: "Program incident history (paginated)",
-  handle: () => ({
-    // Row shape frozen by PR 4.2 (`IncidentRow`, @nvhash/api-types); PR 3.1
-    // fills in the real derivation and heights against it.
-    data: [] as IncidentRow[],
-    source: "indexed" as const,
-    chainHeight: null,
-    indexedHeight: null,
-  }),
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.listIncidents(ctx.query as Pagination),
+    ]);
+    return {
+      data: data satisfies IncidentRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
 });
 
 /**
  * `GET /api/v1/metrics` — enveloped program aggregates (participant count,
- * program age, epoch count; app-spec §8.1 proof strip). Shape frozen by PR
- * 4.2 (`ProgramMetrics`, @nvhash/api-types); every field null until PR 3.1
- * wires the `api_reader` derivations — null is the honest "not yet indexed"
- * state the UI renders as "n/a" (§12.1), never a fabricated number.
+ * program age, epoch count; app-spec §8.1 proof strip; shape frozen by PR
+ * 4.2). `participant_count` is distinct addresses across all transaction
+ * kinds ([R5], §9.4 revision note). All-null until a worker stream has
+ * committed — the honest "not yet indexed" state (§12.1).
  */
 const metricsRoute = defineEnveloped<unknown>({
   method: "GET",
   path: `${API_BASE}/metrics`,
+  auth: "public",
   enveloped: true,
   querySchema: null,
   summary: "Program-level aggregates (participants, age, epochs)",
-  handle: () => ({
-    data: {
-      participant_count: null,
-      program_started_at: null,
-      epoch_count: null,
-    } satisfies ProgramMetrics,
-    source: "indexed" as const,
-    chainHeight: null,
-    indexedHeight: null,
-  }),
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.programMetrics()]);
+    return {
+      data: data satisfies ProgramMetrics,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
 });
 
 /**
  * `GET /api/v1/epochs` — enveloped, paginated per-epoch history (newest
- * first), the series behind the Learn NAV step chart and the §8.5 views.
- * Row shape frozen by PR 4.2 (`EpochRow`, @nvhash/api-types); empty until
- * PR 3.1 reads the indexer's `epoch_snapshots`. A fresh program legitimately
- * has zero settled epochs, so an empty list is not a degraded state.
+ * first) from the indexer's `epoch_snapshots`, the series behind the Learn
+ * NAV step chart and the §8.5 views (row shape frozen by PR 4.2; `nav`
+ * widened to `string | null` by PR 3.1 — an empty-vault epoch has no NAV).
+ * A fresh program legitimately has zero settled epochs.
  */
 const epochsRoute = defineEnveloped({
   method: "GET",
   path: `${API_BASE}/epochs`,
+  auth: "public",
   enveloped: true,
   querySchema: paginationSchema,
   summary: "Per-epoch program history (paginated, newest first)",
-  handle: () => ({
-    data: [] as EpochRow[],
-    source: "indexed" as const,
-    chainHeight: null,
-    indexedHeight: null,
-  }),
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.listEpochs(ctx.query as Pagination),
+    ]);
+    return {
+      data: data satisfies EpochRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/validators` — the public set view (app-spec §8.6): registry
+ * enrollment joined with each validator's latest sampled epoch, plus the
+ * set-health aggregates. Shapes frozen by this PR (`ValidatorRow` /
+ * `ValidatorSetHealth`, @nvhash/api-types); PR 4.3's public page consumes
+ * them. Per-epoch fields are null before the first sample — honest, never a
+ * fabricated zero.
+ */
+const validatorsRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/validators`,
+  auth: "public",
+  enveloped: true,
+  querySchema: null,
+  summary: "Program validator set + set-health aggregates",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.listValidators()]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/market` — the §8.5 secondary-market summary (PR 3.2; shapes
+ * `MarketSummary`/`MarketSample` frozen in @nvhash/api-types). Market data
+ * has no chain-canonical plane, so venue + sample time ride IN the payload,
+ * and the premium/discount is computed against the NAV current at the
+ * sample's time ([R6], §9.5(4)). With the sampler (PR 2.4) parked pending
+ * §14.3, this serves the honest empty state — the v1 "coming soon" shell
+ * (§13 decision 4) with a stable shape ahead of the data.
+ */
+const marketRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/market`,
+  auth: "public",
+  enveloped: true,
+  querySchema: null,
+  summary: "Secondary-market summary (latest sample + bridged supply)",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.latestMarket()]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/portfolio?address=` — address-scoped (PR 3.3, ADR-001
+ * Decision 2): the indexed facts for one address — first activity, event
+ * count, escrowed shares, active redemptions. Deliberately NO balance and no
+ * derived metrics ([R2]: balance is the web tier's live read; cost basis /
+ * effective yield are M6.1). The registry `auth: "address"` declaration is
+ * what the handler enforces — reaching this handler means the assertion's
+ * scope already equals `?address=` exactly.
+ */
+const portfolioRoute = defineEnveloped<z.infer<typeof portfolioQuerySchema>>({
+  method: "GET",
+  path: `${API_BASE}/portfolio`,
+  auth: "address",
+  enveloped: true,
+  querySchema: portfolioQuerySchema,
+  summary: "Address-scoped indexed portfolio facts",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.portfolioFor(ctx.query.address),
+    ]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/transactions?address=&format=` — address-scoped per-event
+ * history (newest first, paginated; app-spec §8.2). `format=csv` returns the
+ * §14.11 statement-of-fact export as `text/csv` with freshness in the
+ * X-Chain-Height / X-Indexed-Height / X-Generated-At headers — the [R3]
+ * recorded deviation from the JSON envelope (a CSV body cannot carry it).
+ */
+const transactionsRoute = defineEnveloped<TransactionsQuery>({
+  method: "GET",
+  path: `${API_BASE}/transactions`,
+  auth: "address",
+  enveloped: true,
+  querySchema: transactionsQuerySchema,
+  summary: "Address-scoped transaction history (paginated; CSV export)",
+  handle: async (ctx) => {
+    const [heads, rows] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.transactionsFor(ctx.query.address, {
+        limit: ctx.query.limit,
+        offset: ctx.query.offset,
+      }),
+    ]);
+    if (ctx.query.format === "csv") {
+      const headers = new Headers();
+      headers.set("content-type", "text/csv; charset=utf-8");
+      headers.set("content-disposition", 'attachment; filename="transactions.csv"');
+      // [R3]: freshness rides in headers for the non-JSON representation —
+      // same values the envelope would carry, never omitted.
+      if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
+      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      headers.set("x-generated-at", ctx.now().toISOString());
+      return new Response(transactionsCsv(rows), { status: 200, headers });
+    }
+    return {
+      data: rows,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
 });
 
 /**
@@ -179,6 +351,7 @@ const epochsRoute = defineEnveloped({
 const healthRoute = defineOperational<unknown>({
   method: "GET",
   path: `${API_BASE}/health`,
+  auth: "public",
   enveloped: false,
   querySchema: null,
   summary: "Liveness probe",
@@ -191,6 +364,10 @@ export const routes: readonly Route[] = [
   incidentsRoute,
   metricsRoute,
   epochsRoute,
+  validatorsRoute,
+  marketRoute,
+  portfolioRoute,
+  transactionsRoute,
   healthRoute,
 ];
 

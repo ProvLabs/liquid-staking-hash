@@ -398,7 +398,7 @@ distinct rendered state, not a DATA-DEGRADED incident. (3) Corrected misleading
 decode-error path labels in `parseProgramDelegations`. Also fixed a stray NUL
 byte that had crept into the incident dedupe-key separator (caught by the new
 bounded-work test).*
-*2026-07-21 (rev 8): **M4.1 delivered** (working plan
+*2026-07-21 (rev 12): **M4.1 delivered** (working plan
 `app-m4.1-global-chrome`): the §8.0 global chrome in `apps/web`:
 `app/chrome/chrome.server.ts` (root-loader ChromeState: paused/halted banner
 from live vault `get` + `epoch_status`, degraded from status-envelope lag or
@@ -413,7 +413,7 @@ recorded in the spec: footer docs link deferred (no docs URL exists) and no
 `governance` verify target (console panel does not exist yet); both are
 follow-ons, not dead links. Next: 4.2–4.4 render inside this chrome.*
 
-*2026-07-22 (rev 9): **M4.2 delivered** (working plan
+*2026-07-22 (rev 13): **M4.2 delivered** (working plan
 `app-m4.2-learn-page`): the §8.1 Learn page in `apps/web`, plus the
 Learn-facing subset of the 3.1 contracts frozen first per the M3
 contracts-first note (Carlton, 2026-07-22): `ProgramMetrics`/`EpochRow`/
@@ -429,3 +429,60 @@ states, a dependency-free step-after NAV chart with table view, the typed
 envelope-contract suite, `e2e/learn.spec.ts`. PR 3.1's remaining scope:
 implement derivations against the frozen shapes; add `/validators` (4.3)
 and `/market` (3.2). Next: 4.3/4.4 in parallel.*
+
+*2026-07-22 (rev 14): **M3.1 delivered** (working plan `app-m3-query-api`,
+which also records the M3 delivery shape — 3.1/3.2/3.3 as three commits on
+one services-only branch, one PR/CI cycle — and the folded-in review
+resolutions [R1]–[R7]): the public program endpoints serve real indexed data.
+`@nvhash/db-indexed` (client GENERATED from the indexer's canonical schema
+via a second generator block; read-only enforced by the `api_reader` role,
+not the client), the injectable `IndexedReader` port (unit/contract suite
+stays Postgres-free; honest empty reader when no `DATABASE_URL`), envelope
+heights from the latest `reconciler_runs` with non-`meta:` checkpoint
+fallback, real `/metrics` (`participant_count` = distinct addresses across
+all kinds) / `/epochs` (shared golden-pinned `navHashPerShare` lifted into
+`@nvhash/api-types`; `EpochRow.nav` widened `string|null` for zero-share
+epochs) / `/incidents`, and `/validators` + frozen
+`ValidatorRow`/`ValidatorSetHealth` (endpoint owned by 3.1, amending the
+rev-13 note; 4.3 consumes). `/status` reports the wired data source with real
+heights. Gates added: populated + honest-empty contract cases,
+`derive.test.ts`, and the DB-backed reader gate (`test:db`, real queries as
+`api_reader`) joining the app-ci `db-grants` job. Spec §9.4 amended in the
+same change. Next: 3.2 ∥ 3.3 on the same branch.*
+
+*2026-07-22 (rev 15): **M3.2 delivered** (second commit of the
+`app-m3-query-api` branch): `/api/v1/market` shape-complete and
+honest-empty — `MarketSummary`/`MarketSample`/`MarketDepthBand`/
+`BridgedSupplyRow` frozen in `@nvhash/api-types` ahead of the parked PR 2.4
+sampler (§14.3), venue + `sampled_at` labeling in the payload,
+`premium_discount_bps` signed/truncated against the **NAV current at the
+sample's time** ([R6], §9.5(4); null before any settled epoch), `price`
+pinned as nhash per whole nvHASH, bridged-supply-only split (local = live
+plane, web's job — recorded §8.5 amendment), and stored `depthBands` JSON
+boundary-validated on read (loud failure, provisional shape PR 2.4 must
+match). Gates: derive units (signed bps, band validation, NAV-price cross-pin),
+honest-empty + populated contract cases (the populated sample proves the
+[R6] epoch selection), and market seeds in the `test:db` reader gate (JSONB
+round trip, latest-per-chain, null premium pre-NAV). Spec §9.4 amended in
+the same change. Next: 3.3 closes the branch.*
+
+*2026-07-22 (rev 16): **M3.3 delivered — M3 milestone complete** (third
+commit of the `app-m3-query-api` branch): the address-scoped endpoints
+(`/portfolio?address=`, `/transactions?address=` + `format=csv`) behind the
+ADR-001 Decision 2 in-process authorization, delivered as machinery: an
+`auth.ts` verifier (HMAC-SHA256, constant-time compare, `exp − iat ≤ 60 s`,
+[R7d] 10 s `iat` forward-skew bound, fail-closed without a key; wire format
+recorded in the ADR-001 amendment and spec §9.4), a registry-declared
+`auth` requirement per route, and the [R4]-pinned pipeline
+(429→404→405→401→400→403→dispatch; bech32 bound on `?address=`).
+`/portfolio` serves indexed facts only ([R2]: no balance field — the live
+plane's job; `estimates` omitted, no producer). The CSV export carries the
+§14.11 pinned column set with formula-injection guarding and [R3] X-header
+freshness (recorded §9.4 deviation). **The cross-address-rejection suite
+(`test/cross-address.test.ts`) is a standing `services/api` CI gate from
+this change on** — A→B 403, absent/expired/mis-signed/future-minted 401,
+`internal:notifier` on personal routes 403, public routes credential-free,
+CSV under the same gate — plus address-plane seeds in `test:db`. Spec §9.4
++ ADR-001 amended in the same change. M3 exits on one branch as three
+commits (3.1/3.2/3.3), one PR/CI cycle; next in the services lane: 8.2
+load-testing when M8 opens.*

@@ -10,10 +10,12 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:db": "vitest run --config vitest.integration.config.ts",
     "start": "node src/index.ts"
   },
   "dependencies": {
     "@nvhash/api-types": "workspace:*",
+    "@nvhash/db-indexed": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

@@ -1,0 +1,230 @@
+// THE cross-address-rejection contract gate (ADR-001 Decision 2; master plan
+// §4) — a STANDING services/api CI gate from PR 3.3 on, never a one-time
+// audit. It proves the address-scoped authorization is an in-process
+// mechanism: an assertion for address A requesting address B → 403;
+// absent/expired/invalid → 401; `internal:notifier` on a personal endpoint →
+// 403; public endpoints accept credential-free requests. The [R4] pipeline
+// order (401 before 400 before 403) and the [R7d] clock-skew bound are part
+// of the matrix, as are the §14.11 CSV export contract ([R3] freshness
+// headers + the pinned column set).
+
+import { describe, expect, it } from "vitest";
+import { API_BASE, routes, TRANSACTIONS_CSV_COLUMNS, csvField } from "../src/index.ts";
+import { mintAssertion, TEST_ASSERTION_KEY } from "./assertions.ts";
+import { startServer, type RunningServer } from "./helpers.ts";
+import { fakeReader } from "./reader-fake.ts";
+
+const ADDR_A = "pb1walletaqq";
+const ADDR_B = "pb1walletzz2";
+
+// Two addresses with history, so scoping is observable in the data itself.
+const facts = {
+  reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
+  transactions: [
+    { txhash: "AA", msgIndex: 0, address: ADDR_A, kind: "swap_in" as const, shares: 1_000n, nhash: 1_017n, navAtHeight: 1_017_500_000n, height: 100n, blockTime: new Date("2026-06-01T00:00:00Z") },
+    { txhash: "BB", msgIndex: 0, address: ADDR_B, kind: "swap_in" as const, shares: 2_000n, nhash: 2_035n, navAtHeight: 1_017_500_000n, height: 200n, blockTime: new Date("2026-06-02T00:00:00Z") },
+    { txhash: "CC", msgIndex: 0, address: ADDR_A, kind: "swap_out_request" as const, shares: 500n, nhash: 0n, navAtHeight: 1_017_500_000n, height: 300n, blockTime: new Date("2026-06-03T00:00:00Z") },
+  ],
+  redemptions: [
+    { requestId: "req-1", owner: ADDR_A, shares: 500n, status: "enqueued" as const, enqueuedAt: new Date("2026-06-03T00:00:00Z"), expeditedAt: null, maturedAt: null, refundedAt: null, lastHeight: 300n, lastTxhash: "CC" },
+    { requestId: "req-0", owner: ADDR_A, shares: 100n, status: "matured" as const, enqueuedAt: new Date("2026-05-01T00:00:00Z"), expeditedAt: null, maturedAt: new Date("2026-05-20T00:00:00Z"), refundedAt: null, lastHeight: 50n, lastTxhash: "OLD" },
+  ],
+};
+
+function startAuthServer(): Promise<RunningServer> {
+  return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(facts));
+}
+
+const PERSONAL_PATHS = [`${API_BASE}/portfolio`, `${API_BASE}/transactions`] as const;
+
+describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
+  it("rejects an assertion for A requesting B with 403 on every personal route", async () => {
+    const server = await startAuthServer();
+    try {
+      for (const path of PERSONAL_PATHS) {
+        const res = await fetch(`${server.baseUrl}${path}?address=${ADDR_B}`, {
+          headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+        });
+        expect(res.status, path).toBe(403);
+        const body = (await res.json()) as { error?: { code?: string } };
+        expect(body.error?.code, path).toBe("forbidden");
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects absent, malformed, and mis-signed assertions with 401", async () => {
+    const server = await startAuthServer();
+    try {
+      const cases: Array<Record<string, string>> = [
+        {}, // absent
+        { authorization: "Bearer not-a-token" },
+        { authorization: "Basic abc" },
+        { authorization: mintAssertion(`address:${ADDR_A}`, { key: "wrong-key-wrong-key-wrong-key-wrong" }) },
+      ];
+      for (const headers of cases) {
+        for (const path of PERSONAL_PATHS) {
+          const res = await fetch(`${server.baseUrl}${path}?address=${ADDR_A}`, { headers });
+          expect(res.status, `${path} ${JSON.stringify(headers)}`).toBe(401);
+        }
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects expired, over-long-lifetime, and future-minted assertions with 401", async () => {
+    const server = await startAuthServer();
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const cases = [
+        mintAssertion(`address:${ADDR_A}`, { iat: now - 120, exp: now - 65 }), // expired
+        mintAssertion(`address:${ADDR_A}`, { iat: now, exp: now + 120 }), // exp − iat > 60 (ADR-001)
+        mintAssertion(`address:${ADDR_A}`, { iat: now + 60, exp: now + 115 }), // [R7d] minted in the future
+      ];
+      for (const authorization of cases) {
+        const res = await fetch(`${server.baseUrl}${API_BASE}/portfolio?address=${ADDR_A}`, {
+          headers: { authorization },
+        });
+        expect(res.status, authorization).toBe(401);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects the internal:notifier scope on personal endpoints with 403", async () => {
+    const server = await startAuthServer();
+    try {
+      for (const path of PERSONAL_PATHS) {
+        const res = await fetch(`${server.baseUrl}${path}?address=${ADDR_A}`, {
+          headers: { authorization: mintAssertion("internal:notifier") },
+        });
+        expect(res.status, path).toBe(403);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("accepts credential-free requests on every public route (registry-driven)", async () => {
+    const server = await startAuthServer();
+    try {
+      for (const route of routes.filter((r) => r.auth === "public")) {
+        const res = await fetch(`${server.baseUrl}${route.path}`);
+        expect(res.status, route.path).toBe(200);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("fails closed with 401 when no assertion key is configured", async () => {
+    // Default server: no assertionKey — a well-formed assertion cannot verify.
+    const server = await startServer({}, undefined, fakeReader(facts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/portfolio?address=${ADDR_A}`, {
+        headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+      });
+      expect(res.status).toBe(401);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("bounds ?address= with the bech32 schema (400 after 401, per the [R4] order)", async () => {
+    const server = await startAuthServer();
+    try {
+      // No credential + bad address → 401 (credential validity precedes zod).
+      const unauth = await fetch(`${server.baseUrl}${API_BASE}/portfolio?address=NOT_BECH32`);
+      expect(unauth.status).toBe(401);
+      // Valid credential + bad address → 400 from the bech32 bound.
+      for (const bad of ["NOT_BECH32", "pb1WALLETAQQ", "pb1short", "pb1walletbio"]) {
+        const res = await fetch(`${server.baseUrl}${API_BASE}/portfolio?address=${bad}`, {
+          headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+        });
+        expect(res.status, bad).toBe(400);
+        const body = (await res.json()) as { error?: { code?: string } };
+        expect(body.error?.code, bad).toBe("invalid_query");
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves the authorized address its own scoped facts (A never sees B)", async () => {
+    const server = await startAuthServer();
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}`, {
+        headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Array<{ txhash: string }> };
+      expect(body.data.map((r) => r.txhash)).toEqual(["CC", "AA"]); // newest first; BB (address B) absent
+
+      const portfolio = await fetch(`${server.baseUrl}${API_BASE}/portfolio?address=${ADDR_A}`, {
+        headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+      });
+      const pBody = (await portfolio.json()) as {
+        data: { transaction_count: number; escrowed_shares: string; active_redemptions: Array<{ request_id: string }> };
+      };
+      expect(pBody.data.transaction_count).toBe(2);
+      expect(pBody.data.escrowed_shares).toBe("500"); // enqueued only; the matured req-0 does not escrow
+      expect(pBody.data.active_redemptions.map((r) => r.request_id)).toEqual(["req-1"]);
+    } finally {
+      await server.close();
+    }
+  });
+});
+
+describe("CSV export contract (§14.11; [R3] freshness headers)", () => {
+  it("serves text/csv with the pinned column set and X- freshness headers", async () => {
+    const server = await startAuthServer();
+    try {
+      const res = await fetch(
+        `${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`,
+        { headers: { authorization: mintAssertion(`address:${ADDR_A}`) } },
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toMatch(/text\/csv/);
+      expect(res.headers.get("content-disposition")).toContain("transactions.csv");
+      expect(res.headers.get("x-chain-height")).toBe("4242");
+      expect(res.headers.get("x-indexed-height")).toBe("4200");
+      expect(res.headers.get("x-generated-at")).not.toBeNull();
+      // Defensive headers still apply to the non-JSON representation.
+      expect(res.headers.get("cache-control")).toBe("no-store");
+
+      const lines = (await res.text()).trimEnd().split("\n");
+      expect(lines[0]).toBe(TRANSACTIONS_CSV_COLUMNS.join(","));
+      expect(lines).toHaveLength(3); // header + CC + AA
+      expect(lines[1]).toBe("2026-06-03T00:00:00.000Z,300,CC,0,swap_out_request,500,0,1017500000");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("requires the same address-scoped authorization as the JSON view", async () => {
+    const server = await startAuthServer();
+    try {
+      const cross = await fetch(
+        `${server.baseUrl}${API_BASE}/transactions?address=${ADDR_B}&format=csv`,
+        { headers: { authorization: mintAssertion(`address:${ADDR_A}`) } },
+      );
+      expect(cross.status).toBe(403);
+      const bare = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`);
+      expect(bare.status).toBe(401);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("csvField guards formula injection and quotes per RFC 4180", () => {
+    expect(csvField("=SUM(A1:A9)")).toBe("'=SUM(A1:A9)");
+    expect(csvField("+1")).toBe("'+1");
+    expect(csvField("-1")).toBe("'-1");
+    expect(csvField("@cmd")).toBe("'@cmd");
+    expect(csvField('a,"b"')).toBe('"a,""b"""');
+    expect(csvField("plain")).toBe("plain");
+  });
+});
