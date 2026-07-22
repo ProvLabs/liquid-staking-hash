@@ -158,6 +158,14 @@ The chain retains only the most recent `EpochSnapshot` (contract §9.10) and no 
 
 Audit reports (firm, scope, date, report links, covered commit/code-hash), program documentation, and the mechanism explainer are **build-reviewed content** (MDX/config in the repo, shipped with the App), not database rows — they change by pull request, which is the right auditability for trust claims (register C1). The displayed code-hash claim carries a verify link to the Console's deployed-build check so the "audited build is the live build" assertion is provable, not asserted.
 
+> **Revision 2026-07-22 (PR 4.2):** the content plane exists as a typed
+> build-reviewed module (`apps/web/app/content/trust.ts`, `AuditEntry[]`)
+> rather than MDX: there is no audit report yet, and MDX tooling would be
+> infrastructure for zero documents. The pre-audit posture renders honestly
+> (SECURITY.md project status) instead of the section being omitted. MDX
+> arrives with the first real report; the typed shape is the contract either
+> way.
+
 ---
 
 ## 6. Architecture Overview
@@ -343,7 +351,27 @@ The comprehension → due-diligence funnel (personas §5), and the program's pub
 6. **Exit explainer.** The two paths side by side: instant DEX trade at market price (with live premium/discount) vs native redemption at protocol rate (guaranteed ≤ 60 days, typically faster — the §8.4 framing, previewed here because "can I get out?" is a pre-deposit question).
 7. **CTA:** "Connect wallet to stake" → §8.3. The funnel steps (arrive → scroll depth → due-diligence sections → connect → first deposit) are counted as the aggregate funnel-stage tallies §8.8 consumes (first-party, aggregate-only; §3 decision 14).
 
-### 8.2 Portfolio (route `/portfolio`, wallet required)
+> **Revision 2026-07-22 (PR 4.2, Learn page):** delivered in `apps/web`
+> (`app/learn/learn.server.ts` assembles the data; components under
+> `app/components/learn/`), rendering inside the 4.1 chrome with every figure
+> independently degradable to an honest "n/a"/cold-start state (gated by
+> `test/learn-data.test.ts`). Deliberate deltas until their dependencies
+> land: the CTA routes to the Stake page (a labeled stub until M5) since no
+> wallet flow exists yet; the compare-to-self-staking panel is qualitative
+> (no fabricated numeric baseline; a real one is a recorded follow-on);
+> funnel counters stay with PR 7.6 (§14.10); the hero pipeline ships as a
+> static SVG with a reduced-motion-safe CSS pulse. The APR minimum-window
+> rule is `MIN_APR_EPOCHS = 2` in `learn.server.ts` (below it: "n/a
+> (insufficient history)", never an annualized single epoch). Indexed
+> figures (participants, program age, epoch chart, incidents) consume the
+> §9.4 contract shapes frozen by this PR and render "n/a"/empty until M2/M3
+> wire real data. **Vocabulary (PR 4.2 review, Ira):** consumer copy says
+> "monthly settlement" for the cadence (the program targets calendar
+> months); "epoch" appears exactly once, in the hero's mechanism sentence
+> above, matching this section's own phrasing. Data identities (epoch
+> indices, `EpochRow`) keep their names: on devnet an epoch is hours, so
+> copy must never claim "month" as the mechanism. Revisit the remaining
+> mention when the contract's calendar-month change lands.
 
 Priya's home. Composes additional roles additively (register F1): operator and admin cards append below the holder view when the address qualifies.
 
@@ -453,6 +481,17 @@ Versioned JSON under `/api/v1/`, split across the two serving processes per ADR-
 Every response from either process carries the freshness envelope `{ data, meta: { chain_height, indexed_height, generated_at, source: "live" | "indexed" } }` — a shared response type (`@nvhash/api-types`) so the freshness contract is in the API shape, not just the UI. `chain_height`/`indexed_height` are `number | null`: `null` is the honest "height not yet known" state (a cold start, or the M1 scaffold before the M2/M3 workers and reader land) that the UI renders as "n/a" per §12.1 — never a fabricated number. `source` stays the closed `live | indexed` union; unwiredness is expressed by null heights, not a third source value.
 
 > **Revision 2026-07-14 (PR 1.2, `services/api` scaffold):** `@nvhash/api-types` and the read-only serving shell now exist. The scaffold registers `/api/v1/status` (enveloped service descriptor), `/api/v1/incidents` (enveloped, zod-bounded `?limit=&offset=` pagination — the seam PR 3.1 fills with real derivation and heights), and `/api/v1/health` (operational liveness, deliberately un-enveloped). All routes are GET-only (any write verb → 405), rate-limited, and — being dataless until M3 — report null heights. The `api_reader` client (`@nvhash/db-indexed`) and address-scoped endpoints are **not** wired here; they land in M3 (PRs 3.1–3.3) with the cross-address-rejection gate.
+
+> **Revision 2026-07-22 (PR 4.2, Learn-facing 3.1 contracts frozen):** the
+> M3 contracts-first step is done for the Learn page's subset. Row shapes
+> live in `@nvhash/api-types` (`ProgramMetrics`, `EpochRow`, `IncidentRow`
+> with closed kind/severity unions mirroring the indexer's incident schema);
+> `services/api` registers `/api/v1/metrics` (enveloped, all-null scaffold)
+> and `/api/v1/epochs` (enveloped, paginated, empty scaffold) and types
+> `/api/v1/incidents` rows accordingly, all gated by the registry-driven
+> envelope-contract harness. PR 3.1 implements the real derivations against
+> exactly these shapes (a field change is a revision here, never a silent
+> edit) and adds `/validators` with PR 4.3.
 
 ### 9.5 Derived metrics (formulas)
 

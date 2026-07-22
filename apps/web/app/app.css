@@ -34,6 +34,23 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+@layer components {
+  /* Learn hero flow diagram: a gentle opacity pulse that walks the pipeline
+     arrows. The base-layer prefers-reduced-motion rule below disables it. */
+  .flow-pulse {
+    animation: flow-pulse 3.2s ease-out infinite;
+  }
+  @keyframes flow-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
 @layer base {
   * {
     border-color: var(--border);
