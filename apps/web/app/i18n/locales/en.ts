@@ -72,7 +72,6 @@ export default {
     "No slash events or program incidents in indexed history. This list is generated from chain history, not curated.",
   "learn.incidents-unavailable": "Incident history is unavailable right now.",
   "learn.incident-open": "open",
-  "learn.incident-closed": "resolved",
   "learn.incident-contract-halted": "Program halted",
   "learn.incident-vault-paused": "Vault paused",
   "learn.incident-slash-write-down": "Slash write-down",
@@ -81,6 +80,36 @@ export default {
   "learn.incident-epoch-overdue": "Settlement overdue",
   "learn.incident-reconciler-divergence": "Reconciler divergence",
   "learn.incident-indexer-lag": "Indexer lag",
+  "learn.incident-desc-contract-halted":
+    "The staking contract halted operations until operators cleared the condition.",
+  "learn.incident-desc-vault-paused":
+    "The vault was paused: deposits and redemptions were suspended until unpaused.",
+  "learn.incident-desc-slash-write-down":
+    "A validator slash reduced principal. The loss was written down at once and NAV stepped down.",
+  "learn.incident-desc-redemption-refund":
+    "A redemption matured without funds in the marker, so the escrowed shares were refunded to the owner.",
+  "learn.incident-desc-jail-report":
+    "A program validator was jailed. Its report stays open until it recovers or is removed from the set.",
+  "learn.incident-desc-epoch-overdue":
+    "A monthly settlement became eligible but had not run within its expected window.",
+  "learn.incident-desc-reconciler-divergence":
+    "The indexed view disagreed with chain state until reconciliation caught up.",
+  "learn.incident-desc-indexer-lag":
+    "Indexed history fell behind the chain, so indexed figures were stale while open.",
+  "learn.incident-severity-info": "info",
+  "learn.incident-severity-warning": "warning",
+  "learn.incident-severity-critical": "critical",
+  "learn.incidents-col-incident": "Incident",
+  "learn.incidents-col-severity": "Severity",
+  "learn.incidents-col-opened": "Opened",
+  "learn.incidents-col-resolved": "Resolved",
+  "learn.incidents-col-duration": "Duration",
+  "learn.incidents-col-height": "Block",
+  "learn.incident-na": "n/a",
+  "learn.incidents-page": "Page {page} of {pages}",
+  "learn.incidents-prev": "Previous",
+  "learn.incidents-next": "Next",
+  "learn.incidents-pagination": "Incident history pages",
 
   "learn.exit-title": "Getting out",
   "learn.exit-native-title": "Native redemption",

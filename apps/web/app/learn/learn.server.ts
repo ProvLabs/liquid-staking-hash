@@ -42,6 +42,11 @@ export const MIN_APR_EPOCHS = 2;
 /** How much epoch history the step chart requests (one page, bounded). */
 export const EPOCH_HISTORY_LIMIT = 48;
 
+/** Incident-history request size: the API's max page (its zod-bounded
+ *  MAX_PAGE_LIMIT), so the section carries full recent history in one read;
+ *  the component pages it client-side. */
+export const INCIDENT_HISTORY_LIMIT = 200;
+
 export type { LearnData, LearnLive } from "./types";
 
 export interface LearnReadOptions {
@@ -73,7 +78,11 @@ export async function loadLearnData(
     )
       .then((body) => epochsEnvelopeSchema.parse(body))
       .catch(() => null),
-    fetchApiJson(`${apiBase}/api/v1/incidents`, fetchImpl, CHROME_READ_TIMEOUT_MS)
+    fetchApiJson(
+      `${apiBase}/api/v1/incidents?limit=${INCIDENT_HISTORY_LIMIT}`,
+      fetchImpl,
+      CHROME_READ_TIMEOUT_MS,
+    )
       .then((body) => incidentsEnvelopeSchema.parse(body))
       .catch(() => null),
   ]);

@@ -33,7 +33,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <NavStepChart locale={locale} epochs={learn.epochs} />
       <YieldSources locale={locale} live={learn.live} />
       <TrustPosture locale={locale} />
-      <IncidentHistory locale={locale} incidents={learn.incidents} />
+      <IncidentHistory locale={locale} incidents={learn.incidents} nowMs={nowMs} />
       <ExitExplainer locale={locale} />
       <Cta locale={locale} />
     </div>
