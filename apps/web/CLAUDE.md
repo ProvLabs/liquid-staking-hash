@@ -55,7 +55,11 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
   envelope bounding (`test/learn-data.test.ts`), BigInt amount display
   golden values (`test/amounts.test.ts`; floats never touch amounts), and
   the Validators public projection (`test/validators-data.test.ts`: honest
-  degradation plus the closed no-operator-economics key set).
+  degradation plus the closed no-operator-economics key set), and the Market
+  shell honesty (`test/market-data.test.ts`: forthcoming vs unavailable,
+  verbatim sample rendering, null premium never fabricated). Charts share
+  `app/components/charts/step-chart.tsx` (presentation-only step-after,
+  dataviz method).
 - `test:e2e` — production build + Playwright against `react-router-serve`
   with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
   fully offline). Includes the axe accessibility scans on both themes (route

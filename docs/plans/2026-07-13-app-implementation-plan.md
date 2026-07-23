@@ -503,3 +503,17 @@ dev-profile `CONSOLE_URL` defaults (the console pins port 5273, not 5173,
 so local verify links finally land). Gates: `test/validators-data.test.ts`,
 `e2e/validators.spec.ts`. Next: 4.4 (market/history) on the delivered 3.2
 contract.*
+
+*2026-07-22 (rev 18): **M4.4 delivered; M4 milestone complete** (working
+plan `app-m4.4-market-history`): the §8.5 Market page in `apps/web` as the
+labeled v1 shell over the delivered 3.2 contract (three states: unavailable /
+forthcoming / active sample; premium rendered verbatim from the API, null
+never fabricated to 0; venue + sample-time labels on every market figure; NO
+verify link on the market plane per §12.1 rule 4), local supply composed
+live from vault `total_shares`, and the program-history views (NAV, TVV,
+net APR per settlement) on real `/epochs` data via a shared step-chart
+extracted from the Learn chart (`app/components/charts/step-chart.tsx`).
+Gates: `test/market-data.test.ts`, `e2e/market.spec.ts`. All four M4 public
+read surfaces now render real or honestly-labeled data inside the 4.1
+chrome. Next lane: M5 (wallet + sessions).*
+

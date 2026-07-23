@@ -7,11 +7,15 @@
 // between producer and consumer is a type error, not a runtime surprise.
 
 import type {
+  BridgedSupplyRow,
   EpochRow,
   FreshnessMeta,
   IncidentKind,
   IncidentRow,
   IncidentSeverity,
+  MarketDepthBand,
+  MarketSample,
+  MarketSummary,
   ProgramMetrics,
   ValidatorRow,
   ValidatorSetHealth,
@@ -64,12 +68,17 @@ export const incidentRowSchema = z.object({
 /** Decimal-string amount (BigInt/Decimal domain; floats never touch these). */
 const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "expected a decimal string");
 
+/** Base-unit integer amount as a decimal string (fractions are a shape
+ * error: consumers BigInt() these; PR #14 review). */
+const baseUnitString = z.string().regex(/^\d+$/, "expected a base-unit integer string");
+
 export const epochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
   ended_at: isoTimestamp,
-  // null since PR 3.1: an epoch settled with zero shares has no NAV.
+  // null since PR 3.1: an epoch settled with zero shares has no NAV. NAV is
+  // a fractional decimal (HASH per nvHASH); TVV is base units, integer-only.
   nav: decimalString.nullable(),
-  tvv: decimalString,
+  tvv: baseUnitString,
   net_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
 }) satisfies z.ZodType<EpochRow>;
 
@@ -105,11 +114,41 @@ export const validatorsPayloadSchema = z.object({
   set_health: validatorSetHealthSchema,
 }) satisfies z.ZodType<ValidatorsPayload>;
 
+// PR 3.2's /market shapes: market data has no chain-canonical plane, so the
+// venue + sample-time labeling rides IN the payload and is validated here
+// like any other boundary input.
+export const marketDepthBandSchema = z.object({
+  side: z.enum(["buy", "sell"]),
+  slippage_bps: z.number().int().min(0).max(100_000),
+  amount: baseUnitString,
+}) satisfies z.ZodType<MarketDepthBand>;
+
+export const marketSampleSchema = z.object({
+  venue: z.string().min(1).max(64),
+  pool: z.string().min(1).max(90),
+  price: baseUnitString,
+  premium_discount_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
+  depth_bands: z.array(marketDepthBandSchema).max(32),
+  sampled_at: isoTimestamp,
+}) satisfies z.ZodType<MarketSample>;
+
+export const bridgedSupplyRowSchema = z.object({
+  chain: z.string().min(1).max(64),
+  supply: baseUnitString,
+  sampled_at: isoTimestamp,
+}) satisfies z.ZodType<BridgedSupplyRow>;
+
+export const marketSummarySchema = z.object({
+  sample: marketSampleSchema.nullable(),
+  bridged_supply: z.array(bridgedSupplyRowSchema).max(64),
+}) satisfies z.ZodType<MarketSummary>;
+
 /** Collections stay bounded at the boundary, mirroring the API's page cap. */
 export const incidentsEnvelopeSchema = envelopeSchema(z.array(incidentRowSchema).max(200));
 export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(200));
 export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
+export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
 export const statusEnvelopeSchema = envelopeSchema(z.unknown());
 
 /**

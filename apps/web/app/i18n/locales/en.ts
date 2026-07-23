@@ -37,8 +37,6 @@ export default {
   "learn.chart-empty":
     "No monthly settlements are indexed yet. The step chart appears as settlement history lands.",
   "learn.chart-unavailable": "Settlement history is unavailable right now.",
-  "learn.chart-show-table": "Table view",
-  "learn.chart-show-chart": "Chart view",
   "learn.chart-col-settlement": "Settlement",
   "learn.chart-col-ended": "Settled",
   "learn.chart-col-nav": "NAV (HASH)",
@@ -135,8 +133,56 @@ export default {
   "portfolio.placeholder":
     "Your position and history arrive here in a later milestone, after wallet connection lands. This deployment is a development scaffold.",
   "market.title": "Market",
-  "market.placeholder":
-    "Market data for nvHASH arrives here in a later milestone. This deployment is a development scaffold.",
+  "market.lede":
+    "Where nvHASH trades and where its supply lives. Market prices come from exchanges, not the chain, so every market figure here carries its venue and sample time.",
+
+  "market.status-title": "Market price",
+  "market.status-forthcoming":
+    "No bridged nvHASH market exists yet; this section activates when nvHASH bridges and a market opens. Native redemption at protocol rate is available today.",
+  "market.status-unavailable": "Market data is unavailable right now.",
+  "market.sample-label": "{venue} · sampled {age} ago",
+  "market.price-label": "Price",
+  "market.price-caption": "HASH per nvHASH",
+  "market.premium-label": "Premium / discount",
+  "market.premium-caption": "vs the redemption value at the sample's time",
+  "market.premium-na": "n/a",
+
+  "market.explainer-title": "Why a spread exists",
+  "market.explainer-body":
+    "nvHASH's redemption value moves in monthly steps at settlement, while a market trades continuously, so a gap opens on either side of each step. Liquidity depth and bridge-transit costs widen it. Native redemption at protocol rate is always available and is the anchor a market prices against.",
+
+  "market.depth-title": "Pool depth",
+  "market.depth-col-side": "Side",
+  "market.depth-col-slippage": "Slippage (bps)",
+  "market.depth-col-size": "Size (nvHASH)",
+  "market.depth-side-buy": "Buy",
+  "market.depth-side-sell": "Sell",
+
+  "market.supply-title": "Where nvHASH lives",
+  "market.supply-local": "On Provenance",
+  "market.supply-local-caption": "Live chain read",
+  "market.supply-bridged-empty":
+    "All nvHASH lives on Provenance today. Bridged supply appears here when the bridge opens.",
+  "market.supply-col-chain": "Chain",
+  "market.supply-col-supply": "Supply (nvHASH)",
+  "market.supply-col-sampled": "Sampled",
+
+  "market.history-title": "Program history",
+  "market.history-nav-title": "Redemption value by monthly settlement",
+  "market.history-nav-caption":
+    "HASH per nvHASH at each settlement. The market price line joins this chart when a market opens.",
+  "market.history-tvv-title": "Total vault value by monthly settlement",
+  "market.history-tvv-caption": "HASH held by the program at each settlement.",
+  "market.history-apr-title": "Net APR by monthly settlement",
+  "market.history-apr-caption":
+    "Percent per year for the window ending at each settlement; settlements without an APR figure are omitted.",
+  "market.history-tvv-col": "Total value (HASH)",
+  "market.history-apr-col": "Net APR",
+  "market.history-unavailable": "Settlement history is unavailable right now.",
+  "market.history-empty": "No monthly settlements are indexed yet.",
+
+  "chart.show-table": "Table view",
+  "chart.show-chart": "Chart view",
   "validators.title": "Validators",
   "validators.lede":
     "These validators stake the program's HASH. Their reliability is measured against the program's own thresholds, read live from chain.",
