@@ -1,0 +1,123 @@
+// The guarded broadcast relay (app plan PR 5.2 §2.3; app-spec §12.3
+// amendment, decided 2026-07-23): the web tier relays a FULLY-SIGNED
+// transaction to the chain, and nothing else. The server cannot alter a
+// signed tx without invalidating its signature — the relay adds no signing
+// or custody capability. The guards below are enforced mechanisms, each
+// with a case in test/broadcast-guard.test.ts:
+//
+//   1. session required                        → 401 (route layer)
+//   2. size cap (SIZE_CAP_BYTES)               → 413
+//   3. decodes as TxRaw, one signature         → 400
+//   4. every msg type ∈ the closed allowlist   → 400
+//   5. every msg's vault == configured vault   → 400
+//   6. every msg's owner == session address    → 403
+//   7. SOLE signer pubkey derives session addr → 403 (cryptographic
+//      binding: the pubkey that signed IS the session's address)
+//   8. rate limit per session address          → 429
+//
+// The chain re-checks everything again (the contract is the enforcement
+// boundary); these guards keep the relay from being a general tx submission
+// service for anyone with a session.
+
+import { LcdClient, TxClient, type FetchLike } from "@nvhash/chain-client";
+
+import { pubkeyToBech32, bech32Prefix } from "~/lib/adr36-verify.server";
+import type { WebConfig } from "~/config/config.server";
+import { ALLOWED_MSG_TYPE_URLS, decodeTxRaw } from "./build";
+
+export const SIZE_CAP_BYTES = 16 * 1024;
+/** Broadcasts per session address per window (a user action, not a bot API). */
+export const RATE_LIMIT_PER_MINUTE = 6;
+
+export type RelayVerdict =
+  | { ok: true }
+  | { ok: false; status: 400 | 403 | 413 | 429; reason: string };
+
+interface RateWindow {
+  windowStartMs: number;
+  count: number;
+}
+const rateWindows = new Map<string, RateWindow>();
+
+/** Test seam. */
+export function resetRelayRateLimitForTests(): void {
+  rateWindows.clear();
+}
+
+function checkRate(address: string, nowMs: number): boolean {
+  const window = rateWindows.get(address);
+  if (window === undefined || nowMs - window.windowStartMs >= 60_000) {
+    rateWindows.set(address, { windowStartMs: nowMs, count: 1 });
+    return true;
+  }
+  window.count += 1;
+  return window.count <= RATE_LIMIT_PER_MINUTE;
+}
+
+/**
+ * Run every relay guard over the raw submitted bytes for the SESSION
+ * address. Pure over its inputs (clock injected) — the route maps the
+ * verdict to its HTTP response.
+ */
+export function guardSignedTx(
+  config: WebConfig,
+  sessionAddress: string,
+  txRawBytes: Uint8Array,
+  nowMs: number = Date.now(),
+): RelayVerdict {
+  if (txRawBytes.length > SIZE_CAP_BYTES) {
+    return { ok: false, status: 413, reason: "transaction too large" };
+  }
+  if (!checkRate(sessionAddress, nowMs)) {
+    return { ok: false, status: 429, reason: "rate limited" };
+  }
+
+  let decoded;
+  try {
+    decoded = decodeTxRaw(txRawBytes);
+  } catch {
+    return { ok: false, status: 400, reason: "malformed transaction" };
+  }
+
+  if (decoded.messages.length === 0 || decoded.signatureCount !== 1 || decoded.signerPubkeys.length !== 1) {
+    return { ok: false, status: 400, reason: "expected exactly one signer" };
+  }
+  for (const msg of decoded.messages) {
+    if (!(ALLOWED_MSG_TYPE_URLS as readonly string[]).includes(msg.typeUrl)) {
+      return { ok: false, status: 400, reason: "message type not allowed" };
+    }
+    if (msg.vaultAddress !== config.vaultAddress) {
+      return { ok: false, status: 400, reason: "unexpected vault address" };
+    }
+    if (msg.owner !== sessionAddress) {
+      return { ok: false, status: 403, reason: "owner is not the session address" };
+    }
+  }
+
+  // Guard 7 — the cryptographic sole-signer binding: the pubkey inside
+  // auth_info must derive the session's own bech32 address. The chain
+  // verifies the signature against this pubkey, so a tx passing this guard
+  // was signed by the session address's key and no other.
+  const prefix = bech32Prefix(sessionAddress);
+  let derived: string;
+  try {
+    derived = pubkeyToBech32(decoded.signerPubkeys[0]!, prefix);
+  } catch {
+    return { ok: false, status: 400, reason: "malformed transaction" };
+  }
+  if (derived !== sessionAddress) {
+    return { ok: false, status: 403, reason: "signer is not the session address" };
+  }
+
+  return { ok: true };
+}
+
+/** Relay the (already-guarded) bytes to the chain. */
+export async function relayBroadcast(
+  config: WebConfig,
+  txRawBytes: Uint8Array,
+  deps: { fetchImpl?: FetchLike } = {},
+): Promise<{ txhash: string; code: number; rawLog: string }> {
+  const lcd = new LcdClient(config.lcdUrl, deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {});
+  return new TxClient(lcd).broadcast(Buffer.from(txRawBytes).toString("base64"));
+}

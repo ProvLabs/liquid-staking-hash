@@ -27,9 +27,19 @@ export interface SignArbitraryResult {
   pubkeyBase64: string;
 }
 
+/** SIGN_MODE_DIRECT sign doc as base64 fields (PR 5.2, §10.2 step 5). */
+export interface DirectSignDoc {
+  bodyBytesBase64: string;
+  authInfoBytesBase64: string;
+  chainId: string;
+  /** decimal string (u64) */
+  accountNumber: string;
+}
+
 /**
- * What a vendor adapter provides. `signDirect` (transaction signing) joins
- * this interface in PR 5.2 — the session PR needs only ADR-36.
+ * What a vendor adapter provides. `signDirect` (PR 5.2) signs the §10.2
+ * transaction sign doc; `signArbitrary` (PR 5.1) signs the ADR-36 session
+ * challenge. Nothing else — no key material ever crosses this boundary.
  */
 export interface WalletAdapter {
   readonly vendor: VendorId;
@@ -37,6 +47,8 @@ export interface WalletAdapter {
   disconnect(): Promise<void>;
   /** ADR-36 sign of the utf8 challenge text (session login, §3 decision 5). */
   signArbitrary(signerAddress: string, challengeText: string): Promise<SignArbitraryResult>;
+  /** SIGN_MODE_DIRECT over the exact bytes the confirm step disclosed. */
+  signDirect(signerAddress: string, signDoc: DirectSignDoc): Promise<SignArbitraryResult>;
 }
 
 /** Environment an adapter is constructed with (all public values). */

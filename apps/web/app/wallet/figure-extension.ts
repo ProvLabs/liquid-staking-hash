@@ -28,6 +28,16 @@ interface InjectedFigureProvider {
     signerAddress: string;
     signDoc: unknown;
   }): Promise<{ signature: { signature: string; pub_key: { value: string } } }>;
+  signDirect?(args: {
+    chainId: string;
+    signerAddress: string;
+    signDoc: {
+      bodyBytes: string;
+      authInfoBytes: string;
+      chainId: string;
+      accountNumber: string;
+    };
+  }): Promise<{ signature: { signature: string; pub_key: { value: string } } }>;
   disconnect?(): Promise<void>;
 }
 
@@ -68,6 +78,32 @@ export class FigureExtensionAdapter implements WalletAdapter {
       chainId: this.env.chainId,
       signerAddress,
       signDoc,
+    });
+    const pubkey = normalizePubkey(response.signature.pub_key.value);
+    if (pubkey === null) throw new Error("wallet returned no usable pubkey");
+    return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
+  }
+
+  async signDirect(
+    signerAddress: string,
+    signDoc: import("./adapter").DirectSignDoc,
+  ): Promise<SignArbitraryResult> {
+    if (this.provider === null) throw new Error("not connected");
+    if (typeof this.provider.signDirect !== "function") {
+      // Provisional (§14.1): if the real extension exposes direct signing
+      // under a different name, THIS adapter absorbs it — never the shared
+      // path. The checklist run (item d) settles it.
+      throw new Error("figure-extension-no-sign-direct");
+    }
+    const response = await this.provider.signDirect({
+      chainId: this.env.chainId,
+      signerAddress,
+      signDoc: {
+        bodyBytes: signDoc.bodyBytesBase64,
+        authInfoBytes: signDoc.authInfoBytesBase64,
+        chainId: signDoc.chainId,
+        accountNumber: signDoc.accountNumber,
+      },
     });
     const pubkey = normalizePubkey(response.signature.pub_key.value);
     if (pubkey === null) throw new Error("wallet returned no usable pubkey");

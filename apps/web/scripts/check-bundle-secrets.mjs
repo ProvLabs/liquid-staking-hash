@@ -50,11 +50,19 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// PR 5.2: the e2e-live test signer (e2e-live/signer.ts) must never reach the
+// client bundle. It is never imported by app code; this literal scan makes
+// that an enforced mechanism rather than a review assumption.
+const FORBIDDEN_LITERALS = ["NVHASH_TEST_SIGNER_MUST_NOT_SHIP"];
+
 const hits = [];
 for (const file of files) {
   const content = readFileSync(file, "latin1");
   for (const [key, sentinel] of sentinels) {
     if (content.includes(sentinel)) hits.push({ file: relative(appDir, file), key });
+  }
+  for (const literal of FORBIDDEN_LITERALS) {
+    if (content.includes(literal)) hits.push({ file: relative(appDir, file), key: literal });
   }
 }
 

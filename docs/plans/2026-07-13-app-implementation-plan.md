@@ -274,7 +274,7 @@ topology assumption:
 | SECURITY.md requirement | Enforced by |
 | --- | --- |
 | Data minimization: no PII, no IP/device linkage to addresses (incl. logs) | Schema lint + log-scrubbing checks in indexer CI (§4); accepted exceptions (push tokens, first/last-seen) implemented exactly as scoped in PRs 6.3 / 5.1 |
-| No custody, no signing in services | No fund-moving endpoint exists in any component (§1 ownership table); wallet lane (5.x) signs client-side only; 5.2's confirm step shows exact message JSON |
+| No custody, no signing in services | No signing endpoint exists in any component (§1 ownership table); wallet lane (5.x) signs client-side only; 5.2's confirm step shows exact message JSON. The 5.2 web-tier broadcast relay carries only fully user-signed bytes under the app-spec §12.3 amendment (2026-07-23): closed msg allowlist, sole-signer = session address, size + rate caps — gated by `apps/web/test/broadcast-guard.test.ts` |
 | Chain is source of truth; indexer input untrusted; idempotent replay | Fixture-decode layer (event shapes validated against captured corpus), replay-convergence property tests (PR 2.1), reconciler + incident machinery (PR 2.5) |
 | APIs read-only and defensive: bounded params, rate limits, address scoping | zod bounds + rate limiting from scaffold PR 1.2; **in-process address authorization on personal endpoints** (§1, PR 3.3) with cross-address-rejection tests gating `services/api` CI |
 | Secrets via environment only; nothing non-public in the client bundle | Bundle-secret check in web CI from PR 1.3; `.env.example` placeholders only |

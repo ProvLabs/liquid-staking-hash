@@ -239,6 +239,37 @@ item blocks the PR and reopens §14.1 rather than shipping a degraded flow.
   track to inclusion). Fund-moving *flow* specs (real pages) arrive with
   5.3/5.4.
 
+*Delivery notes (5.2, 2026-07-23):*
+- *Byte-golden without a corpus re-capture* (resolves §7 Q1 better than
+  proposed): the captured fixtures carry the full signed tx **and its
+  txhash**, and a chain tx id is sha256(TxRaw) — so
+  `test/tx-build.test.ts` re-encodes each fixture tx with the App's own
+  encoder and asserts the hash matches. Every assumed field number and
+  canonical-encoding rule is pinned by the corpus as captured; the
+  `packages/fixtures` capture-script extension is unnecessary and was not
+  made. PR 8.0 re-vets unchanged.
+- *Proto layer is hand-rolled and dependency-free* (~150 lines,
+  `app/tx/proto.ts`): four encoded shapes + one decode do not justify a
+  protobuf toolchain (SECURITY.md dependency posture); the byte-goldens are
+  the correctness proof.
+- *Test signer has NO app-side injection seam* (strengthens the plan's
+  §2.4/§4.1 posture): the e2e-live suite signs entirely in the Playwright
+  process and drives the server's HTTP surface — nothing under `app/`
+  imports it, the closed vendor registry is untouched, and `check:bundle`
+  scans for the signer's sentinel literal. Recorded as the §10.1 spec note.
+- *Lifecycle reducer uses plain discriminated-union `switch`*, not
+  ts-pattern — no new dependency for one reducer; ts-pattern remains
+  available to 5.3/5.4 pages per the spec stack.
+- *The relay's sole-signer guard is cryptographic*: beyond owner-field
+  equality, the signer pubkey inside `auth_info` must derive the session's
+  bech32 address — a tx passing the guard was signed by the session
+  address's key, not merely labeled with it.
+- *Live-run prerequisites for the checklist/e2e-live*: `stack.sh` web tier
+  needs `DATABASE_URL` (+ migrated app schema) and the e2e-live env vars
+  (`E2E_LIVE_BASE_URL`, `E2E_LIVE_VAULT_ADDRESS`, `E2E_LIVE_SIGNER_KEY`);
+  the suite skips cleanly without them. Running it on the real stack — and
+  §14.1 items (d)/(e) — remain the human steps before Tranche A merges.
+
 ### 5.3 — Stake flow (Tranche B; refine before build, §7 Q7)
 
 `app/routes/stake.tsx` becomes real (replacing the 4.1 stub): the §8.3

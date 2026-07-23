@@ -147,6 +147,13 @@ export default {
   "wallet.error-extension-missing":
     "The Figure browser extension was not found. Install it, or pair a mobile wallet instead.",
   "wallet.error-failed": "The wallet declined or the connection failed. Nothing was signed.",
+
+  "tx.confirm-title": "Review before signing",
+  "tx.confirm-fee": "Estimated network fee: {fee}",
+  "tx.confirm-disclosure": "Show the exact message your wallet will sign",
+  "tx.confirm-cancel": "Cancel",
+  "tx.confirm-sign": "Sign in wallet",
+  "tx.pending-label": "Pending — waiting for the chain",
   "market.title": "Market",
   "market.lede":
     "Where nvHASH trades and where its supply lives. Market prices come from exchanges, not the chain, so every market figure here carries its venue and sample time.",

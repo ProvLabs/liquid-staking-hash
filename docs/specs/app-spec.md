@@ -678,6 +678,15 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 > `test/session-scope.test.ts` (standing), `test/assertion.test.ts` (golden
 > vectors cross-pinned with services/api), `test/app-schema-allowlist.test.ts`.
 
+> **Note 2026-07-23 (PR 5.2, e2e-live test-signer posture):** the "no devnet
+> key mode" rule above is preserved **without a test-injection seam**: the
+> e2e-live suite's throwaway devnet signer lives entirely in the Playwright
+> test process (`apps/web/e2e-live/signer.ts`) and drives the App's own HTTP
+> surface — nothing under `app/` imports it, the closed vendor registry is
+> untouched, and `check:bundle` scans the client bundle for the signer's
+> sentinel literal so even an accidental future import fails CI. Real-wallet
+> flows are certified by the §14.1 checklist runbook, not by the test signer.
+
 ### 10.2 Transaction lifecycle (all flows)
 
 1. **Build** client-side: typed Provenance messages (vault `MsgSwapIn` / `MsgSwapOut` `[VERIFY §14.2: exact msg names/fields on the deployed vault module]`; group `MsgSubmitProposal` / `MsgVote` / `MsgExec`).
@@ -685,6 +694,31 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 3. **Simulate** for gas; fee = gas × gas price with adjustment `[VERIFY: reuse console §14.3 result]`.
 4. **Confirm:** consumer-worded consequence summary + the exact message JSON behind a disclosure + fee. Warning tier for redemptions ("shares escrow now; guaranteed release date D; typically sooner") and governance execution; **danger-tier confirmation for the program-ops now originated in the App** (halt/resume, pause/unpause, config change, bridge config, jailed-validator purge — §14.6 decided), with the decoded action and its consequence stated before signing.
 5. **Sign & broadcast** via the wallet; **track** inclusion; toast lifecycle (sonner) with explorer link; on success the affected live reads refresh and an indexer fast-poll reconciles the user's history within seconds (an optimistic pending row bridges the gap, clearly marked pending).
+
+> **Revision 2026-07-23 (PR 5.2, delivered mechanism):** the lifecycle is a
+> typed pure reducer (`apps/web/app/tx/lifecycle.ts`): `idle → building →
+> blocked(reasons[]) | ready → simulating → confirm → signing →
+> broadcasting → pending → reconciling → confirmed | failed`. Structural
+> guarantees, each CI-gated (`test/tx-lifecycle.test.ts`): transitions are
+> total; **signing is unreachable except through the confirm step**;
+> **confirmed is unreachable before chain inclusion**; an on-chain
+> execution failure renders as failure with the chain's reason — no retry
+> loop, no fabricated success. Step mechanics: message building +
+> SIGN_MODE_DIRECT encoding via a ~150-line dependency-free proto layer,
+> **byte-golden to the §14.2 corpus** (re-encoded fixture txs must hash to
+> their captured chain tx ids — `test/tx-build.test.ts`); the step-4
+> disclosure renders proto-JSON produced from the same object the sign doc
+> encodes (**one serialization site**; `test/tx-confirm.test.ts` proves the
+> disclosure equals the decoded sign-doc bytes). Preflight runs
+> server-side from live reads with machine-readable reasons
+> (`test/tx-preflight.test.ts` drives the reject-never-clamp boundary
+> matrix); simulation prices fee = gas × 1905 nhash × 1.3 in integer math
+> (the console's basis, still `[VERIFY §14.3]`). **Broadcast is the §12.3
+> guarded relay** (amendment below); tracking polls inclusion through the
+> web tier, then fast-polls `/api/v1/transactions` under a Decision-2
+> assertion until the indexed row lands and the pending row drops (bounded
+> wait — chain inclusion, the canonical plane, drives `confirmed`; history
+> lag is carried by §12.1 freshness labels).
 
 ### 10.3 Flow-specific rules
 
@@ -747,6 +781,25 @@ This section encodes boundary §5 as build requirements.
 ### 12.3 Application security
 
 - **No custody, no server signing, no fund-moving endpoints** (§10.1). A full backend compromise can lie (until reconciliation alarms) and leak App-state data; it cannot move funds. Stating this bound explicitly is the point of the two-surface split.
+
+  > **Amendment 2026-07-23 (PR 5.2, decided by Ira 2026-07-23): the guarded
+  > signed-tx relay is not a fund-moving endpoint.** The web tier exposes
+  > `POST /tx/broadcast`, which relays a **fully user-signed** transaction
+  > to the chain. This does not weaken the bound above: the server cannot
+  > alter a signed transaction without invalidating its signature, so the
+  > relay adds no signing or custody capability — a compromised backend
+  > still cannot move funds, only refuse to relay (and the user can submit
+  > the same signed bytes anywhere). The relay is narrowly guarded, each
+  > guard an enforced mechanism (`test/broadcast-guard.test.ts`): session
+  > required; size-capped; decodes as one-signer TxRaw; message types in
+  > the **closed §10.2 allowlist** (the two vault msgs; governance types
+  > join with M7 as a recorded amendment); vault address must match config;
+  > every message owner AND the signer pubkey must resolve to the session
+  > address (the pubkey→bech32 derivation is the cryptographic binding);
+  > rate-limited per address. Alternatives were rejected: browser→LCD
+  > contradicts §7 ("the browser never needs LCD CORS"); wallet-side
+  > broadcast is non-standard beyond `cosmos_signDirect` and would fail the
+  > §14.1 dual-vendor conformance gate.
 - **Personal data minimization (`SECURITY.md` is normative):** wallet address (public by nature), first/last-seen timestamps (minimal operational metadata, retained deliberately for transparent and minimally intrusive usage measurement), locale/theme, alert rules, and — when opted in — an opaque Web Push subscription token (revocable, deleted on opt-out). No email or other off-chain identity, no KYC, and no IP-or-device linkage to addresses in persisted logs (scrub or aggregate). Data deletion on request removes the user row, rules, and push subscriptions; indexed *chain* history is public information and remains.
 - **Sessions:** nonce-signature login, `HttpOnly`/`SameSite` cookies, address-scoped authorization on every personal endpoint; admin endpoints re-verify group membership on-chain per session refresh, not per cached role.
 - **API hygiene:** rate limiting on public endpoints, zod-validated inputs at every route boundary (nuva convention), winston structured logging in services, no secrets in the client bundle (server config never serializes past the §7 client-safe subset).

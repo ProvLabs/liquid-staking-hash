@@ -61,3 +61,6 @@ export {
   type GroupMember,
   type GroupPolicyInfo,
 } from "./group.ts";
+export { TxClient, type BroadcastResult, type GasInfo, type TxInclusion } from "./tx.ts";
+export { AuthClient, type AccountInfo } from "./auth.ts";
+export { BankClient } from "./bank.ts";

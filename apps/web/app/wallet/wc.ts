@@ -126,6 +126,36 @@ export class WcAdapter implements WalletAdapter {
     return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
   }
 
+  async signDirect(
+    signerAddress: string,
+    signDoc: import("./adapter").DirectSignDoc,
+  ): Promise<SignArbitraryResult> {
+    if (this.client === null || this.session === null) throw new Error("not connected");
+    // Standard WC v2 cosmos_signDirect: base64 byte fields + chain id +
+    // account number, exactly the sign doc the confirm step disclosed.
+    const response = await this.client.request<{
+      signature: { signature: string; pub_key: { value: string } };
+    }>({
+      topic: this.session.topic,
+      chainId: this.caipChainId,
+      request: {
+        method: "cosmos_signDirect",
+        params: {
+          signerAddress,
+          signDoc: {
+            bodyBytes: signDoc.bodyBytesBase64,
+            authInfoBytes: signDoc.authInfoBytesBase64,
+            chainId: signDoc.chainId,
+            accountNumber: signDoc.accountNumber,
+          },
+        },
+      },
+    });
+    const pubkey = normalizePubkey(response.signature.pub_key.value);
+    if (pubkey === null) throw new Error("wallet returned no usable pubkey");
+    return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
+  }
+
   async disconnect(): Promise<void> {
     if (this.client !== null && this.session !== null) {
       try {
