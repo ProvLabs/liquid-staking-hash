@@ -13,6 +13,9 @@ export const CLIENT_SAFE_CONFIG_KEYS = [
   "contractAddress",
   "vaultAddress",
   "consoleUrl",
+  // PR 5.1 (§7 allowlist amendment): a WalletConnect v2 project id is public
+  // by design — it rides in every pairing URI the user's wallet scans.
+  "walletConnectProjectId",
 ] as const;
 
 export type ClientSafeConfigKey = (typeof CLIENT_SAFE_CONFIG_KEYS)[number];
@@ -23,4 +26,6 @@ export interface ClientConfig {
   contractAddress: string;
   vaultAddress: string;
   consoleUrl: string;
+  /** null = WC transport unconfigured (extension vendors still work). */
+  walletConnectProjectId: string | null;
 }

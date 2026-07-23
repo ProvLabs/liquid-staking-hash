@@ -1,0 +1,25 @@
+// nvHASH web tier — Prisma multi-file schema for the `app` domain (app-spec
+// §3 decision 3, §9.1; ADR-001 Decision 1). One model per `prisma/*.prisma`
+// file (the indexer/nuva precedent). Every table lives in the `app` Postgres
+// schema, owned by the `app_writer` role — which has NO grants on `indexed`
+// (roles.sql; asserted by the standing grant-boundary gate). Indexed history
+// is read only through services/api.
+//
+// Data minimization (SECURITY.md; app-spec §12.3): the `app` schema holds
+// sessions, single-use login nonces, and the accepted per-address first/last
+// seen timestamps — nothing else in PR 5.1. No role column anywhere (roles
+// are live on-chain facts re-checked per refresh, never persisted — spec §4),
+// no IP or device identifiers, no off-chain identity. Enforced, not trusted,
+// by the schema-field allowlist gate (test/app-schema-allowlist.test.ts).
+// Adding a column is a design-review event: it must be added to the allowlist,
+// not merely to a migration.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["app"]
+}
+
+generator client {
+  provider = "prisma-client-js"
+}

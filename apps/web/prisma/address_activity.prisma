@@ -1,0 +1,14 @@
+// address_activity (SECURITY.md accepted exception, Ira 2026-07-13): minimal
+// per-address first/last-seen timestamps for transparent, minimally intrusive
+// usage measurement. The address is public chain data; the timestamps are the
+// entire accepted scope — nothing else may join this table (allowlist gate).
+
+model AddressActivity {
+  /** bech32 wallet address (public by nature). */
+  address     String   @id
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime
+
+  @@map("address_activity")
+  @@schema("app")
+}

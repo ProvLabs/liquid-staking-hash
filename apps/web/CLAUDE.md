@@ -13,6 +13,28 @@ End-user web interface. Production quality.
   migrations, running as the `app_writer` role — which has **no grants on the
   `indexed` schema**. Indexed history is read only through `services/api`;
   live LCD reads (the canonical plane) happen in this server directly.
+  Concrete since PR 5.1: multi-file schema in `prisma/` (sessions,
+  single-use session nonces, the accepted first/last-seen exception —
+  nothing else; `test/app-schema-allowlist.test.ts` gates additions and
+  forbids any role/identity/device column). `migrate:dev|deploy|status`
+  scripts; dev database `./dev pg up` (port 5433). `DATABASE_URL` is
+  optional — absent, sessions run on a non-durable in-memory store
+  (dev/mock posture).
+- **Wallet & session layer** (PR 5.1, app-spec §3 decision 5 / §10.1 /
+  §12.3): signing exists only behind the closed vendor registry in
+  `app/wallet/` (Figure WC v2 mobile + injected extension, Arculus WC v2
+  mobile — §14.1; vendor workarounds live only in that vendor's adapter
+  module). Session login is nonce → ADR-36 (`app/lib/adr36.ts` is the ONE
+  sign-doc construction site for client and server) → HttpOnly opaque-id
+  cookie over a server row; models layer (`app/lib/models/session.server.ts`)
+  is the only Prisma import; services layer
+  (`app/lib/services/{session,roles,assertion}.server.ts`) holds the logic.
+  Roles are live chain reads per refresh, never persisted. Personal loaders
+  reach the acting address ONLY through
+  `getSessionContext`/`requireSession` — never a query param. The §14.1
+  certification runbook
+  ([`docs/plans/2026-07-23-m5.1-wallet-certification-runbook.md`](../../docs/plans/2026-07-23-m5.1-wallet-certification-runbook.md))
+  is the per-vendor acceptance gate.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).
@@ -113,6 +135,17 @@ Playwright suite in the pinned Playwright image. Security-executable gates
 - **axe** (`e2e/axe.spec.ts`): WCAG A/AA scans on both themes; new routes are
   added to its route list.
 
-Later standing gates attach here per plan §4: personal-route session-scope
-enforcement (PR 5.1), push-token deletion (PR 6.3), aggregate-counter keying
-(PR 7.6).
+- **Personal-route session scope** (standing from PR 5.1,
+  `test/session-scope.test.ts` + `test/session.test.ts`): the acting address
+  on personal surfaces comes only from the session (query params have no
+  effect); anonymous requests prompt-and-explain (page) or 401 (resource
+  route); cookie flags, nonce single-use/replay, and expiry bounds are
+  pinned. `test/roles.test.ts` pins live role re-check (membership loss on
+  refresh; degraded chain reads → no roles). `test/assertion.test.ts` holds
+  the ADR-001 Decision 2 golden vectors cross-pinned with
+  `services/api/test/assertion-vectors.test.ts`.
+  `test/app-schema-allowlist.test.ts` is the app-schema data-minimization
+  gate. `test/wallet-adapter.test.ts` keeps the vendor registry closed.
+
+Later standing gates attach here per plan §4: push-token deletion (PR 6.3),
+aggregate-counter keying (PR 7.6).

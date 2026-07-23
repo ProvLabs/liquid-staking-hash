@@ -276,10 +276,10 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `CONSOLE_URL` | the same-environment Console origin | Verify-link base (§12.2). One console per environment; links never cross environments. |
 | `CONSOLE_CHAIN_ID` | chain id of the configured console profile | Added 2026-07-15 (PR 1.3): the operator-declared chain id the `CONSOLE_URL` console serves. Must equal `CHAIN_ID` or boot fails — the §12.2 "checked at boot" cross-environment guard needs the console profile's chain id as an explicit config fact (the console is a static app with no endpoint to ask). |
 | `API_URL` | the same-environment `services/api` origin | Added 2026-07-21 (PR 4.1): server-only base URL for the web tier's indexed-plane reads (footer freshness, degraded banner; zod-bounded http/https at load). The browser never calls the API directly for chrome state; reads go through the web server's loaders, and the value is classified server-only in the bundle-secret gate. |
-| `DATABASE_URL` | PostgreSQL | Indexer + app state. |
+| `DATABASE_URL` | PostgreSQL | Indexer + app state. Web tier (PR 5.1): the `app` schema as `app_writer`; optional — absent, sessions are in-memory (dev/mock posture). |
 | `BASE_RPC_URL` / `ETH_RPC_URL` | EVM read endpoints | Market + bridge-supply sampling (§5.3). |
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
-| `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. |
+| `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. **Client-safe** (PR 5.1 allowlist amendment): a WC project id is public by design — it rides in every pairing URI. |
 | `WEB_PUSH_VAPID_*` | — | Web Push credentials `[DECIDE §14.7]`. |
 | denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
 | `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
@@ -300,6 +300,19 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 > plus a unit test on the root-loader projection and an e2e assertion that no
 > server-only value reaches the rendered page. Adding a client-visible config
 > key amends this section and that allowlist in the same change.
+
+> **Revision 2026-07-23 (PR 5.1, wallet + sessions):** three rows became
+> consumed config, all zod-bounded at load: `WALLETCONNECT_PROJECT_ID`
+> (**amended into the client-safe allowlist** — public by design, riding in
+> every pairing URI; null disables the WC transport while the injected
+> extension keeps working), `DATABASE_URL` for the web tier (`app_writer`,
+> server-only, optional with an in-memory dev/mock fallback), and
+> `API_SERVICE_ASSERTION_KEY` (server-only, ≥ 32 chars, ADR-001 Decision 2
+> minting key). **`SESSION_SECRET` is retired without ever being consumed:**
+> the session cookie carries an opaque 256-bit random id resolved against a
+> server-side row (§12.3), so there is nothing to sign and no key to hold —
+> recorded here so the placeholder's disappearance from `.env.example` is a
+> decision, not an omission.
 
 ### 8.0 Site map & global chrome
 
@@ -643,6 +656,28 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 - The App performs **no server-side signing** of user transactions, holds no keys, and has no devnet key mode (that is a Console tool; the App's devnet build simply points WalletConnect at devnet).
 - Session auth (§3.5) uses a one-time nonce signed by the wallet; the session cookie scopes personal reads and App-state writes only.
 
+> **Revision 2026-07-23 (PR 5.1, delivered mechanism):** the wallet layer is
+> a **closed vendor adapter registry** (`apps/web/app/wallet/adapter.ts`,
+> `satisfies`-total; gated by `test/wallet-adapter.test.ts`) over a shared WC
+> v2 core (`@walletconnect/sign-client`, standard pairing + Cosmos-namespace
+> methods only — `cosmos_getAccounts`/`cosmos_signAmino`/`cosmos_signDirect`)
+> and a per-vendor injected-extension adapter for desktop Figure; vendor
+> workarounds may live only in that vendor's module (§14.1 mechanism (ii)).
+> Session auth is concrete: server-minted single-use address-bound nonce
+> (5 min TTL) → wallet signs the challenge over **ADR-36**
+> (`sign/MsgSignData`, one construction site shared by client and server) →
+> server verifies signature + pubkey→bech32 binding (`@noble`/`@scure`) →
+> opaque 256-bit session id in an **HttpOnly / SameSite=Lax / Secure
+> (non-dev) / Path=/** cookie over a server-side row (7 d absolute,
+> 24 h sliding — plan §7 Q6 values). Roles are re-checked live per refresh
+> (operator: `Validators {}` operator set; admin: `x/group` policy
+> membership behind `Config.admin`, direct-equality fallback for a plain
+> account) through a ≤ 60 s cache and are never persisted — the sessions
+> schema has no role column, enforced by the app-schema allowlist gate.
+> Gates: `test/session.test.ts`, `test/roles.test.ts`,
+> `test/session-scope.test.ts` (standing), `test/assertion.test.ts` (golden
+> vectors cross-pinned with services/api), `test/app-schema-allowlist.test.ts`.
+
 ### 10.2 Transaction lifecycle (all flows)
 
 1. **Build** client-side: typed Provenance messages (vault `MsgSwapIn` / `MsgSwapOut` `[VERIFY §14.2: exact msg names/fields on the deployed vault module]`; group `MsgSubmitProposal` / `MsgVote` / `MsgExec`).
@@ -741,6 +776,7 @@ Protocol and platform facts this design must respect (chain constraints identica
 
 1. **[DECIDED 2026-07-14, Ira] Wallet vendor set:** v1 certifies **Figure Wallet** — mobile pairing over WalletConnect v2, plus the Figure browser extension on desktop — the Provenance-native wallet requiring no custom chain config. Console §14.1 is resolved in the same change (Figure extension + devnet direct-key mode for engineering, compile-time excluded from production), so the program certifies one wallet story with a per-surface transport matrix (App: WC v2 mobile + extension; Console: extension only). **Keplr and Leap are fast-follow, not v1.** A vendor joins the certified set only by passing the **certification checklist** end-to-end on devnet, on both surfaces in the same change: (a) pairing/connection over its supported transport (WalletConnect v2 or injected extension); (b) Provenance chain support — chain id, bech32 prefix, coin type 505, nhash denom/gas — via custom chain config where not native; (c) arbitrary-nonce signing for §3.5 session auth; (d) sign & broadcast of the §10.2 message set with the decoded-preview behavior intact; (e) the §10.3 flow rules exercised against a full devnet drill cycle. The checklist is the gating test, not a caller assumption: it runs against Figure itself as an automated acceptance gate of the wallet/session PR (implementation plan PR 5.1) — if Figure fails an item (notably (c) over WC v2), that failure blocks the PR and reopens this decision rather than shipping a degraded session flow. Adding a vendor later is a spec-recorded amendment here, never a config toggle.
    **Amended 2026-07-14 (Ira): Arculus added as a second v1-certified vendor** (WC v2 mobile; App surface only — no browser extension, so the console set is unchanged and the transport matrix becomes App: Figure WC v2 mobile + extension, Arculus WC v2 mobile; Console: Figure extension + devnet key mode). The checklist's "both surfaces" rule reads per this matrix: a vendor certifies on every surface whose transports it supports. Purpose: **dual-vendor certification is the standards-conformance guard.** Passing the checklist against two independent vendors is what enforces that the shared WC v2 path uses only standard pairing and Cosmos-namespace signing methods and does not silently depend on non-standard Figure behavior that would block wider WC v2 wallet support later. Mechanism, gating PR 5.1: (i) checklist items (a)–(e) run against **both** Figure and Arculus as the PR's acceptance gate; (ii) a vendor-specific workaround may live only behind that vendor's adapter entry, recorded here — the shared WC v2 path absorbs nothing vendor-specific; (iii) either vendor failing an item blocks the PR and reopens this decision. Provenance of the Arculus choice: **firsthand-verified** — Arculus's `signArbitrary` support was tested directly by Ira, working with the Arculus dev team, on the retired `explorer.provenance.io` site, **without Privy** (other Provenance applications reached Arculus through the Privy framework; Privy is explicitly not a dependency here). Item (c) for Arculus is therefore **re-confirmation of a known-working capability, not an open question**. The PR 5.1 devnet run remains the enforced gate for two reasons: the original test surface is retired and wallet releases drift since that test; and the run must confirm the capability over the **standard WC v2 Cosmos-namespace method** specifically — explorer-era Provenance wallet tooling predates WC v2 and used earlier WalletConnect lineages with custom sign methods, so method-namespace equivalence is the one aspect the historical test does not pin.
+   **Implementation note 2026-07-23 (PR 5.1):** the adapter architecture this decision requires is in place — closed vendor registry (`figure-mobile` WC, `figure-extension` injected, `arculus` WC; `apps/web/app/wallet/`), shared WC v2 core restricted to standard Cosmos-namespace methods, per-vendor modules as the only home for workarounds. The certification checklist runs from the runbook [`2026-07-23-m5.1-wallet-certification-runbook.md`](../plans/2026-07-23-m5.1-wallet-certification-runbook.md); with Tranche A delivered as one PR (plan §5), items (a)–(c) certify at the 5.1 commit and (d)–(e) after the 5.2 commit — **all five per vendor before the PR merges**, results transcribed into the table here. The Figure extension's injected surface is provisional until its checklist column passes (recorded in the adapter module).
 2. **[VERIFY] Vault user-message surface:** exact `MsgSwapIn`/`MsgSwapOut` names/fields on the deployed module, swap estimate query shapes, and the event attributes for swap/expedite/payout/refund the indexer decodes (§9.2). Capture as devnet fixtures. **Note (2026-07-13, Ira): this verification is two-stage.** The settlement-era vault module (`AcceptAsset`) has no formal upstream release yet; devnet capture runs against a development build identified by **feature probe** (`AcceptAsset` present), so captured shapes pin assumptions for drift detection without certifying compatibility. When the vault module cuts its formal release, the fixture corpus and full test suite must be re-verified against the released build — **no App release is certified before that re-verification passes** (implementation plan PR 8.0). **Stage 1 executed 2026-07-14 (PR 0.2):** corpus captured to `packages/fixtures` from a feature-probed dev build with a completeness gate over all terminal states (swap in, enqueue, expedite, payout, refund, both `RunEpoch` settlement legs). Pinned facts consumers must honor: msg type URLs carry a `Request` suffix; vault event attribute values are JSON-encoded strings; **payout and refund are EndBlocker events** (`finalize_block_events` via RPC `block_results` — never visible to tx-search; consumed by the §14.5 transport decision in PR 2.1); vault LCD REST lives under `/vault/v1` (not `/provlabs/vault/v1`), and `estimate_swap_in` is gRPC/CLI-only (grpc-gateway rejects `Coin`/`math.Int` query parameters) while `estimate_swap_out` serves over REST with a bare share-integer parameter (corrected 2026-07-14, PR 0.3 — the initial capture wrongly pinned the whole vault query surface as REST-less). Stage 2 (release re-vet) remains PR 8.0.
 3. **[VERIFY] DEX/bridge deployment facts:** Uniswap pool addresses, pair asset, fee tier per chain; bridged-nvHASH token contracts; NUVA bridge transit API/UX integration points.
 4. **[DECIDED 2026-07-15, Ira] Bridge transit UX in v1: deferred; DEX/market surfaces ship as labeled "coming soon" shells.** No bridging system or interface is part of v1 — the initial App, contracts, and services deploy and establish nvHASH on Provenance mainnet **before** the token is bridged to other networks via NUVA. Consequence: with no bridged nvHASH there is no Base/Ethereum Uniswap market at launch, so the cross-chain plane (§5.3), the Market page (§8.5), and the DEX column of the §8.4 exit comparison have no live data. Rather than remove them, they ship as **labeled "coming soon" shells** — the two-column Exit comparison and the Market page render with the DEX/secondary-market side marked a post-launch capability, so the information architecture is stable when NUVA's bridge deliverable lands. `UNISWAP_POOL_*` config and the `[VERIFY §14.3]` DEX facts stay documented placeholders until then. **v1 exit is native-redemption-only in practice**; the DEX path is presented as forthcoming, never as an available action. Timing stays coupled to the NUVA Labs bridge deliverable (contract §15 bridge note); enabling the DEX/market surfaces is a spec-recorded amendment here, not a config toggle.

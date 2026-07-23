@@ -171,6 +171,32 @@ the same change. Automatable items also run in e2e; the rest execute as a
 scripted runbook with recorded results (§7 Q2). Either vendor failing an
 item blocks the PR and reopens §14.1 rather than shipping a degraded flow.
 
+*Delivery notes (5.1, 2026-07-23):*
+- *Checklist staging:* items (d)/(e) exercise §10.2/§10.3 machinery that
+  lands with 5.2 — with Tranche A as one GitHub PR, (a)–(c) certify at the
+  5.1 commit and (d)–(e) after the 5.2 commit, all five per vendor before
+  merge. Runbook:
+  [`2026-07-23-m5.1-wallet-certification-runbook.md`](2026-07-23-m5.1-wallet-certification-runbook.md);
+  the manual per-vendor run is the remaining human step for this commit.
+- *`SESSION_SECRET` retired* (recorded in app-spec §7): the cookie carries
+  an opaque random id over a server-side row — nothing to sign. Removed
+  from `.env.example`/`server-only-env.json` rather than left as a phantom.
+- *`DATABASE_URL` is optional* for the web tier (services/api precedent):
+  absent → non-durable in-memory session store (dev/mock posture, loud
+  warning outside development); the e2e/MSW suites run Postgres-free.
+- *`GroupClient` extended* in `packages/chain-client` with
+  `groupPolicyInfo`/`groupMembers` (standard x/group LCD) for admin
+  detection; `Config.admin` resolving to a plain account (policy 404) falls
+  back to direct address equality. The fixtures corpus has no group-policy
+  captures (the capture devnet had no admin group) — roles tests override
+  MSW handlers with standard x/group shapes; capturing real group fixtures
+  rides with the §14.1 devnet run.
+- *Dependencies added* (dependency-review note): `@walletconnect/sign-client`
+  (pinned WC v2 core), `@noble/curves` + `@noble/hashes` + `@scure/base`
+  (audited, zero-install-script crypto for server-side ADR-36 verify),
+  `uqr` (zero-dep QR SVG for pairing), `@prisma/client`/`prisma` (already
+  the indexer's toolchain).
+
 ### 5.2 — Transaction lifecycle framework
 
 `apps/web/app/tx/` — the §10.2 machine every fund-moving flow rides

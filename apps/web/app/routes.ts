@@ -8,6 +8,11 @@ export default [
   // Operational readiness probe (PR 1.5) — a static, locale-independent path,
   // declared before the `:lang?` segment so it is never parsed as a locale.
   route("healthz", "routes/healthz.tsx"),
+  // Session resource routes (PR 5.1): locale-independent POST-only endpoints
+  // for the nonce-signature login flow (app-spec §3 decision 5).
+  route("session/nonce", "routes/session-nonce.tsx"),
+  route("session/login", "routes/session-login.tsx"),
+  route("session/logout", "routes/session-logout.tsx"),
   route(":lang?", "routes/locale.tsx", [
     index("routes/home.tsx"),
     // §8.0 nav targets (plan 4.1): stubs until their real pages land in

@@ -1,0 +1,24 @@
+// sessions (app-spec §3 decision 5, §12.3; plan 5.1): one row per established
+// wallet session. The cookie carries ONLY the opaque `id` (256-bit random,
+// base64url) — the row is the session; deleting it is logout everywhere.
+//
+// Deliberately NO role column: operator/admin are on-chain facts re-checked
+// live per session refresh (spec §4 "the App stores no role list"); the
+// allowlist gate fails if one is added.
+
+model Session {
+  /** 256-bit random id, base64url — the cookie value, unguessable. */
+  id            String   @id
+  /** bech32 wallet address this session is scoped to (public by nature). */
+  address       String
+  createdAt     DateTime @default(now())
+  /** Absolute ceiling: the session dies at this instant regardless of use. */
+  expiresAt     DateTime
+  /** Sliding-refresh bookkeeping (roles re-checked on refresh). */
+  lastRefreshAt DateTime @default(now())
+
+  @@index([address])
+  @@index([expiresAt])
+  @@map("sessions")
+  @@schema("app")
+}
