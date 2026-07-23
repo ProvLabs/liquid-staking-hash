@@ -1,11 +1,19 @@
-# E-CAL — Calendar-Month Epoch Alignment implementation (four commits)
+# E-CAL — Calendar-Month Epoch Alignment implementation (six commits)
 
-**Status:** DRAFT 2026-07-22 (implementation plan for milestone E-CAL; reviewed
-with Ira before implementation — three approach decisions locked in §"Decisions"
-and the design step-back on configurable cadence resolved to ship calendar-month
-only. Delivery shape per Ira: the four PRs land as **four commits on one
-contracts branch** (`e-cal-calendar-month-epoch`), each staged for Ira to
-commit.)
+**Status:** IMPLEMENTED 2026-07-22 (milestone E-CAL, branch
+`e-cal-calendar-month-epoch`). The four planned PRs landed, plus **two commits
+discovered during execution** — a build-pipeline fix and an App-consumer update
+— for **six commits total** (see the As-built commit ledger below). Verified:
+`cargo test --lib` 74/74 (incl. the `month` proptest over the full `u64`
+nanosecond domain, the embedded-chain calendar gate via `increase_time`, and the
+calendar sim domain); a seed-7 / 2,000-scenario / 96,000-epoch soak with zero
+violations; the live devnet `calendar-drill.sh`; and — for the App leg — a
+workspace typecheck, the standalone console `tsc -b`, and `chain-client` 31/31
+tests, all through the `./dev` containers.
+
+This doc's per-commit sections below record the plan *as designed*; the As-built
+ledger notes where execution deviated (the E-CAL.2 boundary-crossing mechanism,
+and the two added commits). The original planned-shape framing:
 **Epic:** nvHASH Staking Contract —
 [`docs/specs/liquid-staking-spec.md`](../specs/liquid-staking-spec.md) (v1.0, baselined)
 **Milestone:** E-CAL — Calendar-month epoch alignment; design & PR table in the
@@ -87,16 +95,42 @@ spec/code parity, "test the boundary as shipped"). Acceleration comes from the
 
 ## Commit map
 
-Milestone **E-CAL**. `[P]` marks lanes independent of each other (authored in
-either order); all four are committed sequentially on the one branch per Ira's
-request. Maps to the design plan's E-CAL.1–.4 (§4).
+Milestone **E-CAL**, branch `e-cal-calendar-month-epoch`. Maps to the design
+plan's E-CAL.1–.4 (§4), plus two commits discovered during execution.
 
-| Commit | Scope | Depends on |
+### As-built commit ledger (six commits)
+
+| # | Commit | What shipped |
 | --- | --- | --- |
-| **1 · E-CAL.1** | The same-change unit: `month.rs` util (+ unit tests + proptest); `RunEpoch` predicate swap; fee-reserve horizon rederive; retire `min_run_interval_secs`; `cargo schema` regen; simulation calendar-time refactor + new invariants; spec amendments (§9, §9.3, §11.1, §14 pending→resolved). | app-spec §14.12 (decided) |
-| **2 · E-CAL.2** `[P]` | Devnet drill: cross a month boundary (genesis pinned near month-end) — early pre-rollover crank asserted rejected, post-rollover aligned epoch runs. | Commit 1 |
-| **3 · E-CAL.3** `[P]` | Params/ops: re-pin `withdrawal_delay_seconds` against the calendar cadence + live `unbonding_time`; keeper runbook entry; launch-checklist rows. | Commit 1 |
-| **4 · E-CAL.4** | Close: check off `IMPLEMENTATION-STATUS.md` §2; flip app-spec §14.12 to implemented; revisit the App "monthly settlement" copy caveat. | Commits 2–3 |
+| 1 | `56cbe96` **E-CAL.1** | Same-change unit: `month.rs` util + unit/proptest; `RunEpoch` predicate swap; fee-horizon rederive; retire `min_run_interval_secs`; `cargo schema`; sim calendar-time refactor + invariants; spec §9/§9.3/§11.1/§14 amendments. |
+| 2 | `2b7cfc7` **build fix** *(discovered)* | Cap `wasm-opt` one-caller inlining and add a build-time 100-locals gate. **Not in the original plan:** a fresh optimized build merged the execute handlers into one 110-locals function, exceeding the chain's per-function wasm-validation limit — a **pre-existing** blocker (`main` had it too), surfaced by E-CAL.2's fresh deploy. See As-built note A. |
+| 3 | `ca94fc0` **E-CAL.2** | Devnet `calendar-drill.sh` + README. Scope changed from the plan (note B): an eligible crank runs a full epoch end-to-end; a same-month re-crank is asserted rejected. |
+| 4 | `b203188` **E-CAL.3** | Re-pin `withdrawal_delay_seconds` (spec §7/§8/§14 — the 60-day ceiling holds); `docs/user/keeper-runbook.md`; glossary/lock-clearing parity touch-ups. |
+| 5 | `d9058d6` **E-CAL.4** | Close: check off `IMPLEMENTATION-STATUS.md` §2; flip app-spec §14.12 to Implemented; resolve the "monthly settlement" copy caveat + a live §10 display bug (next-run derived from the retired field). |
+| 6 | `e4f914d` **E-CAL.5** *(discovered)* | App-consumer update: `packages/chain-client` drops `minRunIntervalSecs` from `ContractConfig`/parse; `apps/console` rederives `nextRunAt` to the next calendar month + guards/EpochOps/Overview/types/fixtures; shared config fixture. **Not in the original plan:** the config-response schema change broke the console/web/chain-client TS clients; folded in per Ira. See As-built note C. |
+
+### As-built notes (deviations from the plan)
+
+- **A — wasm 100-locals build gate.** Under the release profile (opt-level 3 +
+  LTO), the optimizer's `wasm-opt -Os` inlines any single-caller function
+  regardless of size, merging the execute handlers into one 110-locals function
+  the chain rejects at store. Pre-existing (the pre-E-CAL parent built the same),
+  surfaced only on a fresh deploy. Fix: run the pinned optimizer image in two
+  stages with `--one-caller-inline-max-function-size` capped, plus a build-time
+  gate that fails if any function exceeds 100 locals.
+- **B — E-CAL.2 boundary crossing.** The plan crossed a month boundary via
+  `genesis_time`. Verified on-devnet that block time tracks **real wall-clock**
+  (genesis only stamps block 1), and the dev image has no libfaketime — so a
+  live boundary crossing isn't achievable cheaply. Per Ira, the drill instead
+  asserts what a live chain uniquely proves without clock control: a full
+  eligible epoch runs, and a same-month re-crank is rejected. The cross-boundary
+  aligned epoch stays covered by the deterministic test-tube `increase_time`
+  test (Commit 1) and the sim.
+- **C — App-consumer breakage.** Removing `min_run_interval_secs` from the
+  config response broke `packages/chain-client`'s parser and the console's
+  `nextRunAt` display. Per Ira, folded the fix into this branch (E-CAL.5) rather
+  than a separate apps-area PR; `nextRunAt` now mirrors the contract's
+  `first_of_next_month_secs`.
 
 ---
 
