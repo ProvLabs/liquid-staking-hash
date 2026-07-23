@@ -196,7 +196,6 @@ fn setup_wasm_with_underlying(
                 vault_address: vault_address.to_string(),
                 underlying_denom: underlying.to_string(),
                 receipt_denom: RECEIPT_DENOM.to_string(),
-                min_run_interval_secs: 0,
                 max_delegations_per_run: 0,
                 aum_fee_bps: 0,
                 performance_threshold_bps: 0,
@@ -622,41 +621,44 @@ fn halted_contract_rejects_cranks() {
         .unwrap();
 }
 
+/// The authoritative calendar-month gate coverage against the embedded chain:
+/// a crank rolls the epoch only once block time enters a strictly later civil
+/// month. Time is advanced with `app.increase_time`, so the whole calendar
+/// crossing is exercised deterministically and instantly — no wall-clock wait,
+/// and no test-only cadence knob (the shipped predicate is what runs here).
 #[test]
-fn run_epoch_enforces_min_interval_and_leaves_vault_unpaused() {
+fn run_epoch_enforces_calendar_month_and_leaves_vault_unpaused() {
     let app = ProvwasmTestApp::new();
     let (admin, vault_address, contract) = base_setup(&app);
     set_asset_manager(&app, &admin, &vault_address, &contract);
     let wasm = Wasm::new(&app);
 
-    wasm.execute(
-        contract.as_str(),
-        &ExecuteMsg::UpdateConfig {
-            min_run_interval_secs: Some(1_000_000),
-            max_delegations_per_run: None,
-            aum_fee_bps: None,
-            performance_threshold_bps: None,
-            min_capture_interval_secs: None,
-            max_concentration_multiple_bps: None,
-            min_bonded_cap_bps: None,
-            max_bonded_cap_bps: None,
-            concentration_safety_offset_bps: None,
-                commission_bps: None,
-                jail_unbond_delay_secs: None,
-        },
-        &[],
-        &admin,
-    )
-    .unwrap();
+    // Align the chain clock to just after a month boundary so epoch 1 lands
+    // early in a calendar month, leaving a full month of headroom before the
+    // boundary the same-month retry must NOT cross.
+    let now = app.get_block_time_seconds() as u64;
+    let boundary =
+        crate::month::first_of_next_month_secs(cosmwasm_std::Timestamp::from_seconds(now));
+    app.increase_time(boundary - now + 10);
 
+    // Epoch 1: block time is in a later civil month than the genesis last_run,
+    // so the crank runs and leaves the vault unpaused.
     wasm.execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
         .unwrap();
     assert!(!query_vault(&app, &vault_address).vault.unwrap().paused);
 
+    // A second crank in the SAME calendar month is rejected — the gate is a
+    // calendar boundary, not an elapsed-time floor.
     let err = wasm
         .execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
         .unwrap_err();
     assert!(format!("{err:?}").contains("too soon"));
+
+    // Advance past the next month boundary (32 days clears any month length);
+    // the crank is eligible again.
+    app.increase_time(32 * 86_400);
+    wasm.execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
+        .unwrap();
 
     let status: EpochStatusResponse = wasm
         .query(contract.as_str(), &QueryMsg::EpochStatus {})

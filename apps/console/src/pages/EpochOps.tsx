@@ -59,7 +59,7 @@ export function EpochOps() {
         <Cell cell={epoch}>
           {(e) => {
             const releasing = e.phase === "Releasing";
-            const nextAt = cfg.data ? nextRunAt(e.last_run_seconds, cfg.data.min_run_interval_secs) : 0;
+            const nextAt = nextRunAt(e.last_run_seconds);
             return (
               <div className="stack" style={{ gap: 12 }}>
                 <div className="row" style={{ gap: 8, alignItems: "center" }}>
@@ -167,7 +167,7 @@ export function EpochOps() {
                 <tbody>
                   <ParamRow k="admin" v={<AddressChip addr={c.admin} />} />
                   <ParamRow k="vault" v={<AddressChip addr={c.vault_address} />} />
-                  <ParamRow k="min run interval" v={humanDuration(c.min_run_interval_secs)} />
+                  <ParamRow k="cadence" v="calendar month (block-time rollover)" />
                   <ParamRow k="max delegations / run" v={String(c.max_delegations_per_run)} />
                   <ParamRow k="AUM fee" v={`${pct(c.aum_fee_bps)} (mirror, not measurement)`} />
                   <ParamRow k="performance threshold" v={pct(c.performance_threshold_bps)} />

@@ -50,7 +50,6 @@ fi
 WASM_IN="${WASM_IN:-/tmp/nvhash_staking.wasm}"
 CONTRACT_LABEL="${CONTRACT_LABEL:-nvhash-staking}"
 CONTRACT_ADMIN="${CONTRACT_ADMIN:-}"
-MIN_RUN_INTERVAL_SECS="${MIN_RUN_INTERVAL_SECS:-0}"
 MAX_DELEGATIONS_PER_RUN="${MAX_DELEGATIONS_PER_RUN:-0}"
 AUM_FEE_BPS="${AUM_FEE_BPS:-0}"
 
@@ -230,7 +229,7 @@ else
   echo "  CODE_ID=$CODE_ID"
 
   INIT_MSG="$(cat <<JSON
-{"admin":"${CONTRACT_ADMIN}","vault_address":"${VAULT}","underlying_denom":"${UNDERLYING}","receipt_denom":"${RECEIPT_DENOM}","min_run_interval_secs":${MIN_RUN_INTERVAL_SECS},"max_delegations_per_run":${MAX_DELEGATIONS_PER_RUN},"aum_fee_bps":${AUM_FEE_BPS},"performance_threshold_bps":0,"min_capture_interval_secs":0}
+{"admin":"${CONTRACT_ADMIN}","vault_address":"${VAULT}","underlying_denom":"${UNDERLYING}","receipt_denom":"${RECEIPT_DENOM}","max_delegations_per_run":${MAX_DELEGATIONS_PER_RUN},"aum_fee_bps":${AUM_FEE_BPS},"performance_threshold_bps":0,"min_capture_interval_secs":0}
 JSON
 )"
   INST_RES="$(tx wasm instantiate "$CODE_ID" "$INIT_MSG" \

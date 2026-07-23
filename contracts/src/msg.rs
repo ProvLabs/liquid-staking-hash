@@ -8,8 +8,6 @@ pub struct InstantiateMsg {
     pub underlying_denom: String,
     pub receipt_denom: String,
     #[serde(default)]
-    pub min_run_interval_secs: u64,
-    #[serde(default)]
     pub max_delegations_per_run: u32,
     #[serde(default)]
     pub aum_fee_bps: u64,
@@ -40,7 +38,6 @@ pub enum ExecuteMsg {
     UnpauseVault {},
     /// Admin-gated: update program configuration. Only supplied fields change.
     UpdateConfig {
-        min_run_interval_secs: Option<u64>,
         max_delegations_per_run: Option<u32>,
         aum_fee_bps: Option<u64>,
         performance_threshold_bps: Option<u64>,
@@ -153,7 +150,6 @@ pub struct ConfigResponse {
     pub vault_address: String,
     pub underlying_denom: String,
     pub receipt_denom: String,
-    pub min_run_interval_secs: u64,
     pub max_delegations_per_run: u32,
     pub aum_fee_bps: u64,
     pub performance_threshold_bps: u64,

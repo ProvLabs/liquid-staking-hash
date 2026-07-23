@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 
 use cosmwasm_std::{Addr, MemoryStorage, Timestamp, Uint128};
 
+use crate::month::{year_month, NOMINAL_EPOCH_SECS};
 use crate::plan::{
     commission_on, fee_reserve, plan_rebalance, plan_return, plan_service, redemption_need,
     DelegationView, RebalanceSeat, MAX_UNBOND_ENTRIES,
@@ -83,6 +84,31 @@ pub struct Scenario {
     pub p_tip: u64,
     /// Percent of operators that pay commission on schedule.
     pub p_pay_commission: u64,
+    /// Genesis block time (Unix seconds). The calendar predicate reads real
+    /// civil months from this, so month lengths/leap years fall out for free.
+    pub genesis_secs: u64,
+    /// Upper bound on the keeper-promptness delay drawn each rollover (seconds
+    /// into the new month before the crank fires) under `Timing::Jitter`.
+    pub keeper_jitter_max_secs: u64,
+    /// How crank timing after a rollover is chosen (see `Timing`).
+    pub timing: Timing,
+}
+
+/// Keeper-promptness model after a calendar-month rollover. The eligibility
+/// boundary is always the production predicate (`year_month` rollover); this
+/// only decides HOW LATE into the new month the permissionless crank actually
+/// fires, which is what produces compressed gaps and skipped months.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Timing {
+    /// Random delay in `[0, keeper_jitter_max_secs)` — the default spread.
+    Jitter,
+    /// Deterministically alternate a late crank (26 days into the month) with a
+    /// prompt one (1 day), so the late→prompt pair compresses the inter-crank
+    /// gap below the unbonding period.
+    Compressed,
+    /// Periodically delay past a whole month so one catch-up crank settles two
+    /// months at once (skipped-month coverage).
+    Skip,
 }
 
 impl Scenario {
@@ -105,6 +131,9 @@ impl Scenario {
             p_unregister: r.below(10),
             p_tip: r.below(30),
             p_pay_commission: 60 + r.below(41),
+            genesis_secs: GENESIS_SECS,
+            keeper_jitter_max_secs: (5 + r.below(20)) * DAY_SECS,
+            timing: Timing::Jitter,
         }
     }
 }
@@ -187,12 +216,81 @@ pub fn boundary_scenarios(epochs: u32) -> Vec<(&'static str, Scenario)> {
     ]
 }
 
-// Time quantization: 4 keeper steps per epoch; the mainnet shape (unbonding
-// shorter than the epoch, redemption delay = two epochs) is preserved.
-const STEPS_PER_EPOCH: u64 = 4;
-const UNBOND_STEPS: u64 = 3;
-const REDELEGATION_LOCK_STEPS: u64 = 3;
-const REDEMPTION_DELAY_STEPS: u64 = 2 * STEPS_PER_EPOCH;
+/// Calendar-cadence domain scenarios (E-CAL §3): the timing dimension the old
+/// fixed-step sim never had. Each pins one edge of the calendar predicate and
+/// asserts (in the smoke test) that the edge was actually reached, so none can
+/// rot into a no-op. Boundary scenarios keep the default timing profile —
+/// timing is orthogonal to their economic edges, so it gets its own scenarios
+/// rather than multiplying the boundary set.
+pub fn calendar_scenarios(epochs: u32) -> Vec<(&'static str, Scenario)> {
+    let base = |seed: u64| Scenario::from_seed(seed, epochs);
+    vec![
+        (
+            // Late-then-prompt cranks squeeze the inter-crank gap below the
+            // unbonding period, so a prior crank's entries are still in flight
+            // when the next crank plans — the never-rejected guards must hold.
+            "calendar-compressed-gap",
+            Scenario {
+                timing: Timing::Compressed,
+                p_deposit: 50,
+                p_redeem: 25,
+                p_enroll: 30,
+                ..base(0xCA1E)
+            },
+        ),
+        (
+            // A rollover delayed past a whole month: one catch-up crank settles
+            // two months at once, and loss recognition stays undeferred.
+            "calendar-skipped-month",
+            Scenario {
+                timing: Timing::Skip,
+                p_deposit: 40,
+                p_redeem: 20,
+                ..base(0x5217)
+            },
+        ),
+        (
+            // Genesis pinned to a leap year so February (incl. Feb 29) and the
+            // short/long month lengths are traversed without violation.
+            "calendar-leap-february",
+            Scenario {
+                genesis_secs: LEAP_GENESIS_SECS,
+                p_deposit: 40,
+                p_redeem: 15,
+                ..base(0x1EAF)
+            },
+        ),
+    ]
+}
+
+// Real-time model. Block time advances by a seeded per-step delta and the epoch
+// cranks on a calendar-month rollover (the production predicate in `month.rs`),
+// fired a keeper-promptness delay into the new month. Every lock/delay is a
+// wall-clock deadline, so a compressed inter-crank gap (a late run then a prompt
+// one) leaves unbonding/redelegation entries still in flight at the next crank —
+// exactly the case the never-rejected-move guards must survive. `step` survives
+// only as an event/RNG-cadence counter and failure label, never as time.
+const DAY_SECS: u64 = 86_400;
+const YEAR_SECONDS: u128 = 31_536_000; // mirrors plan::YEAR_SECONDS (365 days)
+const UNBOND_SECS: u64 = 21 * DAY_SECS; // ~Provenance unbonding period
+const REDELEGATION_LOCK_SECS: u64 = 21 * DAY_SECS;
+// Serviceable delay before a redemption is paid. Kept a step-window under the
+// 60-day withdrawal-delay ceiling so payout (delay + up to one keeper step of
+// granularity) stays within the promise the ceiling encodes.
+const REDEMPTION_DELAY_SECS: u64 = 50 * DAY_SECS;
+const WITHDRAWAL_DELAY_CEILING_SECS: u64 = 60 * DAY_SECS;
+// Per-step block-time advance (~5-15 steps per calendar month).
+const STEP_MIN_SECS: u64 = 2 * DAY_SECS;
+const STEP_MAX_SECS: u64 = 6 * DAY_SECS;
+// Jail duration (~half a month, matching the old 2-of-4-steps shape).
+const JAIL_SECS: u64 = 15 * DAY_SECS;
+// A month boundary genesis so the default timelines start clean; the leap
+// scenario overrides this to a leap year. 2025-01-01 / 2024-01-01 (UTC).
+const GENESIS_SECS: u64 = 1_735_689_600;
+const LEAP_GENESIS_SECS: u64 = 1_704_067_200;
+// Distinct RNG stream for crank timing, so adding the clock does not perturb the
+// economic event stream (deposits/jails/churn) drawn from the main `rng`.
+const TIMING_SALT: u64 = 0x7157_3A17_C0DE_F00D;
 const REDEMPTION_MARGIN_BPS: u64 = 50;
 const DEPLOY_BUFFER_BPS: u128 = 50;
 const SHARE_SCALAR: u128 = 1_000_000;
@@ -225,7 +323,11 @@ struct SimVal {
 
 struct Redemption {
     shares: u128,
+    /// Block time (secs) the redemption becomes payable.
     due: u64,
+    /// Block time (secs) the redemption was requested — for the mobilization
+    /// bound vs the withdrawal-delay ceiling.
+    requested_at: u64,
 }
 
 /// Aggregate outcome counters for reporting.
@@ -245,6 +347,17 @@ pub struct Stats {
     /// actually crossed the uint64 share ceiling they target.
     pub max_shares: u128,
     pub worst_convergence_dev: u128,
+    /// Smallest gap (secs) between consecutive cranks; the compressed-gap
+    /// scenario asserts it dropped below the unbonding period. Init to u64::MAX.
+    pub min_run_gap_secs: u64,
+    /// Most calendar months a single crank advanced last_run by (1 = normal,
+    /// >=2 = a month was skipped and settled in one catch-up crank).
+    pub max_month_skip: u32,
+    /// Largest observed request→payout time for a fulfilled redemption; the
+    /// per-payout invariant bounds it under the 60-day withdrawal-delay ceiling.
+    pub max_mobilization_secs: u64,
+    /// Whether the timeline ever traversed a February (leap-scenario metric).
+    pub saw_february: bool,
 }
 
 pub struct SimResult {
@@ -254,9 +367,21 @@ pub struct SimResult {
 
 struct Sim {
     rng: Rng,
+    /// Separate stream for crank-timing draws (block-time deltas, keeper
+    /// promptness), forked from the seed so the economic `rng` sequence is
+    /// unperturbed by adding the clock.
+    time_rng: Rng,
     sc: Scenario,
     storage: MemoryStorage,
+    /// Pure event/RNG-cadence counter and failure label — NOT time.
     step: u64,
+    /// Consensus block time in Unix seconds (the calendar predicate's clock).
+    block_time_secs: u64,
+    /// Block time of the last completed crank (mirrors epoch.last_run).
+    last_run_secs: u64,
+    /// Latched fire target: once a rollover is eligible, the crank fires at the
+    /// first step whose block time reaches month-start + keeper delay.
+    next_fire_secs: Option<u64>,
     vals: Vec<SimVal>,
     /// (mature_step, valoper, amount)
     unbonding: Vec<(u64, String, u128)>,
@@ -277,9 +402,13 @@ impl Sim {
     fn new(sc: Scenario) -> Self {
         let mut sim = Sim {
             rng: Rng::new(sc.seed ^ 0xA5A5_5A5A_DEAD_BEEF),
-            sc,
+            time_rng: Rng::new(sc.seed ^ TIMING_SALT),
             storage: MemoryStorage::new(),
             step: 0,
+            block_time_secs: sc.genesis_secs,
+            last_run_secs: sc.genesis_secs,
+            next_fire_secs: None,
+            sc,
             vals: vec![],
             unbonding: vec![],
             redelegations: vec![],
@@ -299,6 +428,7 @@ impl Sim {
         }
         let v = sim.vals[0].valoper.clone();
         sim.enroll(&v);
+        sim.stats.min_run_gap_secs = u64::MAX;
         sim
     }
 
@@ -310,6 +440,45 @@ impl Sim {
         self.stats.checks += 1;
         if !ok {
             self.fail(what.to_string());
+        }
+    }
+
+    /// Record a fulfilled redemption's request→payout time and bound it under
+    /// the 60-day withdrawal-delay ceiling (§3.4 mobilization gate).
+    fn record_mobilization(&mut self, requested_at: u64) {
+        let mob = self.block_time_secs.saturating_sub(requested_at);
+        self.stats.max_mobilization_secs = self.stats.max_mobilization_secs.max(mob);
+        self.check(
+            mob <= WITHDRAWAL_DELAY_CEILING_SECS,
+            "mobilization exceeded the 60-day withdrawal-delay ceiling",
+        );
+    }
+
+    /// Seconds into the new month the permissionless keeper waits before
+    /// cranking, per the scenario's timing model. Drawn from the timing RNG so
+    /// the economic event stream is unperturbed.
+    fn keeper_delay(&mut self) -> u64 {
+        match self.sc.timing {
+            Timing::Jitter => self.time_rng.below(self.sc.keeper_jitter_max_secs.max(1)),
+            // Alternate a late crank (26d) with a prompt one (1d): the
+            // late→prompt pair squeezes the next inter-crank gap below the
+            // unbonding period, exercising the never-rejected guards live.
+            Timing::Compressed => {
+                if self.stats.epochs % 2 == 0 {
+                    26 * DAY_SECS
+                } else {
+                    DAY_SECS
+                }
+            }
+            // Every third rollover, wait past a whole month so one catch-up
+            // crank settles two months at once (skipped-month coverage).
+            Timing::Skip => {
+                if self.stats.epochs % 3 == 2 {
+                    45 * DAY_SECS
+                } else {
+                    2 * DAY_SECS
+                }
+            }
         }
     }
 
@@ -333,7 +502,7 @@ impl Sim {
                 valoper,
                 &ValidatorRecord {
                     operator: Addr::unchecked(format!("op-{valoper}")),
-                    enrolled_at: Timestamp::from_seconds(self.step),
+                    enrolled_at: Timestamp::from_seconds(self.block_time_secs),
                     uptime_sum_bps: 0,
                     uptime_count: 0,
                     commission_accrued: Uint128::zero(),
@@ -353,7 +522,10 @@ impl Sim {
         self.vals.iter().map(|v| v.third_party + v.program).sum()
     }
     fn active_count(&self) -> u64 {
-        self.vals.iter().filter(|v| v.jailed_until <= self.step).count() as u64
+        self.vals
+            .iter()
+            .filter(|v| v.jailed_until <= self.block_time_secs)
+            .count() as u64
     }
     fn staked_total(&self) -> u128 {
         self.vals.iter().map(|v| v.program).sum()
@@ -385,7 +557,7 @@ impl Sim {
             let Ok(Some(record)) = VALIDATORS.may_load(&self.storage, &v.valoper) else {
                 continue;
             };
-            let jailed = v.jailed_until > self.step;
+            let jailed = v.jailed_until > self.block_time_secs;
             let in_arrears = record.commission_paid < record.commission_due;
             let meets = self.sc.performance_threshold_bps == 0
                 || v.uptime_bps >= self.sc.performance_threshold_bps;
@@ -461,10 +633,19 @@ impl Sim {
     fn apply_unbond(&mut self, valoper: &str, amount: u128) {
         let stake = self.val_mut(valoper).program;
         self.check(amount <= stake, "unbond exceeds live delegation");
+        // Never-rejected under compression: with wall-clock unbonding a prior
+        // late crank's entries can still be in flight, so plan_service must have
+        // routed around a MaxEntries-full validator. A move onto a saturated
+        // queue would be rejected by the chain and revert the crank.
+        let saturated = self.at_capacity().iter().any(|v| v == valoper);
+        self.check(
+            !saturated,
+            "unbond to a MaxEntries-full validator (chain would reject)",
+        );
         let v = self.val_mut(valoper);
         v.program = v.program.saturating_sub(amount);
         self.unbonding
-            .push((self.step + UNBOND_STEPS, valoper.to_string(), amount));
+            .push((self.block_time_secs + UNBOND_SECS, valoper.to_string(), amount));
     }
 
     /// ServiceRedemptions keeper pass (runs every step), mirroring the
@@ -493,6 +674,7 @@ impl Sim {
             let payout = self.estimate(self.redemptions[idx].shares);
             self.check(payout <= self.marker_liquid, "expedite past marker liquidity");
             let r = self.redemptions.remove(idx);
+            self.record_mobilization(r.requested_at);
             self.marker_liquid = self.marker_liquid.saturating_sub(payout);
             self.shares -= r.shares;
             self.stats.redemptions_paid += 1;
@@ -545,7 +727,7 @@ impl Sim {
             let buffer = fee_reserve(
                 Uint128::new(self.tvv()),
                 self.sc.aum_fee_bps,
-                2 * 2_592_000, // two-epoch horizon, monthly epochs
+                2 * NOMINAL_EPOCH_SECS, // two nominal (~30-day) months
             )
             .u128()
             .max(self.marker_liquid * DEPLOY_BUFFER_BPS / 10_000);
@@ -606,12 +788,12 @@ impl Sim {
         let blocked_sources: std::collections::BTreeSet<String> = self
             .redelegations
             .iter()
-            .filter(|(exp, _, _)| *exp > self.step)
+            .filter(|(exp, _, _)| *exp > self.block_time_secs)
             .map(|(_, _, dst)| dst.clone())
             .collect();
         let mut pair_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
         for (exp, src, dst) in &self.redelegations {
-            if *exp > self.step {
+            if *exp > self.block_time_secs {
                 *pair_counts.entry((src.clone(), dst.clone())).or_default() += 1;
             }
         }
@@ -665,7 +847,7 @@ impl Sim {
             self.val_mut(src).program -= amount;
             self.val_mut(dst).program += amount;
             self.redelegations.push((
-                self.step + REDELEGATION_LOCK_STEPS,
+                self.block_time_secs + REDELEGATION_LOCK_SECS,
                 src.clone(),
                 dst.clone(),
             ));
@@ -705,6 +887,7 @@ impl Sim {
             let payout = self.estimate(self.redemptions[idx].shares);
             if payout <= self.marker_liquid {
                 let r = self.redemptions.remove(idx);
+                self.record_mobilization(r.requested_at);
                 self.marker_liquid -= payout;
                 self.shares -= r.shares;
                 expedite_paid += payout;
@@ -713,6 +896,17 @@ impl Sim {
         }
 
         epoch_rollover(&mut self.storage).unwrap();
+
+        // Crank completed: advance last_run to block time (mirrors epoch.rs) and
+        // record the calendar-cadence stats. The gap vs the previous run drives
+        // the compressed-gap metric; the month delta drives skipped-month.
+        let gap = self.block_time_secs.saturating_sub(self.last_run_secs);
+        self.stats.min_run_gap_secs = self.stats.min_run_gap_secs.min(gap);
+        let (ny, nm) = year_month(Timestamp::from_seconds(self.block_time_secs));
+        let (ly, lm) = year_month(Timestamp::from_seconds(self.last_run_secs));
+        let months = ((ny * 12 + nm as i32) - (ly * 12 + lm as i32)).max(0) as u32;
+        self.stats.max_month_skip = self.stats.max_month_skip.max(months);
+        self.last_run_secs = self.block_time_secs;
 
         // ===== invariant battery =====
         let tvv_after = self.tvv();
@@ -788,14 +982,25 @@ impl Sim {
         self.stats.max_shares = self.stats.max_shares.max(self.shares);
     }
 
-    /// One keeper step: user/world events, keeper service, maturities, fees.
+    /// One keeper step: advance the clock, run user/world events, keeper
+    /// service, maturities, fees, then crank if a calendar month has rolled.
     fn run_step(&mut self) {
         self.step += 1;
-        // Reward accrual pro-rata to program stake.
+        // Advance the consensus clock by a seeded per-step delta.
+        let delta = STEP_MIN_SECS + self.time_rng.below(STEP_MAX_SECS - STEP_MIN_SECS + 1);
+        self.block_time_secs = self.block_time_secs.saturating_add(delta);
+        if year_month(Timestamp::from_seconds(self.block_time_secs)).1 == 2 {
+            self.stats.saw_february = true;
+        }
+        // Reward accrual over the elapsed seconds (a nominal month accrues
+        // ~reward_bps_per_epoch regardless of how many steps it contained).
         for v in &mut self.vals {
-            if v.jailed_until <= self.step {
-                v.pending_rewards +=
-                    v.program * self.sc.reward_bps_per_epoch as u128 / 10_000 / STEPS_PER_EPOCH as u128;
+            if v.jailed_until <= self.block_time_secs {
+                v.pending_rewards += mul_div(
+                    v.program,
+                    self.sc.reward_bps_per_epoch as u128 * delta as u128,
+                    10_000 * NOMINAL_EPOCH_SECS as u128,
+                );
             }
         }
         // Deposits.
@@ -817,15 +1022,16 @@ impl Sim {
             self.user_shares -= shares;
             self.redemptions.push(Redemption {
                 shares,
-                due: self.step + REDEMPTION_DELAY_STEPS,
+                due: self.block_time_secs + REDEMPTION_DELAY_SECS,
+                requested_at: self.block_time_secs,
             });
         }
         // Jail + 1% slash of everything on the validator.
         if self.rng.chance(self.sc.p_jail, 100) && !self.vals.is_empty() {
             let i = self.rng.below(self.vals.len() as u64) as usize;
             let v = &mut self.vals[i];
-            if v.jailed_until <= self.step {
-                v.jailed_until = self.step + 2;
+            if v.jailed_until <= self.block_time_secs {
+                v.jailed_until = self.block_time_secs + JAIL_SECS;
                 v.third_party -= v.third_party / 100;
                 v.program -= v.program / 100;
                 v.uptime_bps = v.uptime_bps.saturating_sub(500).max(8_000);
@@ -883,11 +1089,11 @@ impl Sim {
         }
         // Keeper service pass.
         self.keeper_service();
-        // Maturities.
-        let step = self.step;
+        // Maturities (wall-clock deadlines).
+        let now = self.block_time_secs;
         let mut matured = 0u128;
         self.unbonding.retain(|(due, _, a)| {
-            if *due <= step {
+            if *due <= now {
                 matured += *a;
                 false
             } else {
@@ -895,16 +1101,17 @@ impl Sim {
             }
         });
         self.contract_liquid += matured;
-        self.redelegations.retain(|(exp, _, _)| *exp > step);
+        self.redelegations.retain(|(exp, _, _)| *exp > now);
         // Redemptions at their due date: payable from the marker at live NAV,
         // else refunded (adequacy tracking; the keeper ran every step, so a
         // refund is a genuine liquidity-model finding).
         let mut i = 0;
         while i < self.redemptions.len() {
-            if self.redemptions[i].due <= self.step {
+            if self.redemptions[i].due <= self.block_time_secs {
                 let payout = self.estimate(self.redemptions[i].shares);
                 if payout <= self.marker_liquid {
                     let r = self.redemptions.remove(i);
+                    self.record_mobilization(r.requested_at);
                     self.marker_liquid -= payout;
                     self.shares -= r.shares;
                     self.stats.redemptions_paid += 1;
@@ -917,19 +1124,38 @@ impl Sim {
                 i += 1;
             }
         }
-        // AUM fee skim (per step) from marker liquidity.
+        // AUM fee skim over the elapsed seconds from marker liquidity.
         if self.sc.aum_fee_bps > 0 {
-            let per_year = self.tvv() * self.sc.aum_fee_bps as u128 / 10_000;
-            let fee = per_year / (12 * STEPS_PER_EPOCH) as u128;
+            let fee = mul_div(
+                self.tvv(),
+                self.sc.aum_fee_bps as u128 * delta as u128,
+                10_000 * YEAR_SECONDS,
+            );
             if fee <= self.marker_liquid {
                 self.marker_liquid -= fee;
             } else {
                 self.stats.fee_starved_steps += 1;
             }
         }
-        // Epoch boundary.
-        if self.step % STEPS_PER_EPOCH == 0 {
-            self.run_epoch();
+        // Epoch crank: the production calendar-month predicate. Once block time
+        // is in a strictly later civil month than last_run, latch a fire target
+        // a keeper-promptness delay into the new month and crank when reached. A
+        // delay past a whole month yields a skipped-month catch-up; a late run
+        // followed by a prompt one yields a compressed inter-crank gap.
+        let now_ym = year_month(Timestamp::from_seconds(self.block_time_secs));
+        let last_ym = year_month(Timestamp::from_seconds(self.last_run_secs));
+        if now_ym > last_ym {
+            if self.next_fire_secs.is_none() {
+                let month_start = crate::month::first_of_next_month_secs(Timestamp::from_seconds(
+                    self.last_run_secs,
+                ));
+                let delay = self.keeper_delay();
+                self.next_fire_secs = Some(month_start.saturating_add(delay));
+            }
+            if self.block_time_secs >= self.next_fire_secs.unwrap() {
+                self.run_epoch();
+                self.next_fire_secs = None;
+            }
         }
     }
 }
@@ -941,8 +1167,14 @@ pub fn run_scenario(sc: Scenario) -> SimResult {
     let epochs = sc.epochs;
     let outcome = std::panic::catch_unwind(move || {
         let mut sim = Sim::new(sc);
-        for _ in 0..(epochs as u64 * STEPS_PER_EPOCH) {
+        // Steps-per-epoch is now variable (a calendar month spans several
+        // steps), so drive by crank count with a generous step safety cap.
+        let target = epochs as u64;
+        let max_steps = target * 60 + 1_000;
+        let mut n = 0u64;
+        while sim.stats.epochs < target && n < max_steps {
             sim.run_step();
+            n += 1;
             if sim.violations.len() > 25 {
                 break; // a broken scenario floods; keep the head
             }
@@ -1031,6 +1263,43 @@ mod tests {
                         "extreme-TVL scenario stayed small: {}",
                         s.max_tvv
                     );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Calendar-cadence CI check (E-CAL §3): every timing edge completes with
+    /// zero violations, and each demonstrably reached the edge it targets — the
+    /// mobilization ceiling is asserted inline during every run.
+    #[test]
+    fn simulation_calendar_domain_zero_violations() {
+        for (label, sc) in calendar_scenarios(48) {
+            let result = run_scenario(sc);
+            assert!(
+                result.violations.is_empty(),
+                "calendar scenario '{label}' violations: {:#?}",
+                result.violations
+            );
+            let s = &result.stats;
+            assert!(s.epochs >= 48, "'{label}' ran only {} epochs", s.epochs);
+            match label {
+                "calendar-compressed-gap" => {
+                    assert!(
+                        s.min_run_gap_secs < UNBOND_SECS,
+                        "compressed-gap scenario never squeezed below the unbonding period: {}s",
+                        s.min_run_gap_secs
+                    );
+                }
+                "calendar-skipped-month" => {
+                    assert!(
+                        s.max_month_skip >= 2,
+                        "skipped-month scenario never skipped a month (max jump {})",
+                        s.max_month_skip
+                    );
+                }
+                "calendar-leap-february" => {
+                    assert!(s.saw_february, "leap scenario never traversed February");
                 }
                 _ => {}
             }

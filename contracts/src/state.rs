@@ -14,8 +14,6 @@ pub struct Config {
     /// asset in the vault (not an accepted denom), valued via the vault's internal
     /// NAV table at 1:1 to nhash, moved via exchange settlements.
     pub receipt_denom: String,
-    /// Minimum seconds between RunEpoch executions (monthly cadence guard).
-    pub min_run_interval_secs: u64,
     /// Max validators to delegate to per crank (0 = unlimited). Bounds per-tx gas;
     /// the remainder is persisted to PENDING_DELEGATIONS and drained by
     /// continuation cranks.

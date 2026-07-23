@@ -19,7 +19,6 @@ export type ExecuteMsg =
   | { run_epoch: Record<string, never> };
 
 export interface UpdateConfigFields {
-  min_run_interval_secs?: number | null;
   max_delegations_per_run?: number | null;
   aum_fee_bps?: number | null;
   performance_threshold_bps?: number | null;

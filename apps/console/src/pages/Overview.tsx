@@ -2,7 +2,6 @@
 // 1) headline health numbers -> 2) invariant proof row -> 3) trends -> 4) deployment -> 5) history.
 import {
   useApr,
-  useConfig,
   useDeployment,
   useEpoch,
   useLedger,
@@ -32,7 +31,6 @@ export function Overview() {
   const snap = useSnapshot();
   const vals = useValidators();
   const epoch = useEpoch();
-  const cfg = useConfig();
   const deploy = useDeployment();
   const ledger = useLedger();
   const now = useNow();
@@ -81,7 +79,7 @@ export function Overview() {
         <Cell cell={epoch}>
           {(e) => {
             const phaseTone = e.halted ? "critical" : e.phase === "Releasing" ? "warning" : "good";
-            const nextAt = cfg.data ? nextRunAt(e.last_run_seconds, cfg.data.min_run_interval_secs) : 0;
+            const nextAt = nextRunAt(e.last_run_seconds);
             return (
               <div className="row" style={{ gap: 8, alignItems: "center" }}>
                 <Pill tone="neutral">epoch #{snap.data?.epoch_index ?? "—"}</Pill>

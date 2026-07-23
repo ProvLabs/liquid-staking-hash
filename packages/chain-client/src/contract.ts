@@ -21,7 +21,6 @@ export interface ContractConfig {
   vaultAddress: string;
   underlyingDenom: string;
   receiptDenom: string;
-  minRunIntervalSecs: number;
   maxDelegationsPerRun: number;
   aumFeeBps: number;
   performanceThresholdBps: number;
@@ -124,7 +123,6 @@ export function parseContractConfig(value: unknown, path = "$"): ContractConfig 
     vaultAddress: expectString(o["vault_address"], `${path}.vault_address`),
     underlyingDenom: expectString(o["underlying_denom"], `${path}.underlying_denom`),
     receiptDenom: expectString(o["receipt_denom"], `${path}.receipt_denom`),
-    minRunIntervalSecs: parseU64Number(o["min_run_interval_secs"], `${path}.min_run_interval_secs`),
     maxDelegationsPerRun: parseU64Number(o["max_delegations_per_run"], `${path}.max_delegations_per_run`),
     aumFeeBps: parseU64Number(o["aum_fee_bps"], `${path}.aum_fee_bps`),
     performanceThresholdBps: parseU64Number(o["performance_threshold_bps"], `${path}.performance_threshold_bps`),

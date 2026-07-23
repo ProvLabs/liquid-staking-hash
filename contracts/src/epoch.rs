@@ -451,8 +451,15 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let mut epoch = EPOCH.load(deps.storage)?;
     let receipt_minted = RECEIPT_MINTED.load(deps.storage)?;
 
-    let next = epoch.last_run.seconds().saturating_add(cfg.min_run_interval_secs);
-    if env.block.time.seconds() < next {
+    // Calendar-month rollover gate (liquid-staking-spec §9): the epoch may end
+    // once block time is in a strictly later civil (year, month) than the last
+    // run. The boundary is a deterministic function of consensus block time, not
+    // of who cranks or how long since last_run — no caller can pick the epoch's
+    // duration through this permissionless entrypoint. Immediately after a run
+    // last_run is in the current month, so the predicate rejects any further run
+    // until the next rollover: double-run is structurally impossible.
+    if crate::month::year_month(env.block.time) <= crate::month::year_month(epoch.last_run) {
+        let next = crate::month::first_of_next_month_secs(epoch.last_run);
         return Err(ContractError::TooSoon { next });
     }
 
@@ -533,7 +540,10 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         let budget = if eligible_rooms.is_empty() {
             Uint128::zero()
         } else {
-            let horizon = cfg.min_run_interval_secs.saturating_mul(2);
+            // Two nominal epochs of AUM-fee accrual (~30-day months); the epoch
+            // cadence is calendar-month, so this uses the nominal-month constant
+            // rather than the retired min_run_interval_secs.
+            let horizon = crate::month::NOMINAL_EPOCH_SECS.saturating_mul(2);
             let buffer = fee_reserve(tvv, cfg.aum_fee_bps, horizon)
                 .max(vault_liquid.multiply_ratio(DEPLOY_BUFFER_BPS, 10_000u128));
             vault_liquid.saturating_sub(need + buffer)
@@ -1079,7 +1089,6 @@ mod sequence_tests {
                 vault_address: vault.to_string(),
                 underlying_denom: "nhash".to_string(),
                 receipt_denom: "nvhash.staked".to_string(),
-                min_run_interval_secs: 0,
                 max_delegations_per_run: 0,
                 aum_fee_bps: 0,
                 performance_threshold_bps: 0,

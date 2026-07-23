@@ -48,7 +48,6 @@ pub fn instantiate(
         vault_address: deps.api.addr_validate(&msg.vault_address)?,
         underlying_denom: msg.underlying_denom,
         receipt_denom: msg.receipt_denom,
-        min_run_interval_secs: msg.min_run_interval_secs,
         max_delegations_per_run: msg.max_delegations_per_run,
         aum_fee_bps: msg.aum_fee_bps,
         performance_threshold_bps: msg.performance_threshold_bps,
@@ -87,7 +86,6 @@ pub fn execute(
         ExecuteMsg::PauseVault { reason } => exec_pause(deps.as_ref(), env, &info, reason),
         ExecuteMsg::UnpauseVault {} => exec_unpause(deps.as_ref(), env, &info),
         ExecuteMsg::UpdateConfig {
-            min_run_interval_secs,
             max_delegations_per_run,
             aum_fee_bps,
             performance_threshold_bps,
@@ -101,7 +99,6 @@ pub fn execute(
         } => exec_update_config(
             deps,
             &info,
-            min_run_interval_secs,
             max_delegations_per_run,
             aum_fee_bps,
             performance_threshold_bps,
@@ -147,7 +144,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 vault_address: c.vault_address.to_string(),
                 underlying_denom: c.underlying_denom,
                 receipt_denom: c.receipt_denom,
-                min_run_interval_secs: c.min_run_interval_secs,
                 max_delegations_per_run: c.max_delegations_per_run,
                 aum_fee_bps: c.aum_fee_bps,
                 performance_threshold_bps: c.performance_threshold_bps,
@@ -314,7 +310,6 @@ fn exec_unpause(deps: Deps, env: Env, info: &MessageInfo) -> Result<Response, Co
 fn exec_update_config(
     deps: DepsMut,
     info: &MessageInfo,
-    min_run_interval_secs: Option<u64>,
     max_delegations_per_run: Option<u32>,
     aum_fee_bps: Option<u64>,
     performance_threshold_bps: Option<u64>,
@@ -328,9 +323,6 @@ fn exec_update_config(
 ) -> Result<Response, ContractError> {
     assert_admin(deps.as_ref(), info)?;
     CONFIG.update(deps.storage, |mut c| -> Result<_, ContractError> {
-        if let Some(v) = min_run_interval_secs {
-            c.min_run_interval_secs = v;
-        }
         if let Some(v) = max_delegations_per_run {
             c.max_delegations_per_run = v;
         }
@@ -426,7 +418,6 @@ mod unit {
                 vault_address: vault.to_string(),
                 underlying_denom: "nhash".to_string(),
                 receipt_denom: "nvhash.staked".to_string(),
-                min_run_interval_secs: 0,
                 max_delegations_per_run: 0,
                 aum_fee_bps: 0,
                 performance_threshold_bps: 0,
@@ -482,7 +473,6 @@ mod unit {
             vault_address: vault.to_string(),
             underlying_denom: "nhash".to_string(),
             receipt_denom: "nvhash.staked".to_string(),
-            min_run_interval_secs: 0,
             max_delegations_per_run: 0,
             aum_fee_bps: 0,
             performance_threshold_bps: 0,
@@ -592,7 +582,6 @@ mod unit {
             mock_env(),
             message_info(&admin, &[]),
             ExecuteMsg::UpdateConfig {
-                min_run_interval_secs: None,
                 max_delegations_per_run: None,
                 aum_fee_bps: Some(10_001),
                 performance_threshold_bps: None,
@@ -626,7 +615,6 @@ mod unit {
             mock_env(),
             message_info(&admin, &[]),
             ExecuteMsg::UpdateConfig {
-                min_run_interval_secs: Some(2_592_000),
                 max_delegations_per_run: Some(8),
                 aum_fee_bps: Some(15),
                 performance_threshold_bps: Some(9_800),
@@ -642,7 +630,6 @@ mod unit {
         .unwrap();
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
         let resp: ConfigResponse = from_json(&bin).unwrap();
-        assert_eq!(resp.min_run_interval_secs, 2_592_000);
         assert_eq!(resp.max_delegations_per_run, 8);
         assert_eq!(resp.aum_fee_bps, 15);
         assert_eq!(resp.performance_threshold_bps, 9_800);
@@ -664,7 +651,6 @@ mod unit {
         setup(deps.as_mut(), &admin, &vault);
         for msg in [
             ExecuteMsg::UpdateConfig {
-                min_run_interval_secs: Some(1),
                 max_delegations_per_run: None,
                 aum_fee_bps: None,
                 performance_threshold_bps: None,
@@ -1023,7 +1009,6 @@ mod unit {
             mock_env(),
             message_info(&admin, &[]),
             ExecuteMsg::UpdateConfig {
-                min_run_interval_secs: None,
                 max_delegations_per_run: None,
                 aum_fee_bps: None,
                 performance_threshold_bps: None,
@@ -1249,7 +1234,6 @@ mod unit {
             mock_env(),
             message_info(&admin, &[]),
             ExecuteMsg::UpdateConfig {
-                min_run_interval_secs: None,
                 max_delegations_per_run: None,
                 aum_fee_bps: None,
                 performance_threshold_bps: None,
@@ -1338,46 +1322,31 @@ mod unit {
     }
 
     #[test]
-    fn run_epoch_rejects_before_min_interval_elapsed() {
-        // run_epoch's min-interval guard runs entirely off storage (CONFIG,
+    fn run_epoch_rejects_within_same_calendar_month() {
+        // run_epoch's calendar-month gate runs entirely off storage (CONFIG,
         // PENDING_DELEGATIONS, EPOCH, RECEIPT_MINTED loads) before any chain query,
         // so it is reachable with plain mock_dependencies: no gRPC/stargate mocking
         // needed. (The eligibility sweep only runs when validators are enrolled.)
+        //
+        // EPOCH defaults to last_run = 1970-01-01. A crank whose block time is
+        // later in wall-clock but still in the SAME civil month (1970-01) must be
+        // rejected: the gate is a calendar boundary, not an elapsed-time floor.
         let mut deps = mock_dependencies();
         let admin = deps.api.addr_make("admin");
         let vault = deps.api.addr_make("vault");
-        instantiate(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&admin, &[]),
-            InstantiateMsg {
-                admin: admin.to_string(),
-                vault_address: vault.to_string(),
-                underlying_denom: "nhash".to_string(),
-                receipt_denom: "nvhash.staked".to_string(),
-                min_run_interval_secs: u64::MAX,
-                max_delegations_per_run: 0,
-                aum_fee_bps: 0,
-                performance_threshold_bps: 0,
-                min_capture_interval_secs: 0,
-                max_concentration_multiple_bps: None,
-                min_bonded_cap_bps: None,
-                max_bonded_cap_bps: None,
-                concentration_safety_offset_bps: None,
-                commission_bps: None,
-                jail_unbond_delay_secs: None,
-            },
-        )
-        .unwrap();
+        setup(deps.as_mut(), &admin, &vault);
 
+        let mut env = mock_env();
+        env.block.time = cosmwasm_std::Timestamp::from_seconds(10 * 86_400); // 1970-01-11
         let err = execute(
             deps.as_mut(),
-            mock_env(),
+            env,
             message_info(&admin, &[]),
             ExecuteMsg::RunEpoch {},
         )
         .unwrap_err();
-        assert!(matches!(err, ContractError::TooSoon { next } if next == u64::MAX));
+        // next = first second of the following month (1970-02-01 = 31 days).
+        assert!(matches!(err, ContractError::TooSoon { next } if next == 31 * 86_400));
     }
 
     #[test]

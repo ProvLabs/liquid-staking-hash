@@ -12,3 +12,10 @@ against is stood up from [`infra/devnet/`](../../infra/devnet/).
 - `jail-drill.sh` — jail report/purge and slash write-down against real
   downtime jailing: two never-signing validators, real slashes, NAV marked
   down by exactly the unbacked amount in the detection epoch.
+- `calendar-drill.sh` — calendar-month cadence gate (E-CAL): an eligible
+  `RunEpoch` runs a full epoch end-to-end, then a second crank in the same
+  calendar month is rejected with `too soon`, with the reported next-eligible
+  instant in a strictly later month. Run against a fresh bootstrap (a devnet's
+  `block.time` is real wall-clock and cannot be made to cross a month boundary
+  in seconds, so the cross-boundary aligned epoch is covered by the
+  embedded-chain `increase_time` test and the simulation, not here).

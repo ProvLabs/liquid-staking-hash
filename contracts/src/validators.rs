@@ -1078,7 +1078,6 @@ mod jail_episode_tests {
                 vault_address: vault.to_string(),
                 underlying_denom: "nhash".to_string(),
                 receipt_denom: "nvhash.staked".to_string(),
-                min_run_interval_secs: 0,
                 max_delegations_per_run: 0,
                 aum_fee_bps: 0,
                 performance_threshold_bps: 0,
