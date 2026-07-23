@@ -37,8 +37,6 @@ export default {
   "learn.chart-empty":
     "No monthly settlements are indexed yet. The step chart appears as settlement history lands.",
   "learn.chart-unavailable": "Settlement history is unavailable right now.",
-  "learn.chart-show-table": "Table view",
-  "learn.chart-show-chart": "Chart view",
   "learn.chart-col-settlement": "Settlement",
   "learn.chart-col-ended": "Settled",
   "learn.chart-col-nav": "NAV (HASH)",

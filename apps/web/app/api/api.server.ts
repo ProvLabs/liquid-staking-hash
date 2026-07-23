@@ -68,12 +68,17 @@ export const incidentRowSchema = z.object({
 /** Decimal-string amount (BigInt/Decimal domain; floats never touch these). */
 const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "expected a decimal string");
 
+/** Base-unit integer amount as a decimal string (fractions are a shape
+ * error: consumers BigInt() these; PR #14 review). */
+const baseUnitString = z.string().regex(/^\d+$/, "expected a base-unit integer string");
+
 export const epochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
   ended_at: isoTimestamp,
-  // null since PR 3.1: an epoch settled with zero shares has no NAV.
+  // null since PR 3.1: an epoch settled with zero shares has no NAV. NAV is
+  // a fractional decimal (HASH per nvHASH); TVV is base units, integer-only.
   nav: decimalString.nullable(),
-  tvv: decimalString,
+  tvv: baseUnitString,
   net_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
 }) satisfies z.ZodType<EpochRow>;
 
@@ -108,10 +113,6 @@ export const validatorsPayloadSchema = z.object({
   validators: z.array(apiValidatorRowSchema).max(500),
   set_health: validatorSetHealthSchema,
 }) satisfies z.ZodType<ValidatorsPayload>;
-
-/** Base-unit integer amount as a decimal string (PR 3.2 pins market price
- * and supply amounts as base-unit integers, never fractional strings). */
-const baseUnitString = z.string().regex(/^\d+$/, "expected a base-unit integer string");
 
 // PR 3.2's /market shapes: market data has no chain-canonical plane, so the
 // venue + sample-time labeling rides IN the payload and is validated here

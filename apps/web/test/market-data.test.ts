@@ -148,6 +148,23 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
     expect(data.market).not.toBeNull();
   });
 
+  it("a fractional TVV is a shape error at the boundary, never a render crash", async () => {
+    // history.tsx BigInts tvv for the table; the schema must reject fractions
+    // (PR #14 review) so a bad row degrades the whole surface instead.
+    server.use(
+      http.get("*/api/v1/epochs", () =>
+        HttpResponse.json(
+          envelope(
+            [{ epoch_index: 8, ended_at: "2026-07-14T00:00:01Z", nav: "1.0175", tvv: "1.5", net_apr_bps: null }],
+            { source: "indexed" },
+          ),
+        ),
+      ),
+    );
+    const data = await loadMarketData(config());
+    expect(data.epochs).toBeNull();
+  });
+
   it("pristine local supply comes from the live corpus shares", async () => {
     const data = await loadMarketData(config());
     // 309963777029000000 nvhash base units at exponent 15 → "309.96"

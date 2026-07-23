@@ -41,8 +41,8 @@ export function NavStepChart({
     <StepChart
       title={t(locale, "learn.chart-title")}
       caption={t(locale, "learn.chart-caption")}
-      showTableLabel={t(locale, "learn.chart-show-table")}
-      showChartLabel={t(locale, "learn.chart-show-chart")}
+      showTableLabel={t(locale, "chart.show-table")}
+      showChartLabel={t(locale, "chart.show-chart")}
       points={series.map((row) => Number.parseFloat(row.nav))}
       firstXLabel={`#${series[0]!.epoch_index}`}
       lastXLabel={`#${series[series.length - 1]!.epoch_index}`}
