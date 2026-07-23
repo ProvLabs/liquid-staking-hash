@@ -410,6 +410,27 @@ The guided `SwapIn` flow (§10.3 for the transaction mechanics):
 - **Vesting-HASH honesty:** unvested HASH cannot be deposited (contract §13); if the connected account holds locked HASH the flow says so rather than letting the transaction fail cryptically.
 - **Preview → sign → track** per §10.2, then land on Portfolio with the new position and a first-timer explainer of the accrual model.
 
+> **Revision 2026-07-24 (PR 5.3, delivered):** `/stake` (`app/routes/stake.tsx`)
+> is the guided SwapIn on the 5.2 lifecycle. Inline education states the four
+> facts plus the **next-epoch date** — the first of the civil month after
+> `EpochStatus.lastRunSeconds` (`nextEpochIso`, E-CAL cadence). Amount entry
+> parses a decimal HASH string to base units at the boundary
+> (`app/lib/amount.ts`, reject-never-clamp, no floats — `test/amount.test.ts`),
+> shows spendable balance and vault min/max, and previews expected nvHASH via
+> **`previewSharesOut`** (the vault's floor share-math from the live NAV pair;
+> `estimate_swap_in` is gRPC-only, §14.2) **labeled an execution-time-rate
+> estimate** (§10.3) — cross-checked against the real mint by the e2e-live
+> stake drill (`e2e-live/stake.spec.ts`). Preflight reasons (paused, disabled,
+> min/max, balance-incl-fee, vesting-lock) render as localized copy
+> (`app/tx/reasons.ts`); the confirm step reuses the 5.2 exact-JSON disclosure;
+> the flow is driven by `useTxFlow` (`app/tx/use-tx-flow.ts`). The wallet
+> provider now surfaces `signDirect`/`pubkeyBase64`/`canSign` to pages and a
+> `ReconnectToSignError` for the post-reload adapter-gone case. **Land-on-
+> Portfolio** is a minimal live position strip (nvHASH balance + HASH value at
+> NAV) on the `/portfolio` stub; the full §8.2 page remains M6.1. Gates:
+> `test/amount.test.ts`, `test/stake-preview.test.ts`, `test/stake-data.test.ts`,
+> `e2e/stake.spec.ts` (+ axe both themes), `e2e-live/stake.spec.ts`.
+
 ### 8.4 Redeem & Exit (route `/exit`)
 
 The most communication-critical surface in the program (contract §17.1 "the 60-day headline number needs communication"). It opens with the **exit-path comparison**, not a form:

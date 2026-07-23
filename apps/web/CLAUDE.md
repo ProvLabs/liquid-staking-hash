@@ -47,6 +47,17 @@ End-user web interface. Production quality.
   signer must derive the session address, size + rate caps
   (`test/broadcast-guard.test.ts`). Fee basis mirrors the console
   (1905 nhash × 1.3, `[VERIFY §14.3]`).
+- **Transacting pages** (PR 5.3, app-spec §8.3; PR 5.4, §8.4): pages drive
+  the lifecycle through **`useTxFlow`** (`app/tx/use-tx-flow.ts`) —
+  preflight → simulate → confirm → sign → broadcast → track — never calling
+  the resource routes ad hoc. Signing reaches the wallet only via
+  `useWallet().signDirect` (throws `ReconnectToSignError` when the cookie
+  session outlived the in-memory adapter). User amounts parse through
+  `app/lib/amount.ts` (decimal string → base-unit BigInt, float-rejecting);
+  display uses `app/learn/amounts.ts`. Preflight block reasons localize via
+  `app/tx/reasons.ts`; shared status/confirm surfaces are `app/tx/flow-status.tsx`.
+  Live preview math is pure and testable (`app/stake/preview.ts`) — never
+  `estimate_swap_in` (gRPC-only, §14.2).
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).
@@ -97,7 +108,8 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
 - `test:e2e:live` — the **e2e (live)** layer (PR 5.2; master plan §4):
   Playwright against the REAL devnet stack. Bring it up first
   (`infra/devnet/stack.sh up`, app profile, migrated app schema), then run
-  with `E2E_LIVE_BASE_URL` (web origin), `E2E_LIVE_VAULT_ADDRESS`, and
+  with `E2E_LIVE_BASE_URL` (web origin), `E2E_LIVE_VAULT_ADDRESS`,
+  `E2E_LIVE_LCD_URL` (for the stake drill's balance cross-check), and
   `E2E_LIVE_SIGNER_KEY` (a funded THROWAWAY devnet key, 32 hex bytes —
   SECURITY.md devnet rules; specs skip cleanly when unset). The test signer
   lives only in the test process (`e2e-live/signer.ts`); `check:bundle`
