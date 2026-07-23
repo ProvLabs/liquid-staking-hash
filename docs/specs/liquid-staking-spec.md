@@ -51,7 +51,7 @@ Delivery path: *spec → reference contract + tests on testnet → audit → mai
 | **Reserves** | Vault funds used to pay positive interest into principal. |
 | **Receipt token** | The restricted marker (the **HASH-staked receipt**) used as the vault's `payment_denom` to represent HASH that has left the vault to be staked, so it still counts toward TVV. |
 | **Eligible validator** | An enrolled validator currently meeting the program's performance threshold. |
-| **Epoch** | The monthly cadence on which the contract reconciles rewards, recomputes eligibility, and executes a full rebalance. |
+| **Epoch** | The calendar-month cadence (§9) on which the contract reconciles rewards, recomputes eligibility, and executes a full rebalance; eligible once block time enters a later civil month than the last run. |
 | **TIP** | A voluntary contribution a validator operator pays *beyond* the required commission. TIP is the primary priority key (per epoch, non-cumulative); **uptime performance** is the secondary/default key. Since all eligible validators target the same uniform slot, priority mainly sets **drain order** — lowest priority is unbonded first for redemption liquidity (and breaks ties / allocates capped residual). |
 | **Uptime performance** | Reliability metric read **directly on-chain** from the slashing module: signed-blocks ratio over the chain's signing window (`signed_blocks_window = 34560` ≈ 2 days). Drives both eligibility (threshold) and the default priority order (tie-break beyond TIP). No off-chain oracle (§10.3). |
 | **Slot** | The uniform per-validator delegation size each epoch: `slot = stakeable_total / |eligible|`. Every eligible validator targets the same slot (§9.2). |
@@ -71,7 +71,7 @@ The following are settled design decisions:
 7. **Reward handling:** Auto-claim each epoch; rewards return to the pool as excess liquidity, cover redemptions, then top validators to the uniform slot — raising NAV per share (§9.5).
 8. **Deliverable for this phase:** This written specification.
 9. **Principal mobilization:** A **HASH-staked receipt token**, held by the vault's principal marker as an internally-priced asset (seeded 1:1 to nHASH), represents HASH removed from the vault to be staked, preserving TVV (§5.1). Deploy and return legs are **x/exchange payment settlements** accepted by the vault under asset-manager authority (`AcceptAsset`), value-neutral at the recorded 1:1 NAV and executed unpaused; verified end to end on devnet.
-10. **Single-epoch convergence:** The uniform-slot end-state is reached within one monthly epoch via redelegation (sources/destinations disjoint, and the monthly cadence exceeds the ~3-week lock so entries clear each epoch — §9.3).
+10. **Single-epoch convergence:** The uniform-slot end-state is reached within one epoch via redelegation (sources/destinations disjoint, and a calendar month normally exceeds the ~3-week lock so entries clear before the next epoch; a compressed late-then-prompt gap is handled by plan-time deferral guards — §9.3).
 11. **Validator priority:** A two-key per-epoch sort — **primary: TIP amount descending** (TIP = contributions beyond required commission, non-cumulative); **secondary/default: uptime performance descending** (signed-blocks ratio read on-chain from the slashing module, §10.3). Absent TIP differences, the most reliable validators rank highest. Highest priority receives delegations first; lowest priority is unbonded first when servicing redemptions.
 12. **Internal concentration sub-cap:** Target the **live chain concentration cap** (§9.7) minus a small configurable **safety offset** (`concentration_safety_offset`), giving margin so a batch of rebalancing delegations doesn't inadvertently trip the protocol threshold mid-execution.
 13. **Cross-chain bridging (in scope for v1):** nvHASH is portable to **Base and Ethereum** via the **NUVA Labs** infrastructure. A dedicated bridge-adapter contract is set as the vault's `bridge_address` and uses the vault's bridge accounting (`BridgeMintShares` / `BridgeBurnShares`); NUVA Labs operates the associated destination-network contracts. The full cross-chain transit flow is **out of scope** of this document beyond the integration points below (§11.5).
@@ -168,7 +168,7 @@ All settlement legs execute **unpaused**; the only pause-gated operation is the 
 | `payment_denom` | unset (defaults to underlying) | Collapse-compatible with the vault module's `payment_denom == underlying` direction. |
 | `share_denom` | `nvhash` | Liquid staking token. Set bank metadata via `SetShareDenomMetadata`. |
 | Receipt (held asset) | `nvhash.staked` | Restricted marker, NOT an accepted vault denom (§5.1). Valued via the vault's internal NAV table at 1:1 to nHASH, seeded at bootstrap; moved only by settlements and the write-down leg. The contract holds Mint, Burn, Withdraw, Deposit and Transfer on it. |
-| `withdrawal_delay_seconds` | `5,184,000` (60 days) | Ceiling for worst-case liquidity mobilization: next epoch run + unbonding period + buffer (§8). `ExpeditePendingSwapOut` restores UX for funded requests. Pin the final ceiling against the live `unbonding_time` and production epoch cadence at launch (§14). |
+| `withdrawal_delay_seconds` | `5,184,000` (60 days) | Ceiling for worst-case liquidity mobilization: next epoch eligibility (up to a full calendar month, §9) + unbonding period + buffer (§8). `ExpeditePendingSwapOut` restores UX for funded requests. The ceiling holds at the calendar-month cadence (re-pinned E-CAL, 2026-07-22); confirm the final value against the live `unbonding_time` at launch (§14). |
 | `asset_manager` | Staking Contract address | Set after contract instantiation via `SetAssetManager`. |
 | `nav_authority` | Staking Contract address | Rotated via `UpdateNAVAuthority` at bootstrap: enables the automatic slash write-down (§9.9). |
 | interest rate | **unused** (left at zero/disabled) | This design accrues value by direct principal deposit, not the vault's continuous interest-rate mechanism (§5). No `min_rate`/`max_rate` tuning needed. |
@@ -185,15 +185,15 @@ All settlement legs execute **unpaused**; the only pause-gated operation is the 
 
 **The gap this design closes: safety by delay sizing, never caller gating.** A user can square off **directly with the vault** (`SwapIn(nhash) → nvHASH → SwapOut`) without ever touching the staking contract, so any liquidity model that depends on redemptions being intercepted by the contract is unsound. Instead, the `PendingSwapOut` queue is **on-chain state**: every service pass (the permissionless `ServiceRedemptions` keeper, and each epoch run) reads the entire queue (paginated) and mobilizes liquidity for every queued request, whoever created it. Safety then reduces to sizing the delay so worst-case mobilization always completes before maturity.
 
-**Delay sizing (~60 days).** Worst case for a redemption arriving just after an epoch run:
+**Delay sizing (~60 days).** Worst case for a redemption arriving just after an epoch run, early in a calendar month:
 
 ```text
-withdrawal_delay >= (time to next epoch run) + (unbonding period) + buffer
-                 ~=  ~31 days (monthly cadence) + ~21 days         + buffer
+withdrawal_delay >= (time to next epoch eligibility) + (unbonding period) + buffer
+                 ~=  ~31 days (full 31-day month)     + ~21 days           + buffer
                  ~=  ~52 days + buffer  →  60-day standard delay
 ```
 
-The buffer absorbs scheduling slack (keeper cadence, entry-capacity deferrals). A delay equal to the ~3-week unbonding period is **not** safe: it leaves zero slack for the wait until an unbond can actually be started.
+The "time to next epoch eligibility" term is unchanged by the calendar-month cadence (§9): under either cadence the worst case is a run landing early in a long month, so the next epoch is up to a full month (~31 days) away. A late-then-prompt crank pair *compresses* that gap (making mobilization faster), never extends it. The buffer absorbs scheduling slack (keeper cadence, entry-capacity deferrals). A delay equal to the ~3-week unbonding period is **not** safe: it leaves zero slack for the wait until an unbond can actually be started. Re-pinned against the calendar-month cadence and the sim's mobilization bound (E-CAL, 2026-07-22, §14).
 
 **Expedite is UX, not safety.** The standard delay stays at the safe ceiling; when the liquidity for a queued request has actually been mobilized, the contract (as asset manager) calls `ExpeditePendingSwapOut` to release it early: users wait only as long as mobilization really took, not the worst-case window. **Expedites are gated on principal-marker liquidity only, never on the contract's own balance.** The vault EndBlocker pays from the principal marker, so an expedite issued against contract-held funds would mature unfunded and refund (i.e. cancel) the user's redemption; since service passes are permissionless, that would be a griefing vector anyone could trigger. Gating on the marker closes it by construction.
 
@@ -512,7 +512,7 @@ Enabling cross-chain nvHASH (§11.5) accepts the vault module's documented bridg
 These are protocol facts the design must respect:
 
 - Redemption delay is honored by the vault queue, but **liquidity must actually be present** at payout — the contract is responsible for undelegating in time (§8).
-- Redelegations and unbondings are time-locked for the unbonding period and capped by `MaxEntries` per validator pair; no transitive redelegation. The design reaches the uniform-slot state **in a single epoch** by keeping source/destination roles disjoint and relying on the monthly cadence exceeding the lock (§9.3).
+- Redelegations and unbondings are time-locked for the unbonding period and capped by `MaxEntries` per validator pair; no transitive redelegation. The design reaches the uniform-slot state **in a single epoch** by keeping source/destination roles disjoint and, in the normal case, the calendar-month cadence exceeding the lock — with plan-time deferral guards covering a compressed gap (§9.3).
 - **At most 100 validators** on Provenance, so the eligible set — and thus the per-epoch computation and number of delegation operations — is always bounded and small, which is what makes in-contract computation (§9.0) and single-epoch convergence practical.
 - **Provenance validator concentration cap (§9.7):** delegations/inbound redelegations that would push a validator over ~`5.5 / activeValidatorCount` of total bond (clamped to 5%–33%) are **rejected at delegation time**. The rebalancer must compute headroom from the validator's *total* bonded tokens and clamp moves (possibly to zero), redistributing or leaving the remainder liquid. The cap only blocks power increases — moves away are unaffected.
 - The AUM tech fee (15 bps) and program commission both affect reported net APR (§5, §10).
@@ -545,8 +545,8 @@ Every design question RC1 and RC2 left open has been resolved and, where it touc
 **Launch checklist (parameters and process, not design):**
 
 - Read the live mainnet values and set the config mirrors accordingly: staking `unbonding_time` and `max_entries`, the concentration restriction options, the slashing window, x/exchange payment-fee params, and the per-transaction gas limit (note: storing the current ~640KB artifact costs ~4.3M gas; confirm the upload path).
-- Pin `withdrawal_delay_seconds` against the production epoch cadence and live unbonding time (the ~60-day ceiling holds at monthly cadence).
-- Size `commission_bps`, `performance_threshold_bps`, and the redemption margin against launch economics. Capture cadence is defined (§10.4): daily `CaptureUptimeSignal` with `min_capture_interval_secs` ~0.9x the cadence (~21-22 h), re-derived from the live `signed_blocks_window`. Stand up the keeper (daily capture; ClaimRewards + a capture before each RunEpoch; ServiceRedemptions on a regular cadence) and monitoring on `EpochSnapshot`/`Apr`/`JailReports`.
+- Pin `withdrawal_delay_seconds` against the live `unbonding_time` and the calendar-month cadence (§9). The 60-day ceiling holds: worst case is a full 31-day month to the next epoch eligibility + ~21-day unbonding + buffer ≈ 52 days + slack (re-pinned E-CAL, 2026-07-22; the simulation asserts observed mobilization stays under the ceiling, §14 item 12). Confirm ≤ 60 days once the live `unbonding_time` is read.
+- Size `commission_bps`, `performance_threshold_bps`, and the redemption margin against launch economics. Capture cadence is defined (§10.4): daily `CaptureUptimeSignal` with `min_capture_interval_secs` ~0.9x the cadence (~21-22 h), re-derived from the live `signed_blocks_window`. Stand up the keeper per [`docs/user/keeper-runbook.md`](../user/keeper-runbook.md) (daily capture; **`RunEpoch` promptly after each calendar-month rollover**; ClaimRewards + a capture before each RunEpoch; ServiceRedemptions on a regular cadence) and monitoring on `EpochSnapshot`/`Apr`/`JailReports`.
 - Vault share-denom metadata, `nvhash.pb` attribute grants, marker permissions (incl. the contract’s Transfer on the receipt), asset-manager and NAV-authority rotation: all scripted in `infra/devnet/bootstrap/nvhash-deploy-p2p.sh`.
 - Third-party security audit (contract + bridge-adapter authorization) before mainnet; enable bridging only after the adapter audit.
 
