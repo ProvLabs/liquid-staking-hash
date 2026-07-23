@@ -122,8 +122,8 @@ export interface PendingSwapOut {
   id: number;
   owner: string;
   shares: string;
-  estimate_nhash: string; // vault estimate-swap-out
-  enqueued_at_seconds: number;
+  estimate_nhash: string; // vault estimate-swap-out query
+  matures_at_seconds: number; // absolute maturity instant (timeout)
 }
 export interface DeploymentSplit {
   delegated: string;

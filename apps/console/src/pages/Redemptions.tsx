@@ -79,7 +79,7 @@ export function Redemptions() {
                       </thead>
                       <tbody>
                         {ordered.map((r) => {
-                          const mature = r.enqueued_at_seconds + delay;
+                          const mature = r.matures_at_seconds;
                           const own = r.owner === wallet.address;
                           return (
                             <tr key={r.id} className={own ? "own" : undefined}>
