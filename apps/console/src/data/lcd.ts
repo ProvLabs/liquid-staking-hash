@@ -62,7 +62,7 @@ async function estimateSwapOut(vaultAddress: string, sharesAmount: string): Prom
  *  { request_id, pending_swap_out: { owner, shares: Coin, redeem_denom }, timeout }.
  *  Parse strictly; a silent default here would lie about real requests (spec §17). */
 export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwapOut[]> {
-  const out: PendingSwapOut[] = [];
+  const rows: Omit<PendingSwapOut, "estimate_nhash">[] = [];
   let key: string | null = null;
   // page to exhaustion (spec §13); limit 100 to match the contract's own reads
   do {
@@ -74,17 +74,18 @@ export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwap
       const maturesAtMs = Date.parse(r?.timeout ?? "");
       if (r?.request_id == null || !p?.owner || typeof p?.shares?.amount !== "string" || Number.isNaN(maturesAtMs))
         throw new Error(`pending_swap_outs: unexpected row shape: ${JSON.stringify(r).slice(0, 200)}`);
-      out.push({
+      rows.push({
         id: Number(r.request_id),
         owner: p.owner,
         shares: p.shares.amount,
-        estimate_nhash: await estimateSwapOut(vaultAddress, p.shares.amount),
         matures_at_seconds: Math.floor(maturesAtMs / 1000),
       });
     }
     key = body.pagination?.next_key ?? null;
   } while (key);
-  return out;
+  return Promise.all(
+    rows.map(async (r) => ({ ...r, estimate_nhash: await estimateSwapOut(vaultAddress, r.shares) })),
+  );
 }
 
 /** Contract staking totals for the deployment split (spec §5.2). delegated = Σ delegation
