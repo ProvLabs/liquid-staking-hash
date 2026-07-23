@@ -412,6 +412,22 @@ The most communication-critical surface in the program (contract §17.1 "the 60-
 
 The secondary-market context page (register A3): NAV vs market price over time (two series, clearly named — the accrual step line vs the market line); current premium/discount with an explainer of *why* a spread exists (stepwise NAV creates a pre-/post-epoch seam — contract §17.1 — plus liquidity and bridge-transit costs); pool depth and where nvHASH supply lives (local vs bridged, §5.3). Alert hooks for spread thresholds. Every market figure is labeled with its venue and sample time — market data is the one plane with **no** chain-canonical version, so its freshness labeling works twice as hard.
 
+> **Revision 2026-07-22 (PR 4.4, page delivered):** implemented in `apps/web`
+> (`app/market/market.server.ts`; components under `app/components/market/`)
+> as the labeled v1 shell over PR 3.2's real contract: three distinct states
+> (unavailable / forthcoming / active sample), the premium rendered VERBATIM
+> from the API (the §9.5(4) formula is not recomputed web-side; a null
+> premium renders "n/a", never 0), depth and bridged rows always carrying
+> venue-or-chain + sample time, and NO verify link on any market figure
+> (§12.1 rule 4), all gated by `test/market-data.test.ts` +
+> `e2e/market.spec.ts`. Local supply is composed from the live plane (vault
+> `total_shares`) per the PR 3.2 amendment. The program-history views (NAV,
+> TVV, net APR per settlement) render real `/epochs` data via a shared
+> step-chart extracted from the Learn chart; the NAV-vs-market pairing
+> activates by data presence when a market opens (the caption names the
+> forthcoming line). Spread-threshold alert hooks are M6 machinery,
+> deliberately absent here.
+
 ### 8.6 Validators (route `/validators`, public; `/validators/mine` for operators)
 
 - **Public view:** the validator set as consumer-legible cards/table — moniker, eligibility, uptime vs threshold, program delegation, tenure — plus set-health aggregates (eligible count trend, churn from indexed history). Framing: "who is staking your HASH and are they reliable," not the console's operational table. Verify links land on the Console validators page.

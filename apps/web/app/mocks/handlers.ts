@@ -87,6 +87,13 @@ export const handlers = [
   http.get("*/api/v1/epochs", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
+  // PR 3.2's /market shape (MarketSummary), honest-empty exactly as the real
+  // route serves with the sampler parked: no sample, no bridged supply.
+  http.get("*/api/v1/market", () =>
+    HttpResponse.json(
+      envelope({ sample: null, bridged_supply: [] }, { source: "indexed" }),
+    ),
+  ),
   // PR 3.1's /validators shape (ValidatorsPayload), honest-empty exactly as
   // the real route serves with no reader wired.
   http.get("*/api/v1/validators", () =>
