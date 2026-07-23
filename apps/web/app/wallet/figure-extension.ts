@@ -11,7 +11,7 @@
 // localization the per-vendor adapter boundary exists for.
 
 import { buildAdr36SignDoc, utf8ToBase64 } from "~/lib/adr36";
-import { normalizePubkey } from "./wc";
+import { normalizePubkey, normalizeSignature } from "./wc";
 import type {
   AdapterEnv,
   SignArbitraryResult,
@@ -81,7 +81,9 @@ export class FigureExtensionAdapter implements WalletAdapter {
     });
     const pubkey = normalizePubkey(response.signature.pub_key.value);
     if (pubkey === null) throw new Error("wallet returned no usable pubkey");
-    return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
+    const signature = normalizeSignature(response.signature.signature);
+    if (signature === null) throw new Error("wallet returned no usable signature");
+    return { signatureBase64: signature, pubkeyBase64: pubkey };
   }
 
   async signDirect(
@@ -107,7 +109,9 @@ export class FigureExtensionAdapter implements WalletAdapter {
     });
     const pubkey = normalizePubkey(response.signature.pub_key.value);
     if (pubkey === null) throw new Error("wallet returned no usable pubkey");
-    return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
+    const signature = normalizeSignature(response.signature.signature);
+    if (signature === null) throw new Error("wallet returned no usable signature");
+    return { signatureBase64: signature, pubkeyBase64: pubkey };
   }
 
   async disconnect(): Promise<void> {

@@ -33,16 +33,35 @@ type SessionLike = {
   namespaces: Record<string, { accounts: string[] }>;
 };
 
-/** Normalize a pubkey the wallet returned (base64 or hex) to base64. */
-export function normalizePubkey(raw: string): string | null {
-  if (/^[0-9a-fA-F]{66}$/.test(raw)) {
+/**
+ * Normalize wallet-returned bytes (hex, base64, or base64url — vendors vary
+ * in ENCODING, which is format normalization, not a vendor workaround) to
+ * standard base64, verified to the expected decoded length. Anything else
+ * is null: the caller surfaces a hard error rather than passing garbage on
+ * (and the server independently re-verifies everything it receives).
+ */
+export function normalizeBase64Bytes(raw: string, expectedLength: number): string | null {
+  if (new RegExp(`^[0-9a-fA-F]{${expectedLength * 2}}$`).test(raw)) {
     return Buffer.from(raw, "hex").toString("base64");
   }
-  if (/^[A-Za-z0-9+/]{44}$/.test(raw) || /^[A-Za-z0-9+/]+={0,2}$/.test(raw)) {
-    const bytes = Buffer.from(raw, "base64");
-    if (bytes.length === 33) return bytes.toString("base64");
-  }
-  return null;
+  // base64url → standard base64 (PR #17 review: several Cosmos WC wallets
+  // emit base64url); unpadded input is tolerated by the decoder.
+  const std = raw.replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(std)) return null;
+  const bytes = Buffer.from(std, "base64");
+  if (bytes.length !== expectedLength) return null;
+  return bytes.toString("base64");
+}
+
+/** 33-byte compressed secp256k1 pubkey. */
+export function normalizePubkey(raw: string): string | null {
+  return normalizeBase64Bytes(raw, 33);
+}
+
+/** 64-byte r||s signature — the same encoding drift applies to signatures
+ * (the login/relay boundary schemas require standard base64). */
+export function normalizeSignature(raw: string): string | null {
+  return normalizeBase64Bytes(raw, 64);
 }
 
 export class WcAdapter implements WalletAdapter {
@@ -123,7 +142,9 @@ export class WcAdapter implements WalletAdapter {
     });
     const pubkey = normalizePubkey(response.signature.pub_key.value);
     if (pubkey === null) throw new Error("wallet returned no usable pubkey");
-    return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
+    const signature = normalizeSignature(response.signature.signature);
+    if (signature === null) throw new Error("wallet returned no usable signature");
+    return { signatureBase64: signature, pubkeyBase64: pubkey };
   }
 
   async signDirect(
@@ -153,7 +174,9 @@ export class WcAdapter implements WalletAdapter {
     });
     const pubkey = normalizePubkey(response.signature.pub_key.value);
     if (pubkey === null) throw new Error("wallet returned no usable pubkey");
-    return { signatureBase64: response.signature.signature, pubkeyBase64: pubkey };
+    const signature = normalizeSignature(response.signature.signature);
+    if (signature === null) throw new Error("wallet returned no usable signature");
+    return { signatureBase64: signature, pubkeyBase64: pubkey };
   }
 
   async disconnect(): Promise<void> {

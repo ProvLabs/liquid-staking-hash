@@ -62,5 +62,11 @@ export function canonicalJson(value: unknown): string {
 /** Runtime-portable utf8 → base64 (Node and browser). */
 export function utf8ToBase64(text: string): string {
   if (typeof Buffer !== "undefined") return Buffer.from(text, "utf8").toString("base64");
-  return btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+  // Loop, not spread: spreading a typed array into String.fromCharCode hits
+  // engine argument-count limits on large inputs (PR #17 review) — this
+  // utility must be safe regardless of payload size.
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary);
 }
