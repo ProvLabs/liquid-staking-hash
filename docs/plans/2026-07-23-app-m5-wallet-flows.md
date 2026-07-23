@@ -371,6 +371,35 @@ e2e-live must render **every terminal state from real drill history**
 > 5.4 records the deferred hook. `estimate_swap_out` re-pricing copy states
 > that estimates rise if an epoch lands before payout (§8.4).
 
+*Delivery notes (5.4, 2026-07-24):*
+- *Endpoint folded into the 5.4 commit* (Q4): `/api/v1/redemptions/stats`
+  spans `packages/api-types` (PayoutStats), `services/api` (derive + reader
+  port + Prisma reader + route + fake), and a `services/indexer` migration
+  (terminal-timestamp indexes). Validated at all three layers: pure derive
+  unit, envelope-contract (cold-start / sample-sufficient / below-threshold),
+  and the DB-backed reader gate as `api_reader` (run locally against the dev
+  Postgres with the CI db-grants sequence: roles.sql → migrate:deploy →
+  test:db, all green).
+- *Preview uses NAV redemption-value math*, not `estimate_swap_out` per
+  keystroke — parity with the stake preview, labeled "re-prices at payout"
+  (§8.4); the precise on-chain estimate would be a round-trip per amount.
+- *Tracker "funded state"* beyond queue membership has no readable source in
+  v1 (the pending entry carries owner/shares/redeem-denom/timeout only), so
+  the tracker shows queue position + the guaranteed-by countdown + terminal
+  outcomes honestly, and does not fabricate a funded flag.
+- *Nav gains a "Redeem" entry* (`/exit`, grouped with Stake) — a small §8.0
+  addition recorded in the nav comment and the §8.4 revision.
+- *e2e-live redeem drill* exercises the real SwapOut + tracker render;
+  every-terminal-state rendering activates against a stack with p2p-drill
+  history (`E2E_LIVE_DRILL_HISTORY=1`).
+
+**Status (2026-07-24):** Tranche B code complete — 5.3 committed
+(`ca382ba`); 5.4 staged for review (this working plan is not a merged-work
+ledger, so the master-plan revision log is left for the merge commit per the
+revision-log-only-for-merged-work convention). Remaining human step for the
+live gates: run `test:e2e:live` (stake + redeem drills) against the devnet
+stack, and the §14.1 vendor checklist.
+
 ## 4. Security & invariants (enforced mechanisms with gating tests)
 
 1. **No key material, ever** (SECURITY.md apps rule; §10.1). Signing exists

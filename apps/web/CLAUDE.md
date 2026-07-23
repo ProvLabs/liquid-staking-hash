@@ -57,7 +57,12 @@ End-user web interface. Production quality.
   display uses `app/learn/amounts.ts`. Preflight block reasons localize via
   `app/tx/reasons.ts`; shared status/confirm surfaces are `app/tx/flow-status.tsx`.
   Live preview math is pure and testable (`app/stake/preview.ts`) — never
-  `estimate_swap_in` (gRPC-only, §14.2).
+  `estimate_swap_in` (gRPC-only, §14.2). The `/exit` page (PR 5.4, §8.4)
+  opens with the comparison table (normative guaranteed-vs-typical framing;
+  `app/exit/typical.ts` decides whether a typical figure exists), a DEX
+  coming-soon shell (§14.4), the native SwapOut flow (warning-tier confirm,
+  three §10.3 timing facts), and the redemption tracker composed from live
+  `pendingSwapOuts` + `/portfolio` + `/transactions` (`app/exit/exit.server.ts`).
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

@@ -87,6 +87,43 @@ export const handlers = [
   http.get("*/api/v1/epochs", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
+  // PR 5.4 /redemptions/stats — honest cold-start (§14.12): no data, no
+  // completed epoch → null stats, the guarantee-alone state. Band bounds
+  // ride as data. Tests exercising the sample-sufficient path override this.
+  http.get("*/api/v1/redemptions/stats", () =>
+    HttpResponse.json(
+      envelope(
+        {
+          sample_count: 0,
+          median_seconds: null,
+          p90_seconds: null,
+          band_floor_seconds: 21 * 24 * 60 * 60,
+          band_ceiling_seconds: 60 * 24 * 60 * 60,
+          cold_start: true,
+        },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  // PR 5.4 address-scoped reads the redemption tracker composes. Honest-empty
+  // by default (no session in offline e2e); tests override with populated data.
+  http.get("*/api/v1/portfolio", ({ request }) =>
+    HttpResponse.json(
+      envelope(
+        {
+          address: new URL(request.url).searchParams.get("address") ?? "",
+          first_activity_at: null,
+          transaction_count: 0,
+          escrowed_shares: "0",
+          active_redemptions: [],
+        },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/transactions", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
   // PR 3.2's /market shape (MarketSummary), honest-empty exactly as the real
   // route serves with the sampler parked: no sample, no bridged supply.
   http.get("*/api/v1/market", () =>

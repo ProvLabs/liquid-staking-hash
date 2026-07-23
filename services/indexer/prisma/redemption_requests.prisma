@@ -18,6 +18,10 @@ model RedemptionRequest {
 
   @@index([owner])
   @@index([status])
+  // Terminal-timestamp indexes (PR 5.4): the §9.5.3 payout-stats query
+  // filters the recent terminal cohort by expeditedAt/maturedAt >= cutoff.
+  @@index([maturedAt])
+  @@index([expeditedAt])
   @@map("redemption_requests")
   @@schema("indexed")
 }

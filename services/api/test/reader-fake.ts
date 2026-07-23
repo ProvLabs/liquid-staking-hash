@@ -6,12 +6,15 @@
 
 import type { IndexedReader } from "../src/reader.ts";
 import {
+  derivePayoutStats,
   derivePortfolio,
   deriveHeads,
   deriveMetrics,
   deriveValidatorsPayload,
   isActiveRedemption,
   navPriceNhash,
+  payoutDurationSeconds,
+  PAYOUT_STATS_WINDOW_DAYS,
   toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
@@ -41,6 +44,8 @@ export interface FakeFacts {
   readonly bridgedSupply?: readonly BridgedSupplyFacts[] | undefined;
   readonly transactions?: readonly TransactionFacts[] | undefined;
   readonly redemptions?: readonly RedemptionFacts[] | undefined;
+  /** Fixed "now" for the payout-stats recent-window filter (deterministic). */
+  readonly payoutNow?: Date | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -115,6 +120,22 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
           .sort((a, b) => (a.chain < b.chain ? -1 : 1))
           .map(toBridgedSupplyRow),
       });
+    },
+    payoutStats: () => {
+      // Mirror the Prisma reader: recent terminal cohort → durations →
+      // derivePayoutStats with the completed-epoch count as the cold-start
+      // gate. The fake windows by a fixed `now` if provided (deterministic).
+      const now = facts.payoutNow ?? new Date();
+      const cutoff = new Date(now.getTime() - PAYOUT_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const durations: number[] = [];
+      for (const r of facts.redemptions ?? []) {
+        if (r.status !== "matured" && r.status !== "expedited") continue;
+        const paid = r.expeditedAt ?? r.maturedAt ?? null;
+        if (paid === null || paid < cutoff) continue;
+        const d = payoutDurationSeconds(r);
+        if (d !== null) durations.push(d);
+      }
+      return Promise.resolve(derivePayoutStats(durations, facts.epochs?.length ?? 0));
     },
     portfolioFor: (address) => {
       const mine = (facts.transactions ?? []).filter((t) => t.address === address);

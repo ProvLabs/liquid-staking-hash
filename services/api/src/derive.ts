@@ -22,6 +22,7 @@ import {
   type IncidentSeverity,
   type MarketDepthBand,
   type MarketSample,
+  type PayoutStats,
   type PortfolioSummary,
   type ProgramMetrics,
   type RedemptionRow,
@@ -347,6 +348,69 @@ export function toRedemptionRow(f: RedemptionFacts): RedemptionRow {
 /** A redemption escrows shares while it is enqueued or expedited. */
 export function isActiveRedemption(status: RedemptionStatus): boolean {
   return status === "enqueued" || status === "expedited";
+}
+
+// ── Payout statistics (§9.5.3, §14.12) ───────────────────────────────────
+
+/** The physical band the "typical" statistic lives in (§9.5.3): the
+ * unbonding floor (~21 days) to the redemption guarantee ceiling (60 days).
+ * Carried in the payload so display copy never implies precision outside it. */
+export const REDEMPTION_BAND_FLOOR_SECONDS = 21 * 24 * 60 * 60;
+export const REDEMPTION_BAND_CEILING_SECONDS = 60 * 24 * 60 * 60;
+/** §14.12: below ten terminal requests the "typical" would be a lie. */
+export const PAYOUT_STATS_MIN_SAMPLE = 10;
+/** The recent-terminal-request window (Q4 delivery: no epoch-index column
+ * exists, so "recent-epoch cohort" is a rolling window). */
+export const PAYOUT_STATS_WINDOW_DAYS = 90;
+
+/** Linear-interpolated percentile over a NON-EMPTY sorted ascending array. */
+export function percentileSeconds(sortedAsc: readonly number[], p: number): number {
+  if (sortedAsc.length === 1) return sortedAsc[0]!;
+  const rank = (p / 100) * (sortedAsc.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return sortedAsc[lo]!;
+  return Math.round(sortedAsc[lo]! + (sortedAsc[hi]! - sortedAsc[lo]!) * (rank - lo));
+}
+
+/**
+ * The §9.5.3 typical time-to-payout. `payoutDurationsSeconds` are already
+ * filtered to the recent terminal cohort — each is
+ * `(expedited_at ?? matured_at) − enqueued_at` in seconds — and `epochCount`
+ * is the completed-epoch count (the cold-start gate). Median/p90 are exposed
+ * only when NOT cold-start AND the cohort is sample-sufficient; otherwise
+ * null, and the web tier shows the 60-day guarantee alone (§14.12).
+ */
+export function derivePayoutStats(
+  payoutDurationsSeconds: readonly number[],
+  epochCount: number,
+): PayoutStats {
+  const coldStart = epochCount < 1;
+  const sampleCount = payoutDurationsSeconds.length;
+  const sufficient = !coldStart && sampleCount >= PAYOUT_STATS_MIN_SAMPLE;
+  const sorted = sufficient ? [...payoutDurationsSeconds].sort((a, b) => a - b) : [];
+  return {
+    sample_count: sampleCount,
+    median_seconds: sufficient ? percentileSeconds(sorted, 50) : null,
+    p90_seconds: sufficient ? percentileSeconds(sorted, 90) : null,
+    band_floor_seconds: REDEMPTION_BAND_FLOOR_SECONDS,
+    band_ceiling_seconds: REDEMPTION_BAND_CEILING_SECONDS,
+    cold_start: coldStart,
+  };
+}
+
+/** The payout time of a terminal request: expedited wins over matured
+ * (§9.5.3); null when the request never paid out (refund-only). */
+export function payoutTime(f: RedemptionFacts): Date | null {
+  return f.expeditedAt ?? f.maturedAt ?? null;
+}
+
+/** enqueue→payout duration in whole seconds, or null when not paid out. */
+export function payoutDurationSeconds(f: RedemptionFacts): number | null {
+  const paid = payoutTime(f);
+  if (paid === null) return null;
+  const seconds = Math.floor((paid.getTime() - f.enqueuedAt.getTime()) / 1000);
+  return seconds >= 0 ? seconds : null;
 }
 
 /**

@@ -26,6 +26,7 @@ export default [
     // 4.2–4.4 / M5 / M7, because the nav must never 404. New routes join the
     // axe scan route list (e2e/axe.spec.ts).
     route("stake", "routes/stake.tsx"),
+    route("exit", "routes/exit.tsx"),
     route("portfolio", "routes/portfolio.tsx"),
     route("market", "routes/market.tsx"),
     route("validators", "routes/validators.tsx"),
