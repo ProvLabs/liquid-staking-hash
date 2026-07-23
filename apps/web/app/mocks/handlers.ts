@@ -156,4 +156,28 @@ export const handlers = [
     HttpResponse.json(stakingDelegations),
   ),
   http.get("*/cosmos/group/v1/groups", () => HttpResponse.json(groupGroups)),
+
+  // PR 5.2 tx-lifecycle surfaces. The corpus has no auth/bank/simulate
+  // captures, so the defaults answer as a real LCD does for state that does
+  // not exist — a 404 account, empty balances, and tx endpoints that refuse
+  // (a mock must not fabricate gas or an inclusion). Tests exercising the
+  // lifecycle override these with server.use() (the roles-test pattern).
+  http.get("*/cosmos/auth/v1beta1/accounts/:address", () =>
+    lcdError(404, "account not found"),
+  ),
+  http.get("*/cosmos/bank/v1beta1/spendable_balances/:address", () =>
+    HttpResponse.json({ balances: [], pagination: { next_key: null, total: "0" } }),
+  ),
+  http.get("*/cosmos/bank/v1beta1/balances/:address/by_denom", ({ request }) =>
+    HttpResponse.json({
+      balance: { denom: new URL(request.url).searchParams.get("denom") ?? "nhash", amount: "0" },
+    }),
+  ),
+  http.post("*/cosmos/tx/v1beta1/simulate", () =>
+    lcdError(400, "mock: simulation requires a live chain"),
+  ),
+  http.post("*/cosmos/tx/v1beta1/txs", () =>
+    lcdError(400, "mock: broadcast requires a live chain"),
+  ),
+  http.get("*/cosmos/tx/v1beta1/txs/:hash", () => lcdError(404, "tx not found")),
 ];

@@ -52,4 +52,15 @@ export {
   type Delegation,
   type StakingValidator,
 } from "./staking.ts";
-export { GroupClient, parseGroupInfo, type GroupInfo } from "./group.ts";
+export {
+  GroupClient,
+  parseGroupInfo,
+  parseGroupMember,
+  parseGroupPolicyInfo,
+  type GroupInfo,
+  type GroupMember,
+  type GroupPolicyInfo,
+} from "./group.ts";
+export { TxClient, type BroadcastResult, type GasInfo, type TxInclusion } from "./tx.ts";
+export { AuthClient, type AccountInfo } from "./auth.ts";
+export { BankClient } from "./bank.ts";

@@ -16,10 +16,13 @@ import { Banner } from "~/components/chrome/banner";
 import { EnvBadge } from "~/components/chrome/env-badge";
 import { FreshnessFooter } from "~/components/chrome/freshness-footer";
 import { Nav } from "~/components/chrome/nav";
+import { WalletButton } from "~/components/chrome/wallet-button";
 import { ThemeToggle } from "~/components/theme-toggle";
 import { getBootedConfig, toClientConfig } from "~/config/config.server";
 import { DEFAULT_LOCALE, isLocale, t, type Locale } from "~/i18n";
+import { getSessionContext } from "~/lib/services/session.server";
 import { themeFromCookieHeader } from "~/theme/theme";
+import { WalletProvider } from "~/wallet/provider";
 import type { Route } from "./+types/root";
 
 export const links: Route.LinksFunction = () => [{ rel: "stylesheet", href: stylesheet }];
@@ -32,10 +35,18 @@ export const links: Route.LinksFunction = () => [{ rel: "stylesheet", href: styl
 // ChromeState is public chain data (not config) and crosses alongside it.
 export async function loader({ request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
+  const [chrome, session] = await Promise.all([
+    loadChromeState(config),
+    // PR 5.1: the session context is the server truth the wallet slot renders
+    // from. Only the public address crosses (never the session id — the
+    // cookie is HttpOnly and the id never appears in loader data).
+    getSessionContext(config, request),
+  ]);
   return {
     clientConfig: toClientConfig(config),
     theme: themeFromCookieHeader(request.headers.get("Cookie")),
-    chrome: await loadChromeState(config),
+    chrome,
+    session: session === null ? null : { address: session.address },
   };
 }
 
@@ -59,25 +70,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body className="flex min-h-svh flex-col antialiased">
-        <header className="border-b">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
-            <span className="font-semibold">{t(locale, "app.name")}</span>
-            <Nav locale={locale} />
-            <div className="ml-auto flex items-center gap-3">
-              {data ? (
-                <EnvBadge
-                  locale={locale}
-                  appEnv={data.clientConfig.appEnv}
-                  chainId={data.clientConfig.chainId}
-                />
-              ) : null}
-              <AlertsBell locale={locale} />
-              <ThemeToggle locale={locale} initialTheme={theme} />
+        <WalletProvider
+          chainId={data?.clientConfig.chainId ?? ""}
+          walletConnectProjectId={data?.clientConfig.walletConnectProjectId ?? null}
+          sessionAddress={data?.session?.address ?? null}
+        >
+          <header className="border-b">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
+              <span className="font-semibold">{t(locale, "app.name")}</span>
+              <Nav locale={locale} />
+              <div className="ml-auto flex items-center gap-3">
+                {data ? (
+                  <EnvBadge
+                    locale={locale}
+                    appEnv={data.clientConfig.appEnv}
+                    chainId={data.clientConfig.chainId}
+                  />
+                ) : null}
+                {data ? <WalletButton locale={locale} /> : null}
+                <AlertsBell locale={locale} />
+                <ThemeToggle locale={locale} initialTheme={theme} />
+              </div>
             </div>
-          </div>
-        </header>
-        <Banner locale={locale} banner={data?.chrome.banner ?? null} />
-        <main className="flex-1">{children}</main>
+          </header>
+          <Banner locale={locale} banner={data?.chrome.banner ?? null} />
+          <main className="flex-1">{children}</main>
+        </WalletProvider>
         {data ? (
           <FreshnessFooter
             locale={locale}

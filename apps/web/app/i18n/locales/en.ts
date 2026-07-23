@@ -132,6 +132,28 @@ export default {
   "portfolio.title": "Portfolio",
   "portfolio.placeholder":
     "Your position and history arrive here in a later milestone, after wallet connection lands. This deployment is a development scaffold.",
+  "portfolio.connect-prompt":
+    "Connect a wallet to see your position. Your portfolio is read from the chain and shown only for the connected address.",
+  "portfolio.connected-as": "Connected as {address}. Position details arrive in a later milestone.",
+
+  "wallet.connect": "Connect wallet",
+  "wallet.disconnect": "Disconnect",
+  "wallet.pick-vendor": "Choose a wallet",
+  "wallet.connecting": "Waiting for the wallet…",
+  "wallet.approve-in-wallet": "Approve the login request in your wallet. It signs a one-time message; nothing moves.",
+  "wallet.scan-qr": "Scan with your wallet app",
+  "wallet.error-wc-unconfigured":
+    "Mobile wallet pairing is not configured on this deployment. The browser extension still works.",
+  "wallet.error-extension-missing":
+    "The Figure browser extension was not found. Install it, or pair a mobile wallet instead.",
+  "wallet.error-failed": "The wallet declined or the connection failed. Nothing was signed.",
+
+  "tx.confirm-title": "Review before signing",
+  "tx.confirm-fee": "Estimated network fee: {fee}",
+  "tx.confirm-disclosure": "Show the exact message your wallet will sign",
+  "tx.confirm-cancel": "Cancel",
+  "tx.confirm-sign": "Sign in wallet",
+  "tx.pending-label": "Pending — waiting for the chain",
   "market.title": "Market",
   "market.lede":
     "Where nvHASH trades and where its supply lives. Market prices come from exchanges, not the chain, so every market figure here carries its venue and sample time.",

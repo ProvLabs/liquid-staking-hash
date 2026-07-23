@@ -26,7 +26,15 @@ export class UnsupportedTransportError extends Error {
   }
 }
 
-export type FetchLike = (url: string, init: { signal: AbortSignal }) => Promise<{
+export type FetchLike = (
+  url: string,
+  init: {
+    signal: AbortSignal;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  },
+) => Promise<{
   ok: boolean;
   status: number;
   text(): Promise<string>;
@@ -67,6 +75,35 @@ export class LcdClient {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const res = await this.fetchImpl(url, { signal: controller.signal });
+      const text = await res.text();
+      if (!res.ok) throw new LcdError(res.status, path, text);
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw new LcdError(res.status, path, `non-JSON body: ${text.slice(0, 120)}`);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * POST path with a JSON body (grpc-gateway tx endpoints: simulate,
+   * broadcast — app plan PR 5.2). Same bounded-timeout/error discipline as
+   * `get`; the ONLY write surface is the chain's own tx submission — the
+   * client grows no other mutating verb.
+   */
+  async post(path: string, body: unknown): Promise<unknown> {
+    const url = `${this.base}/${path.replace(/^\/+/, "")}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await this.fetchImpl(url, {
+        signal: controller.signal,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const text = await res.text();
       if (!res.ok) throw new LcdError(res.status, path, text);
       try {

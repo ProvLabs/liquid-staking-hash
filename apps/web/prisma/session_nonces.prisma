@@ -1,0 +1,19 @@
+// session_nonces (app-spec §3 decision 5; plan 5.1): single-use login
+// challenges. A nonce is minted address-bound with a short TTL, consumed
+// exactly once on successful signature verification (consume-on-verify:
+// the DELETE is the replay gate — a second presentation of the same signed
+// nonce finds no row and fails 401; test/session.test.ts pins this).
+
+model SessionNonce {
+  /** 32-byte random nonce, base64url — the exact string the wallet signs. */
+  nonce     String   @id
+  /** bech32 address the challenge was minted for; must match the signer. */
+  address   String
+  createdAt DateTime @default(now())
+  /** Short TTL (~5 min): an unconsumed nonce simply expires. */
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("session_nonces")
+  @@schema("app")
+}

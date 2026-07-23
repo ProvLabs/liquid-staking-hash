@@ -137,6 +137,18 @@ personal endpoint → 403; public endpoints accept no-credential requests.
 > the gating-test matrix above now runs as
 > `services/api/test/cross-address.test.ts`, standing in CI.
 
+> **Amendment 2026-07-23 (PR 5.1, minting side delivered):** the web session
+> layer now mints this exact contract
+> (`apps/web/app/lib/services/assertion.server.ts`): scope is always the
+> SESSION address (the session layer is the sole caller — a cross-address
+> assertion cannot be minted from user input), lifetime pinned at 60 s, key
+> zod-bounded ≥ 32 chars at config and absent from the client bundle
+> (`check:bundle`). The two implementations are held together by **shared
+> golden vectors cross-pinned in both suites**
+> (`apps/web/test/assertion.test.ts` and
+> `services/api/test/assertion-vectors.test.ts` carry identical literals) —
+> either side drifting fails its own CI until both move together.
+
 ## Decision 3 — Notifier: a worker process in `apps/web`, reading through the API
 
 The notifier (alert-rule evaluation on indexer ticks) is app-state machinery:

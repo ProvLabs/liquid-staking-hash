@@ -1,0 +1,51 @@
+// Assertion-minting gate (plan 5.1 §4.7; ADR-001 Decision 2): the web tier
+// mints EXACTLY what services/api verifies — one contract, two
+// implementations. The golden vectors below are CROSS-PINNED: the identical
+// literals live in services/api/test/assertion-vectors.test.ts, verified by
+// the API's own verifyAssertion. A change to either implementation fails one
+// side until both move together.
+//
+// The vector key is a test literal, not a secret (SECURITY.md: devnet/test
+// material only).
+
+import { describe, expect, it } from "vitest";
+
+import {
+  ASSERTION_LIFETIME_SECONDS,
+  mintAddressAssertion,
+  personalApiHeaders,
+} from "~/lib/services/assertion.server";
+
+// ── SHARED GOLDEN VECTOR (cross-pinned with services/api) ────────────────
+export const VECTOR_KEY = "nvhash-assertion-golden-vector-key-0123456789abcdef";
+export const VECTOR_ADDRESS = "tp1l39wu7cht0zcycc5rkcd90sdd4ksjmxwdf388y";
+export const VECTOR_IAT = 1_750_000_000;
+export const VECTOR_HEADER =
+  "Bearer eyJzY29wZSI6ImFkZHJlc3M6dHAxbDM5d3U3Y2h0MHpjeWNjNXJrY2Q5MHNkZDRrc2pteHdkZjM4OHkiLCJpYXQiOjE3NTAwMDAwMDAsImV4cCI6MTc1MDAwMDA2MH0.QgKm9gljB0IjyLvWnH60oT-J549e08V5UW3_SO3apIU";
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("service-assertion minting (ADR-001 Decision 2)", () => {
+  it("mints the exact golden-vector header", () => {
+    expect(mintAddressAssertion(VECTOR_KEY, VECTOR_ADDRESS, VECTOR_IAT)).toBe(VECTOR_HEADER);
+  });
+
+  it("lifetime is pinned to the verifier's 60 s bound", () => {
+    expect(ASSERTION_LIFETIME_SECONDS).toBe(60);
+    const header = mintAddressAssertion(VECTOR_KEY, VECTOR_ADDRESS, VECTOR_IAT);
+    const payload = JSON.parse(
+      Buffer.from(header.slice("Bearer ".length).split(".")[0]!, "base64url").toString("utf8"),
+    ) as { iat: number; exp: number; scope: string };
+    expect(payload.exp - payload.iat).toBe(60);
+    expect(payload.scope).toBe(`address:${VECTOR_ADDRESS}`);
+  });
+
+  it("personalApiHeaders is null without a configured key (degrade honestly)", () => {
+    expect(personalApiHeaders({ apiServiceAssertionKey: undefined }, VECTOR_ADDRESS)).toBeNull();
+    const headers = personalApiHeaders(
+      { apiServiceAssertionKey: VECTOR_KEY },
+      VECTOR_ADDRESS,
+      VECTOR_IAT,
+    );
+    expect(headers).toEqual({ Authorization: VECTOR_HEADER });
+  });
+});

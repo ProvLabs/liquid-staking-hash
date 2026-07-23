@@ -5,12 +5,16 @@
 //
 // This tier consumes only what it uses: the client-safe identity subset
 // (app-spec §7) plus the server-only LCD endpoint and console profile chain id
-// needed by the boot checks, and (PR 4.1) the server-only services/api base
-// URL for the chrome's indexed-plane reads. `DATABASE_URL` (the `app_writer` role),
-// `SESSION_SECRET`, `API_SERVICE_ASSERTION_KEY`, `WALLETCONNECT_PROJECT_ID`,
-// and `WEB_PUSH_VAPID_*` are documented in `.env.example` but deliberately NOT
-// read here — they land with the PRs that consume them (5.1 / 3.3 / 6.3), so
+// needed by the boot checks, the server-only services/api base URL for the
+// chrome's indexed-plane reads (PR 4.1), and — since PR 5.1 — the wallet and
+// session configuration: `WALLETCONNECT_PROJECT_ID` (client-safe: a WC v2
+// project id is public by design, §7 allowlist amendment), plus the
+// server-only `DATABASE_URL` (the `app_writer` role) and
+// `API_SERVICE_ASSERTION_KEY` (ADR-001 Decision 2 minting key).
+// `WEB_PUSH_VAPID_*` remains documented-but-unconsumed until PR 6.3, so
 // config never claims to consume a secret the code does not use.
+// (`SESSION_SECRET` was retired in PR 5.1: sessions are opaque random ids
+// resolved against a server-side row — nothing to sign, no key to hold.)
 //
 // Boot checks (app-spec §7, §12.2) — both fail startup loudly:
 //   1. Console chain-id match: the configured console profile must serve the
@@ -55,6 +59,37 @@ export const configSchema = z.object({
    * environment, links never cross environments (§12.2).
    */
   consoleChainId: z.string().min(1).max(64),
+  /**
+   * WalletConnect v2 project id (app-spec §7, PR 5.1) — CLIENT-SAFE: a WC
+   * project id is public by design (it rides in every pairing URI), amended
+   * into the §7 allowlist in the same change. Null disables the WC transport
+   * (the injected Figure extension still works); the WC vendors render a
+   * "not configured" state rather than a broken pairing flow.
+   */
+  walletConnectProjectId: z
+    .string()
+    .regex(/^[0-9a-zA-Z]{8,64}$/, "expected a WalletConnect project id")
+    .nullable()
+    .default(null),
+  /**
+   * PostgreSQL URL for the `app` schema, connecting as `app_writer`
+   * (ADR-001 Decision 1; server-only). Optional: absent, the session layer
+   * runs on a non-durable in-memory store (dev/mock posture, the services/api
+   * optional-DATABASE_URL precedent) — production profiles set it.
+   */
+  databaseUrl: z
+    .string()
+    .regex(/^postgres(ql)?:\/\//, "expected a postgres:// URL")
+    .optional(),
+  /**
+   * HMAC key for minting the short-lived service assertions services/api
+   * verifies (ADR-001 Decision 2; server-only, never past the client-config
+   * projection). Optional: absent, no assertion can be minted and personal
+   * indexed-plane reads degrade honestly (the API fails closed on its side).
+   * Bounded below at 32 chars — a shorter key is a misconfiguration, not a
+   * weaker deployment.
+   */
+  apiServiceAssertionKey: z.string().min(32).max(512).optional(),
 });
 
 export type WebConfig = z.infer<typeof configSchema>;
@@ -70,6 +105,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     consoleUrl: env.CONSOLE_URL,
     apiUrl: env.API_URL,
     consoleChainId: env.CONSOLE_CHAIN_ID,
+    walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID ?? null,
+    databaseUrl: env.DATABASE_URL,
+    apiServiceAssertionKey: env.API_SERVICE_ASSERTION_KEY,
   });
   if (!parsed.success) {
     // Fail loudly rather than starting half-configured.
@@ -141,6 +179,7 @@ export function toClientConfig(config: WebConfig): ClientConfig {
     contractAddress: config.contractAddress,
     vaultAddress: config.vaultAddress,
     consoleUrl: config.consoleUrl,
+    walletConnectProjectId: config.walletConnectProjectId,
   };
   for (const key of Object.keys(client)) {
     if (!(CLIENT_SAFE_CONFIG_KEYS as readonly string[]).includes(key)) {

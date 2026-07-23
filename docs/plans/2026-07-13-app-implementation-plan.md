@@ -140,7 +140,7 @@ waiting for implementations.
 | 5.1 [P] | **WalletConnect v2 + sessions:** pairing, nonce-signature session (HttpOnly/SameSite cookie), role detection re-checked on-chain per refresh. Runs the §14.1 certification checklist against **both v1 vendors — Figure (WC v2 mobile + extension) and Arculus (WC v2 mobile)** — as its acceptance gate; the shared WC v2 path uses standard pairing/Cosmos-namespace methods only, vendor-specific workarounds live behind per-vendor adapter entries recorded in §14.1. | 1.3; §14.1 wallet-set decision (DECIDED + amended 2026-07-14: Figure + Arculus v1) |
 | 5.2 | **Transaction lifecycle framework** (§10.2): build → preflight (reasons on every disabled control) → simulate → confirm (consumer summary + exact JSON disclosure) → sign/broadcast → track, with optimistic pending rows and indexer fast-poll reconcile. | 5.1, 0.3 |
 | 5.3 [P] | **Stake flow** (§8.3): inline education, amount entry with limits and vesting-lock preflight, preview at execution-time NAV, land-on-Portfolio. | 5.2 |
-| 5.4 [P] | **Redeem & Exit** (§8.4): exit-path comparison table (guaranteed-vs-typical framing is normative), native redemption flow, redemption tracker (queue position, funded state, countdown), DEX path hand-off. e2e must render every terminal state — expedite, matured payout, unfunded-maturity refund — from real drill history. | 5.2, 3.3, 2.1; **§14.4 DEX hand-off and §14.12 sample-threshold decisions (blocking)** |
+| 5.4 [P] | **Redeem & Exit** (§8.4): exit-path comparison table (guaranteed-vs-typical framing is normative), native redemption flow, redemption tracker (queue position, funded state, countdown), DEX path hand-off. e2e must render every terminal state — expedite, matured payout, unfunded-maturity refund — from real drill history. | 5.2, 3.3, 2.1; §14.4 + §14.12 (both DECIDED 2026-07-15, app-spec §14 — no longer blocking) |
 
 ### M6 — Portfolio, alerts, notifier
 
@@ -249,7 +249,7 @@ and recorded in `app-spec.md` §14.
 | §14.1 wallet vendor set | DECIDED 2026-07-14, amended same day (v1: **Figure** — WC v2 mobile + extension — **and Arculus** — WC v2 mobile, App-only — dual-vendor as WC v2 standards-conformance guard; console §14.1 resolved same change — Figure extension + devnet key mode; Keplr/Leap fast-follow behind the certification checklist, which PR 5.1 runs against both v1 vendors as its acceptance gate) | PR 5.1 |
 | §14.2 vault msg/event shapes | VERIFY — **two-stage:** stage 1 captured 2026-07-14 (PR 0.2, provisional, `packages/fixtures`); stage 2 re-vets against the formal vault release (PR 8.0) | 0.2, 2.1, 5.2; release gate 8.0 |
 | §14.3 pool/bridge facts | VERIFY — external (NUVA bridge deployment) | 2.4, 3.2 config |
-| §14.4 bridge transit UX | DECIDE — v1 assumption: hand-off, no in-app transit | 5.4 |
+| §14.4 bridge transit UX | DECIDED 2026-07-15 (deferred to post-launch; DEX/market surfaces ship as labeled "coming soon" shells; v1 exit is native-redemption-only in practice) | 5.4 |
 | §14.5 indexer transport/depth | DECIDE/VERIFY — resolved inside 2.1 (tx-search primary, ws optional) | 2.1 |
 | §14.6 governance composer scope | DECIDE — needed before 7.4 only; 7.1–7.3 unaffected | 7.4 |
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
@@ -257,7 +257,7 @@ and recorded in `app-spec.md` §14.
 | §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
 | §14.10 analytics taxonomy | DECIDE — needed before 7.6 | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |
-| §14.12 typical-payout sample threshold | DECIDE — needed before 5.4 copy finalizes | 5.4, 6.2 |
+| §14.12 typical-payout sample threshold | DECIDED 2026-07-15 (≥ 10 terminal requests, else the 60-day guarantee alone; epoch-metric cold-start rules; calendar-month cadence — E-CAL delivered 2026-07-22) | 5.4, 6.2 |
 | §14.13 console entity anchors | FOLLOW-ON (console repo/area) — schedule with console work before 8.4 | 4.x verify links, 8.4 |
 | §14.14 name & domain | DECIDE — launch decision | 8.5 |
 
@@ -274,7 +274,7 @@ topology assumption:
 | SECURITY.md requirement | Enforced by |
 | --- | --- |
 | Data minimization: no PII, no IP/device linkage to addresses (incl. logs) | Schema lint + log-scrubbing checks in indexer CI (§4); accepted exceptions (push tokens, first/last-seen) implemented exactly as scoped in PRs 6.3 / 5.1 |
-| No custody, no signing in services | No fund-moving endpoint exists in any component (§1 ownership table); wallet lane (5.x) signs client-side only; 5.2's confirm step shows exact message JSON |
+| No custody, no signing in services | No signing endpoint exists in any component (§1 ownership table); wallet lane (5.x) signs client-side only; 5.2's confirm step shows exact message JSON. The 5.2 web-tier broadcast relay carries only fully user-signed bytes under the app-spec §12.3 amendment (2026-07-23): closed msg allowlist, sole-signer = session address, size + rate caps — gated by `apps/web/test/broadcast-guard.test.ts` |
 | Chain is source of truth; indexer input untrusted; idempotent replay | Fixture-decode layer (event shapes validated against captured corpus), replay-convergence property tests (PR 2.1), reconciler + incident machinery (PR 2.5) |
 | APIs read-only and defensive: bounded params, rate limits, address scoping | zod bounds + rate limiting from scaffold PR 1.2; **in-process address authorization on personal endpoints** (§1, PR 3.3) with cross-address-rejection tests gating `services/api` CI |
 | Secrets via environment only; nothing non-public in the client bundle | Bundle-secret check in web CI from PR 1.3; `.env.example` placeholders only |
@@ -516,4 +516,19 @@ extracted from the Learn chart (`app/components/charts/step-chart.tsx`).
 Gates: `test/market-data.test.ts`, `e2e/market.spec.ts`. All four M4 public
 read surfaces now render real or honestly-labeled data inside the 4.1
 chrome. Next lane: M5 (wallet + sessions).*
+
+*2026-07-23 (rev 19): **M5 elaborated to a working plan** (working plan
+[`app-m5-wallet-flows`](2026-07-23-app-m5-wallet-flows.md), single multi-PR
+file per the M3 precedent; plan-first — the plan document is committed
+before any M5 code). Delivery is tranched per Ira: Tranche A = 5.1 + 5.2
+(full grain, two commits on `m5.x-wallet-flows`, one GitHub PR/CI cycle);
+Tranche B = 5.3 + 5.4 (coarser grain, refined in a same-file revision
+before build). Decisions recorded there: guarded web-tier broadcast relay
+of the user-signed tx (a §12.3 amendment lands with 5.2), and the e2e-live
+layer staged as harness + bundle-gated test signer in 5.2 with fund-moving
+drill specs in 5.3/5.4. Stale-row correction in this change: §5's §14.4 and
+§14.12 rows still read DECIDE, but both were DECIDED 2026-07-15 in
+`app-spec.md` §14 — the rows and 5.4's §2 dependency cell now point at the
+recorded decisions; 5.4's remaining gates are Tranche B plan refinement and
+the typical-payout serving source (plan §7 Q4), not open decisions.*
 

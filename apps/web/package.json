@@ -4,22 +4,35 @@
   "private": true,
   "description": "nvHASH Program App web tier (app plan PR 1.3). React Router 7 SSR, $lang+ i18n routing, Auto/Light/Dark themes, env config with boot checks (vault-address cross-check, console chain-id match), MSW harness over the @nvhash/fixtures corpus. Owns the `app` schema per ADR-001 (Prisma lands with the session/alert PRs); indexed history is read only through services/api, never the tables.",
   "type": "module",
+  "prisma": {
+    "schema": "prisma"
+  },
   "scripts": {
-    "typecheck": "react-router typegen && tsc --noEmit",
+    "typecheck": "prisma generate && react-router typegen && tsc --noEmit",
     "test": "vitest run",
     "dev": "react-router dev",
     "build": "react-router build",
     "start": "react-router-serve ./build/server/index.js",
     "test:e2e": "react-router build && playwright test",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "check:palette": "node scripts/check-palette.mjs",
-    "check:bundle": "node scripts/check-bundle-secrets.mjs"
+    "check:bundle": "node scripts/check-bundle-secrets.mjs",
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:status": "prisma migrate status"
   },
   "dependencies": {
+    "@noble/curves": "^1.8.0",
+    "@noble/hashes": "^1.7.0",
+    "@scure/base": "^1.2.0",
     "@nvhash/api-types": "workspace:*",
     "@nvhash/chain-client": "workspace:*",
+    "@prisma/client": "^6.7.0",
     "@radix-ui/react-slot": "^1.1.1",
     "@react-router/node": "^7.18.1",
     "@react-router/serve": "^7.18.1",
+    "@walletconnect/sign-client": "^2.17.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "isbot": "^5.1.17",
@@ -27,6 +40,7 @@
     "react-dom": "^19.2.0",
     "react-router": "^7.18.1",
     "tailwind-merge": "^3.0.0",
+    "uqr": "^0.1.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {
@@ -39,6 +53,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "msw": "^2.15.0",
+    "prisma": "^6.7.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.9.0",
     "vite": "^7.0.0",
