@@ -79,13 +79,21 @@ export function useTxFlow(): TxFlow {
       dispatch({ type: "START", intent });
 
       // Preflight (server, session-scoped). Reasons block the flow with a
-      // machine-readable list; the page maps each to localized copy.
-      const pfRes = await postJson("/tx/preflight", { kind: input.kind, amount: input.amount.toString() });
-      if (!pfRes.ok) {
+      // machine-readable list; the page maps each to localized copy. A
+      // thrown fetch (network down) blocks the same way — the flow must
+      // always land in a state the user can restart from, never strand.
+      let pf: PreflightResponse;
+      try {
+        const pfRes = await postJson("/tx/preflight", { kind: input.kind, amount: input.amount.toString() });
+        if (!pfRes.ok) {
+          dispatch({ type: "PREFLIGHT_BLOCKED", reasons: [{ code: "chain-unavailable" }] });
+          return;
+        }
+        pf = (await pfRes.json()) as PreflightResponse;
+      } catch {
         dispatch({ type: "PREFLIGHT_BLOCKED", reasons: [{ code: "chain-unavailable" }] });
         return;
       }
-      const pf = (await pfRes.json()) as PreflightResponse;
       if (pf.reasons.length > 0 || pf.signer === null) {
         dispatch({
           type: "PREFLIGHT_BLOCKED",
@@ -97,26 +105,34 @@ export function useTxFlow(): TxFlow {
 
       if (pubkeyBase64 === null) {
         // Live reads passed, but we cannot build a sign doc without the
-        // connected pubkey — surface the reconnect need honestly.
+        // connected pubkey — surface the reconnect need honestly. SIMULATE
+        // first: the reducer only accepts SIMULATE_FAILED from `simulating`.
+        dispatch({ type: "SIMULATE" });
         dispatch({ type: "SIMULATE_FAILED", detail: "wallet not connected for signing" });
         return;
       }
 
       // Simulate (server) for the fee.
       dispatch({ type: "SIMULATE" });
-      const simRes = await postJson("/tx/simulate", {
-        kind: input.kind,
-        amount: input.amount.toString(),
-        denom: input.denom,
-        pubkey: pubkeyBase64,
-        redeemDenom: input.kind === "swap_out" ? input.redeemDenom : "",
-      });
-      if (!simRes.ok) {
-        const detail = await simRes.text().catch(() => "simulation failed");
-        dispatch({ type: "SIMULATE_FAILED", detail });
+      let sim: SimulateResponse;
+      try {
+        const simRes = await postJson("/tx/simulate", {
+          kind: input.kind,
+          amount: input.amount.toString(),
+          denom: input.denom,
+          pubkey: pubkeyBase64,
+          redeemDenom: input.kind === "swap_out" ? input.redeemDenom : "",
+        });
+        if (!simRes.ok) {
+          const detail = await simRes.text().catch(() => "simulation failed");
+          dispatch({ type: "SIMULATE_FAILED", detail });
+          return;
+        }
+        sim = (await simRes.json()) as SimulateResponse;
+      } catch {
+        dispatch({ type: "SIMULATE_FAILED", detail: "network error during simulation" });
         return;
       }
-      const sim = (await simRes.json()) as SimulateResponse;
       const fee: Fee = {
         gasLimit: BigInt(sim.fee.gas_limit),
         amount: BigInt(sim.fee.amount),
@@ -159,19 +175,32 @@ export function useTxFlow(): TxFlow {
     const txRaw = encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [
       Uint8Array.from(Buffer.from(signatureBase64, "base64")),
     ]);
-    const bcRes = await postJson("/tx/broadcast", {
-      tx_raw: Buffer.from(txRaw).toString("base64"),
-    });
-    if (!bcRes.ok) {
-      const detail = await bcRes.text().catch(() => "broadcast failed");
-      dispatch({ type: "BROADCAST_FAILED", detail });
+    let txhash: string;
+    let code: number;
+    let raw_log: string;
+    try {
+      const bcRes = await postJson("/tx/broadcast", {
+        tx_raw: Buffer.from(txRaw).toString("base64"),
+      });
+      if (!bcRes.ok) {
+        const detail = await bcRes.text().catch(() => "broadcast failed");
+        dispatch({ type: "BROADCAST_FAILED", detail });
+        return;
+      }
+      ({ txhash, code, raw_log } = (await bcRes.json()) as {
+        txhash: string;
+        code: number;
+        raw_log: string;
+      });
+    } catch {
+      // The response was lost, so delivery is UNKNOWN (the request may have
+      // reached the relay) — say so rather than claiming nothing was sent.
+      dispatch({
+        type: "BROADCAST_FAILED",
+        detail: "network error — delivery unknown; check your portfolio before retrying",
+      });
       return;
     }
-    const { txhash, code, raw_log } = (await bcRes.json()) as {
-      txhash: string;
-      code: number;
-      raw_log: string;
-    };
     if (code !== 0) {
       dispatch({ type: "BROADCAST_FAILED", detail: raw_log || `broadcast code ${code}` });
       return;

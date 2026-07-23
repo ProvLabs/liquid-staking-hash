@@ -52,7 +52,7 @@ export function ComparisonTable({ locale, typical }: { locale: Locale; typical: 
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {t(locale, "exit.native-typical-withheld")}
+                  {t(locale, "exit.native-typical-withheld", { days: typical.guaranteeDays })}
                 </p>
               )}
             </td>

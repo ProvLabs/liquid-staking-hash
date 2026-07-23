@@ -126,10 +126,14 @@ describe("loadExitContext", () => {
     expect(ctx.tracker!.queue[0]!.position).toBe(2);
     expect(ctx.tracker!.queue[0]!.queueLength).toBe(2);
     expect(ctx.tracker!.queue[0]!.timeoutIso).toBe("2026-08-15T00:00:00Z");
-    // Only the two terminal legs surface — the swap_in is excluded.
-    expect(ctx.tracker!.terminal.map((t) => t.kind).sort()).toEqual([
-      "redemption_payout",
-      "redemption_refund",
+    // Only the two terminal legs surface — the swap_in is excluded — and each
+    // carries its (txhash, msgIndex) row identity (one tx can hold several
+    // redemption legs; the tracker keys on the pair).
+    expect(
+      ctx.tracker!.terminal.map((t) => ({ kind: t.kind, txhash: t.txhash, msgIndex: t.msgIndex })).sort((a, b) => a.kind.localeCompare(b.kind)),
+    ).toEqual([
+      { kind: "redemption_payout", txhash: "PAID", msgIndex: 0 },
+      { kind: "redemption_refund", txhash: "REF", msgIndex: 0 },
     ]);
   });
 

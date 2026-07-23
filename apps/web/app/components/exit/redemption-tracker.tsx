@@ -58,7 +58,7 @@ export function RedemptionTracker({
 
           {terminal.map((leg) => (
             <div
-              key={leg.txhash}
+              key={`${leg.txhash}:${leg.msgIndex}`}
               className={`flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm ${leg.kind === "redemption_refund" ? "border-[var(--status-warning)]" : "border-[var(--status-good)]"}`}
             >
               <span className="font-medium">

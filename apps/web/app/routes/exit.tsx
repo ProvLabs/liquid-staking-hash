@@ -18,7 +18,6 @@ import { t } from "~/i18n";
 import { parseAmount } from "~/lib/amount";
 import { formatBaseAmount, HASH_EXPONENT, SHARE_EXPONENT } from "~/learn/amounts";
 import { getSessionContext } from "~/lib/services/session.server";
-import { previewSharesOut } from "~/stake/preview";
 import { TxConfirm } from "~/tx/confirm";
 import { FlowStatus, feeDisplay } from "~/tx/flow-status";
 import { useTxFlow } from "~/tx/use-tx-flow";
@@ -131,6 +130,12 @@ export default function Exit({ loaderData }: Route.ComponentProps) {
             ) : null}
             {!wallet.canSign ? (
               <p className="text-xs text-muted-foreground">{t(locale, "tx.reconnect-to-sign")}</p>
+            ) : null}
+            {!vault.swapOutEnabled ? (
+              // §10.2: a disabled control always carries its reason.
+              <p className="rounded-lg border border-[var(--status-warning)] bg-card p-3 text-sm" role="alert">
+                {t(locale, "tx.reason-swaps-disabled")}
+              </p>
             ) : null}
             <Button onClick={() => void onReview()} disabled={!canSubmit}>
               {t(locale, "exit.review")}

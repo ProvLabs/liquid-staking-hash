@@ -36,6 +36,9 @@ export interface TerminalLeg {
   shares: string;
   nhash: string;
   txhash: string;
+  /** Message index within the tx — (txhash, msgIndex) is the row identity;
+   * one tx can carry several redemption legs (batch payout/refund). */
+  msgIndex: number;
   blockTime: string;
 }
 
@@ -159,6 +162,7 @@ export async function loadExitContext(
         shares: t.shares,
         nhash: t.nhash,
         txhash: t.txhash,
+        msgIndex: t.msg_index,
         blockTime: t.block_time,
       }));
     tracker = {

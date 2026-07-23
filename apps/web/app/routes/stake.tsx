@@ -161,6 +161,13 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
             <p className="text-xs text-muted-foreground">{t(locale, "tx.reconnect-to-sign")}</p>
           ) : null}
 
+          {!vault.swapInEnabled ? (
+            // §10.2: a disabled control always carries its reason.
+            <p className="rounded-lg border border-[var(--status-warning)] bg-card p-3 text-sm" role="alert">
+              {t(locale, "tx.reason-swaps-disabled")}
+            </p>
+          ) : null}
+
           <Button onClick={() => void onReview()} disabled={!canSubmit}>
             {t(locale, "stake.review")}
           </Button>
