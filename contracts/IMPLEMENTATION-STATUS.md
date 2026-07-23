@@ -14,7 +14,7 @@ decisions (2026-07-08, Ira): the top-level spec governs product scope; Design
 C governs deploy/settlement mechanics; the 60-day delay + single-tx epoch
 model stands.
 
-Update this file as tranches land. Last updated: 2026-07-13.
+Update this file as tranches land. Last updated: 2026-07-22.
 
 ---
 
@@ -82,8 +82,8 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       Deliverables: production `min_capture_interval_secs` (bootstrap +
       UpdateConfig), keeper schedule entry in the ops runbook, spec §10.4
       note documenting the derivation.
-- [ ] **Calendar-month epoch alignment (app-spec §14.12; contract behavior
-      change)** [MEDIUM, CONTRACT + SIM + DOCS]
+- [x] **Calendar-month epoch alignment (app-spec §14.12; contract behavior
+      change)** [MEDIUM, CONTRACT + SIM + DOCS] — done 2026-07-22 (E-CAL)
       Replace the `RunEpoch` eligibility gate: `min_run_interval_secs`
       (fixed-duration minimum since `last_run`) is **retired** in favor of
       "the calendar month of block time is later than `last_run`'s"
@@ -100,9 +100,20 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       all month lengths; skipped-month catch-up) with per-epoch invariant
       assertions, re-pin `withdrawal_delay_seconds`, and amend the spec. Full
       breakdown in
-      [`docs/plans/2026-07-15-calendar-month-epoch-alignment.md`](../docs/plans/2026-07-15-calendar-month-epoch-alignment.md).
-      Likely v1-launch-blocking (the App displays calendar alignment);
-      confirm when scheduling E-CAL.1.
+      [`docs/plans/2026-07-15-calendar-month-epoch-alignment.md`](../docs/plans/2026-07-15-calendar-month-epoch-alignment.md);
+      implementation record in
+      [`docs/plans/2026-07-22-e-cal-calendar-month-implementation.md`](../docs/plans/2026-07-22-e-cal-calendar-month-implementation.md).
+      Confirmed v1-launch-blocking and scheduled; shipped as four commits
+      (E-CAL.1 predicate + `month.rs` + sim domain + spec; E-CAL.2 devnet
+      `calendar-drill.sh`; E-CAL.3 `withdrawal_delay` re-pin + keeper runbook;
+      E-CAL.4 close). Verified: `cargo test --lib` 74/74 (incl. the `month`
+      proptest over the full u64 nanosecond domain, the embedded-chain calendar
+      gate via `increase_time`, and the calendar sim domain — compressed-gap,
+      skipped-month, leap-February, mobilization-ceiling); a seed-7 /
+      2,000-scenario / 96,000-epoch soak with zero violations; and the live
+      devnet `calendar-drill.sh` (eligible crank runs a full epoch; a same-month
+      re-crank is rejected with the next-eligible instant one month later).
+      Spec §14 item 12 records the resolution.
 - [ ] **Dual x/group policies (spec §12.1)** [SMALL]
       Split single `admin` into `admin_group_policy` (fund administration,
       pause/halt/clear) and `ops_group_policy` (`UpdateConfig`).
