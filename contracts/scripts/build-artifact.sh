@@ -48,9 +48,11 @@ esac
 OCIMFS=65   # binaryen IR-size cap for single-caller inlining (~flexible limit)
 MAX_LOCALS=100
 
-MOUNTS=(-v "$CRATE":/code
-  --mount type=volume,source="$(basename "$CRATE")_cache",target=/target
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry)
+MOUNTS=(
+  -v "$CRATE":/code
+  --mount "type=volume,source=$(basename "$CRATE")_cache,target=/target"
+  --mount "type=volume,source=registry_cache,target=/usr/local/cargo/registry"
+)
 
 echo "building $ARTIFACT with $IMAGE (wasm-opt -ocimfs=$OCIMFS)"
 docker run --rm "${MOUNTS[@]}" --entrypoint sh "$IMAGE" -c '
