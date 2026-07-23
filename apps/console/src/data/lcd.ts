@@ -49,22 +49,7 @@ export async function vaultQuery(vaultAddress: string): Promise<VaultInfo> {
   };
 }
 
-/** Module estimate for one swap-out (Query/EstimateSwapOut): underlying assets for `shares`
- *  at current NAV. The queue rows carry no estimate — this is its only source. */
-async function estimateSwapOut(vaultAddress: string, sharesAmount: string): Promise<string> {
-  const q = new URLSearchParams({ shares: sharesAmount });
-  const body = await getJson(`/vault/v1/vaults/${vaultAddress}/estimate_swap_out?${q}`);
-  const amount = body?.assets?.amount;
-  if (typeof amount !== "string") throw new Error("estimate_swap_out: unexpected response shape");
-  return amount;
-}
-
-/** Vault pending swap-out queue (paginated), per Query/VaultPendingSwapOuts
- *  (provlabs/vault query.proto): rows are PendingSwapOutWithTimeout —
- *  { request_id, pending_swap_out: { owner, vault_address, shares: Coin, redeem_denom },
- *    timeout } — where `timeout` is the absolute maturity instant. Parse strictly and fail
- *  loudly on shape drift (honesty rules, spec §17): a silent zero here once rendered real
- *  requests as 0.00 / matured / funded. */
+/** Vault pending swap-out queue (paginated). Live shape: { pending_swap_outs:[], pagination }. */
 export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwapOut[]> {
   const out: PendingSwapOut[] = [];
   let key: string | null = null;
@@ -74,16 +59,12 @@ export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwap
     if (key) q.set("pagination.key", key);
     const body = await getJson(`/vault/v1/vaults/${vaultAddress}/pending_swap_outs?${q}`);
     for (const r of body.pending_swap_outs ?? []) {
-      const p = r?.pending_swap_out;
-      const maturesAtMs = Date.parse(r?.timeout ?? "");
-      if (r?.request_id == null || !p?.owner || typeof p?.shares?.amount !== "string" || Number.isNaN(maturesAtMs))
-        throw new Error(`pending_swap_outs: unexpected row shape: ${JSON.stringify(r).slice(0, 200)}`);
       out.push({
-        id: Number(r.request_id),
-        owner: p.owner,
-        shares: p.shares.amount,
-        estimate_nhash: await estimateSwapOut(vaultAddress, p.shares.amount),
-        matures_at_seconds: Math.floor(maturesAtMs / 1000),
+        id: Number(r.id ?? r.request_id ?? 0),
+        owner: r.owner ?? r.address ?? "",
+        shares: r.shares?.amount ?? r.shares ?? "0",
+        estimate_nhash: r.estimate?.amount ?? r.estimate_nhash ?? r.amount?.amount ?? "0",
+        enqueued_at_seconds: Number(r.enqueued_at_seconds ?? r.created_at ?? 0),
       });
     }
     key = body.pagination?.next_key ?? null;

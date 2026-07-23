@@ -79,8 +79,7 @@ export function Redemptions() {
                       </thead>
                       <tbody>
                         {ordered.map((r) => {
-                          // module reports the absolute maturity instant (PendingSwapOutWithTimeout.timeout)
-                          const mature = r.matures_at_seconds;
+                          const mature = r.enqueued_at_seconds + delay;
                           const own = r.owner === wallet.address;
                           return (
                             <tr key={r.id} className={own ? "own" : undefined}>

@@ -200,9 +200,9 @@ export const mockJailReports: JailReportsResponse = {
 };
 
 export const mockSwapOuts: PendingSwapOut[] = [
-  { id: 101, owner: PAT_OPERATOR, shares: "480000000000000000000", estimate_nhash: h(50_000), matures_at_seconds: NOW + 55 * DAY },
-  { id: 102, owner: "pb1holderaholderaholderaholderaholdera000", shares: "240000000000000000000", estimate_nhash: h(25_000), matures_at_seconds: NOW + 58 * DAY },
-  { id: 103, owner: "pb1holderbholderbholderbholderbholderb000", shares: "120000000000000000000", estimate_nhash: h(12_500), matures_at_seconds: NOW - 3600 },
+  { id: 101, owner: PAT_OPERATOR, shares: "480000000000000000000", estimate_nhash: h(50_000), enqueued_at_seconds: NOW - 5 * DAY },
+  { id: 102, owner: "pb1holderaholderaholderaholderaholdera000", shares: "240000000000000000000", estimate_nhash: h(25_000), enqueued_at_seconds: NOW - 2 * DAY },
+  { id: 103, owner: "pb1holderbholderbholderbholderbholderb000", shares: "120000000000000000000", estimate_nhash: h(12_500), enqueued_at_seconds: NOW - 12 * 3600 },
 ];
 
 // A 14-epoch ledger history for the trend charts, deterministic (no Math.random).
