@@ -7,7 +7,6 @@ export interface ConfigResponse {
   vault_address: string;
   underlying_denom: string;
   receipt_denom: string;
-  min_run_interval_secs: number;
   max_delegations_per_run: number;
   aum_fee_bps: number;
   performance_threshold_bps: number;

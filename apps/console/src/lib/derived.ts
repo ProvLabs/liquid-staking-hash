@@ -27,9 +27,17 @@ export function aprDisplayable(apr: AprResponse | null): boolean {
   return !!apr && apr.window_seconds >= 86400;
 }
 
-/** §9.5.3 next-run eligibility timestamp. */
-export function nextRunAt(lastRunSecs: number, minIntervalSecs: number): number {
-  return lastRunSecs + minIntervalSecs;
+/**
+ * Next-run eligibility timestamp: the first second of the calendar month AFTER
+ * `last_run` (UTC). Mirrors the contract's `RunEpoch` gate — eligible once
+ * block time is in a strictly later civil month than `last_run` (§14.12,
+ * liquid-staking-spec §9) — and equals the `too soon { next }` instant the
+ * contract reports. The cadence is no longer a config interval.
+ */
+export function nextRunAt(lastRunSecs: number): number {
+  const d = new Date(lastRunSecs * 1000);
+  // Date.UTC rolls month 12 (December, index 11 + 1) into the next January.
+  return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000);
 }
 
 export interface InvariantCheck {

@@ -30,11 +30,11 @@ export function guardRunEpoch(g: GuardInputs): GuardState {
   if (g.epoch?.halted) return { kind: "disabled", reason: "contract halted" };
   const s = fresh(g);
   if (s) return s;
-  if (isReleasing(g.epoch)) return { kind: "enabled" }; // continuation bypasses interval
-  if (g.config && g.epoch) {
-    const at = nextRunAt(g.epoch.last_run_seconds, g.config.min_run_interval_secs);
+  if (isReleasing(g.epoch)) return { kind: "enabled" }; // continuation bypasses the calendar gate
+  if (g.epoch) {
+    const at = nextRunAt(g.epoch.last_run_seconds);
     if (g.nowSecs < at)
-      return { kind: "disabled", reason: `interval: eligible in ${humanDuration(at - g.nowSecs)}` };
+      return { kind: "disabled", reason: `calendar month: eligible in ${humanDuration(at - g.nowSecs)}` };
   }
   return { kind: "enabled" };
 }

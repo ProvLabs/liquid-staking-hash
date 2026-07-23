@@ -29,7 +29,6 @@ export const mockConfig: ConfigResponse = {
   vault_address: VAULT_ADDR,
   underlying_denom: "nhash",
   receipt_denom: "nvhash.staked",
-  min_run_interval_secs: 30 * DAY,
   max_delegations_per_run: 10,
   aum_fee_bps: 25,
   performance_threshold_bps: 9500,
