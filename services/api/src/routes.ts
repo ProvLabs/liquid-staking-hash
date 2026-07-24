@@ -26,6 +26,8 @@ import type {
 } from "@nvhash/api-types";
 import type { z } from "zod";
 import { transactionsCsv } from "./csv.ts";
+import { toTransactionRow } from "./derive.ts";
+import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
 import {
   paginationSchema,
   portfolioQuerySchema,
@@ -334,6 +336,38 @@ const portfolioRoute = defineEnveloped<z.infer<typeof portfolioQuerySchema>>({
 });
 
 /**
+ * `GET /api/v1/portfolio/metrics?address=` — address-scoped (M6.1 §2.4): the
+ * derived cost-basis, realized-gain, effective-yield, and accrual figures for
+ * one address, produced by the pure `derivePortfolioMetrics` fold over the
+ * address's FULL indexed history plus the epoch step series. A sibling of
+ * `/portfolio` (indexed facts): the registry `auth: "address"` declaration is
+ * enforced by the handler, so reaching here means the assertion scope already
+ * equals `?address=` exactly, and the standing cross-address gate holds this
+ * path too.
+ */
+const portfolioMetricsRoute = defineEnveloped<z.infer<typeof portfolioQuerySchema>>({
+  method: "GET",
+  path: `${API_BASE}/portfolio/metrics`,
+  auth: "address",
+  enveloped: true,
+  querySchema: portfolioQuerySchema,
+  summary: "Address-scoped derived portfolio metrics (M6.1)",
+  handle: async (ctx) => {
+    const [heads, txs, epochs] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.transactionsAscFor(ctx.query.address),
+      ctx.reader.listEpochsAsc(),
+    ]);
+    return {
+      data: derivePortfolioMetrics(ctx.query.address, txs, epochs),
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
  * `GET /api/v1/transactions?address=&format=` — address-scoped per-event
  * history (newest first, paginated; app-spec §8.2). `format=csv` returns the
  * §14.11 statement-of-fact export as `text/csv` with freshness in the
@@ -348,14 +382,16 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
   querySchema: transactionsQuerySchema,
   summary: "Address-scoped transaction history (paginated; CSV export)",
   handle: async (ctx) => {
-    const [heads, rows] = await Promise.all([
-      ctx.reader.heads(),
-      ctx.reader.transactionsFor(ctx.query.address, {
-        limit: ctx.query.limit,
-        offset: ctx.query.offset,
-      }),
-    ]);
     if (ctx.query.format === "csv") {
+      // §14.11 amendment (M6.1): the export is the COMPLETE indexed history
+      // ascending by (height, msg_index) — a statement of fact, never a
+      // paginated slice. `limit`/`offset` are deliberately ignored here (they
+      // bound only the JSON view); the full stream comes from the chunked
+      // `transactionsAscFor`, mapped through the same per-row fact mapping.
+      const [heads, facts] = await Promise.all([
+        ctx.reader.heads(),
+        ctx.reader.transactionsAscFor(ctx.query.address),
+      ]);
       const headers = new Headers();
       headers.set("content-type", "text/csv; charset=utf-8");
       headers.set("content-disposition", 'attachment; filename="transactions.csv"');
@@ -364,8 +400,15 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
       if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
-      return new Response(transactionsCsv(rows), { status: 200, headers });
+      return new Response(transactionsCsv(facts.map(toTransactionRow)), { status: 200, headers });
     }
+    const [heads, rows] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.transactionsFor(ctx.query.address, {
+        limit: ctx.query.limit,
+        offset: ctx.query.offset,
+      }),
+    ]);
     return {
       data: rows,
       source: "indexed" as const,
@@ -401,6 +444,7 @@ export const routes: readonly Route[] = [
   marketRoute,
   payoutStatsRoute,
   portfolioRoute,
+  portfolioMetricsRoute,
   transactionsRoute,
   healthRoute,
 ];

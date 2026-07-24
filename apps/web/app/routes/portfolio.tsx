@@ -1,8 +1,13 @@
-import { t } from "~/i18n";
+import { AccrualChart } from "~/components/portfolio/accrual-chart";
+import { ActiveRedemptions } from "~/components/portfolio/active-redemptions";
+import { EffectiveYieldPanel } from "~/components/portfolio/effective-yield-panel";
+import { HistoryTable } from "~/components/portfolio/history-table";
+import { PositionSummary } from "~/components/portfolio/position-summary";
 import { getBootedConfig } from "~/config/config.server";
-import { formatBaseAmount, HASH_EXPONENT, SHARE_EXPONENT } from "~/learn/amounts";
+import { t } from "~/i18n";
+import { parsePageParam } from "~/portfolio/page-param";
+import { loadPortfolioData } from "~/portfolio/portfolio.server";
 import { getSessionContext } from "~/lib/services/session.server";
-import { loadPortfolioPosition } from "~/portfolio/portfolio.server";
 import { useLocale } from "~/root";
 import type { Route } from "./+types/portfolio";
 
@@ -10,25 +15,25 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "Portfolio · nvHASH" }];
 }
 
-// Personal-route session scope (PR 5.1, the standing gate): the loader's
-// acting address comes ONLY from the session — there is no query param to
-// read another address, and an anonymous request renders the connect prompt
-// (prompt-and-explain, never blank, never someone else's data). 5.3 lands
-// the stake flow here with a minimal live position strip (Q5); the full
-// §8.2 Portfolio page (yield panel, accrual chart, CSV) is M6.1.
+// Personal-route session scope (PR 5.1, the standing gate): the acting address
+// comes ONLY from the session (there is no query param to read another
+// address), and an anonymous request renders the connect prompt (never blank,
+// never someone else's data). The page loads its data only for a real session.
 export async function loader({ request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
   const session = await getSessionContext(config, request);
-  if (session === null) return { address: null, position: null };
-  const position = await loadPortfolioPosition(config, session.address);
-  return { address: session.address, position };
+  if (session === null) return { data: null } as const;
+
+  const page = parsePageParam(new URL(request.url).searchParams.get("page"));
+  const data = await loadPortfolioData(config, { address: session.address }, page);
+  return { data } as const;
 }
 
 export default function Portfolio({ loaderData }: Route.ComponentProps) {
   const locale = useLocale();
-  const { address, position } = loaderData;
+  const { data } = loaderData;
 
-  if (address === null) {
+  if (data === null) {
     return (
       <section className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-6 py-16">
         <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "portfolio.title")}</h1>
@@ -39,37 +44,34 @@ export default function Portfolio({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const hasShares = position?.shares !== null && position?.shares !== undefined && BigInt(position.shares) > 0n;
-
   return (
-    <section className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "portfolio.title")}</h1>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-12">
+      <section className="flex flex-col gap-2">
+        <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "portfolio.title")}</h1>
+        <p className="text-sm text-muted-foreground">
+          {t(locale, "portfolio.viewing-address", { address: data.address })}
+        </p>
+      </section>
 
-      <div className="flex flex-col gap-2 rounded-lg border bg-card p-4">
-        <h2 className="text-sm font-medium text-muted-foreground">{t(locale, "portfolio.position-title")}</h2>
-        {position === null || position.shares === null ? (
-          <p className="text-sm text-muted-foreground">{t(locale, "portfolio.value-unavailable")}</p>
-        ) : !hasShares ? (
-          <p className="text-sm text-muted-foreground">{t(locale, "portfolio.no-position")}</p>
-        ) : (
-          <>
-            <p className="font-mono text-2xl">
-              {t(locale, "portfolio.balance", {
-                shares: formatBaseAmount(BigInt(position.shares), SHARE_EXPONENT, 4),
-              })}
-            </p>
-            {position.valueNhash !== null ? (
-              <p className="text-sm text-muted-foreground">
-                {t(locale, "portfolio.value-at-nav", {
-                  value: formatBaseAmount(BigInt(position.valueNhash), HASH_EXPONENT, 4),
-                })}
-              </p>
-            ) : null}
-          </>
-        )}
-      </div>
+      <PositionSummary locale={locale} summary={data.summary} />
 
-      <p className="text-xs text-muted-foreground">{t(locale, "portfolio.full-page-note")}</p>
-    </section>
+      {data.personalReadsAvailable ? (
+        <>
+          <EffectiveYieldPanel
+            locale={locale}
+            effectiveAprBps={data.effectiveAprBps}
+            yieldByEpoch={data.yieldByEpoch}
+            yieldTruncated={data.yieldTruncated}
+          />
+          <AccrualChart locale={locale} accrual={data.accrual} />
+          <ActiveRedemptions locale={locale} redemptions={data.activeRedemptions} />
+          {data.history !== null ? <HistoryTable locale={locale} history={data.history} /> : null}
+        </>
+      ) : (
+        <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          {t(locale, "portfolio.indexed-unavailable")}
+        </p>
+      )}
+    </div>
   );
 }

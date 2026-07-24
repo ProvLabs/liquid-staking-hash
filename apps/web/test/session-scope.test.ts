@@ -14,6 +14,7 @@ import { buildAdr36SignDoc, canonicalJson, utf8ToBase64 } from "~/lib/adr36";
 import { pubkeyToBech32 } from "~/lib/adr36-verify.server";
 import { InMemorySessionStore } from "~/lib/models/session.server";
 import { login, mintNonce, requireSession } from "~/lib/services/session.server";
+import { exportTransactionsCsv } from "~/portfolio/portfolio.server";
 
 const config = loadConfig({
   APP_ENV: "development",
@@ -24,6 +25,20 @@ const config = loadConfig({
   CONSOLE_URL: "https://console.example",
   CONSOLE_CHAIN_ID: "chain-dev",
   API_URL: "http://api.mock:8787",
+} as NodeJS.ProcessEnv);
+
+// Same environment with a minting key configured — the export proxy needs one
+// or it degrades to 503 before any address is read.
+const configWithKey = loadConfig({
+  APP_ENV: "development",
+  CHAIN_ID: "chain-dev",
+  LCD_URL: "http://lcd.mock:1317",
+  CONTRACT_ADDRESS: "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
+  VAULT_ADDRESS: "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
+  CONSOLE_URL: "https://console.example",
+  CONSOLE_CHAIN_ID: "chain-dev",
+  API_URL: "http://api.mock:8787",
+  API_SERVICE_ASSERTION_KEY: "session-scope-test-assertion-key-0123456789",
 } as NodeJS.ProcessEnv);
 
 const PRIV = sha256(new TextEncoder().encode("nvhash-scope-test-key"));
@@ -77,5 +92,40 @@ describe("personal-route session scope (standing gate, plan §4)", () => {
     await expect(requireSession(config, request, { store })).rejects.toSatisfy(
       (thrown) => thrown instanceof Response && thrown.status === 401,
     );
+  });
+});
+
+describe("portfolio/export joins the standing gate", () => {
+  it("rejects an anonymous request with a reasonless 401", async () => {
+    const store = new InMemorySessionStore();
+    const request = new Request("http://app.local/portfolio/export");
+    await expect(
+      exportTransactionsCsv(configWithKey, request, { sessionOverride: { store } }),
+    ).rejects.toSatisfy((thrown) => thrown instanceof Response && thrown.status === 401);
+  });
+
+  it("proxies for the SESSION address — a ?address= query param has no effect", async () => {
+    const store = new InMemorySessionStore();
+    const cookie = await sessionCookie(store);
+    let requestedUrl: string | null = null;
+    const fetchImpl = ((url: string) => {
+      requestedUrl = url;
+      return Promise.resolve(
+        new Response("txhash\n", { status: 200, headers: { "content-type": "text/csv" } }),
+      );
+    }) as unknown as typeof fetch;
+
+    const request = new Request(`http://app.local/portfolio/export?address=${OTHER}`, {
+      headers: { Cookie: cookie },
+    });
+    const response = await exportTransactionsCsv(configWithKey, request, {
+      fetchImpl,
+      sessionOverride: { store },
+    });
+    expect(response.status).toBe(200);
+    // The upstream URL is scoped to the session address, never the query param.
+    expect(requestedUrl).toContain(`address=${encodeURIComponent(ADDRESS)}`);
+    expect(requestedUrl).not.toContain(OTHER);
+    expect(requestedUrl).toContain("format=csv");
   });
 });

@@ -231,6 +231,37 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     });
   });
 
+  it("reads the FULL history ascending (height, msgIndex) as fold facts, Decimal round trip", async () => {
+    const facts = await reader.transactionsAscFor("pb1alice");
+    // Ascending, pb1bob's BB absent; the reverse of the newest-first view.
+    expect(facts.map((f) => f.txhash)).toEqual(["AA", "CC"]);
+    // Amounts survive as bigint (Decimal(39,0) → bigint), heights as bigint.
+    expect(facts[0]).toMatchObject({
+      txhash: "AA",
+      kind: "swap_in",
+      shares: 1000n,
+      nhash: 1017n,
+      navAtHeight: 10175n,
+      height: 100n,
+    });
+    expect(facts[1]!.kind).toBe("swap_out_request");
+    expect(facts[1]!.shares).toBe(500n);
+  });
+
+  it("lists epoch step facts ascending with endHeight and null-capable APR", async () => {
+    const steps = await reader.listEpochsAsc();
+    expect(steps).toEqual([
+      {
+        epochIndex: 12n,
+        endedAtSeconds: 1_767_225_600n,
+        tvvAfter: BigInt(FIXTURE_TVV),
+        totalShares: BigInt(FIXTURE_SHARES),
+        netAprBps: 431,
+        endHeight: 4100n,
+      },
+    ]);
+  });
+
   it("derives the portfolio facts: first activity, count, active-only escrow", async () => {
     const portfolio = await reader.portfolioFor("pb1alice");
     expect(portfolio.address).toBe("pb1alice");

@@ -20,6 +20,9 @@ export default [
   route("tx/broadcast", "routes/tx-broadcast.tsx"),
   route("tx/status", "routes/tx-status.tsx"),
   route("tx/recent", "routes/tx-recent.tsx"),
+  // Portfolio CSV export (M6.1 §2.7): a locale-independent, session-gated
+  // resource route, declared outside `:lang?` like the session/tx routes.
+  route("portfolio/export", "routes/portfolio-export.tsx"),
   route(":lang?", "routes/locale.tsx", [
     index("routes/home.tsx"),
     // §8.0 nav targets (plan 4.1): stubs until their real pages land in

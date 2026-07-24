@@ -63,6 +63,26 @@ End-user web interface. Production quality.
   coming-soon shell (§14.4), the native SwapOut flow (warning-tier confirm,
   three §10.3 timing facts), and the redemption tracker composed from live
   `pendingSwapOuts` + `/portfolio` + `/transactions` (`app/exit/exit.server.ts`).
+- **Portfolio page** (PR 6.1 commit C, app-spec §8.2): `app/routes/portfolio.tsx`
+  loads its data only for the session address (`getSessionContext`; anonymous
+  renders the connect prompt, never blank; the standing session-scope gate)
+  and zod-bounds `?page=` at entry (int 0–10 000; malformed → 400, reject
+  never clamp). `app/portfolio/portfolio.server.ts` composes the live plane
+  (canonical chain read) and the indexed plane (`services/api`) with §12.1
+  honesty labels; components under `app/components/portfolio/` are
+  presentation-only over the `types.ts` view models. Every figure is "n/a"
+  when null, never 0. The **CSV export** is a plain `<a href="/portfolio/export">`
+  to a resource route registered **outside** the `:lang?` segment
+  (`app/routes/portfolio-export.tsx`, the `tx/*` precedent):
+  `requireSession` → `personalApiHeaders` → the API's CSV streamed back with
+  only its `content-type`/`content-disposition`/`x-*` freshness headers; the
+  browser never sees the assertion or talks to the API. **StepChart extension**
+  (`app/components/charts/step-chart.tsx`): optional `markers` (event dots on
+  the primary series — filled "in", hollow ring "out", their data mirrored
+  into the table toggle) and an optional `compare` second series in
+  `--viz-cat-2` with a naming legend; all new props are optional so existing
+  callers compile unchanged, and no new tokens are introduced (`check:palette`
+  unaffected). Load the `dataviz` skill before touching the chart.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

@@ -72,6 +72,13 @@ export const configSchema = z.object({
     .nullable()
     .default(null),
   /**
+   * Block-explorer base URL for transaction verify-links (M6.1 Portfolio
+   * history). CLIENT-SAFE: an explorer URL is public by construction (§7
+   * allowlist amendment). Optional: absent, history rows render without a
+   * verify-link rather than a broken one.
+   */
+  explorerUrl: z.string().url().optional(),
+  /**
    * PostgreSQL URL for the `app` schema, connecting as `app_writer`
    * (ADR-001 Decision 1; server-only). Optional: absent, the session layer
    * runs on a non-durable in-memory store (dev/mock posture, the services/api
@@ -106,6 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     apiUrl: env.API_URL,
     consoleChainId: env.CONSOLE_CHAIN_ID,
     walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID ?? null,
+    explorerUrl: env.EXPLORER_URL,
     databaseUrl: env.DATABASE_URL,
     apiServiceAssertionKey: env.API_SERVICE_ASSERTION_KEY,
   });
@@ -180,6 +188,7 @@ export function toClientConfig(config: WebConfig): ClientConfig {
     vaultAddress: config.vaultAddress,
     consoleUrl: config.consoleUrl,
     walletConnectProjectId: config.walletConnectProjectId,
+    explorerUrl: config.explorerUrl,
   };
   for (const key of Object.keys(client)) {
     if (!(CLIENT_SAFE_CONFIG_KEYS as readonly string[]).includes(key)) {

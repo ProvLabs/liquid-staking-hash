@@ -35,7 +35,11 @@ function startAuthServer(): Promise<RunningServer> {
   return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(facts));
 }
 
-const PERSONAL_PATHS = [`${API_BASE}/portfolio`, `${API_BASE}/transactions`] as const;
+const PERSONAL_PATHS = [
+  `${API_BASE}/portfolio`,
+  `${API_BASE}/portfolio/metrics`,
+  `${API_BASE}/transactions`,
+] as const;
 
 describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
   it("rejects an assertion for A requesting B with 403 on every personal route", async () => {
@@ -197,8 +201,9 @@ describe("CSV export contract (§14.11; [R3] freshness headers)", () => {
 
       const lines = (await res.text()).trimEnd().split("\n");
       expect(lines[0]).toBe(TRANSACTIONS_CSV_COLUMNS.join(","));
-      expect(lines).toHaveLength(3); // header + CC + AA
-      expect(lines[1]).toBe("2026-06-03T00:00:00.000Z,300,CC,0,swap_out_request,500,0,1017500000");
+      expect(lines).toHaveLength(3); // header + AA + CC (§14.11: full history, ascending)
+      expect(lines[1]).toBe("2026-06-01T00:00:00.000Z,100,AA,0,swap_in,1000,1017,1017500000");
+      expect(lines[2]).toBe("2026-06-03T00:00:00.000Z,300,CC,0,swap_out_request,500,0,1017500000");
     } finally {
       await server.close();
     }
@@ -214,6 +219,49 @@ describe("CSV export contract (§14.11; [R3] freshness headers)", () => {
       expect(cross.status).toBe(403);
       const bare = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`);
       expect(bare.status).toBe(401);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("exports the COMPLETE history ascending, ignoring JSON pagination bounds (§14.11)", async () => {
+    // More rows than the JSON `limit` max (200): the CSV must never inherit
+    // that bound, or an export would silently drop a holder's older events.
+    const ROWS = 260;
+    const many = Array.from({ length: ROWS }, (_, i) => ({
+      txhash: `TX${i}`,
+      msgIndex: 0,
+      address: ADDR_A,
+      kind: "swap_in" as const,
+      shares: BigInt(i + 1),
+      nhash: BigInt(i + 1),
+      navAtHeight: 1_000_000_000n,
+      height: BigInt(i + 1),
+      blockTime: new Date((1_700_000_000 + i) * 1000),
+    }));
+    const server = await startServer(
+      { assertionKey: TEST_ASSERTION_KEY },
+      undefined,
+      fakeReader({ reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n }, transactions: many }),
+    );
+    try {
+      const auth = { authorization: mintAssertion(`address:${ADDR_A}`) };
+      const csv = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`, {
+        headers: auth,
+      });
+      expect(csv.status).toBe(200);
+      const lines = (await csv.text()).trimEnd().split("\n");
+      expect(lines).toHaveLength(ROWS + 1); // header + every row, none truncated
+      // Ascending by (height, msg_index): TX0 first data row, TX259 last.
+      expect(lines[1]!.split(",")[2]).toBe("TX0");
+      expect(lines[ROWS]!.split(",")[2]).toBe(`TX${ROWS - 1}`);
+
+      // The JSON view still paginates at the schema ceiling (200).
+      const json = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&limit=200`, {
+        headers: auth,
+      });
+      const body = (await json.json()) as { data: unknown[] };
+      expect(body.data).toHaveLength(200);
     } finally {
       await server.close();
     }

@@ -7,7 +7,10 @@
 // between producer and consumer is a type error, not a runtime surprise.
 
 import type {
+  AccrualMarker,
+  AccrualPoint,
   BridgedSupplyRow,
+  EffectiveYieldPoint,
   EpochRow,
   FreshnessMeta,
   IncidentKind,
@@ -17,6 +20,7 @@ import type {
   MarketSample,
   MarketSummary,
   PayoutStats,
+  PortfolioMetrics,
   PortfolioSummary,
   ProgramMetrics,
   RedemptionRow,
@@ -77,6 +81,11 @@ const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "expected a decimal stri
 /** Base-unit integer amount as a decimal string (fractions are a shape
  * error: consumers BigInt() these; PR #14 review). */
 const baseUnitString = z.string().regex(/^\d+$/, "expected a base-unit integer string");
+
+/** Signed base-unit integer amount (realized gain, the one signed nhash
+ * figure; leading `-` allowed, fractions a shape error since consumers
+ * BigInt() these). */
+const signedBaseUnitString = z.string().regex(/^-?\d+$/, "expected a signed base-unit integer string");
 
 export const epochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
@@ -160,17 +169,12 @@ export const marketSummarySchema = z.object({
   bridged_supply: z.array(bridgedSupplyRowSchema).max(64),
 }) satisfies z.ZodType<MarketSummary>;
 
-/** Collections stay bounded at the boundary, mirroring the API's page cap. */
-export const incidentsEnvelopeSchema = envelopeSchema(z.array(incidentRowSchema).max(200));
-export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(200));
-export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
-export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
-export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
-export const payoutStatsEnvelopeSchema = envelopeSchema(payoutStatsSchema);
-export const statusEnvelopeSchema = envelopeSchema(z.unknown());
-
-// PR 5.4: the redemption tracker consumes the address-scoped /portfolio
-// (active redemptions) and /transactions (terminal payout/refund rows).
+// M6.1 personal surfaces (address-scoped /portfolio, /portfolio/metrics,
+// /transactions). Amounts are base-unit integer strings; only realized_gain_nhash
+// is signed (the accrual/marker legs are unsigned). Closed unions are pinned so
+// an unknown wire variant is a shape error, not a guess. The PR 5.4 redemption
+// tracker consumes the same /portfolio (active redemptions) and /transactions
+// (terminal payout/refund rows) shapes.
 export const redemptionStatusSchema = z.enum([
   "enqueued",
   "expedited",
@@ -195,7 +199,7 @@ export const portfolioSummarySchema = z.object({
   first_activity_at: isoTimestamp.nullable(),
   transaction_count: z.number().int().nonnegative(),
   escrowed_shares: baseUnitString,
-  active_redemptions: z.array(redemptionRowSchema).max(200),
+  active_redemptions: z.array(redemptionRowSchema).max(500),
 }) satisfies z.ZodType<PortfolioSummary>;
 
 export const transactionKindSchema = z.enum([
@@ -218,7 +222,54 @@ export const transactionRowSchema = z.object({
   block_time: isoTimestamp,
 }) satisfies z.ZodType<TransactionRow>;
 
+export const effectiveYieldPointSchema = z.object({
+  epoch_index: z.number().int().nonnegative(),
+  ended_at: isoTimestamp,
+  personal_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
+  net_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
+}) satisfies z.ZodType<EffectiveYieldPoint>;
+
+export const accrualPointSchema = z.object({
+  time: isoTimestamp,
+  height: z.number().int().nonnegative(),
+  value_nhash: baseUnitString,
+}) satisfies z.ZodType<AccrualPoint>;
+
+export const accrualMarkerSchema = z.object({
+  time: isoTimestamp,
+  txhash: z.string().max(64),
+  kind: transactionKindSchema,
+  shares: baseUnitString,
+  nhash: baseUnitString,
+}) satisfies z.ZodType<AccrualMarker>;
+
+export const portfolioMetricsSchema = z.object({
+  address: z.string().max(90),
+  history_state: z.enum(["complete", "has_transfers", "inconsistent"]),
+  indexed_share_balance: baseUnitString,
+  escrowed_share_balance: baseUnitString,
+  cost_basis_nhash: baseUnitString.nullable(),
+  escrowed_basis_nhash: baseUnitString.nullable(),
+  realized_gain_nhash: signedBaseUnitString.nullable(),
+  effective_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
+  yield_by_epoch: z.array(effectiveYieldPointSchema).max(20_000),
+  yield_truncated: z.boolean(),
+  accrual: z.array(accrualPointSchema).max(20_000),
+  accrual_truncated: z.boolean(),
+  accrual_markers: z.array(accrualMarkerSchema).max(2_000),
+  markers_truncated: z.boolean(),
+}) satisfies z.ZodType<PortfolioMetrics>;
+
+/** Collections stay bounded at the boundary, mirroring the API's page cap. */
+export const incidentsEnvelopeSchema = envelopeSchema(z.array(incidentRowSchema).max(200));
+export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(200));
+export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
+export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
+export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
+export const payoutStatsEnvelopeSchema = envelopeSchema(payoutStatsSchema);
+export const statusEnvelopeSchema = envelopeSchema(z.unknown());
 export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
+export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);
 export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));
 
 /**

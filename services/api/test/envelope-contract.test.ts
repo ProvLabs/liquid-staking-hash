@@ -263,6 +263,106 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
       await server.close();
     }
   });
+
+  it("/portfolio/metrics serves the fold's empty output for an unseen address", async () => {
+    const server = await startServer({ assertionKey: TEST_ASSERTION_KEY });
+    const auth = { authorization: mintAssertion(`address:${EXAMPLE_ADDRESS}`) };
+    try {
+      const res = await fetch(
+        `${server.baseUrl}${API_BASE}/portfolio/metrics?address=${EXAMPLE_ADDRESS}`,
+        { headers: auth },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Record<string, unknown> };
+      // No history: zeros for balances/basis, null APR, empty series — never
+      // a fabricated figure (§12.1 honesty).
+      expect(body.data).toEqual({
+        address: EXAMPLE_ADDRESS,
+        history_state: "complete",
+        indexed_share_balance: "0",
+        escrowed_share_balance: "0",
+        cost_basis_nhash: "0",
+        escrowed_basis_nhash: "0",
+        realized_gain_nhash: "0",
+        effective_apr_bps: null,
+        yield_by_epoch: [],
+        yield_truncated: false,
+        accrual: [],
+        accrual_truncated: false,
+        accrual_markers: [],
+        markers_truncated: false,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+});
+
+describe("populated portfolio metrics (M6.1 derived fold behind the route)", () => {
+  const ADDR = "pb1walletaqq";
+  const metricsFacts: FakeFacts = {
+    reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
+    // NAV rises 1.0 → 2.2 between the two settled epochs; the deposit lands
+    // between them, so it is held into epoch 2's repricing.
+    epochs: [
+      { epochIndex: 1n, endedAtSeconds: 1_000n, tvvAfter: 1_000n, totalShares: 1_000n, netAprBps: 400, endHeight: 10n },
+      { epochIndex: 2n, endedAtSeconds: 2_000n, tvvAfter: 2_200n, totalShares: 1_000n, netAprBps: 500, endHeight: 20n },
+    ],
+    transactions: [
+      { txhash: "DEP", msgIndex: 0, address: ADDR, kind: "swap_in", shares: 1_000n, nhash: 1_000n, navAtHeight: 1_000_000_000n, height: 15n, blockTime: new Date(1_500 * 1000) },
+    ],
+  };
+
+  it("derives basis, balances, accrual heights, and yield behind the route", async () => {
+    const server = await startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(metricsFacts));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/portfolio/metrics?address=${ADDR}`, {
+        headers: { authorization: mintAssertion(`address:${ADDR}`) },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: {
+          history_state: string;
+          indexed_share_balance: string;
+          escrowed_share_balance: string;
+          cost_basis_nhash: string;
+          escrowed_basis_nhash: string;
+          realized_gain_nhash: string;
+          effective_apr_bps: number | null;
+          yield_by_epoch: Array<Record<string, unknown>>;
+          yield_truncated: boolean;
+          accrual: Array<{ height: number; value_nhash: string }>;
+          accrual_truncated: boolean;
+          accrual_markers: Array<Record<string, unknown>>;
+          markers_truncated: boolean;
+        };
+        meta: { indexed_height: number };
+      };
+      expect(body.data.history_state).toBe("complete");
+      expect(body.data.indexed_share_balance).toBe("1000");
+      expect(body.data.escrowed_share_balance).toBe("0");
+      expect(body.data.cost_basis_nhash).toBe("1000");
+      expect(body.data.escrowed_basis_nhash).toBe("0");
+      expect(body.data.realized_gain_nhash).toBe("0");
+      // Accrual carries the REAL synthesized heights (event height, epoch end
+      // height) and the value repriced at each step's NAV.
+      expect(body.data.accrual.map((p) => p.height)).toEqual([15, 20]);
+      expect(body.data.accrual.map((p) => p.value_nhash)).toEqual(["1000", "2200"]);
+      // Only epoch 2 spans time after the deposit; its program net APR rides
+      // alongside the (unattributable-here) personal figure.
+      expect(body.data.yield_by_epoch).toEqual([
+        { epoch_index: 2, ended_at: new Date(2_000 * 1000).toISOString(), personal_apr_bps: null, net_apr_bps: 500 },
+      ]);
+      expect(typeof body.data.effective_apr_bps).toBe("number");
+      expect(body.data.accrual_markers.map((m) => m.kind)).toEqual(["swap_in"]);
+      expect(body.data.yield_truncated).toBe(false);
+      expect(body.data.accrual_truncated).toBe(false);
+      expect(body.data.markers_truncated).toBe(false);
+      expect(body.meta.indexed_height).toBe(4200);
+    } finally {
+      await server.close();
+    }
+  });
 });
 
 describe("populated reader (PR 3.1: real derivations behind the frozen shapes)", () => {

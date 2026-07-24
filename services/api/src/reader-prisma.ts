@@ -30,8 +30,10 @@ import {
   toTransactionRow,
   type ValidatorEpochFacts,
 } from "./derive.ts";
+import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Heads, IndexedReader } from "./reader.ts";
 import type { Pagination } from "./query.ts";
+import type { TransactionFacts } from "./derive.ts";
 import type {
   EpochRow,
   IncidentRow,
@@ -47,6 +49,33 @@ import type {
 /** Prisma Decimal(39,0) → bigint (always integral; no float is ever built). */
 function toBigint(value: { toFixed(dp: number): string }): bigint {
   return BigInt(value.toFixed(0));
+}
+
+interface TransactionRowScalars {
+  txhash: string;
+  msgIndex: number;
+  address: string;
+  kind: string;
+  shares: { toFixed(dp: number): string };
+  nhash: { toFixed(dp: number): string };
+  navAtHeight: { toFixed(dp: number): string };
+  height: bigint;
+  blockTime: Date;
+}
+
+/** One transaction row → fold facts (the shared per-row mapping). */
+function toTxFacts(r: TransactionRowScalars): TransactionFacts {
+  return {
+    txhash: r.txhash,
+    msgIndex: r.msgIndex,
+    address: r.address,
+    kind: r.kind as TransactionKind,
+    shares: toBigint(r.shares),
+    nhash: toBigint(r.nhash),
+    navAtHeight: toBigint(r.navAtHeight),
+    height: r.height,
+    blockTime: r.blockTime,
+  };
 }
 
 /** Reserved `meta:`-prefixed checkpoint rows are markers, not worker cursors. */
@@ -298,19 +327,59 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         skip: page.offset,
         take: page.limit,
       });
-      return rows.map((r) =>
-        toTransactionRow({
-          txhash: r.txhash,
-          msgIndex: r.msgIndex,
-          address: r.address,
-          kind: r.kind as TransactionKind,
-          shares: toBigint(r.shares),
-          nhash: toBigint(r.nhash),
-          navAtHeight: toBigint(r.navAtHeight),
-          height: r.height,
-          blockTime: r.blockTime,
-        }),
-      );
+      return rows.map((r) => toTransactionRow(toTxFacts(r)));
+    },
+
+    async transactionsAscFor(address: string): Promise<TransactionFacts[]> {
+      // Fixed chunk, loop until a short page: the full history is bounded per
+      // query, so no single SELECT scans an address's entire (unbounded) log.
+      const CHUNK = 1000;
+      const facts: TransactionFacts[] = [];
+      for (let skip = 0; ; skip += CHUNK) {
+        const rows = await prisma.transaction.findMany({
+          where: { address },
+          orderBy: [{ height: "asc" }, { msgIndex: "asc" }],
+          skip,
+          take: CHUNK,
+        });
+        for (const r of rows) facts.push(toTxFacts(r));
+        if (rows.length < CHUNK) break;
+      }
+      return facts;
+    },
+
+    async listEpochsAsc(): Promise<EpochStepFact[]> {
+      // Same chunk-until-short-page pattern as transactionsAscFor: epochs are
+      // calendar-month (small in practice) but no SELECT is left unbounded.
+      const CHUNK = 1000;
+      const facts: EpochStepFact[] = [];
+      for (let skip = 0; ; skip += CHUNK) {
+        const rows = await prisma.epochSnapshot.findMany({
+          orderBy: { epochIndex: "asc" },
+          skip,
+          take: CHUNK,
+          select: {
+            epochIndex: true,
+            endedAtSeconds: true,
+            tvvAfter: true,
+            totalShares: true,
+            netAprBps: true,
+            endHeight: true,
+          },
+        });
+        for (const r of rows) {
+          facts.push({
+            epochIndex: r.epochIndex,
+            endedAtSeconds: r.endedAtSeconds,
+            tvvAfter: toBigint(r.tvvAfter),
+            totalShares: toBigint(r.totalShares),
+            netAprBps: r.netAprBps,
+            endHeight: r.endHeight,
+          });
+        }
+        if (rows.length < CHUNK) break;
+      }
+      return facts;
     },
 
     close: () => prisma.$disconnect(),

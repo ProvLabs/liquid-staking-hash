@@ -226,6 +226,102 @@ export interface PortfolioSummary {
 }
 
 /**
+ * One epoch step of the personal effective-yield series (M6.1 §2.2). The
+ * program figure `net_apr_bps` rides alongside the personal APR so the UI can
+ * chart the depositor against the program for the same epoch. Both are signed
+ * bps and nullable: null is the honest "not attributable to this position"
+ * state (cold-start epoch, zero-share NAV, or a step the position did not span).
+ */
+export interface EffectiveYieldPoint {
+  epoch_index: number;
+  /** ISO-8601 settlement time of this epoch. */
+  ended_at: string;
+  /** Personal APR over the step, bps, signed; null when not attributable. */
+  personal_apr_bps: number | null;
+  /** Program net APR for the same epoch, bps; null when absent. */
+  net_apr_bps: number | null;
+}
+
+/**
+ * One step-after sample of the position's value (M6.1 §2.3): value in nhash of
+ * the held+escrow shares priced at the NAV current at `time`. Points exist only
+ * once the position is priceable (a deposit exists and a NAV-bearing epoch has
+ * settled); before that, a value cannot be honestly stated.
+ */
+export interface AccrualPoint {
+  /** ISO-8601 time of the epoch step or event this point samples. */
+  time: string;
+  height: number;
+  /** Position value in nhash base units, decimal string. */
+  value_nhash: string;
+}
+
+/**
+ * One event annotation on the accrual series (M6.1 §2.3): the deposit,
+ * request, payout, refund, or transfer that moved the position, echoing the
+ * event's own amounts (refund `nhash` is "0" upstream).
+ */
+export interface AccrualMarker {
+  /** ISO-8601 event time. */
+  time: string;
+  txhash: string;
+  kind: TransactionKind;
+  /** Shares moved by the event, nvHASH base units, decimal string. */
+  shares: string;
+  /** nhash leg of the event, decimal string ("0" where none). */
+  nhash: string;
+}
+
+/**
+ * Fidelity of the reconstructed cost-basis history (M6.1 §2.1):
+ * `complete`: a clean deposit/redemption record;
+ * `has_transfers`: transfers were observed (they carry no basis, so the
+ *   reconstructed basis is a lower-fidelity estimate);
+ * `inconsistent`: an event would drive a pool negative or hit an empty escrow,
+ *   so no basis/gain figure can be trusted (those fields serve null).
+ */
+export type PortfolioHistoryState = "complete" | "has_transfers" | "inconsistent";
+
+/**
+ * `GET /api/v1/portfolio/metrics` (address-scoped, M6.1 §2.4): the derived
+ * cost-basis, realized-gain, effective-yield, and accrual figures for one
+ * address, reconstructed from the indexed event history. All amounts are
+ * base-unit decimal strings; basis/gain/APR fields serve null on an
+ * `inconsistent` history (never a fabricated figure). Balances are the indexed
+ * held/escrow share pools (not a live bank read, which stays a web-tier read,
+ * [R2]).
+ */
+export interface PortfolioMetrics {
+  /** The authorized address the figures belong to (echo of the query). */
+  address: string;
+  history_state: PortfolioHistoryState;
+  /** Held-pool shares (excludes escrow), nvHASH base units, decimal string. */
+  indexed_share_balance: string;
+  /** Escrowed shares in active redemptions, base units, decimal string. */
+  escrowed_share_balance: string;
+  /** Held-pool average-cost basis in nhash, decimal string; null if inconsistent. */
+  cost_basis_nhash: string | null;
+  /** Escrow-pool average-cost basis in nhash, decimal string; null if inconsistent. */
+  escrowed_basis_nhash: string | null;
+  /** Realized gain in nhash, signed decimal string; null if inconsistent. */
+  realized_gain_nhash: string | null;
+  /** Effective APR since first deposit, bps; null until a step completes. */
+  effective_apr_bps: number | null;
+  /** Per-epoch personal-vs-program yield, oldest first from the first deposit; most recent MAX_YIELD_POINTS kept. */
+  yield_by_epoch: EffectiveYieldPoint[];
+  /** True when the yield cap trimmed earlier epochs; the most recent points are kept. */
+  yield_truncated: boolean;
+  /** Step-after value series, most recent MAX_ACCRUAL_POINTS kept. */
+  accrual: AccrualPoint[];
+  /** True when the accrual cap trimmed earlier history; the most recent points are kept. */
+  accrual_truncated: boolean;
+  /** Event annotations, most recent MARKER_CAP kept. */
+  accrual_markers: AccrualMarker[];
+  /** True when the marker cap trimmed older events. */
+  markers_truncated: boolean;
+}
+
+/**
  * One depth-at-slippage band of a sampled DEX pool (app-spec §5.3/§8.5).
  * PROVISIONAL SHAPE: the market sampler (plan PR 2.4) is parked pending the
  * §14.3 pool facts, so no producer pins these fields yet — when PR 2.4 lands
