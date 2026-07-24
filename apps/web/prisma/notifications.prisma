@@ -1,0 +1,44 @@
+// notifications (app-spec §9.1, §10.4; plan 6.2 §2.1) — the in-app delivery
+// log. `kind` is NOT a rule FK: default-on kinds have no rule row (absence
+// means default). Payload minimalism is enforced, not stylistic: each kind has
+// a closed zod shape (app/lib/services/alerts.server.ts) carrying only
+// identifiers/ordinals — { epoch_index }, { request_id, event },
+// { incident_kind }, { valoper, epoch_index } — and **never amounts** (a stored
+// amount goes stale and violates §12.1; the 6.3 push payload is then a strict
+// subset of an already-minimal shape). In-app copy renders at read time from
+// the payload keys + i18n.
+//
+// Two mechanisms, correctness never resting on the cursor (plan §2.4):
+//   * `@@unique([address, kind, dedupeKey])` — THE exactly-once gate: every
+//     tick inserts with `skipDuplicates` (ON CONFLICT DO NOTHING), so an
+//     indexer replay or worker restart can never double-deliver.
+//   * the per-stream cursor (notifier_checkpoints) advances in the SAME
+//     transaction as the insert batch — an efficiency device, absorbed by the
+//     unique constraint if it over- or under-scans.
+//
+// There is deliberately **no `channel` column** (a recorded §9.1 deviation):
+// in-app is the always-on channel, so the row's creation IS the in-app
+// delivery and `deliveredAt` records it. Channel-specific delivery state
+// belongs to the channel that needs it (6.3's push machinery keys off
+// `notifications.id` with its own bookkeeping). Columns gated by
+// test/app-schema-allowlist.test.ts.
+
+model Notification {
+  id          BigInt    @id @default(autoincrement())
+  /** bech32 target address (public by nature). */
+  address     String
+  /** The closed alert kind (NOT a rule FK: default-on kinds have no rule). */
+  kind        AlertKind
+  /** Replay-stable event identity (plan §2.4) — never an autoincrement id. */
+  dedupeKey   String
+  /** Closed per-kind zod shape; identifiers/ordinals only, NEVER amounts. */
+  payload     Json
+  deliveredAt DateTime  @default(now())
+  readAt      DateTime?
+
+  @@unique([address, kind, dedupeKey]) // THE exactly-once mechanism
+  @@index([address, readAt]) // bell unread count
+  @@index([deliveredAt]) // retention sweep
+  @@map("notifications")
+  @@schema("app")
+}

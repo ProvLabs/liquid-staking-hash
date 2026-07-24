@@ -2,6 +2,7 @@
   "include": [
     "app/**/*.ts",
     "app/**/*.tsx",
+    "notifier/**/*.ts",
     "test/**/*.ts",
     "e2e/**/*.ts",
     "playwright.config.ts",

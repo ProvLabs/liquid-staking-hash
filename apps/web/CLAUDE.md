@@ -86,6 +86,28 @@ End-user web interface. Production quality.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).
+  **Delivered PR 6.2 commit B:** `notifier/index.ts` (`pnpm notifier` →
+  `node notifier/index.ts`) lives **outside `app/`** so the React Router build
+  never bundles it (`check:bundle` confirms). It uses **relative** imports, not
+  the `~` alias, because `node`'s strip-only TS runs it directly — for the same
+  reason, files it loads at runtime must avoid **parameter properties** (use
+  explicit field assignment) and `enum`/`namespace`. Its config
+  (`notifier/config.ts`) is zod-bounded and **fail-fast**: `DATABASE_URL` and
+  `API_SERVICE_ASSERTION_KEY` (≥ 32) are required. **`app/lib/models/alerts.server.ts`**
+  is the AlertStore port — the **sole new Prisma import site** (the
+  `session.server.ts` split: Prisma + in-memory behind one contract, so routes
+  and tests run storeless). The exactly-once mechanism is `commitTick` (insert
+  `skipDuplicates` + cursor advance in one transaction). The pure evaluation
+  core, effective-settings merge (absence-means-default), payload zod shapes,
+  and incident→kind mapping live in **`app/lib/services/alerts.server.ts`** (no
+  Prisma, no fetch, no clock). `mintInternalAssertion` (in
+  `assertion.server.ts`) mints the `internal:notifier` scope, golden-vector
+  cross-pinned with `services/api`. New standing gates: `test/notifier.test.ts`
+  (exactly-once, presence filter, opt-out suppression, opt-in fan-out, incident
+  mapping, failure isolation, retention sweep), `test/notification-payload.test.ts`
+  (closed identifier-only payloads, no amount keys), `test/alerts-models.test.ts`
+  (store contract, both impls), `test/notifier-config.test.ts` (config bounds);
+  the app-schema allowlist now covers the three alert tables.
 - The session layer mints the short-lived scoped service assertions
   `services/api` requires for address-scoped reads (ADR-001 Decision 2);
   `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client

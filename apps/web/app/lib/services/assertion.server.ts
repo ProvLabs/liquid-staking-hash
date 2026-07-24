@@ -46,6 +46,26 @@ export function mintAddressAssertion(
 }
 
 /**
+ * Mint the Authorization header for the notifier's `internal:notifier` reads
+ * (M6.2; ADR-001 Decision 3). Same wire format, field order, lifetime, and
+ * key as {@link mintAddressAssertion} — only the scope literal differs
+ * (`internal:notifier`, no address). Cross-address by nature and never granting
+ * a personal endpoint (services/api enforces both). The internal golden vector
+ * in test/assertion.test.ts pins this output byte-for-byte against the
+ * verifier's cross-pinned vector.
+ */
+export function mintInternalAssertion(key: string, nowSeconds: number): string {
+  const payload = JSON.stringify({
+    scope: "internal:notifier",
+    iat: nowSeconds,
+    exp: nowSeconds + ASSERTION_LIFETIME_SECONDS,
+  });
+  const payloadB64 = Buffer.from(payload, "utf8").toString("base64url");
+  const sig = createHmac("sha256", key).update(payloadB64).digest("base64url");
+  return `Bearer ${payloadB64}.${sig}`;
+}
+
+/**
  * Headers for a personal services/api read scoped to the session address.
  * Null when no minting key is configured: the caller degrades honestly
  * (the API fails closed on its side regardless — one contract, two ends).

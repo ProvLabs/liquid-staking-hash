@@ -245,4 +245,8 @@ To revisit:
    `infra/dev/postgres/roles.sql`.
 5. [ ] PR 3.3: cross-address-rejection contract tests; standing in
    `services/api` CI.
-6. [ ] PR 6.2: notifier internal read surface under `internal:notifier` scope.
+6. [x] PR 6.2: notifier internal read surface under `internal:notifier` scope
+   (three `/api/v1/internal/alert-facts/*` routes in `services/api`; the
+   notifier worker `apps/web/notifier/` reads them and holds no `indexed`
+   grant; cross-pinned assertion vector + registry-derived `INTERNAL_PATHS`
+   gate).

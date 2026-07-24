@@ -13,6 +13,7 @@
     "dev": "react-router dev",
     "build": "react-router build",
     "start": "react-router-serve ./build/server/index.js",
+    "notifier": "node notifier/index.ts",
     "test:e2e": "react-router build && playwright test",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "check:palette": "node scripts/check-palette.mjs",

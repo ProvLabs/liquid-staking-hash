@@ -599,6 +599,30 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 - `alert_rules`, `notifications` (rule; address; channel; payload; delivered_at; read_at) — `app` schema, with Web Push subscriptions and the aggregate funnel counters (§14.10).
 - `indexer_checkpoints` (stream name PK; cursor height/page; updated_at) — the nuva precedent, one row per worker stream.
 
+> **Revision 2026-07-24 (PR 6.2 commit B, the `app`-schema alert domain):**
+> three tables land in the `app` schema (allowlist gate extended in the same
+> change): **`alert_rules`** (`address, kind, enabled, createdAt, updatedAt`;
+> PK `(address, kind)`), **`notifications`** (`id, address, kind, dedupeKey,
+> payload, deliveredAt, readAt`), **`notifier_checkpoints`** (`stream, cursor,
+> updatedAt`). Recorded decisions: (a) **`alert_rules` is preference
+> OVERRIDES, not subscription rows** — absence-means-default (ON for the §14.7
+> R2 set `{redemption_update, operator_arrears}`, OFF for the rest); a row is
+> only ever an explicit opt-out (`enabled=false`) or opt-in (`enabled=true`),
+> so a user who never touches settings has zero rows. **No params column** (the
+> only parameterized kind, market-spread, is deferred with §14.4). (b)
+> **`notifications` has NO `channel` column** — a deviation from this section's
+> parenthetical `(rule; address; channel; payload; delivered_at; read_at)`:
+> in-app is the always-on channel, so the row's creation IS the in-app delivery
+> and `deliveredAt` records it; channel-specific state belongs to the channel
+> that needs it (6.3 push keys off `notifications.id` with its own bookkeeping).
+> `kind` is NOT a rule FK (default-on kinds have no rule row). The
+> **`@@unique([address, kind, dedupeKey])`** is the exactly-once mechanism
+> (§10.4). Payloads are closed per-kind zod shapes of identifiers/ordinals only
+> — **never amounts** (a stored amount goes stale, §12.1). (c)
+> **`notifier_checkpoints`** cursors are efficiency, not correctness (the
+> unique constraint is): a stale/garbage cursor merely re-scans and the
+> duplicates are absorbed.
+
 ### 9.2 Indexer workers
 
 - **Transport:** dual-source per the §14.5 resolution (RESOLVED 2026-07-20, PR 2.1) — tx-search by height range for DeliverTx events, and `block_results` per height for EndBlocker payout/refund + the NAV marker (which never appear in tx-search, §14.2); paging to exhaustion per block window; RPC websocket subscription is a latency optimization, not a correctness dependency.
@@ -918,6 +942,31 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 
 Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notifications` and fan out per channel opt-in. Channels are **in-app (always)** and **Web Push (per-browser opt-in)**; there is no email channel (`SECURITY.md`: no off-chain identity linked to wallets). A push subscription is stored as an opaque, revocable endpoint token and is deleted on opt-out or session deletion; push payloads are minimal (event + link into the App, no amounts). Every alert kind has an in-app rendering so users without push lose nothing but latency.
 
+> **Revision 2026-07-24 (PR 6.2 commit B, notifier delivered):** the notifier
+> is a separate `apps/web` worker entrypoint (`notifier/index.ts`, `pnpm
+> notifier`; ADR-001 Decision 3) that reads indexed facts ONLY through
+> `services/api`'s `internal:notifier` surface (§9.4) — its `app_writer`
+> credential holds no `indexed` grant. Recorded mechanisms: (a)
+> **Evaluation population = app presence**, never "all indexed addresses": an
+> in-app notification can only be seen by an address that has established a
+> session, so the notifier notifies only addresses with an `address_activity`
+> row (the accepted first/last-seen marker, `app`-schema-local — no API hop).
+> Consequence, stated honestly: a holder's first login shows notifications only
+> for events after that first presence; they could never have seen earlier
+> ones. (b) **Exactly-once is two-layered**, correctness never resting on the
+> cursor: the `notifications` unique constraint (`ON CONFLICT DO NOTHING` on
+> every insert) plus a per-stream cursor advanced in the SAME transaction as
+> the insert batch. Dedupe keys are replay-stable chain/indexed identities
+> (`epoch:<i>`, `req:<id>:<event>`, `incident:<kind>:<dedupeKey>`,
+> `arrears:<valoper>:<epoch>`), never autoincrement ids. (c) **Incident→kind
+> mapping is a closed table**: `vault_status ← {vault_paused, contract_halted}`,
+> `validator_set_incident ← {jail_report, slash_write_down}`; ops-facing kinds
+> excluded; v1 sends no close/"resumed" notifications. (d) A **retention sweep**
+> rides the tick (bounded batch): delete read > 90 days ago, and any > 180 days
+> old (proposal values) — minimization applied to our own table. Per-stream
+> try/catch isolates a failing stream (cursor unmoved, retry next tick); a boot
+> misconfig is a loud exit.
+
 ---
 
 ## 11. Design Language
@@ -1027,7 +1076,8 @@ Protocol and platform facts this design must respect (chain constraints identica
    - **Admin program-ops** (halt/resume, pause/unpause, config, bridge config) are originated in the App via the §8.7 governance templates — these program-ops *are* group-policy proposals, so "admin actions in the App" and "template-scoped governance" are the same mechanism.
    - **Boundary amendment:** this supersedes the prior "§10.3 everything-else-is-a-link" rule and §8.6's "every action lands in the Console." The App now **fully** implements these privileged writes (no half-implementation) — all still wallet-signed, message-building only, **no key material** (SECURITY.md apps rules unchanged; the contract remains the enforcement boundary and UI preflight stays convenience only). The Console retains free-form compose, the devnet key mode, and raw engineering ops as an engineering surface, not a user dependency (console §14.6 keeps the composer).
    - **Register B2 (validator-elected admins):** unchanged — this decision takes no position; if B2 resolves toward validator voting, that surface is the §8.7 page.
-7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Remaining `[DECIDE]`: which alert kinds default-on per role. Email remains excluded and is not an option.
+7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Email remains excluded and is not an option.
+   **[DECIDED 2026-07-24, Ira] Default-on alert kinds = the R2 minimal set (PR 6.2 commit B).** Holders: `redemption_update` (matured | expedited | refunded — one settings row, §8.2/§8.4) is **on by default, opt-out** (§10.3). Operators: `operator_arrears` is **on by default** for sessions the live role read reports as operator (§8.6). Everything else — `nav_step_posted`, `vault_status`, `validator_set_incident` — is **opt-in** (off by default). The mechanism is **absence-means-default** (§9.1): no `alert_rules` row means the kind's default, so a user who never touches settings has zero rows and the default-on set costs no stored subscription (data minimization by construction). The market-spread kind is **deferred with §14.4** (no market data in v1) — enabling it later is an enum migration + allowlist review + a `thresholdBps` column, a spec-recorded amendment, not a config toggle.
 8. **[DECIDED 2026-07-14, ADR-001 Decision 4]** Design-system packaging (boundary §7.4): design tokens are **web-local** (`apps/web`) for v1, not a shared package — the two surfaces deliberately wear different registers and the console is mid-migration. Family coherence is enforced where it matters: both surfaces run the same dataviz palette validation (`validate_palette.js`) in CI on every token change, both themes. Shared TypeScript code (fixtures, chain client, API types, read-only indexed DB client) lives in a root pnpm workspace under `packages/` (`@nvhash/*`); the console may join the workspace with its own migration. Revisit shared token packaging post-v1 if drift is observed. **Brand pass delivered (PR 1.4, 2026-07-17):** program-specific accent and status tokens set web-local in `apps/web/app/theme/tokens.css` over the nuva base — NUVA mint-green primary CTA / focus ring (dark green-black label, WCAG AA both themes) and the fixed good/warning/serious/critical status set (icon + label; `warning`/`serious` are sub-3:1 on the light surface only under that relief rule). Both theme token sets pass the shared validation method in CI: the categorical chart palette via `check:palette`, the accent/status contrast via `test/brand-tokens.test.ts` (both computed by `validate_palette.js`, never eyeballed). §14.8 is now fully resolved.
 9. **[DECIDED 2026-07-15, Ira] Launch locale set: `en` only.** v1 ships a single English locale. Future locales (`zh`/`ko` precedents or others) are TBD and explicitly **not in v1**. The `$lang+` i18n routing/plumbing (§8.0, §15) is retained with a single `en` catalog so additional locales are additive without a routing change — adding one is a content+config change, not a re-architecture.
 10. **[DECIDE] Aggregate-analytics event taxonomy:** which page classes and funnel stages are counted, and the consent posture for the counters — within the `SECURITY.md` constraint that analytics are first-party, aggregate-only, and never keyed by wallet, session, or device.
