@@ -71,6 +71,8 @@ export interface EpochSnapshotFacts {
   readonly tvvAfter: bigint;
   readonly totalShares: bigint;
   readonly netAprBps: number;
+  /** Snapshot end height; only the M6.1 step-fact mapping consumes it. */
+  readonly endHeight?: bigint;
 }
 
 export interface IncidentFacts {

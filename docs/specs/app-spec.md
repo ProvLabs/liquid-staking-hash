@@ -280,6 +280,7 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `BASE_RPC_URL` / `ETH_RPC_URL` | EVM read endpoints | Market + bridge-supply sampling (§5.3). |
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
 | `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. **Client-safe** (PR 5.1 allowlist amendment): a WC project id is public by design — it rides in every pairing URI. |
+| `EXPLORER_URL` | block-explorer base URL | Portfolio transaction verify-links (§8.2). **Client-safe** (PR 6.1 allowlist amendment): an explorer URL is public by construction. Optional; absent, history rows render a plain truncated txhash rather than a broken link. |
 | `WEB_PUSH_VAPID_*` | — | Web Push credentials `[DECIDE §14.7]`. |
 | denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
 | `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
@@ -313,6 +314,17 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 > server-side row (§12.3), so there is nothing to sign and no key to hold —
 > recorded here so the placeholder's disappearance from `.env.example` is a
 > decision, not an omission.
+
+> **Revision 2026-07-23 (PR 6.1 commit C, `EXPLORER_URL`):** the optional
+> `EXPLORER_URL` becomes consumed config, zod-bounded to an http(s) URL at
+> load (`apps/web/app/config/config.server.ts`) and **amended into the
+> client-safe allowlist** (`apps/web/app/config/client.ts`): a block-explorer
+> base URL is public by construction (it is the verify-link target for the §8.2
+> Portfolio transaction history). Absent, history rows render a plain truncated
+> txhash rather than a broken link. The client-visible addition is a spec-level
+> event recorded here in the same change as the allowlist edit, and it stays
+> subject to the standing bundle-secret gate (`check:bundle` +
+> `test/client-config.test.ts`).
 
 ### 8.0 Site map & global chrome
 
@@ -400,6 +412,43 @@ Priya's home. Composes additional roles additively (register F1): operator and a
 - **Active redemptions:** each pending `SwapOut` with escrowed shares, current estimate, the maturity countdown, funded state, and the expedite explanation; links to §8.4's tracker detail.
 - **Transaction history:** every indexed event for her address (deposits, redemptions, transfers in/out, refunds), each row with amounts, NAV at the time, txhash → explorer, and verify link. **Exportable as CSV** (register D2) — raw per-event rows with the share price in HASH (NAV) at each swap (§14.11 decided; a separate operator export of commission/TIP payments lives in §8.6).
 - **Alert settings:** per-address rules — NAV step posted, redemption matured/expedited/refunded, market premium/discount beyond X bps, vault paused/halted, validator-set incident — each deliverable in-app always, plus Web Push when opted in (register D1).
+
+> **Revision 2026-07-23 (PR 6.1 commit C, Portfolio page delivered):** built in
+> `apps/web` (`app/routes/portfolio.tsx` + `app/portfolio/portfolio.server.ts`
+> composing the live and indexed planes, components under
+> `app/components/portfolio/`). The acting address is the session address only
+> (`getSessionContext`; anonymous renders the connect prompt, never blank,
+> never a query-param address; the standing session-scope gate). Delivered
+> shape and deliberate honesty states: the **position summary** shows nvHASH
+> balance, current value with its plane label (live vs indexed fallback),
+> current NAV, signed accrued gain (icon + sign word, never color alone), the
+> §14.11 average-cost basis under its "aid, not the authoritative record"
+> label, and realized gain; every figure renders "n/a" when null, never 0
+> (§12.1). **Value at market price is the §14.4 "coming soon" n/a** (no bridged
+> market to price against). The **§2.7 divergence / history-state note** shows
+> whenever the live and indexed share balances differ or `history_state !=
+> "complete"`, and an `inconsistent` state states the basis-derived figures are
+> unavailable rather than fabricating them. The **effective-yield panel** is
+> §14.12 cold-gated ("first epoch not yet settled", never a zero) and charts
+> the holder's per-settlement APR against the program's net APR (the extended
+> StepChart `compare` series) with the systematic-gap explainer inline. The
+> **accrual chart** is a step-after series with deposit/redeem markers (filled
+> "in", hollow "out": shape, not color alone; the marker data also rides the
+> table toggle) and flags a truncated marker set. **Active redemptions** are
+> self-contained status rows (icon + label) with **no link to `/exit`** until
+> 5.4 ships that tracker (a recorded deferral note stands in); the VM carries
+> no maturity estimate yet, so no countdown is fabricated. The **transaction
+> history** is a paginated table (time, kind, shares, HASH, NAV at event,
+> txhash → explorer when `EXPLORER_URL` is set, else a plain truncated hash)
+> with a session-gated **CSV export** (`GET /portfolio/export`, §14.11). When
+> the indexed plane is unavailable (no minting key or the API is unreachable)
+> the indexed sections degrade to an honest "temporarily unavailable" note
+> while the live-plane summary still renders. **Alert settings are a recorded
+> 6.2 deferral, not an empty shell.** Gates: `test/portfolio-data.test.ts` +
+> `test/portfolio-compose.test.ts` (degradation and composition), the offline
+> `e2e/portfolio.spec.ts` (anonymous connect-prompt, no personal data) with
+> `/portfolio` in the axe route list (both themes), and the skip-clean
+> `e2e-live/portfolio.spec.ts` (authenticated summary + CSV freshness headers).
 
 ### 8.3 Stake (route `/stake`, wallet required to submit)
 
@@ -629,6 +678,23 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > `X-Indexed-Height` / `X-Generated-At` response headers, since a CSV body
 > cannot carry the JSON envelope.
 
+> **Revision 2026-07-23 (PR 6.1 commit B, derived portfolio metrics +
+> CSV completeness):** `/api/v1/portfolio/metrics?address=` is live: a third
+> address-scoped route (`auth: "address"`, enveloped, `?address=` bounded by
+> the same bech32 schema) that serves the frozen `PortfolioMetrics` shape from
+> `@nvhash/api-types` (cost basis, realized gain, effective yield, the
+> per-epoch personal-vs-program series, and the accrual series) produced by
+> the pure `derivePortfolioMetrics` fold (§9.5 items 1-2) over the address's
+> full indexed history plus the epoch step series. It joins `/portfolio` and
+> `/transactions` in the cross-address-rejection `PERSONAL_PATHS` (the standing
+> CI gate holds it too). CSV amendment (§14.11): `/transactions?format=csv`
+> now serves the COMPLETE indexed history ascending by `(height, msg_index)`,
+> superseding the paginated slice recorded by PR 3.3 (a holder's export must
+> never silently drop older events; `limit`/`offset` bound only the JSON
+> view). The pinned columns, formula-injection guard, and the
+> `X-Chain-Height` / `X-Indexed-Height` / `X-Generated-At` freshness headers
+> are unchanged.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.
@@ -639,6 +705,27 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 4. **Premium/discount:** `(market_price − NAV) / NAV` in bps, computed at each market sample against the NAV current at that sample's time.
 5. **Upkeep lag:** for each crank kind, actual execution time − earliest-eligible time (from config intervals + prior state), distribution per epoch.
 6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run. **Per-metric tolerances live in code** (`services/indexer/src/reconciler/tolerances.ts`), reviewed like the schema allowlist and **not env-tunable** — a widened tolerance would silence the alarm, which §12.1.3 forbids (RESOLVED 2026-07-21, PR 2.5). The "live plane" the reconciler compares against is the chain's retained latest epoch snapshot (the authoritative current record); copied snapshot values use an exact (0) tolerance, so any indexed divergence trips `reconciler_divergence`. **Queue-length delta is deferred** to a fast-follow (it needs a vault `pending_swap_outs` decoder the indexer does not yet carry).
+
+> **Revision 2026-07-23 (PR 6.1 commit B):** items 1 and 2 are implemented in
+> `services/api/src/portfolio-metrics.ts` (the pure `derivePortfolioMetrics`
+> fold behind `/portfolio/metrics`, §9.4). Pinned mechanics: average cost is
+> carried as two pools (held, escrow) with basis moved by proportional
+> floor-rounded amounts; escrowed shares keep participating in yield until the
+> payout event (they re-price at each NAV step, then realize at payout);
+> refunds realize nothing (they return shares and their basis to the held
+> pool); `SECONDS_PER_YEAR = 31_536_000`; signed bps figures truncate toward
+> zero; transfer kinds are excluded from basis and surface as
+> `history_state: "has_transfers"` (the basis rule for transfers is decided
+> when their producing worker lands). The R3 property and sim-trace-replay
+> suites gate these formulas in CI (§2.8.2). Replay convention (plan §7 Q1,
+> RESOLVED 2026-07-23): the chain-free traces tag events round-robin to
+> synthetic addresses as documented metadata over single-pooled economics, so
+> R3 replays each trace's full event stream as ONE pooled address (the fold is
+> per-address by construction, so per-address decomposition adds no coverage
+> the property suite does not already generate). The accrual series is capped
+> server-side at `MAX_ACCRUAL_POINTS = 2000` (most recent kept, earlier history
+> trimmed and flagged by `accrual_truncated`), so a high-event address never
+> trips the web boundary bound and silently nulls the whole read.
 
 ### 9.6 Incident derivation
 

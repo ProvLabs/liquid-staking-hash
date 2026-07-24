@@ -5,6 +5,7 @@
 // epochIndex, incidents newest-first by openedAt, skip/take slicing.
 
 import type { IndexedReader } from "../src/reader.ts";
+import type { EpochStepFact } from "../src/portfolio-metrics.ts";
 import {
   derivePortfolio,
   deriveHeads,
@@ -139,6 +140,27 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
             .sort((a, b) => (a.height === b.height ? b.msgIndex - a.msgIndex : a.height < b.height ? 1 : -1)),
           p,
         ).map(toTransactionRow),
+      ),
+    transactionsAscFor: (address) =>
+      Promise.resolve(
+        [...(facts.transactions ?? [])]
+          .filter((t) => t.address === address)
+          .sort((a, b) => (a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1)),
+      ),
+    listEpochsAsc: () =>
+      Promise.resolve(
+        [...(facts.epochs ?? [])]
+          .sort((a, b) => (a.epochIndex < b.epochIndex ? -1 : 1))
+          .map(
+            (e): EpochStepFact => ({
+              epochIndex: e.epochIndex,
+              endedAtSeconds: e.endedAtSeconds,
+              tvvAfter: e.tvvAfter,
+              totalShares: e.totalShares,
+              netAprBps: e.netAprBps,
+              endHeight: e.endHeight ?? e.epochIndex,
+            }),
+          ),
       ),
   };
 }

@@ -1,0 +1,3551 @@
+{
+  "seed": 8,
+  "epochs": [
+    {
+      "epoch_index": 1,
+      "ended_at_seconds": 1739007426,
+      "tvv_after": "648399428627873112487",
+      "total_shares": "648423355086475254475823394"
+    },
+    {
+      "epoch_index": 2,
+      "ended_at_seconds": 1740956799,
+      "tvv_after": "741216732499930292218",
+      "total_shares": "740746205930049546980199567"
+    },
+    {
+      "epoch_index": 3,
+      "ended_at_seconds": 1745258925,
+      "tvv_after": "148641922219961412212",
+      "total_shares": "148432522282045855249050584"
+    },
+    {
+      "epoch_index": 4,
+      "ended_at_seconds": 1747315697,
+      "tvv_after": "650858646741277433149",
+      "total_shares": "649941583153845974477210807"
+    },
+    {
+      "epoch_index": 5,
+      "ended_at_seconds": 1749170898,
+      "tvv_after": "655217424311051681018",
+      "total_shares": "653080112757363371305991823"
+    },
+    {
+      "epoch_index": 6,
+      "ended_at_seconds": 1751643486,
+      "tvv_after": "1232787820654192950151",
+      "total_shares": "1227635781309599829333703319"
+    },
+    {
+      "epoch_index": 7,
+      "ended_at_seconds": 1755316534,
+      "tvv_after": "521772995452907380693",
+      "total_shares": "519099550829249477885179779"
+    },
+    {
+      "epoch_index": 8,
+      "ended_at_seconds": 1757674816,
+      "tvv_after": "173695181632741919353",
+      "total_shares": "172686596375775988219421160"
+    },
+    {
+      "epoch_index": 9,
+      "ended_at_seconds": 1760759909,
+      "tvv_after": "369567443849805959460",
+      "total_shares": "367004702628677739323581641"
+    },
+    {
+      "epoch_index": 10,
+      "ended_at_seconds": 1762658327,
+      "tvv_after": "424859660193437785425",
+      "total_shares": "421305558227808570932717262"
+    },
+    {
+      "epoch_index": 11,
+      "ended_at_seconds": 1766258005,
+      "tvv_after": "43884166507904748424",
+      "total_shares": "43471761165258297485568298"
+    },
+    {
+      "epoch_index": 12,
+      "ended_at_seconds": 1767860925,
+      "tvv_after": "192338645834009412318",
+      "total_shares": "190525176193625938976203279"
+    },
+    {
+      "epoch_index": 13,
+      "ended_at_seconds": 1771337600,
+      "tvv_after": "881693538255242273483",
+      "total_shares": "872773735816772992217006122"
+    },
+    {
+      "epoch_index": 14,
+      "ended_at_seconds": 1772801702,
+      "tvv_after": "189857999645428318551",
+      "total_shares": "187700495973729149336148642"
+    },
+    {
+      "epoch_index": 15,
+      "ended_at_seconds": 1775758892,
+      "tvv_after": "457046308388269198246",
+      "total_shares": "451742785020156830388135742"
+    },
+    {
+      "epoch_index": 16,
+      "ended_at_seconds": 1779087971,
+      "tvv_after": "411077589063373559571",
+      "total_shares": "405293620010609599373325440"
+    },
+    {
+      "epoch_index": 17,
+      "ended_at_seconds": 1780871976,
+      "tvv_after": "754040258560468558176",
+      "total_shares": "742991894458608134035195449"
+    },
+    {
+      "epoch_index": 18,
+      "ended_at_seconds": 1783624045,
+      "tvv_after": "696618959813184448680",
+      "total_shares": "684418526387972865245657712"
+    },
+    {
+      "epoch_index": 19,
+      "ended_at_seconds": 1786310652,
+      "tvv_after": "422364886781952255698",
+      "total_shares": "414296191831603966104489396"
+    },
+    {
+      "epoch_index": 20,
+      "ended_at_seconds": 1788912435,
+      "tvv_after": "569255676281798607976",
+      "total_shares": "557954762235931053981101896"
+    },
+    {
+      "epoch_index": 21,
+      "ended_at_seconds": 1791567588,
+      "tvv_after": "1121112565332689945807",
+      "total_shares": "1097658958517878866863853789"
+    },
+    {
+      "epoch_index": 22,
+      "ended_at_seconds": 1794082330,
+      "tvv_after": "2059293687327294637966",
+      "total_shares": "2013986472723716445803417518"
+    },
+    {
+      "epoch_index": 23,
+      "ended_at_seconds": 1797095154,
+      "tvv_after": "609282161200983956548",
+      "total_shares": "595826893702200850227324062"
+    },
+    {
+      "epoch_index": 24,
+      "ended_at_seconds": 1800099338,
+      "tvv_after": "52463745291807142137",
+      "total_shares": "51236924450641708956122185"
+    },
+    {
+      "epoch_index": 25,
+      "ended_at_seconds": 1801971539,
+      "tvv_after": "107174223925444525813",
+      "total_shares": "104596308129772807614106839"
+    },
+    {
+      "epoch_index": 26,
+      "ended_at_seconds": 1804109357,
+      "tvv_after": "182743013223819717156",
+      "total_shares": "178240642289294666408254955"
+    },
+    {
+      "epoch_index": 27,
+      "ended_at_seconds": 1807781422,
+      "tvv_after": "88109296838417275507",
+      "total_shares": "85899144030331866306044506"
+    },
+    {
+      "epoch_index": 28,
+      "ended_at_seconds": 1810792543,
+      "tvv_after": "302803153795967468569",
+      "total_shares": "294930861616046143255890200"
+    },
+    {
+      "epoch_index": 29,
+      "ended_at_seconds": 1812660677,
+      "tvv_after": "432184311693057810699",
+      "total_shares": "420310386711980500559569432"
+    },
+    {
+      "epoch_index": 30,
+      "ended_at_seconds": 1815930469,
+      "tvv_after": "708981101964520668421",
+      "total_shares": "688586347568909873109336937"
+    },
+    {
+      "epoch_index": 31,
+      "ended_at_seconds": 1817488567,
+      "tvv_after": "709450972285402775800",
+      "total_shares": "688586347568909873109336937"
+    },
+    {
+      "epoch_index": 32,
+      "ended_at_seconds": 1820491901,
+      "tvv_after": "628374794422569806681",
+      "total_shares": "609571042613165700755312901"
+    },
+    {
+      "epoch_index": 33,
+      "ended_at_seconds": 1823223320,
+      "tvv_after": "161350471753520451940",
+      "total_shares": "156493318979437992080433646"
+    },
+    {
+      "epoch_index": 34,
+      "ended_at_seconds": 1825348980,
+      "tvv_after": "502033545228473551697",
+      "total_shares": "486889306765842981983201535"
+    },
+    {
+      "epoch_index": 35,
+      "ended_at_seconds": 1829171825,
+      "tvv_after": "235961948803728513442",
+      "total_shares": "228791581869260205554508833"
+    },
+    {
+      "epoch_index": 36,
+      "ended_at_seconds": 1830792634,
+      "tvv_after": "371737568856404145498",
+      "total_shares": "360441342409073485211174323"
+    },
+    {
+      "epoch_index": 37,
+      "ended_at_seconds": 1834283990,
+      "tvv_after": "7788032625261453503",
+      "total_shares": "7543477927625219255341189"
+    },
+    {
+      "epoch_index": 38,
+      "ended_at_seconds": 1836257447,
+      "tvv_after": "623249735306931776885",
+      "total_shares": "603665572272900597391077463"
+    },
+    {
+      "epoch_index": 39,
+      "ended_at_seconds": 1839999106,
+      "tvv_after": "623564547791981728142",
+      "total_shares": "601041037812103919113837304"
+    },
+    {
+      "epoch_index": 40,
+      "ended_at_seconds": 1841317711,
+      "tvv_after": "704126898826398432379",
+      "total_shares": "678540841476220878884635757"
+    },
+    {
+      "epoch_index": 41,
+      "ended_at_seconds": 1844418994,
+      "tvv_after": "187668089573697033046",
+      "total_shares": "180804668695758605595660979"
+    },
+    {
+      "epoch_index": 42,
+      "ended_at_seconds": 1846629972,
+      "tvv_after": "461526396669520724731",
+      "total_shares": "444479287284193680776072684"
+    },
+    {
+      "epoch_index": 43,
+      "ended_at_seconds": 1849500746,
+      "tvv_after": "514565225521321642651",
+      "total_shares": "494207343904452526215109777"
+    },
+    {
+      "epoch_index": 44,
+      "ended_at_seconds": 1852136901,
+      "tvv_after": "511633255485359042819",
+      "total_shares": "491065659918295016540248589"
+    },
+    {
+      "epoch_index": 45,
+      "ended_at_seconds": 1854526885,
+      "tvv_after": "489331483211878673651",
+      "total_shares": "469124276091516000037914609"
+    },
+    {
+      "epoch_index": 46,
+      "ended_at_seconds": 1857671887,
+      "tvv_after": "207452868448754176562",
+      "total_shares": "198447784128407390234409824"
+    },
+    {
+      "epoch_index": 47,
+      "ended_at_seconds": 1860065882,
+      "tvv_after": "105898123424742694987",
+      "total_shares": "101173245367532939442409886"
+    },
+    {
+      "epoch_index": 48,
+      "ended_at_seconds": 1863593047,
+      "tvv_after": "514093965206162892666",
+      "total_shares": "490744900467646233152140119"
+    }
+  ],
+  "events": [
+    {
+      "seq": 0,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "155332586318615360236000000",
+      "nhash": "155332586318615360236",
+      "epoch_index": 0
+    },
+    {
+      "seq": 1,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "5819080375230765547454521",
+      "nhash": "0",
+      "epoch_index": 0
+    },
+    {
+      "seq": 2,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "5819080375230765547454521",
+      "nhash": "5819080375230765547",
+      "epoch_index": 0
+    },
+    {
+      "seq": 3,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "123726945346818876606331579",
+      "nhash": "0",
+      "epoch_index": 0
+    },
+    {
+      "seq": 4,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "123726945346818876606331579",
+      "nhash": "123725931879978992900",
+      "epoch_index": 0
+    },
+    {
+      "seq": 5,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "11331841566811125309301408",
+      "nhash": "0",
+      "epoch_index": 0
+    },
+    {
+      "seq": 6,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "11331841566811125309301408",
+      "nhash": "11331704759213457974",
+      "epoch_index": 0
+    },
+    {
+      "seq": 7,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "393312134205081461594596968",
+      "nhash": "393305675693694097474",
+      "epoch_index": 0
+    },
+    {
+      "seq": 8,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "368097636614022766997460975",
+      "nhash": "368089853809239297831",
+      "epoch_index": 0
+    },
+    {
+      "seq": 9,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "287223543433529543224955399",
+      "nhash": "0",
+      "epoch_index": 0
+    },
+    {
+      "seq": 10,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "287223543433529543224955399",
+      "nhash": "287217470575283774527",
+      "epoch_index": 0
+    },
+    {
+      "seq": 11,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "159782408671145976335808358",
+      "nhash": "159778608412215105281",
+      "epoch_index": 0
+    },
+    {
+      "seq": 12,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "398407222380110615713191566",
+      "nhash": "398392521376764120242",
+      "epoch_index": 1
+    },
+    {
+      "seq": 13,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "426225043312942408351277550",
+      "nhash": "426208121418142003524",
+      "epoch_index": 1
+    },
+    {
+      "seq": 14,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "761257820174862755354686923",
+      "nhash": "0",
+      "epoch_index": 1
+    },
+    {
+      "seq": 15,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "761257820174862755354686923",
+      "nhash": "761227596880968861905",
+      "epoch_index": 1
+    },
+    {
+      "seq": 16,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "49179937918788945405475429",
+      "nhash": "49177794209635243398",
+      "epoch_index": 1
+    },
+    {
+      "seq": 17,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "116090928733051119458942798",
+      "nhash": "116085543364254069867",
+      "epoch_index": 1
+    },
+    {
+      "seq": 18,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "283517414645694850211550289",
+      "nhash": "283502909488253514407",
+      "epoch_index": 1
+    },
+    {
+      "seq": 19,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "778569679920880472269418765",
+      "nhash": "0",
+      "epoch_index": 1
+    },
+    {
+      "seq": 20,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "778569679920880472269418765",
+      "nhash": "778528099082014221298",
+      "epoch_index": 1
+    },
+    {
+      "seq": 21,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "358729803948729580988044229",
+      "nhash": "358709653317851237445",
+      "epoch_index": 1
+    },
+    {
+      "seq": 22,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "558649222092779549401165316",
+      "nhash": "0",
+      "epoch_index": 1
+    },
+    {
+      "seq": 23,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "299233348273575810401126031",
+      "nhash": "299423423146494419544",
+      "epoch_index": 2
+    },
+    {
+      "seq": 24,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "396361108920320489958434554",
+      "nhash": "0",
+      "epoch_index": 2
+    },
+    {
+      "seq": 25,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "558649222092779549401165316",
+      "nhash": "559004079532660496481",
+      "epoch_index": 2
+    },
+    {
+      "seq": 26,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "1033849755035819122727094",
+      "nhash": "1034501648623824804",
+      "epoch_index": 2
+    },
+    {
+      "seq": 27,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "82615705951463668061241133",
+      "nhash": "0",
+      "epoch_index": 2
+    },
+    {
+      "seq": 28,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "82615705951463668061241133",
+      "nhash": "82667427359883523149",
+      "epoch_index": 2
+    },
+    {
+      "seq": 29,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "50121300828374763439559824",
+      "nhash": "50152356406021340930",
+      "epoch_index": 2
+    },
+    {
+      "seq": 30,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "386240943345003129849360923",
+      "nhash": "386478023798648243321",
+      "epoch_index": 2
+    },
+    {
+      "seq": 31,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "396361108920320489958434554",
+      "nhash": "396604401282586116436",
+      "epoch_index": 2
+    },
+    {
+      "seq": 32,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "48051284091856219520015658",
+      "nhash": "48080651803453388555",
+      "epoch_index": 2
+    },
+    {
+      "seq": 33,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "48369013419757506318280838",
+      "nhash": "48398264510148139971",
+      "epoch_index": 2
+    },
+    {
+      "seq": 34,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "437048600271682958058233310",
+      "nhash": "0",
+      "epoch_index": 2
+    },
+    {
+      "seq": 35,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "58216959398655570023458742",
+      "nhash": "0",
+      "epoch_index": 2
+    },
+    {
+      "seq": 36,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "58216959398655570023458742",
+      "nhash": "58251980275859421020",
+      "epoch_index": 2
+    },
+    {
+      "seq": 37,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "191203464241261311780002299",
+      "nhash": "191317493727609535828",
+      "epoch_index": 2
+    },
+    {
+      "seq": 38,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "437048600271682958058233310",
+      "nhash": "437309246320100294750",
+      "epoch_index": 2
+    },
+    {
+      "seq": 39,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "113250381478707061477569769",
+      "nhash": "0",
+      "epoch_index": 2
+    },
+    {
+      "seq": 40,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "29575090510741044817881174",
+      "nhash": "29592438671404150345",
+      "epoch_index": 2
+    },
+    {
+      "seq": 41,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "113250381478707061477569769",
+      "nhash": "113410148506080569103",
+      "epoch_index": 2
+    },
+    {
+      "seq": 42,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "39658475866327929732915849",
+      "nhash": "0",
+      "epoch_index": 3
+    },
+    {
+      "seq": 43,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "39658475866327929732915849",
+      "nhash": "39714423729077676852",
+      "epoch_index": 3
+    },
+    {
+      "seq": 44,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "243131438364671712015517325",
+      "nhash": "243473846621877071899",
+      "epoch_index": 3
+    },
+    {
+      "seq": 45,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "132015119039587336407285914",
+      "nhash": "0",
+      "epoch_index": 3
+    },
+    {
+      "seq": 46,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "132015119039587336407285914",
+      "nhash": "132201039326733844190",
+      "epoch_index": 3
+    },
+    {
+      "seq": 47,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "430051217413043673352844661",
+      "nhash": "430651111011943581178",
+      "epoch_index": 3
+    },
+    {
+      "seq": 48,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "146740659708673617713236150",
+      "nhash": "146947181676657912116",
+      "epoch_index": 4
+    },
+    {
+      "seq": 49,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "289425367985324460799351263",
+      "nhash": "0",
+      "epoch_index": 4
+    },
+    {
+      "seq": 50,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "176493267642891551478756308",
+      "nhash": "0",
+      "epoch_index": 4
+    },
+    {
+      "seq": 51,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "11766356127500035281383145",
+      "nhash": "0",
+      "epoch_index": 4
+    },
+    {
+      "seq": 52,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "11766356127500035281383145",
+      "nhash": "11782816162116578609",
+      "epoch_index": 4
+    },
+    {
+      "seq": 53,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "334082861650559826675035582",
+      "nhash": "334548979368884280908",
+      "epoch_index": 4
+    },
+    {
+      "seq": 54,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "176493267642891551478756308",
+      "nhash": "176739513855004581556",
+      "epoch_index": 4
+    },
+    {
+      "seq": 55,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "289425367985324460799351263",
+      "nhash": "289829178858722817649",
+      "epoch_index": 4
+    },
+    {
+      "seq": 56,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "16158322586691084547616709",
+      "nhash": "0",
+      "epoch_index": 4
+    },
+    {
+      "seq": 57,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "394322176930626395703277307",
+      "nhash": "395612660790364553604",
+      "epoch_index": 5
+    },
+    {
+      "seq": 58,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "16158322586691084547616709",
+      "nhash": "16211203341866657375",
+      "epoch_index": 5
+    },
+    {
+      "seq": 59,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "7128107450903233226689778",
+      "nhash": "7151317141644378981",
+      "epoch_index": 5
+    },
+    {
+      "seq": 60,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "189263706757397913645361120",
+      "nhash": "189878356919003267226",
+      "epoch_index": 5
+    },
+    {
+      "seq": 61,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "248357044838537258929407807",
+      "nhash": "249399328947550476781",
+      "epoch_index": 6
+    },
+    {
+      "seq": 62,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "143941664379731142628670891",
+      "nhash": "144543603487081511945",
+      "epoch_index": 6
+    },
+    {
+      "seq": 63,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "1606671756080580157292290889",
+      "nhash": "0",
+      "epoch_index": 6
+    },
+    {
+      "seq": 64,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "9528231218199296428441690",
+      "nhash": "0",
+      "epoch_index": 6
+    },
+    {
+      "seq": 65,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "9528231218199296428441690",
+      "nhash": "9568020999573482071",
+      "epoch_index": 6
+    },
+    {
+      "seq": 66,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "303651211277881481421855215",
+      "nhash": "304916367391520805227",
+      "epoch_index": 6
+    },
+    {
+      "seq": 67,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "211713836322279219292275126",
+      "nhash": "212594909023078357085",
+      "epoch_index": 6
+    },
+    {
+      "seq": 68,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "1606671756080580157292290889",
+      "nhash": "1614946369228318216018",
+      "epoch_index": 6
+    },
+    {
+      "seq": 69,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "359306965409089705056568336",
+      "nhash": "0",
+      "epoch_index": 7
+    },
+    {
+      "seq": 70,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "359306965409089705056568336",
+      "nhash": "361157452995490523673",
+      "epoch_index": 7
+    },
+    {
+      "seq": 71,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "85352024457054262293407151",
+      "nhash": "0",
+      "epoch_index": 7
+    },
+    {
+      "seq": 72,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "85352024457054262293407151",
+      "nhash": "85790359297240264907",
+      "epoch_index": 7
+    },
+    {
+      "seq": 73,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "98246035412670477684216868",
+      "nhash": "98750268008544525611",
+      "epoch_index": 7
+    },
+    {
+      "seq": 74,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "370051816831423312122236573",
+      "nhash": "372210816937102532704",
+      "epoch_index": 8
+    },
+    {
+      "seq": 75,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "464121759314381799363670870",
+      "nhash": "0",
+      "epoch_index": 8
+    },
+    {
+      "seq": 76,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "168415523512623827134319195",
+      "nhash": "169396873056588659818",
+      "epoch_index": 8
+    },
+    {
+      "seq": 77,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "464121759314381799363670870",
+      "nhash": "466826175554332413723",
+      "epoch_index": 8
+    },
+    {
+      "seq": 78,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "211673213103269272930507285",
+      "nhash": "212905250324404886951",
+      "epoch_index": 8
+    },
+    {
+      "seq": 79,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "91700687880032861719231702",
+      "nhash": "0",
+      "epoch_index": 8
+    },
+    {
+      "seq": 80,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "91700687880032861719231702",
+      "nhash": "92234045858549193101",
+      "epoch_index": 8
+    },
+    {
+      "seq": 81,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "10919258709288068050427052",
+      "nhash": "10995457454263969956",
+      "epoch_index": 9
+    },
+    {
+      "seq": 82,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "340949188330200067838826794",
+      "nhash": "343326709154856983028",
+      "epoch_index": 9
+    },
+    {
+      "seq": 83,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "560104853483364707800073950",
+      "nhash": "0",
+      "epoch_index": 9
+    },
+    {
+      "seq": 84,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "272385468101179489938661674",
+      "nhash": "274283686024497767713",
+      "epoch_index": 9
+    },
+    {
+      "seq": 85,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "560104853483364707800073950",
+      "nhash": "564008149350179259419",
+      "epoch_index": 9
+    },
+    {
+      "seq": 86,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "267965235211847983968851459",
+      "nhash": "269832041807795033336",
+      "epoch_index": 9
+    },
+    {
+      "seq": 87,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "1917077145056087769405853",
+      "nhash": "0",
+      "epoch_index": 9
+    },
+    {
+      "seq": 88,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "1917077145056087769405853",
+      "nhash": "1930432654611275796",
+      "epoch_index": 9
+    },
+    {
+      "seq": 89,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "275896364124963982618151555",
+      "nhash": "0",
+      "epoch_index": 9
+    },
+    {
+      "seq": 90,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "275896364124963982618151555",
+      "nhash": "277817658506866321823",
+      "epoch_index": 9
+    },
+    {
+      "seq": 91,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "31160610815927233847455177",
+      "nhash": "31423479382430242646",
+      "epoch_index": 10
+    },
+    {
+      "seq": 92,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "310103545723776103887509502",
+      "nhash": "0",
+      "epoch_index": 10
+    },
+    {
+      "seq": 93,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "8830622452177991172962016",
+      "nhash": "8905040183835922328",
+      "epoch_index": 10
+    },
+    {
+      "seq": 94,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "107634127639698721631587437",
+      "nhash": "0",
+      "epoch_index": 10
+    },
+    {
+      "seq": 95,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "43466643870990853185389779",
+      "nhash": "0",
+      "epoch_index": 10
+    },
+    {
+      "seq": 96,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "87356967180672948469218",
+      "nhash": "0",
+      "epoch_index": 10
+    },
+    {
+      "seq": 97,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "87356967180672948469218",
+      "nhash": "88090972836497260",
+      "epoch_index": 10
+    },
+    {
+      "seq": 98,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "107634127639698721631587437",
+      "nhash": "108655224740434001677",
+      "epoch_index": 10
+    },
+    {
+      "seq": 99,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "310103545723776103887509502",
+      "nhash": "313045417771331860454",
+      "epoch_index": 10
+    },
+    {
+      "seq": 100,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "114212092758175410437454070",
+      "nhash": "115295593310850194220",
+      "epoch_index": 11
+    },
+    {
+      "seq": 101,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "43466643870990853185389779",
+      "nhash": "43879000667191537517",
+      "epoch_index": 11
+    },
+    {
+      "seq": 102,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "29948209280386965050567252",
+      "nhash": "0",
+      "epoch_index": 11
+    },
+    {
+      "seq": 103,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "29948209280386965050567252",
+      "nhash": "30232252714164045627",
+      "epoch_index": 11
+    },
+    {
+      "seq": 104,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "12944294550188994271136582",
+      "nhash": "0",
+      "epoch_index": 11
+    },
+    {
+      "seq": 105,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "12944294550188994271136582",
+      "nhash": "13067033884357608379",
+      "epoch_index": 11
+    },
+    {
+      "seq": 106,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "187855861298049294462400949",
+      "nhash": "189636408878596348871",
+      "epoch_index": 11
+    },
+    {
+      "seq": 107,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "75174626787289076567089771",
+      "nhash": "75886780512548211960",
+      "epoch_index": 11
+    },
+    {
+      "seq": 108,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "143830018113579327469216196",
+      "nhash": "0",
+      "epoch_index": 11
+    },
+    {
+      "seq": 109,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "143830018113579327469216196",
+      "nhash": "145192566723145470209",
+      "epoch_index": 11
+    },
+    {
+      "seq": 110,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "330628500608743112470238141",
+      "nhash": "333773564565203985100",
+      "epoch_index": 12
+    },
+    {
+      "seq": 111,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "158234300605935836616591471",
+      "nhash": "159736675433605325815",
+      "epoch_index": 12
+    },
+    {
+      "seq": 112,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "193385758408468104153973231",
+      "nhash": "195220980545731922705",
+      "epoch_index": 12
+    },
+    {
+      "seq": 113,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "768602484307064903176040316",
+      "nhash": "0",
+      "epoch_index": 12
+    },
+    {
+      "seq": 114,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "299474622607035518916866835",
+      "nhash": "302535272073635298463",
+      "epoch_index": 13
+    },
+    {
+      "seq": 115,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "234675294792956807151357513",
+      "nhash": "0",
+      "epoch_index": 13
+    },
+    {
+      "seq": 116,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "234675294792956807151357513",
+      "nhash": "237073691056317972872",
+      "epoch_index": 13
+    },
+    {
+      "seq": 117,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "768602484307064903176040316",
+      "nhash": "776457650007393657704",
+      "epoch_index": 13
+    },
+    {
+      "seq": 118,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "16888354495664702760169679",
+      "nhash": "0",
+      "epoch_index": 13
+    },
+    {
+      "seq": 119,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "16888354495664702760169679",
+      "nhash": "17060866683141252781",
+      "epoch_index": 13
+    },
+    {
+      "seq": 120,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "338192759692658836202184708",
+      "nhash": "341645526516388977539",
+      "epoch_index": 13
+    },
+    {
+      "seq": 121,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "192232276987858536051162229",
+      "nhash": "0",
+      "epoch_index": 13
+    },
+    {
+      "seq": 122,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "192232276987858536051162229",
+      "nhash": "194194865509969314824",
+      "epoch_index": 13
+    },
+    {
+      "seq": 123,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "110342211559193248861179286",
+      "nhash": "0",
+      "epoch_index": 13
+    },
+    {
+      "seq": 124,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "110342211559193248861179286",
+      "nhash": "111468361146126639915",
+      "epoch_index": 13
+    },
+    {
+      "seq": 125,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "164980066313611383622388524",
+      "nhash": "0",
+      "epoch_index": 14
+    },
+    {
+      "seq": 126,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "2922828100609625830384413",
+      "nhash": "0",
+      "epoch_index": 14
+    },
+    {
+      "seq": 127,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "116969263054316876527354426",
+      "nhash": "118311737501592006271",
+      "epoch_index": 14
+    },
+    {
+      "seq": 128,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "2922828100609625830384413",
+      "nhash": "2956373853881782672",
+      "epoch_index": 14
+    },
+    {
+      "seq": 129,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "61631389140154420348846532",
+      "nhash": "0",
+      "epoch_index": 14
+    },
+    {
+      "seq": 130,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "61631389140154420348846532",
+      "nhash": "62338262542530442808",
+      "epoch_index": 14
+    },
+    {
+      "seq": 131,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "244798298331514409744587169",
+      "nhash": "247605152403672779394",
+      "epoch_index": 14
+    },
+    {
+      "seq": 132,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "164980066313611383622388524",
+      "nhash": "166871725586218767801",
+      "epoch_index": 14
+    },
+    {
+      "seq": 133,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "131809011214971824581664974",
+      "nhash": "133319738193218466146",
+      "epoch_index": 14
+    },
+    {
+      "seq": 134,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "186653213087108469355629171",
+      "nhash": "188844547869127326934",
+      "epoch_index": 15
+    },
+    {
+      "seq": 135,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "86716115242130183367997944",
+      "nhash": "0",
+      "epoch_index": 15
+    },
+    {
+      "seq": 136,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "86716115242130183367997944",
+      "nhash": "87733815544393925242",
+      "epoch_index": 15
+    },
+    {
+      "seq": 137,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "213347116613478380527126479",
+      "nhash": "215850010802145551332",
+      "epoch_index": 15
+    },
+    {
+      "seq": 138,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "97932552865202389602980359",
+      "nhash": "0",
+      "epoch_index": 15
+    },
+    {
+      "seq": 139,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "97932552865202389602980359",
+      "nhash": "99080729769792182246",
+      "epoch_index": 15
+    },
+    {
+      "seq": 140,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "493392041632855636882420909",
+      "nhash": "0",
+      "epoch_index": 15
+    },
+    {
+      "seq": 141,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "173323802839678663952127692",
+      "nhash": "175353857599134790960",
+      "epoch_index": 15
+    },
+    {
+      "seq": 142,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "493392041632855636882420909",
+      "nhash": "499170895119707801463",
+      "epoch_index": 15
+    },
+    {
+      "seq": 143,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "58267412190375465003705568",
+      "nhash": "58949690249281435260",
+      "epoch_index": 15
+    },
+    {
+      "seq": 144,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "240350621696021721637615736",
+      "nhash": "0",
+      "epoch_index": 15
+    },
+    {
+      "seq": 145,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "54451066785132505805171590",
+      "nhash": "55227856124691005171",
+      "epoch_index": 16
+    },
+    {
+      "seq": 146,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "290433762147883238617288425",
+      "nhash": "294576382538650870795",
+      "epoch_index": 16
+    },
+    {
+      "seq": 147,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "240350621696021721637615736",
+      "nhash": "243778878035808537423",
+      "epoch_index": 16
+    },
+    {
+      "seq": 148,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "317355178176905937137362450",
+      "nhash": "321880694922281210619",
+      "epoch_index": 16
+    },
+    {
+      "seq": 149,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "280790545091016430032566948",
+      "nhash": "284792812547332860001",
+      "epoch_index": 16
+    },
+    {
+      "seq": 150,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "364981656056917855292903668",
+      "nhash": "0",
+      "epoch_index": 16
+    },
+    {
+      "seq": 151,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "364981656056917855292903668",
+      "nhash": "370183947336759862685",
+      "epoch_index": 16
+    },
+    {
+      "seq": 152,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "58559792596159224574352923",
+      "nhash": "59430582594215981369",
+      "epoch_index": 17
+    },
+    {
+      "seq": 153,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "3342576969727635319511036",
+      "nhash": "3392244980034294962",
+      "epoch_index": 17
+    },
+    {
+      "seq": 154,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "118060714590626559419386202",
+      "nhash": "0",
+      "epoch_index": 17
+    },
+    {
+      "seq": 155,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "118060714590626559419386202",
+      "nhash": "119814698997443924439",
+      "epoch_index": 17
+    },
+    {
+      "seq": 156,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "416973359699903887864813254",
+      "nhash": "0",
+      "epoch_index": 17
+    },
+    {
+      "seq": 157,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "2415023045895569264015494",
+      "nhash": "0",
+      "epoch_index": 17
+    },
+    {
+      "seq": 158,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "2415023045895569264015494",
+      "nhash": "2450863473744143133",
+      "epoch_index": 17
+    },
+    {
+      "seq": 159,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "155197015364437814202002908",
+      "nhash": "157963071324808295436",
+      "epoch_index": 18
+    },
+    {
+      "seq": 160,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "246697929766821645455081948",
+      "nhash": "251092533621199224558",
+      "epoch_index": 18
+    },
+    {
+      "seq": 161,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "416973359699903887864813254",
+      "nhash": "424401199631280603628",
+      "epoch_index": 18
+    },
+    {
+      "seq": 162,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "255043919987724470933439918",
+      "nhash": "0",
+      "epoch_index": 18
+    },
+    {
+      "seq": 163,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "255043919987724470933439918",
+      "nhash": "260011070615453229080",
+      "epoch_index": 18
+    },
+    {
+      "seq": 164,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "387767571477298195012158190",
+      "nhash": "0",
+      "epoch_index": 19
+    },
+    {
+      "seq": 165,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "175973605637027066451835972",
+      "nhash": "179397630442024033484",
+      "epoch_index": 19
+    },
+    {
+      "seq": 166,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "19750562353900168069299684",
+      "nhash": "0",
+      "epoch_index": 19
+    },
+    {
+      "seq": 167,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "19750562353900168069299684",
+      "nhash": "20134860983047333820",
+      "epoch_index": 19
+    },
+    {
+      "seq": 168,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "161807908836543356744295115",
+      "nhash": "164955443752001287733",
+      "epoch_index": 19
+    },
+    {
+      "seq": 169,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "145282254294839561939082237",
+      "nhash": "0",
+      "epoch_index": 19
+    },
+    {
+      "seq": 170,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "387767571477298195012158190",
+      "nhash": "395310540044675660524",
+      "epoch_index": 19
+    },
+    {
+      "seq": 171,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "388490954794774236612860923",
+      "nhash": "396046527073008551107",
+      "epoch_index": 19
+    },
+    {
+      "seq": 172,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "29813510737979646911839399",
+      "nhash": "0",
+      "epoch_index": 19
+    },
+    {
+      "seq": 173,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "29813510737979646911839399",
+      "nhash": "30393339257713692792",
+      "epoch_index": 19
+    },
+    {
+      "seq": 174,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "145282254294839561939082237",
+      "nhash": "148107778440309945722",
+      "epoch_index": 19
+    },
+    {
+      "seq": 175,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "401027979077873072786000293",
+      "nhash": "409146303730655534171",
+      "epoch_index": 20
+    },
+    {
+      "seq": 176,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "425834703876311592134058020",
+      "nhash": "0",
+      "epoch_index": 20
+    },
+    {
+      "seq": 177,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "12581910692301368408919487",
+      "nhash": "12836567534560128347",
+      "epoch_index": 20
+    },
+    {
+      "seq": 178,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "169490359758528042665066776",
+      "nhash": "172920241897713601068",
+      "epoch_index": 20
+    },
+    {
+      "seq": 179,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "425834703876311592134058020",
+      "nhash": "434452083927611194251",
+      "epoch_index": 20
+    },
+    {
+      "seq": 180,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "122540216026158036938598677",
+      "nhash": "125018874841637712785",
+      "epoch_index": 20
+    },
+    {
+      "seq": 181,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "259898434603398884218224680",
+      "nhash": "265154151433771374767",
+      "epoch_index": 20
+    },
+    {
+      "seq": 182,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "211157828172581172335237086",
+      "nhash": "215669623607217977907",
+      "epoch_index": 21
+    },
+    {
+      "seq": 183,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "412129179321128524853554518",
+      "nhash": "420932682600641054429",
+      "epoch_index": 21
+    },
+    {
+      "seq": 184,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "168743427765634006374155494",
+      "nhash": "172346857322870851215",
+      "epoch_index": 21
+    },
+    {
+      "seq": 185,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "1771122417085661804660312071",
+      "nhash": "0",
+      "epoch_index": 21
+    },
+    {
+      "seq": 186,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "279246070730854624704844743",
+      "nhash": "285206433141735039839",
+      "epoch_index": 21
+    },
+    {
+      "seq": 187,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "154948991784360749328228112",
+      "nhash": "0",
+      "epoch_index": 21
+    },
+    {
+      "seq": 188,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "154948991784360749328228112",
+      "nhash": "158255738174110228956",
+      "epoch_index": 21
+    },
+    {
+      "seq": 189,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "180776114161440194015962180",
+      "nhash": "0",
+      "epoch_index": 22
+    },
+    {
+      "seq": 190,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "180776114161440194015962180",
+      "nhash": "184842905230019982377",
+      "epoch_index": 22
+    },
+    {
+      "seq": 191,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "109693043159389487450712799",
+      "nhash": "112160366395941139059",
+      "epoch_index": 22
+    },
+    {
+      "seq": 192,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "118689941163053151019725262",
+      "nhash": "0",
+      "epoch_index": 22
+    },
+    {
+      "seq": 193,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "118689941163053151019725262",
+      "nhash": "121356865341467822519",
+      "epoch_index": 22
+    },
+    {
+      "seq": 194,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "193931634528481539702109290",
+      "nhash": "198288288501627144094",
+      "epoch_index": 22
+    },
+    {
+      "seq": 195,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "348804215700768526967083968",
+      "nhash": "356639233970727935203",
+      "epoch_index": 22
+    },
+    {
+      "seq": 196,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "1771122417085661804660312071",
+      "nhash": "1811118808901587075395",
+      "epoch_index": 22
+    },
+    {
+      "seq": 197,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "416626641862862924655260768",
+      "nhash": "426033671650451465883",
+      "epoch_index": 23
+    },
+    {
+      "seq": 198,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "223043133685869901025078047",
+      "nhash": "228078071483553747835",
+      "epoch_index": 23
+    },
+    {
+      "seq": 199,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "151942109737966156127773041",
+      "nhash": "155371120877215585369",
+      "epoch_index": 23
+    },
+    {
+      "seq": 200,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "910870030588943954703418936",
+      "nhash": "0",
+      "epoch_index": 23
+    },
+    {
+      "seq": 201,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "910870030588943954703418936",
+      "nhash": "931426435174114128272",
+      "epoch_index": 23
+    },
+    {
+      "seq": 202,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "320203357556557067496833083",
+      "nhash": "0",
+      "epoch_index": 23
+    },
+    {
+      "seq": 203,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "320203357556557067496833083",
+      "nhash": "327427524466154889166",
+      "epoch_index": 23
+    },
+    {
+      "seq": 204,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "105128466392757100879061714",
+      "nhash": "0",
+      "epoch_index": 23
+    },
+    {
+      "seq": 205,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "105128466392757100879061714",
+      "nhash": "107645670439511295294",
+      "epoch_index": 23
+    },
+    {
+      "seq": 206,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "39304866916890417286658266",
+      "nhash": "0",
+      "epoch_index": 24
+    },
+    {
+      "seq": 207,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "2425919130966225513263805",
+      "nhash": "0",
+      "epoch_index": 24
+    },
+    {
+      "seq": 208,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "2425919130966225513263805",
+      "nhash": "2483983071446332485",
+      "epoch_index": 24
+    },
+    {
+      "seq": 209,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "235713633581073737234509100",
+      "nhash": "241354428385842751749",
+      "epoch_index": 24
+    },
+    {
+      "seq": 210,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "39304866916890417286658266",
+      "nhash": "40245460321432185365",
+      "epoch_index": 24
+    },
+    {
+      "seq": 211,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "360915467829642216953549276",
+      "nhash": "369551483321798097493",
+      "epoch_index": 24
+    },
+    {
+      "seq": 212,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "565051636611062081099188784",
+      "nhash": "0",
+      "epoch_index": 24
+    },
+    {
+      "seq": 213,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "63512704927333868369037133",
+      "nhash": "65032198373912580295",
+      "epoch_index": 24
+    },
+    {
+      "seq": 214,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "565051636611062081099188784",
+      "nhash": "578570069809449976095",
+      "epoch_index": 24
+    },
+    {
+      "seq": 215,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "12769732262827518880247447",
+      "nhash": "0",
+      "epoch_index": 25
+    },
+    {
+      "seq": 216,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "307432066079817025337813526",
+      "nhash": "315006739353192216823",
+      "epoch_index": 25
+    },
+    {
+      "seq": 217,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "325757216587063166873527663",
+      "nhash": "0",
+      "epoch_index": 25
+    },
+    {
+      "seq": 218,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "12769732262827518880247447",
+      "nhash": "13084359656491405232",
+      "epoch_index": 25
+    },
+    {
+      "seq": 219,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "70676360267459013336552887",
+      "nhash": "0",
+      "epoch_index": 25
+    },
+    {
+      "seq": 220,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "70676360267459013336552887",
+      "nhash": "72417534959265454127",
+      "epoch_index": 25
+    },
+    {
+      "seq": 221,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "175415577197054532546662587",
+      "nhash": "179735844401080259311",
+      "epoch_index": 25
+    },
+    {
+      "seq": 222,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "325757216587063166873527663",
+      "nhash": "333780211133977475684",
+      "epoch_index": 25
+    },
+    {
+      "seq": 223,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "106307022102639639161442932",
+      "nhash": "0",
+      "epoch_index": 26
+    },
+    {
+      "seq": 224,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "282730728408463966941637315",
+      "nhash": "289869888817586319291",
+      "epoch_index": 26
+    },
+    {
+      "seq": 225,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "106307022102639639161442932",
+      "nhash": "108991353189250102089",
+      "epoch_index": 26
+    },
+    {
+      "seq": 226,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "80229733999667947035719420",
+      "nhash": "82255174176512444192",
+      "epoch_index": 26
+    },
+    {
+      "seq": 227,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "327082074298406532899624598",
+      "nhash": "335334872275080509512",
+      "epoch_index": 26
+    },
+    {
+      "seq": 228,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "676077012862861607817748850",
+      "nhash": "0",
+      "epoch_index": 26
+    },
+    {
+      "seq": 229,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "676077012862861607817748850",
+      "nhash": "693472221224113959347",
+      "epoch_index": 26
+    },
+    {
+      "seq": 230,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "53473904144768783916913926",
+      "nhash": "54849767673317080290",
+      "epoch_index": 27
+    },
+    {
+      "seq": 231,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "284729186851788984534653423",
+      "nhash": "292054179239657417410",
+      "epoch_index": 27
+    },
+    {
+      "seq": 232,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "292701087672238239321777673",
+      "nhash": "0",
+      "epoch_index": 27
+    },
+    {
+      "seq": 233,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "292701087672238239321777673",
+      "nhash": "300231166561677826490",
+      "epoch_index": 27
+    },
+    {
+      "seq": 234,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "87201689230581413207604782",
+      "nhash": "89444763458712387785",
+      "epoch_index": 27
+    },
+    {
+      "seq": 235,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "54356747746896142218048607",
+      "nhash": "0",
+      "epoch_index": 27
+    },
+    {
+      "seq": 236,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "54356747746896142218048607",
+      "nhash": "55754653838477241296",
+      "epoch_index": 27
+    },
+    {
+      "seq": 237,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "320687084692826767867788529",
+      "nhash": "328933213095630294470",
+      "epoch_index": 27
+    },
+    {
+      "seq": 238,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "209229049882553726727235706",
+      "nhash": "214607692342016916049",
+      "epoch_index": 27
+    },
+    {
+      "seq": 239,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "38631423052253147501140192",
+      "nhash": "39624381457384304898",
+      "epoch_index": 27
+    },
+    {
+      "seq": 240,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "387766438771885715027683365",
+      "nhash": "0",
+      "epoch_index": 27
+    },
+    {
+      "seq": 241,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "387766438771885715027683365",
+      "nhash": "397733349493386131387",
+      "epoch_index": 27
+    },
+    {
+      "seq": 242,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "133539213486977804614004778",
+      "nhash": "136970726037139233506",
+      "epoch_index": 27
+    },
+    {
+      "seq": 243,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "183635559565016254851985997",
+      "nhash": "0",
+      "epoch_index": 27
+    },
+    {
+      "seq": 244,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "183635559565016254851985997",
+      "nhash": "188354381181894501042",
+      "epoch_index": 27
+    },
+    {
+      "seq": 245,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "336655235382892101609426966",
+      "nhash": "345641234210931072515",
+      "epoch_index": 28
+    },
+    {
+      "seq": 246,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "210006532807278742620128110",
+      "nhash": "215610730764356346612",
+      "epoch_index": 28
+    },
+    {
+      "seq": 247,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "432192040560097011093347508",
+      "nhash": "0",
+      "epoch_index": 28
+    },
+    {
+      "seq": 248,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "432192040560097011093347508",
+      "nhash": "443725442490001869599",
+      "epoch_index": 28
+    },
+    {
+      "seq": 249,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "227451404893373361101413784",
+      "nhash": "0",
+      "epoch_index": 28
+    },
+    {
+      "seq": 250,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "211033642420609208593308086",
+      "nhash": "216663901721276778161",
+      "epoch_index": 28
+    },
+    {
+      "seq": 251,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "227451404893373361101413784",
+      "nhash": "233519680895066246372",
+      "epoch_index": 28
+    },
+    {
+      "seq": 252,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "27327559938624676675577362",
+      "nhash": "28056504113588906327",
+      "epoch_index": 28
+    },
+    {
+      "seq": 253,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "258901615926436050678143618",
+      "nhash": "0",
+      "epoch_index": 29
+    },
+    {
+      "seq": 254,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "416528484043908604524240426",
+      "nhash": "428291351218861474793",
+      "epoch_index": 29
+    },
+    {
+      "seq": 255,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "258901615926436050678143618",
+      "nhash": "266213061448616220478",
+      "epoch_index": 29
+    },
+    {
+      "seq": 256,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "98001973354967546936139329",
+      "nhash": "100768853217366230081",
+      "epoch_index": 29
+    },
+    {
+      "seq": 257,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "113804045924551241470740428",
+      "nhash": "0",
+      "epoch_index": 29
+    },
+    {
+      "seq": 258,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "113804045924551241470740428",
+      "nhash": "117017064113354629863",
+      "epoch_index": 29
+    },
+    {
+      "seq": 259,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "331832033481392523820517812",
+      "nhash": "341199542822990646622",
+      "epoch_index": 29
+    },
+    {
+      "seq": 260,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "246234917262725179559676735",
+      "nhash": "253184937204560492571",
+      "epoch_index": 29
+    },
+    {
+      "seq": 261,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "235708449866684152688450352",
+      "nhash": "242358082445012143763",
+      "epoch_index": 29
+    },
+    {
+      "seq": 262,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "687324235301761342830373103",
+      "nhash": "0",
+      "epoch_index": 29
+    },
+    {
+      "seq": 263,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "687324235301761342830373103",
+      "nhash": "706714518634929916773",
+      "epoch_index": 29
+    },
+    {
+      "seq": 264,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "541087255609115480542603177",
+      "nhash": "0",
+      "epoch_index": 30
+    },
+    {
+      "seq": 265,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "138738095348679612596025357",
+      "nhash": "142940906938729347968",
+      "epoch_index": 31
+    },
+    {
+      "seq": 266,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "261593285317020477566449146",
+      "nhash": "0",
+      "epoch_index": 31
+    },
+    {
+      "seq": 267,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "261593285317020477566449146",
+      "nhash": "269516026050131910889",
+      "epoch_index": 31
+    },
+    {
+      "seq": 268,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "18383475813280054096775844",
+      "nhash": "0",
+      "epoch_index": 31
+    },
+    {
+      "seq": 269,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "18383475813280054096775844",
+      "nhash": "18940149274143099131",
+      "epoch_index": 31
+    },
+    {
+      "seq": 270,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "133326900251108964253891813",
+      "nhash": "137363657536199805124",
+      "epoch_index": 31
+    },
+    {
+      "seq": 271,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "133965439470453383526849705",
+      "nhash": "0",
+      "epoch_index": 31
+    },
+    {
+      "seq": 272,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "133965439470453383526849705",
+      "nhash": "138021529897173183577",
+      "epoch_index": 31
+    },
+    {
+      "seq": 273,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "62861900045221165986133489",
+      "nhash": "64764896672540424697",
+      "epoch_index": 31
+    },
+    {
+      "seq": 274,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "409615367547401149680351413",
+      "nhash": "422250983694225010499",
+      "epoch_index": 32
+    },
+    {
+      "seq": 275,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "541087255609115480542603177",
+      "nhash": "557778452779651244889",
+      "epoch_index": 32
+    },
+    {
+      "seq": 276,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "469891329674797793692900563",
+      "nhash": "0",
+      "epoch_index": 32
+    },
+    {
+      "seq": 277,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "80369350322438564931403674",
+      "nhash": "82846401155881888521",
+      "epoch_index": 32
+    },
+    {
+      "seq": 278,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "67916143780345850948869398",
+      "nhash": "70009076306014604823",
+      "epoch_index": 32
+    },
+    {
+      "seq": 279,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "469891329674797793692900563",
+      "nhash": "484371699034206608656",
+      "epoch_index": 32
+    },
+    {
+      "seq": 280,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "30763149720794685087514341",
+      "nhash": "0",
+      "epoch_index": 33
+    },
+    {
+      "seq": 281,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "30763149720794685087514341",
+      "nhash": "31717813227066240582",
+      "epoch_index": 33
+    },
+    {
+      "seq": 282,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "35643711695639050267130697",
+      "nhash": "36749617970434708113",
+      "epoch_index": 33
+    },
+    {
+      "seq": 283,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "249707084456246294597189748",
+      "nhash": "257451827034444366452",
+      "epoch_index": 33
+    },
+    {
+      "seq": 284,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "75808341355314330125961785",
+      "nhash": "78159366864364152902",
+      "epoch_index": 33
+    },
+    {
+      "seq": 285,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "477548306985399477823977920",
+      "nhash": "0",
+      "epoch_index": 34
+    },
+    {
+      "seq": 286,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "54076703076723344915140680",
+      "nhash": "55758532650278793360",
+      "epoch_index": 34
+    },
+    {
+      "seq": 287,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "20055503090170196902285270",
+      "nhash": "0",
+      "epoch_index": 34
+    },
+    {
+      "seq": 288,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "20055503090170196902285270",
+      "nhash": "20679245594622165977",
+      "epoch_index": 34
+    },
+    {
+      "seq": 289,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "186455813429348575232701065",
+      "nhash": "192253888359215863339",
+      "epoch_index": 34
+    },
+    {
+      "seq": 290,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "221288710101901258086804259",
+      "nhash": "0",
+      "epoch_index": 34
+    },
+    {
+      "seq": 291,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "221288710101901258086804259",
+      "nhash": "228167753167831703485",
+      "epoch_index": 34
+    },
+    {
+      "seq": 292,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "43095214118734161461475566",
+      "nhash": "44434780988854605757",
+      "epoch_index": 34
+    },
+    {
+      "seq": 293,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "15797561511963606734892452",
+      "nhash": "0",
+      "epoch_index": 34
+    },
+    {
+      "seq": 294,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "15797561511963606734892452",
+      "nhash": "16288611167078717971",
+      "epoch_index": 34
+    },
+    {
+      "seq": 295,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "32249451451145721441780048",
+      "nhash": "0",
+      "epoch_index": 34
+    },
+    {
+      "seq": 296,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "2074876721689433233040948",
+      "nhash": "0",
+      "epoch_index": 34
+    },
+    {
+      "seq": 297,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "2074876721689433233040948",
+      "nhash": "2139335143405191578",
+      "epoch_index": 34
+    },
+    {
+      "seq": 298,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "227288954340880836184770884",
+      "nhash": "234348457816151429642",
+      "epoch_index": 34
+    },
+    {
+      "seq": 299,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "32249451451145721441780048",
+      "nhash": "33251106438098974411",
+      "epoch_index": 34
+    },
+    {
+      "seq": 300,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "477548306985399477823977920",
+      "nhash": "492514751825909996245",
+      "epoch_index": 34
+    },
+    {
+      "seq": 301,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "196715289587153382268985443",
+      "nhash": "0",
+      "epoch_index": 35
+    },
+    {
+      "seq": 302,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "196715289587153382268985443",
+      "nhash": "202880380087581431714",
+      "epoch_index": 35
+    },
+    {
+      "seq": 303,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "155104553743317515536247336",
+      "nhash": "159964740411846137996",
+      "epoch_index": 35
+    },
+    {
+      "seq": 304,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "42472712694411928389357146",
+      "nhash": "0",
+      "epoch_index": 35
+    },
+    {
+      "seq": 305,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "42472712694411928389357146",
+      "nhash": "43803591169812724396",
+      "epoch_index": 35
+    },
+    {
+      "seq": 306,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "215733209078061074778760743",
+      "nhash": "222490578676392480076",
+      "epoch_index": 35
+    },
+    {
+      "seq": 307,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "303628145218846887177628257",
+      "nhash": "313143846889612698866",
+      "epoch_index": 36
+    },
+    {
+      "seq": 308,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "109009459214008745805507265",
+      "nhash": "112425040683480074775",
+      "epoch_index": 36
+    },
+    {
+      "seq": 309,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "709044111884671508687368292",
+      "nhash": "0",
+      "epoch_index": 36
+    },
+    {
+      "seq": 310,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "58456898980551865522251042",
+      "nhash": "0",
+      "epoch_index": 36
+    },
+    {
+      "seq": 311,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "58456898980551865522251042",
+      "nhash": "60288138891671810687",
+      "epoch_index": 36
+    },
+    {
+      "seq": 312,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "276422857330635288882960254",
+      "nhash": "285080566314952154578",
+      "epoch_index": 36
+    },
+    {
+      "seq": 313,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "46243822161011312589574017",
+      "nhash": "47692041059298888597",
+      "epoch_index": 36
+    },
+    {
+      "seq": 314,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "248502344815109540651352603",
+      "nhash": "0",
+      "epoch_index": 36
+    },
+    {
+      "seq": 315,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "248502344815109540651352603",
+      "nhash": "256284698764507802768",
+      "epoch_index": 36
+    },
+    {
+      "seq": 316,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "44636094753151603361055292",
+      "nhash": "46033785140650664616",
+      "epoch_index": 36
+    },
+    {
+      "seq": 317,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "113915625227644918333019723",
+      "nhash": "0",
+      "epoch_index": 36
+    },
+    {
+      "seq": 318,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "113915625227644918333019723",
+      "nhash": "117482666099995942408",
+      "epoch_index": 36
+    },
+    {
+      "seq": 319,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "228673467879210236069817949",
+      "nhash": "235831723585769405195",
+      "epoch_index": 36
+    },
+    {
+      "seq": 320,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "141608424161968105702629583",
+      "nhash": "146040691179038575114",
+      "epoch_index": 36
+    },
+    {
+      "seq": 321,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "373201154292302612351014091",
+      "nhash": "0",
+      "epoch_index": 36
+    },
+    {
+      "seq": 322,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "709044111884671508687368292",
+      "nhash": "731236808748241885585",
+      "epoch_index": 36
+    },
+    {
+      "seq": 323,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "373201154292302612351014091",
+      "nhash": "385300095433392422987",
+      "epoch_index": 36
+    },
+    {
+      "seq": 324,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "6132617824393175552616039",
+      "nhash": "0",
+      "epoch_index": 37
+    },
+    {
+      "seq": 325,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "195275392573492898204981779",
+      "nhash": "201605468247299073894",
+      "epoch_index": 37
+    },
+    {
+      "seq": 326,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "6132617824393175552616039",
+      "nhash": "6331413660342302178",
+      "epoch_index": 37
+    },
+    {
+      "seq": 327,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "104014090122857050362695028",
+      "nhash": "0",
+      "epoch_index": 37
+    },
+    {
+      "seq": 328,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "104014090122857050362695028",
+      "nhash": "107385340411661612092",
+      "epoch_index": 37
+    },
+    {
+      "seq": 329,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "136814450720171531833953545",
+      "nhash": "141248374633290125748",
+      "epoch_index": 37
+    },
+    {
+      "seq": 330,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "374178958998861174012112017",
+      "nhash": "386302321043490681512",
+      "epoch_index": 37
+    },
+    {
+      "seq": 331,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "260652437348703032001468192",
+      "nhash": "269106993410467222320",
+      "epoch_index": 38
+    },
+    {
+      "seq": 332,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "360534313220652510290575350",
+      "nhash": "0",
+      "epoch_index": 38
+    },
+    {
+      "seq": 333,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "139189592762762111997418213",
+      "nhash": "143699989592449547230",
+      "epoch_index": 38
+    },
+    {
+      "seq": 334,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "41932251351609311985551214",
+      "nhash": "0",
+      "epoch_index": 38
+    },
+    {
+      "seq": 335,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "360534313220652510290575350",
+      "nhash": "372217319047931705489",
+      "epoch_index": 38
+    },
+    {
+      "seq": 336,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "41932251351609311985551214",
+      "nhash": "43290953981309087722",
+      "epoch_index": 38
+    },
+    {
+      "seq": 337,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "550206193073650040451556469",
+      "nhash": "0",
+      "epoch_index": 38
+    },
+    {
+      "seq": 338,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "77499803664116959770798453",
+      "nhash": "80404043959624043772",
+      "epoch_index": 39
+    },
+    {
+      "seq": 339,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "75786551238573775336686820",
+      "nhash": "0",
+      "epoch_index": 40
+    },
+    {
+      "seq": 340,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "75786551238573775336686820",
+      "nhash": "78644270225899127602",
+      "epoch_index": 40
+    },
+    {
+      "seq": 341,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "312150072611182697004190681",
+      "nhash": "323916319209690449291",
+      "epoch_index": 40
+    },
+    {
+      "seq": 342,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "335976135813214870356523884",
+      "nhash": "348638481888139814308",
+      "epoch_index": 40
+    },
+    {
+      "seq": 343,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "209224679697308593626550931",
+      "nhash": "0",
+      "epoch_index": 40
+    },
+    {
+      "seq": 344,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "550206193073650040451556469",
+      "nhash": "570942490943147416178",
+      "epoch_index": 40
+    },
+    {
+      "seq": 345,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "382558544286843371341239462",
+      "nhash": "396974546454810008405",
+      "epoch_index": 40
+    },
+    {
+      "seq": 346,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "209224679697308593626550931",
+      "nhash": "217108919851273064731",
+      "epoch_index": 40
+    },
+    {
+      "seq": 347,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "693203501482170802576134585",
+      "nhash": "0",
+      "epoch_index": 40
+    },
+    {
+      "seq": 348,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "693203501482170802576134585",
+      "nhash": "719517796456149878966",
+      "epoch_index": 40
+    },
+    {
+      "seq": 349,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "124123102922549137238243309",
+      "nhash": "128834867846421971076",
+      "epoch_index": 41
+    },
+    {
+      "seq": 350,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "389077596791294643121121707",
+      "nhash": "403846226773863799295",
+      "epoch_index": 41
+    },
+    {
+      "seq": 351,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "91747667323206336711662911",
+      "nhash": "95229208314687167133",
+      "epoch_index": 41
+    },
+    {
+      "seq": 352,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "341273748448615041890616222",
+      "nhash": "0",
+      "epoch_index": 41
+    },
+    {
+      "seq": 353,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "341273748448615041890616222",
+      "nhash": "354223155345909314179",
+      "epoch_index": 41
+    },
+    {
+      "seq": 354,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "51002264743730866705728150",
+      "nhash": "52958354061858936950",
+      "epoch_index": 42
+    },
+    {
+      "seq": 355,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "230446108388410109534271668",
+      "nhash": "239283857100372701034",
+      "epoch_index": 42
+    },
+    {
+      "seq": 356,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "303841726679329760542725002",
+      "nhash": "315491777738660630118",
+      "epoch_index": 42
+    },
+    {
+      "seq": 357,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "37201282103111960043397114",
+      "nhash": "0",
+      "epoch_index": 42
+    },
+    {
+      "seq": 358,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "37201282103111960043397114",
+      "nhash": "38627672219803295430",
+      "epoch_index": 42
+    },
+    {
+      "seq": 359,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "394091468066329033505039829",
+      "nhash": "409200138971876426663",
+      "epoch_index": 42
+    },
+    {
+      "seq": 360,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "1278776159624833778086275854",
+      "nhash": "0",
+      "epoch_index": 42
+    },
+    {
+      "seq": 361,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "85369237530307869421391268",
+      "nhash": "88640721370983826655",
+      "epoch_index": 42
+    },
+    {
+      "seq": 362,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "300954692940096943859554144",
+      "nhash": "312486552814879124191",
+      "epoch_index": 42
+    },
+    {
+      "seq": 363,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "1278776159624833778086275854",
+      "nhash": "1327775785913900818699",
+      "epoch_index": 42
+    },
+    {
+      "seq": 364,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "307804465498276759774691300",
+      "nhash": "320483853910944856790",
+      "epoch_index": 43
+    },
+    {
+      "seq": 365,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "256201311757314627391149080",
+      "nhash": "266753334448308758490",
+      "epoch_index": 43
+    },
+    {
+      "seq": 366,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "707062467863758164648681814",
+      "nhash": "0",
+      "epoch_index": 43
+    },
+    {
+      "seq": 367,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "123352266273344533467888573",
+      "nhash": "128430957406522599420",
+      "epoch_index": 43
+    },
+    {
+      "seq": 368,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "168625274128555020911770572",
+      "nhash": "175566952520920400745",
+      "epoch_index": 43
+    },
+    {
+      "seq": 369,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "423396901801312924538266961",
+      "nhash": "0",
+      "epoch_index": 43
+    },
+    {
+      "seq": 370,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "707062467863758164648681814",
+      "nhash": "736169612570194764547",
+      "epoch_index": 43
+    },
+    {
+      "seq": 371,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "271334368021422637966588062",
+      "nhash": "282502809068506584971",
+      "epoch_index": 43
+    },
+    {
+      "seq": 372,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "423396901801312924538266961",
+      "nhash": "441130286461209999096",
+      "epoch_index": 43
+    },
+    {
+      "seq": 373,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "296107903825024056625922306",
+      "nhash": "308509967555355956091",
+      "epoch_index": 44
+    },
+    {
+      "seq": 374,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "253328082542799127859218851",
+      "nhash": "263934786140935385752",
+      "epoch_index": 44
+    },
+    {
+      "seq": 375,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "172218450987104034145642488",
+      "nhash": "179428540185431595556",
+      "epoch_index": 44
+    },
+    {
+      "seq": 376,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "979400796157739905680783405",
+      "nhash": "0",
+      "epoch_index": 44
+    },
+    {
+      "seq": 377,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "979400796157739905680783405",
+      "nhash": "1020404341717089493766",
+      "epoch_index": 44
+    },
+    {
+      "seq": 378,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "235804974976033670547665780",
+      "nhash": "245675455208961342997",
+      "epoch_index": 44
+    },
+    {
+      "seq": 379,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "359563479789057839532379070",
+      "nhash": "0",
+      "epoch_index": 44
+    },
+    {
+      "seq": 380,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "218635441638808482663717220",
+      "nhash": "228053013651614552039",
+      "epoch_index": 45
+    },
+    {
+      "seq": 381,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "359563479789057839532379070",
+      "nhash": "375051430592947669682",
+      "epoch_index": 45
+    },
+    {
+      "seq": 382,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "124296884777701729183007328",
+      "nhash": "129648558479537594934",
+      "epoch_index": 45
+    },
+    {
+      "seq": 383,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "411652189745925005553794876",
+      "nhash": "429374412548189291946",
+      "epoch_index": 45
+    },
+    {
+      "seq": 384,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "610135706487383465373939014",
+      "nhash": "0",
+      "epoch_index": 45
+    },
+    {
+      "seq": 385,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "610135706487383465373939014",
+      "nhash": "636400133786821274590",
+      "epoch_index": 45
+    },
+    {
+      "seq": 386,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "163074845687331179728808118",
+      "nhash": "170094290849789848968",
+      "epoch_index": 45
+    },
+    {
+      "seq": 387,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "378630350798213875630740389",
+      "nhash": "0",
+      "epoch_index": 45
+    },
+    {
+      "seq": 388,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "85512015036507611595802893",
+      "nhash": "89192591361218224445",
+      "epoch_index": 45
+    },
+    {
+      "seq": 389,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "57153627549132585702492009",
+      "nhash": "0",
+      "epoch_index": 45
+    },
+    {
+      "seq": 390,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "57153627549132585702492009",
+      "nhash": "59613612714244850462",
+      "epoch_index": 45
+    },
+    {
+      "seq": 391,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "131635295774405147710915262",
+      "nhash": "137300696881093543759",
+      "epoch_index": 45
+    },
+    {
+      "seq": 392,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "378630350798213875630740389",
+      "nhash": "394926077531826785776",
+      "epoch_index": 45
+    },
+    {
+      "seq": 393,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "49163822909024055249942925",
+      "nhash": "0",
+      "epoch_index": 46
+    },
+    {
+      "seq": 394,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "73798843942398536338041396",
+      "nhash": "77147046867969010099",
+      "epoch_index": 46
+    },
+    {
+      "seq": 395,
+      "address": "user-1",
+      "kind": "swap_out_request",
+      "shares": "67696712968045754506793864",
+      "nhash": "0",
+      "epoch_index": 46
+    },
+    {
+      "seq": 396,
+      "address": "user-1",
+      "kind": "redemption_payout",
+      "shares": "67696712968045754506793864",
+      "nhash": "70768066397213694836",
+      "epoch_index": 46
+    },
+    {
+      "seq": 397,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "49163822909024055249942925",
+      "nhash": "51394351829296908740",
+      "epoch_index": 46
+    },
+    {
+      "seq": 398,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "78964913121740093585481085",
+      "nhash": "82547193262479198668",
+      "epoch_index": 46
+    },
+    {
+      "seq": 399,
+      "address": "user-2",
+      "kind": "swap_out_request",
+      "shares": "133177759947943270958785630",
+      "nhash": "0",
+      "epoch_index": 46
+    },
+    {
+      "seq": 400,
+      "address": "user-2",
+      "kind": "redemption_payout",
+      "shares": "133177759947943270958785630",
+      "nhash": "139397276514803493648",
+      "epoch_index": 46
+    },
+    {
+      "seq": 401,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "286748466131359489936179204",
+      "nhash": "300138251578042051302",
+      "epoch_index": 47
+    },
+    {
+      "seq": 402,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "34740837299984595298639630",
+      "nhash": "36362943704333722028",
+      "epoch_index": 47
+    },
+    {
+      "seq": 403,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "56920063901186204784928850",
+      "nhash": "59577437224601636884",
+      "epoch_index": 47
+    },
+    {
+      "seq": 404,
+      "address": "user-0",
+      "kind": "swap_out_request",
+      "shares": "27510519911106009844308823",
+      "nhash": "0",
+      "epoch_index": 47
+    },
+    {
+      "seq": 405,
+      "address": "user-0",
+      "kind": "redemption_payout",
+      "shares": "27510519911106009844308823",
+      "nhash": "28794689497228138035",
+      "epoch_index": 47
+    },
+    {
+      "seq": 406,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "38672807678689013534291372",
+      "nhash": "40477433669895194237",
+      "epoch_index": 47
+    }
+  ]
+}

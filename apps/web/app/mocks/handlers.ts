@@ -94,6 +94,51 @@ export const handlers = [
       envelope({ sample: null, bridged_supply: [] }, { source: "indexed" }),
     ),
   ),
+  // M6.1 personal surfaces (/portfolio, /portfolio/metrics, /transactions):
+  // honest-empty defaults mirroring the services/api empty payloads (reader
+  // stub + derivePortfolioMetrics over an empty history). Auth-agnostic (match
+  // by path); tests exercising populated positions override with server.use().
+  // The CSV branch is deliberately unmocked: the export proxy is covered by
+  // its own stubbed-fetch unit test, not MSW.
+  http.get("*/api/v1/portfolio", ({ request }) =>
+    HttpResponse.json(
+      envelope(
+        {
+          address: new URL(request.url).searchParams.get("address") ?? "",
+          first_activity_at: null,
+          transaction_count: 0,
+          escrowed_shares: "0",
+          active_redemptions: [],
+        },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/portfolio/metrics", ({ request }) =>
+    HttpResponse.json(
+      envelope(
+        {
+          address: new URL(request.url).searchParams.get("address") ?? "",
+          history_state: "complete" as const,
+          indexed_share_balance: "0",
+          escrowed_share_balance: "0",
+          cost_basis_nhash: "0",
+          escrowed_basis_nhash: "0",
+          realized_gain_nhash: "0",
+          effective_apr_bps: null,
+          yield_by_epoch: [],
+          accrual: [],
+          accrual_truncated: false,
+          accrual_markers: [],
+          markers_truncated: false,
+        },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/transactions", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
   // PR 3.1's /validators shape (ValidatorsPayload), honest-empty exactly as
   // the real route serves with no reader wired.
   http.get("*/api/v1/validators", () =>

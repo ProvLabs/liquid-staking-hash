@@ -23,7 +23,8 @@ import type {
   TransactionRow,
   ValidatorsPayload,
 } from "@nvhash/api-types";
-import type { Heads } from "./derive.ts";
+import type { Heads, TransactionFacts } from "./derive.ts";
+import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Pagination } from "./query.ts";
 
 export type { Heads } from "./derive.ts";
@@ -54,6 +55,14 @@ export interface IndexedReader {
   portfolioFor(address: string): Promise<PortfolioSummary>;
   /** Per-event history for the address, newest first, paginated. */
   transactionsFor(address: string, page: Pagination): Promise<TransactionRow[]>;
+  /**
+   * The address's FULL event history ascending (height asc, msgIndex asc) as
+   * fold facts (M6.1). Chunked internally so no single query is unbounded; the
+   * derived-metrics fold and the CSV export both replay the complete history.
+   */
+  transactionsAscFor(address: string): Promise<TransactionFacts[]>;
+  /** All epoch snapshots ascending by epochIndex, as the fold's step facts. */
+  listEpochsAsc(): Promise<EpochStepFact[]>;
 }
 
 /**
@@ -82,4 +91,6 @@ export const emptyReader: IndexedReader = {
       active_redemptions: [],
     }),
   transactionsFor: () => Promise.resolve([]),
+  transactionsAscFor: () => Promise.resolve([]),
+  listEpochsAsc: () => Promise.resolve([]),
 };

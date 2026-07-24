@@ -40,7 +40,17 @@ Query API over the indexer's data store.
   (`test/cross-address.test.ts`) is a standing CI gate** since PR 3.3.
   `/transactions?format=csv` serves the §14.11 export (pinned columns,
   formula-injection guard) with freshness in X-Chain-Height /
-  X-Indexed-Height / X-Generated-At headers (recorded §9.4 deviation).
+  X-Indexed-Height / X-Generated-At headers (recorded §9.4 deviation); since
+  PR 6.1 the CSV serves the COMPLETE indexed history ascending by
+  `(height, msg_index)` (via `IndexedReader.transactionsAscFor`, chunked
+  1000/query): `limit`/`offset` bound only the JSON view, never the export.
+- **`/portfolio/metrics` (PR 6.1, M6.1)** is the third `auth: "address"`
+  route (joined to the cross-address `PERSONAL_PATHS` gate): it runs the pure
+  `derivePortfolioMetrics` fold (`src/portfolio-metrics.ts`) over the address's
+  full history (`transactionsAscFor`) plus the epoch step series
+  (`IndexedReader.listEpochsAsc`: `epoch_snapshots` ascending as
+  `EpochStepFact`), serving the frozen `PortfolioMetrics` shape. Derivation
+  stays in the pure fold; the reader adds only the two SELECTs.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.
@@ -115,6 +125,16 @@ security-executable gates (SECURITY.md, plan §4), which fail CI on violation:
   fixed-window limiter refuses over the ceiling (429 + `Retry-After`); the
   client key is not spoofable via `X-Forwarded-For` unless proxy trust is on
   (`test/client-key.test.ts`).
+- **Derived-metrics R3** (M6.1, spec §2.8.2): two standing suites gate the
+  `derivePortfolioMetrics` fold. `test/portfolio-metrics-property.test.ts`
+  (fast-check) generates event/epoch histories; `test/portfolio-metrics-traces.test.ts`
+  replays the committed sim traces (`@nvhash/fixtures/sim-traces`, 5 seeds +
+  manifest) as a single pooled address, asserting conservation within the
+  per-floor-site dust bound (full history + seeded prefixes), non-negative
+  bases, `history_state: "complete"`, refund gain-invariance, and escrow
+  reconciliation against the manifest stats. DevDeps for these: `fast-check`
+  and `@nvhash/fixtures` (`workspace:*`): first-party corpus, no new runtime
+  dependency (SECURITY.md supply chain).
 
 The **cross-address-rejection** gate for address-scoped endpoints (ADR-001
 Decision 2) is a standing `services/api` gate **from PR 3.3**, when those

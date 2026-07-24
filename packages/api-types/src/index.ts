@@ -11,7 +11,10 @@ export {
   type FreshnessSource,
 } from "./envelope.ts";
 export {
+  type AccrualMarker,
+  type AccrualPoint,
   type BridgedSupplyRow,
+  type EffectiveYieldPoint,
   type EpochRow,
   type IncidentKind,
   type IncidentRow,
@@ -19,6 +22,8 @@ export {
   type MarketDepthBand,
   type MarketSample,
   type MarketSummary,
+  type PortfolioHistoryState,
+  type PortfolioMetrics,
   type PortfolioSummary,
   type ProgramMetrics,
   type RedemptionRow,

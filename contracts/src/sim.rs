@@ -16,6 +16,7 @@
 use std::collections::BTreeMap;
 
 use cosmwasm_std::{Addr, MemoryStorage, Timestamp, Uint128};
+use serde::Serialize;
 
 use crate::month::{year_month, NOMINAL_EPOCH_SECS};
 use crate::plan::{
@@ -322,6 +323,9 @@ struct SimVal {
 }
 
 struct Redemption {
+    /// Trace-only owner tag (plan §7 Q1); a plain label carried alongside the
+    /// pooled entry, never a factor in the payout math or entry shape.
+    address: String,
     shares: u128,
     /// Block time (secs) the redemption becomes payable.
     due: u64,
@@ -330,12 +334,80 @@ struct Redemption {
     requested_at: u64,
 }
 
+/// Synthetic per-user identities (plan §7 Q1): the sim otherwise models a
+/// single pooled depositor, so these label that pool purely for trace
+/// attribution. Deposits/redemption requests are tagged with a round-robin
+/// owner (no rng draw), one tag per pooled event; the pooled amounts, entry
+/// counts, and RNG stream driving every invariant check are unchanged.
+const ACTORS: [&str; 3] = ["user-0", "user-1", "user-2"];
+
+/// Trace event kind, mirroring `TransactionKind` in `packages/api-types/src/rows.ts`.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum EventKind {
+    SwapIn,
+    SwapOutRequest,
+    RedemptionPayout,
+    RedemptionRefund,
+}
+
+fn u128_str<S: serde::Serializer>(v: &u128, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&v.to_string())
+}
+
+/// One epoch settlement, mirroring `EpochRow`'s `epoch_index`/`tvv` fields.
+#[derive(Serialize, Clone, Debug)]
+pub struct TraceEpoch {
+    pub epoch_index: u64,
+    pub ended_at_seconds: u64,
+    #[serde(serialize_with = "u128_str")]
+    pub tvv_after: u128,
+    #[serde(serialize_with = "u128_str")]
+    pub total_shares: u128,
+}
+
+/// One deposit/redemption event in execution order (`seq` strictly increasing).
+#[derive(Serialize, Clone, Debug)]
+pub struct TraceEvent {
+    pub seq: u64,
+    pub address: String,
+    pub kind: EventKind,
+    #[serde(serialize_with = "u128_str")]
+    pub shares: u128,
+    #[serde(serialize_with = "u128_str")]
+    pub nhash: u128,
+    /// The last settled epoch index at the moment of this event (0 before the
+    /// first epoch has settled).
+    pub epoch_index: u64,
+}
+
+/// A full scenario trace for the derived-metrics property harness (M6.1 plan
+/// commit A). `packages/fixtures/fixtures/sim-traces/manifest.json` records
+/// how the committed traces were regenerated.
+#[derive(Serialize, Clone, Debug)]
+pub struct Trace {
+    pub seed: u64,
+    pub epochs: Vec<TraceEpoch>,
+    pub events: Vec<TraceEvent>,
+}
+
+/// Trace accumulator; only populated when `run_scenario_traced` is used, so
+/// an untraced run pays no bookkeeping cost.
+#[derive(Default)]
+struct TraceBuilder {
+    seq: u64,
+    events: Vec<TraceEvent>,
+    epochs: Vec<TraceEpoch>,
+}
+
 /// Aggregate outcome counters for reporting.
 #[derive(Default, Debug, Clone)]
 pub struct Stats {
     pub epochs: u64,
     pub checks: u64,
     pub deposits: u64,
+    /// Redemption requests raised (one per RNG branch firing, never split).
+    pub redemption_requests: u64,
     pub redemptions_paid: u64,
     pub redemption_refunds: u64,
     pub slashes: u64,
@@ -396,6 +468,12 @@ struct Sim {
     redemptions: Vec<Redemption>,
     stats: Stats,
     violations: Vec<String>,
+    /// Round-robin cursor over `ACTORS` for deposit ownership.
+    next_actor: usize,
+    /// Round-robin cursor over `ACTORS` for redemption-request ownership.
+    next_redeem_actor: usize,
+    /// Populated only by `run_scenario_traced`.
+    trace: Option<TraceBuilder>,
 }
 
 impl Sim {
@@ -421,6 +499,9 @@ impl Sim {
             redemptions: vec![],
             stats: Stats::default(),
             violations: vec![],
+            next_actor: 0,
+            next_redeem_actor: 0,
+            trace: None,
         };
         // Genesis: a couple of chain validators, one enrolled.
         for _ in 0..(1 + sim.rng.below(3)) {
@@ -440,6 +521,23 @@ impl Sim {
         self.stats.checks += 1;
         if !ok {
             self.fail(what.to_string());
+        }
+    }
+
+    /// Append a trace event (no-op unless `run_scenario_traced` requested one).
+    fn record_event(&mut self, address: &str, kind: EventKind, shares: u128, nhash: u128) {
+        let epoch_index = self.stats.epochs;
+        if let Some(t) = self.trace.as_mut() {
+            let seq = t.seq;
+            t.seq += 1;
+            t.events.push(TraceEvent {
+                seq,
+                address: address.to_string(),
+                kind,
+                shares,
+                nhash,
+                epoch_index,
+            });
         }
     }
 
@@ -678,6 +776,7 @@ impl Sim {
             self.marker_liquid = self.marker_liquid.saturating_sub(payout);
             self.shares -= r.shares;
             self.stats.redemptions_paid += 1;
+            self.record_event(&r.address, EventKind::RedemptionPayout, r.shares, payout);
         }
     }
 
@@ -892,6 +991,7 @@ impl Sim {
                 self.shares -= r.shares;
                 expedite_paid += payout;
                 self.stats.redemptions_paid += 1;
+                self.record_event(&r.address, EventKind::RedemptionPayout, r.shares, payout);
             }
         }
 
@@ -980,6 +1080,14 @@ impl Sim {
         self.stats.epochs += 1;
         self.stats.max_tvv = self.stats.max_tvv.max(self.tvv());
         self.stats.max_shares = self.stats.max_shares.max(self.shares);
+        if let Some(t) = self.trace.as_mut() {
+            t.epochs.push(TraceEpoch {
+                epoch_index: self.stats.epochs,
+                ended_at_seconds: self.block_time_secs,
+                tvv_after,
+                total_shares: self.shares,
+            });
+        }
     }
 
     /// One keeper step: advance the clock, run user/world events, keeper
@@ -1015,16 +1123,28 @@ impl Sim {
             self.shares += minted;
             self.user_shares += minted;
             self.stats.deposits += 1;
+            // Trace attribution only (plan §7 Q1): round-robin owner tag, no
+            // rng draw, no change to the pooled deposit math above.
+            let owner = ACTORS[self.next_actor % ACTORS.len()];
+            self.next_actor += 1;
+            self.record_event(owner, EventKind::SwapIn, minted, amount);
         }
-        // Redemption requests.
+        // Redemption requests: always a single pooled entry, exactly as
+        // before actor attribution existed. The owner tag below is metadata
+        // for the trace only; it never splits the entry or the amount.
         if self.user_shares > 0 && self.rng.chance(self.sc.p_redeem, 100) {
             let shares = self.rng.range(1, self.user_shares);
             self.user_shares -= shares;
+            let owner = ACTORS[self.next_redeem_actor % ACTORS.len()];
+            self.next_redeem_actor += 1;
             self.redemptions.push(Redemption {
+                address: owner.to_string(),
                 shares,
                 due: self.block_time_secs + REDEMPTION_DELAY_SECS,
                 requested_at: self.block_time_secs,
             });
+            self.stats.redemption_requests += 1;
+            self.record_event(owner, EventKind::SwapOutRequest, shares, 0);
         }
         // Jail + 1% slash of everything on the validator.
         if self.rng.chance(self.sc.p_jail, 100) && !self.vals.is_empty() {
@@ -1115,10 +1235,12 @@ impl Sim {
                     self.marker_liquid -= payout;
                     self.shares -= r.shares;
                     self.stats.redemptions_paid += 1;
+                    self.record_event(&r.address, EventKind::RedemptionPayout, r.shares, payout);
                 } else {
                     let r = self.redemptions.remove(i);
                     self.user_shares += r.shares;
                     self.stats.redemption_refunds += 1;
+                    self.record_event(&r.address, EventKind::RedemptionRefund, r.shares, 0);
                 }
             } else {
                 i += 1;
@@ -1163,10 +1285,24 @@ impl Sim {
 /// Run one scenario to completion; arithmetic panics are caught and recorded
 /// as violations carrying the seed.
 pub fn run_scenario(sc: Scenario) -> SimResult {
+    run_scenario_impl(sc, false).0
+}
+
+/// Same execution as `run_scenario`, plus the full deposit/redemption/epoch
+/// trace (M6.1 plan commit A) for the derived-metrics property harness.
+pub fn run_scenario_traced(sc: Scenario) -> (SimResult, Trace) {
+    let (result, trace) = run_scenario_impl(sc, true);
+    (result, trace.expect("trace requested"))
+}
+
+fn run_scenario_impl(sc: Scenario, want_trace: bool) -> (SimResult, Option<Trace>) {
     let seed = sc.seed;
     let epochs = sc.epochs;
     let outcome = std::panic::catch_unwind(move || {
         let mut sim = Sim::new(sc);
+        if want_trace {
+            sim.trace = Some(TraceBuilder::default());
+        }
         // Steps-per-epoch is now variable (a calendar month spans several
         // steps), so drive by crank count with a generous step safety cap.
         let target = epochs as u64;
@@ -1179,10 +1315,18 @@ pub fn run_scenario(sc: Scenario) -> SimResult {
                 break; // a broken scenario floods; keep the head
             }
         }
-        SimResult {
-            stats: sim.stats,
-            violations: sim.violations,
-        }
+        let trace = sim.trace.take().map(|t| Trace {
+            seed,
+            epochs: t.epochs,
+            events: t.events,
+        });
+        (
+            SimResult {
+                stats: sim.stats,
+                violations: sim.violations,
+            },
+            trace,
+        )
     });
     match outcome {
         Ok(r) => r,
@@ -1192,10 +1336,13 @@ pub fn run_scenario(sc: Scenario) -> SimResult {
                 .map(|s| s.to_string())
                 .or_else(|| e.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "unknown panic".to_string());
-            SimResult {
-                stats: Stats::default(),
-                violations: vec![format!("[seed {seed}] PANIC: {what}")],
-            }
+            (
+                SimResult {
+                    stats: Stats::default(),
+                    violations: vec![format!("[seed {seed}] PANIC: {what}")],
+                },
+                None,
+            )
         }
     }
 }
@@ -1305,4 +1452,179 @@ mod tests {
             }
         }
     }
+
+    /// Golden test (M6.1 plan commit A): a tiny fixed scenario (one validator,
+    /// no rewards/fees/slashes/churn, a fixed deposit every step, one epoch)
+    /// serializes to the exact expected trace JSON.
+    #[test]
+    fn trace_export_golden_json() {
+        let sc = Scenario {
+            seed: 7,
+            epochs: 1,
+            max_validators: 1,
+            reward_bps_per_epoch: 0,
+            commission_bps: 0,
+            aum_fee_bps: 0,
+            performance_threshold_bps: 0,
+            deposit_ceiling: 5_000_000,
+            min_deposit: 5_000_000,
+            p_deposit: 100,
+            p_redeem: 0,
+            p_jail: 0,
+            p_enroll: 0,
+            p_unregister: 0,
+            p_tip: 0,
+            p_pay_commission: 0,
+            genesis_secs: GENESIS_SECS,
+            keeper_jitter_max_secs: 0,
+            timing: Timing::Jitter,
+        };
+        let (result, trace) = run_scenario_traced(sc);
+        assert!(result.violations.is_empty(), "golden scenario violations: {:#?}", result.violations);
+        let json = serde_json::to_string_pretty(&trace).unwrap();
+        assert_eq!(json, GOLDEN_TRACE_JSON);
+    }
+
+    /// Regression for the actor-attribution split bug (M6.1 review): grouping
+    /// trace events by address and summing back across addresses must
+    /// reproduce the pooled scenario totals exactly, one event per pooled
+    /// occurrence. A regression that splits a pooled deposit/redemption
+    /// across owners inflates the per-kind event count past these pooled
+    /// counters.
+    #[test]
+    fn trace_per_actor_totals_match_pooled_stats() {
+        for seed in [1u64, 4, 8] {
+            let sc = Scenario::from_seed(seed, 24);
+            let (result, trace) = run_scenario_traced(sc);
+            assert!(result.violations.is_empty(), "seed {seed} violations: {:#?}", result.violations);
+            let mut by_address: BTreeMap<&str, BTreeMap<EventKind, u64>> = BTreeMap::new();
+            for e in &trace.events {
+                *by_address.entry(e.address.as_str()).or_default().entry(e.kind).or_insert(0) += 1;
+            }
+            let pooled = |kind: EventKind| -> u64 {
+                by_address.values().map(|k| *k.get(&kind).unwrap_or(&0)).sum()
+            };
+            assert_eq!(
+                pooled(EventKind::SwapIn),
+                result.stats.deposits,
+                "seed {seed}: per-actor swap_in totals must sum to the pooled deposit count"
+            );
+            assert_eq!(
+                pooled(EventKind::SwapOutRequest),
+                result.stats.redemption_requests,
+                "seed {seed}: per-actor swap_out_request totals must sum to the pooled request count (never split)"
+            );
+            assert_eq!(
+                pooled(EventKind::RedemptionPayout),
+                result.stats.redemptions_paid,
+                "seed {seed}: per-actor payout totals must sum to the pooled paid count"
+            );
+            assert_eq!(
+                pooled(EventKind::RedemptionRefund),
+                result.stats.redemption_refunds,
+                "seed {seed}: per-actor refund totals must sum to the pooled refund count"
+            );
+        }
+    }
+
+    /// Regression for the same bug from the other direction: tracing is
+    /// purely observational, so a traced run must reach byte-identical
+    /// pooled stats to an untraced run of the same seed.
+    #[test]
+    fn tracing_never_changes_economics() {
+        for seed in [1u64, 4, 8, 9] {
+            let untraced = run_scenario(Scenario::from_seed(seed, 24));
+            let (traced, _trace) = run_scenario_traced(Scenario::from_seed(seed, 24));
+            assert_eq!(untraced.stats.deposits, traced.stats.deposits, "seed {seed}: deposits");
+            assert_eq!(
+                untraced.stats.redemption_requests, traced.stats.redemption_requests,
+                "seed {seed}: redemption_requests"
+            );
+            assert_eq!(
+                untraced.stats.redemptions_paid, traced.stats.redemptions_paid,
+                "seed {seed}: redemptions_paid"
+            );
+            assert_eq!(
+                untraced.stats.redemption_refunds, traced.stats.redemption_refunds,
+                "seed {seed}: redemption_refunds"
+            );
+            assert_eq!(untraced.stats.max_tvv, traced.stats.max_tvv, "seed {seed}: max_tvv");
+            assert_eq!(untraced.stats.max_shares, traced.stats.max_shares, "seed {seed}: max_shares");
+            assert_eq!(
+                untraced.violations.len(),
+                traced.violations.len(),
+                "seed {seed}: violation count"
+            );
+        }
+    }
+
+    const GOLDEN_TRACE_JSON: &str = r#"{
+  "seed": 7,
+  "epochs": [
+    {
+      "epoch_index": 1,
+      "ended_at_seconds": 1738402741,
+      "tvv_after": "35000000",
+      "total_shares": "35000000000000"
+    }
+  ],
+  "events": [
+    {
+      "seq": 0,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    },
+    {
+      "seq": 1,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    },
+    {
+      "seq": 2,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    },
+    {
+      "seq": 3,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    },
+    {
+      "seq": 4,
+      "address": "user-1",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    },
+    {
+      "seq": 5,
+      "address": "user-2",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    },
+    {
+      "seq": 6,
+      "address": "user-0",
+      "kind": "swap_in",
+      "shares": "5000000000000",
+      "nhash": "5000000",
+      "epoch_index": 0
+    }
+  ]
+}"#;
 }

@@ -7,15 +7,17 @@
 //!
 //! Usage:
 //!   cargo run --release --bin simulate -- [--seed N] [--scenarios N]
-//!       [--epochs N] [--report-secs N] [--halt-on-failure]
+//!       [--epochs N] [--report-secs N] [--halt-on-failure] [--trace-out DIR]
 //!
 //! Defaults: random master seed, unbounded scenarios, 240 epochs (20 years,
-//! monthly) per scenario, a status line every 10 seconds.
+//! monthly) per scenario, a status line every 10 seconds. `--trace-out DIR`
+//! writes one `seed-<scenario_seed>.json` deposit/redemption/epoch trace per
+//! scenario into DIR (M6.1 plan commit A); omit it for today's behavior.
 
 use std::io::Write;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use nvhash_staking::sim::{run_scenario, Scenario, Stats};
+use nvhash_staking::sim::{run_scenario, run_scenario_traced, Scenario, Stats};
 
 fn arg(name: &str) -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
@@ -37,6 +39,10 @@ fn main() {
     let epochs: u32 = arg("--epochs").and_then(|v| v.parse().ok()).unwrap_or(240);
     let report_secs: u64 = arg("--report-secs").and_then(|v| v.parse().ok()).unwrap_or(10);
     let halt = std::env::args().any(|a| a == "--halt-on-failure");
+    let trace_out = arg("--trace-out");
+    if let Some(dir) = &trace_out {
+        std::fs::create_dir_all(dir).expect("create --trace-out directory");
+    }
 
     println!("nvHASH chain-free simulation soak (RC2 15.5)");
     println!("  master seed  : {master_seed}   (reproduce a scenario: --seed <scenario_seed> --scenarios 1)");
@@ -57,7 +63,15 @@ fn main() {
         }
         let scenario_seed = master_seed.wrapping_add(scenarios.wrapping_mul(0x9E3779B97F4A7C15));
         let sc = Scenario::from_seed(scenario_seed, epochs);
-        let result = run_scenario(sc.clone());
+        let result = if let Some(dir) = &trace_out {
+            let (result, trace) = run_scenario_traced(sc.clone());
+            let path = format!("{dir}/seed-{scenario_seed}.json");
+            let json = serde_json::to_string_pretty(&trace).expect("serialize trace");
+            std::fs::write(&path, json + "\n").expect("write trace file");
+            result
+        } else {
+            run_scenario(sc.clone())
+        };
         scenarios += 1;
         agg.epochs += result.stats.epochs;
         agg.checks += result.stats.checks;

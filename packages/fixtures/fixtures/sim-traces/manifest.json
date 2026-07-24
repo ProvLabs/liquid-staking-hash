@@ -1,0 +1,48 @@
+{
+  "status": "Chain-free sim traces (M6.1 plan commit A) for the derived-metrics property harness (spec requirement R3): deposit/redemption/epoch events from the production planners, never captured from a live chain.",
+  "source": "contracts/src/sim.rs (Scenario::from_seed) driven by contracts/src/bin/simulate.rs --trace-out",
+  "regeneration_command": "cd contracts && GOTOOLCHAIN=go1.24.5 cargo run --release --bin simulate -- --seed <seed> --scenarios 1 --epochs 48 --report-secs 0 --trace-out ../packages/fixtures/fixtures/sim-traces",
+  "conventions": {
+    "actors": "Deposits and redemption requests are tagged (round-robin, no rng draw) with one of 3 synthetic addresses (user-0, user-1, user-2) for trace attribution; the sim otherwise models a single pooled depositor. The tag is metadata only: every pooled entry, amount, and RNG draw is identical to an untraced run of the same seed (see contracts/src/sim.rs tests trace_per_actor_totals_match_pooled_stats and tracing_never_changes_economics).",
+    "epoch_index": "1-based, matching the contract's EPOCH_INDEX (first settled epoch = 1). An event's epoch_index is the count of epochs already settled at the moment the event occurred (0 before the first epoch settles).",
+    "amounts": "shares and nhash are decimal strings (u128 base units). nhash is \"0\" on swap_out_request and redemption_refund, which carry no nhash leg (mirrors TransactionRow in packages/api-types/src/rows.ts).",
+    "stats_derivation": "Each trace's stats below are counted directly from that file's events array (swap_in / swap_out_request / redemption_payout / redemption_refund), not copied from the simulate binary's own report line. swap_out_request may exceed redemption_payout + redemption_refund by the count still pending (not yet due) when the scenario's epoch budget ran out; slashes and write_downs come from the binary's report line (not separately recorded as trace events)."
+  },
+  "traces": [
+    {
+      "file": "seed-1.json",
+      "seed": 1,
+      "epochs": 48,
+      "notes": "Moderate economy with heavy redelegation churn; includes redemption refunds.",
+      "stats": { "deposits": 43, "swap_out_request": 48, "redemption_payout": 44, "redemption_refund": 3, "slashes": 2, "write_downs": 0, "max_tvl_nhash": "9.796e20" }
+    },
+    {
+      "file": "seed-2.json",
+      "seed": 2,
+      "epochs": 48,
+      "notes": "High-deposit, high-TVL economy with frequent slashing but no write-down epoch in this window; includes redemption refunds.",
+      "stats": { "deposits": 187, "swap_out_request": 23, "redemption_payout": 21, "redemption_refund": 2, "slashes": 19, "write_downs": 0, "max_tvl_nhash": "1.533e22" }
+    },
+    {
+      "file": "seed-4.json",
+      "seed": 4,
+      "epochs": 48,
+      "notes": "REQUIRED coverage scenario: includes both redemption refunds and a slash write-down (a TVV step-down not fully explained by redemption payouts alone).",
+      "stats": { "deposits": 66, "swap_out_request": 94, "redemption_payout": 91, "redemption_refund": 3, "slashes": 8, "write_downs": 1, "max_tvl_nhash": "4.540e21" }
+    },
+    {
+      "file": "seed-8.json",
+      "seed": 8,
+      "epochs": 48,
+      "notes": "High-churn economy (heaviest redelegation volume of the set) with slashing but no refunds or write-downs in this window.",
+      "stats": { "deposits": 165, "swap_out_request": 121, "redemption_payout": 121, "redemption_refund": 0, "slashes": 13, "write_downs": 0, "max_tvl_nhash": "2.059e21" }
+    },
+    {
+      "file": "seed-9.json",
+      "seed": 9,
+      "epochs": 48,
+      "notes": "Quiet-ish baseline economy: zero slashes, one refund, for contrast against the more heavily stressed scenarios above.",
+      "stats": { "deposits": 104, "swap_out_request": 38, "redemption_payout": 37, "redemption_refund": 1, "slashes": 0, "write_downs": 0, "max_tvl_nhash": "1.107e21" }
+    }
+  ]
+}
