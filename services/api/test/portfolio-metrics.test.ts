@@ -9,6 +9,7 @@ import {
   derivePortfolioMetrics,
   MARKER_CAP,
   MAX_ACCRUAL_POINTS,
+  MAX_YIELD_POINTS,
   type EpochStepFact,
 } from "../src/portfolio-metrics.ts";
 
@@ -60,6 +61,7 @@ describe("derivePortfolioMetrics: empty history", () => {
       realized_gain_nhash: "0",
       effective_apr_bps: null,
       yield_by_epoch: [],
+      yield_truncated: false,
       accrual: [],
       accrual_truncated: false,
       accrual_markers: [],
@@ -319,5 +321,23 @@ describe("derivePortfolioMetrics: accrual cap", () => {
     expect(m.accrual).toHaveLength(MAX_ACCRUAL_POINTS);
     expect(m.accrual_truncated).toBe(false);
     expect(m.accrual[0]?.height).toBe(1);
+  });
+
+  // yield_by_epoch gets one entry per epoch step at/after the first deposit
+  // (the first has a null personal figure), so N epochs yield N entries.
+  it("keeps the most recent MAX_YIELD_POINTS yield entries and flags truncation", () => {
+    const m = withEpochs(MAX_YIELD_POINTS + 2);
+    expect(m.yield_by_epoch).toHaveLength(MAX_YIELD_POINTS);
+    expect(m.yield_truncated).toBe(true);
+    // 2002 entries (epochs 1..2002) sliced to the most recent 2000: 1 and 2 dropped.
+    expect(m.yield_by_epoch[0]?.epoch_index).toBe(3);
+    expect(m.yield_by_epoch[MAX_YIELD_POINTS - 1]?.epoch_index).toBe(MAX_YIELD_POINTS + 2);
+  });
+
+  it("keeps the full yield series and flags false at the cap", () => {
+    const m = withEpochs(MAX_YIELD_POINTS);
+    expect(m.yield_by_epoch).toHaveLength(MAX_YIELD_POINTS);
+    expect(m.yield_truncated).toBe(false);
+    expect(m.yield_by_epoch[0]?.epoch_index).toBe(1);
   });
 });

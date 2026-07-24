@@ -183,6 +183,8 @@ export default {
     "Your HASH value at each event and monthly settlement; flat between settlements by design.",
   "portfolio.accrual-cold": "Your value chart appears once your position has at least two points of history.",
   "portfolio.accrual-unavailable": "Your accrual history is unavailable right now.",
+  "portfolio.yield-truncated":
+    "Showing the most recent settlements; earlier yield history is trimmed.",
   "portfolio.accrual-truncated":
     "Showing the most recent events; earlier deposit and redeem markers are not listed.",
   "portfolio.accrual-history-truncated":

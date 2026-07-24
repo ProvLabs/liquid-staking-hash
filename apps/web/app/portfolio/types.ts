@@ -94,6 +94,7 @@ export interface PortfolioData {
   summary: PositionSummaryVM;
   effectiveAprBps: number | null;
   yieldByEpoch: YieldPointVM[];
+  yieldTruncated: boolean;
   accrual: AccrualVM | null;
   activeRedemptions: RedemptionVM[];
   firstActivityAt: string | null;

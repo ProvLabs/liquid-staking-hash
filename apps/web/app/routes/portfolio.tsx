@@ -61,6 +61,7 @@ export default function Portfolio({ loaderData }: Route.ComponentProps) {
             locale={locale}
             effectiveAprBps={data.effectiveAprBps}
             yieldByEpoch={data.yieldByEpoch}
+            yieldTruncated={data.yieldTruncated}
           />
           <AccrualChart locale={locale} accrual={data.accrual} />
           <ActiveRedemptions locale={locale} redemptions={data.activeRedemptions} />

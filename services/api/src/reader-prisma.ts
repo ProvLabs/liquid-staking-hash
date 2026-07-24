@@ -311,25 +311,37 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     },
 
     async listEpochsAsc(): Promise<EpochStepFact[]> {
-      const rows = await prisma.epochSnapshot.findMany({
-        orderBy: { epochIndex: "asc" },
-        select: {
-          epochIndex: true,
-          endedAtSeconds: true,
-          tvvAfter: true,
-          totalShares: true,
-          netAprBps: true,
-          endHeight: true,
-        },
-      });
-      return rows.map((r) => ({
-        epochIndex: r.epochIndex,
-        endedAtSeconds: r.endedAtSeconds,
-        tvvAfter: toBigint(r.tvvAfter),
-        totalShares: toBigint(r.totalShares),
-        netAprBps: r.netAprBps,
-        endHeight: r.endHeight,
-      }));
+      // Same chunk-until-short-page pattern as transactionsAscFor: epochs are
+      // calendar-month (small in practice) but no SELECT is left unbounded.
+      const CHUNK = 1000;
+      const facts: EpochStepFact[] = [];
+      for (let skip = 0; ; skip += CHUNK) {
+        const rows = await prisma.epochSnapshot.findMany({
+          orderBy: { epochIndex: "asc" },
+          skip,
+          take: CHUNK,
+          select: {
+            epochIndex: true,
+            endedAtSeconds: true,
+            tvvAfter: true,
+            totalShares: true,
+            netAprBps: true,
+            endHeight: true,
+          },
+        });
+        for (const r of rows) {
+          facts.push({
+            epochIndex: r.epochIndex,
+            endedAtSeconds: r.endedAtSeconds,
+            tvvAfter: toBigint(r.tvvAfter),
+            totalShares: toBigint(r.totalShares),
+            netAprBps: r.netAprBps,
+            endHeight: r.endHeight,
+          });
+        }
+        if (rows.length < CHUNK) break;
+      }
+      return facts;
     },
 
     close: () => prisma.$disconnect(),

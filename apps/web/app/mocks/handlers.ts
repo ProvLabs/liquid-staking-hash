@@ -127,6 +127,7 @@ export const handlers = [
           realized_gain_nhash: "0",
           effective_apr_bps: null,
           yield_by_epoch: [],
+          yield_truncated: false,
           accrual: [],
           accrual_truncated: false,
           accrual_markers: [],

@@ -258,6 +258,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
         realized_gain_nhash: "0",
         effective_apr_bps: null,
         yield_by_epoch: [],
+        yield_truncated: false,
         accrual: [],
         accrual_truncated: false,
         accrual_markers: [],
@@ -301,6 +302,7 @@ describe("populated portfolio metrics (M6.1 derived fold behind the route)", () 
           realized_gain_nhash: string;
           effective_apr_bps: number | null;
           yield_by_epoch: Array<Record<string, unknown>>;
+          yield_truncated: boolean;
           accrual: Array<{ height: number; value_nhash: string }>;
           accrual_truncated: boolean;
           accrual_markers: Array<Record<string, unknown>>;
@@ -325,6 +327,7 @@ describe("populated portfolio metrics (M6.1 derived fold behind the route)", () 
       ]);
       expect(typeof body.data.effective_apr_bps).toBe("number");
       expect(body.data.accrual_markers.map((m) => m.kind)).toEqual(["swap_in"]);
+      expect(body.data.yield_truncated).toBe(false);
       expect(body.data.accrual_truncated).toBe(false);
       expect(body.data.markers_truncated).toBe(false);
       expect(body.meta.indexed_height).toBe(4200);

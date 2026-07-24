@@ -21,9 +21,11 @@ import type {
 import { toSafeInt, toSafeSignedInt, type TransactionFacts } from "./derive.ts";
 
 export const MARKER_CAP = 200;
-/** Accrual series cap: the web zod bound would null the whole read past this,
- * so trim earlier history server-side and flag it (keep the most recent). */
+/** Series caps: trim earlier history server-side and flag it (keep the most
+ * recent) so responses stay bounded well under the web wire limits (which
+ * carry 10x slack above these caps). */
 export const MAX_ACCRUAL_POINTS = 2000;
+export const MAX_YIELD_POINTS = 2000;
 const SECONDS_PER_YEAR = 31_536_000n;
 
 /** Minimal epoch-step input (the endpoint task maps epoch_snapshots + the
@@ -119,6 +121,7 @@ export function derivePortfolioMetrics(
       realized_gain_nhash: null,
       effective_apr_bps: null,
       yield_by_epoch: [],
+      yield_truncated: false,
       accrual: [],
       accrual_truncated: false,
       accrual_markers: [],
@@ -155,6 +158,7 @@ export function derivePortfolioMetrics(
       realized_gain_nhash: realized.toString(),
       effective_apr_bps: null,
       yield_by_epoch: [],
+      yield_truncated: false,
       accrual: [],
       accrual_truncated: false,
       accrual_markers: accrualMarkers,
@@ -300,6 +304,10 @@ export function derivePortfolioMetrics(
   const accrualPoints = accrualTruncated
     ? accrual.slice(accrual.length - MAX_ACCRUAL_POINTS)
     : accrual;
+  const yieldTruncated = yieldByEpoch.length > MAX_YIELD_POINTS;
+  const yieldPoints = yieldTruncated
+    ? yieldByEpoch.slice(yieldByEpoch.length - MAX_YIELD_POINTS)
+    : yieldByEpoch;
 
   return {
     address,
@@ -310,7 +318,8 @@ export function derivePortfolioMetrics(
     escrowed_basis_nhash: escrowBasis.toString(),
     realized_gain_nhash: realized.toString(),
     effective_apr_bps: effectiveAprBps,
-    yield_by_epoch: yieldByEpoch,
+    yield_by_epoch: yieldPoints,
+    yield_truncated: yieldTruncated,
     accrual: accrualPoints,
     accrual_truncated: accrualTruncated,
     accrual_markers: accrualMarkers,

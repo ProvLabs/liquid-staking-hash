@@ -273,8 +273,10 @@ export interface PortfolioMetrics {
   realized_gain_nhash: string | null;
   /** Effective APR since first deposit, bps; null until a step completes. */
   effective_apr_bps: number | null;
-  /** Per-epoch personal-vs-program yield, oldest first from the first deposit. */
+  /** Per-epoch personal-vs-program yield, oldest first from the first deposit; most recent MAX_YIELD_POINTS kept. */
   yield_by_epoch: EffectiveYieldPoint[];
+  /** True when the yield cap trimmed earlier epochs; the most recent points are kept. */
+  yield_truncated: boolean;
   /** Step-after value series, most recent MAX_ACCRUAL_POINTS kept. */
   accrual: AccrualPoint[];
   /** True when the accrual cap trimmed earlier history; the most recent points are kept. */

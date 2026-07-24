@@ -320,6 +320,7 @@ export async function loadPortfolioData(
       personalAprBps: p.personal_apr_bps,
       netAprBps: p.net_apr_bps,
     })),
+    yieldTruncated: metrics?.yield_truncated ?? false,
     accrual,
     activeRedemptions,
     firstActivityAt: summaryEnv?.data.first_activity_at ?? null,

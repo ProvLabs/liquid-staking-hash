@@ -16,10 +16,12 @@ export function EffectiveYieldPanel({
   locale,
   effectiveAprBps,
   yieldByEpoch,
+  yieldTruncated = false,
 }: {
   locale: Locale;
   effectiveAprBps: number | null;
   yieldByEpoch: YieldPointVM[];
+  yieldTruncated?: boolean;
 }) {
   // Both lines must exist for the same settlement, or the comparison lies.
   const aligned = yieldByEpoch.filter(
@@ -74,6 +76,9 @@ export function EffectiveYieldPanel({
         />
       )}
 
+      {yieldTruncated ? (
+        <p className="text-xs text-muted-foreground">{t(locale, "portfolio.yield-truncated")}</p>
+      ) : null}
       <p className="text-xs text-muted-foreground">{t(locale, "portfolio.yield-gap-note")}</p>
     </section>
   );

@@ -725,7 +725,11 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 > the property suite does not already generate). The accrual series is capped
 > server-side at `MAX_ACCRUAL_POINTS = 2000` (most recent kept, earlier history
 > trimmed and flagged by `accrual_truncated`), so a high-event address never
-> trips the web boundary bound and silently nulls the whole read.
+> trips the web boundary bound and silently nulls the whole read. The
+> per-epoch yield series carries the symmetric cap (`MAX_YIELD_POINTS = 2000`,
+> flagged by `yield_truncated`; web wire bound 10x above), and the epoch-step
+> read (`listEpochsAsc`) is chunked like the transaction read so no SELECT is
+> unbounded (PR 6.1 follow-up, external review).
 
 ### 9.6 Incident derivation
 
