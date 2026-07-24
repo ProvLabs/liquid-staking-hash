@@ -14,11 +14,14 @@
 
 import { Prisma, PrismaClient } from "@nvhash/db-indexed";
 import {
+  derivePayoutStats,
   derivePortfolio,
   deriveHeads,
   deriveMetrics,
   deriveValidatorsPayload,
   navPriceNhash,
+  payoutDurationSeconds,
+  PAYOUT_STATS_WINDOW_DAYS,
   toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
@@ -35,6 +38,7 @@ import type {
   EpochRow,
   IncidentRow,
   MarketSummary,
+  PayoutStats,
   PortfolioSummary,
   ProgramMetrics,
   TransactionKind,
@@ -248,6 +252,40 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           toBridgedSupplyRow({ chain: row.chain, remoteSupply: toBigint(row.remoteSupply), sampledAt: row.sampledAt }),
         ),
       };
+    },
+
+    async payoutStats(): Promise<PayoutStats> {
+      // Recent terminal cohort (§9.5.3, no epoch-index column → rolling
+      // window, Q4 delivery). The window also bounds the row set. Terminal =
+      // matured or expedited (a refund-only request never paid out).
+      const cutoff = new Date(Date.now() - PAYOUT_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const [rows, epochCount] = await Promise.all([
+        prisma.redemptionRequest.findMany({
+          where: {
+            status: { in: ["matured", "expedited"] },
+            OR: [{ expeditedAt: { gte: cutoff } }, { maturedAt: { gte: cutoff } }],
+          },
+          select: { enqueuedAt: true, expeditedAt: true, maturedAt: true },
+        }),
+        prisma.epochSnapshot.count(),
+      ]);
+      const durations: number[] = [];
+      for (const r of rows) {
+        const d = payoutDurationSeconds({
+          requestId: "",
+          owner: "",
+          shares: 0n,
+          status: "matured",
+          enqueuedAt: r.enqueuedAt,
+          expeditedAt: r.expeditedAt,
+          maturedAt: r.maturedAt,
+          refundedAt: null,
+          lastHeight: 0n,
+          lastTxhash: "",
+        });
+        if (d !== null) durations.push(d);
+      }
+      return derivePayoutStats(durations, epochCount);
     },
 
     async portfolioFor(address: string): Promise<PortfolioSummary> {

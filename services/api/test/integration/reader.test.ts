@@ -114,10 +114,30 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     });
     // Address plane (PR 3.3): one active (enqueued) and one terminal
     // (matured) redemption — the portfolio read must escrow only the former.
+    // 11 recent terminal (matured) requests dated RELATIVE TO NOW so the
+    // payout-stats recent-window filter always captures them (the reader's
+    // cutoff is real wall-clock; fixed dates would age out of the window and
+    // make the test flaky). Durations 20..30 days → cohort ≥ 10, so the
+    // median/p90 gate opens; epochCount is 1 (seeded above), so not cold-start.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const recentTerminal = Array.from({ length: 11 }, (_, i) => {
+      const maturedAt = new Date(Date.now() - 5 * DAY_MS);
+      return {
+        requestId: `payout-${i}`,
+        owner: `pb1holder${i}`,
+        shares: "1000",
+        status: "matured" as const,
+        enqueuedAt: new Date(maturedAt.getTime() - (20 + i) * DAY_MS),
+        maturedAt,
+        lastHeight: 400n,
+        lastTxhash: `PAYOUT${i}`,
+      };
+    });
     await writer.redemptionRequest.createMany({
       data: [
         { requestId: "req-1", owner: "pb1alice", shares: "500", status: "enqueued", enqueuedAt: new Date("2026-06-03T00:00:00Z"), lastHeight: 300n, lastTxhash: "CC" },
         { requestId: "req-0", owner: "pb1alice", shares: "100", status: "matured", enqueuedAt: new Date("2026-05-01T00:00:00Z"), maturedAt: new Date("2026-05-20T00:00:00Z"), lastHeight: 50n, lastTxhash: "OLD" },
+        ...recentTerminal,
       ],
     });
     // Market plane (PR 3.2): the sample predates every settled epoch, so the
@@ -249,6 +269,19 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     expect(portfolio.transaction_count).toBe(2);
     expect(portfolio.escrowed_shares).toBe("500"); // matured req-0 does not escrow
     expect(portfolio.active_redemptions.map((r) => r.request_id)).toEqual(["req-1"]);
+  });
+
+  it("derives payout stats: terminal cohort in-window, median/p90 gate, band bounds", async () => {
+    const stats = await reader.payoutStats();
+    // ≥ 11 recent matured requests → cohort clears the ≥10 gate; the old
+    // req-0 may or may not fall in the window, so assert a lower bound.
+    expect(stats.sample_count).toBeGreaterThanOrEqual(11);
+    expect(stats.cold_start).toBe(false); // one epoch is seeded
+    expect(stats.median_seconds).not.toBeNull();
+    expect(stats.p90_seconds).not.toBeNull();
+    expect((stats.p90_seconds as number) >= (stats.median_seconds as number)).toBe(true);
+    expect(stats.band_floor_seconds).toBe(21 * 24 * 60 * 60);
+    expect(stats.band_ceiling_seconds).toBe(60 * 24 * 60 * 60);
   });
 
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {

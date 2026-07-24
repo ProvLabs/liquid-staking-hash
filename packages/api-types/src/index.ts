@@ -22,6 +22,7 @@ export {
   type MarketDepthBand,
   type MarketSample,
   type MarketSummary,
+  type PayoutStats,
   type PortfolioHistoryState,
   type PortfolioMetrics,
   type PortfolioSummary,

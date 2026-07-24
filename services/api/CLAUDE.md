@@ -20,6 +20,16 @@ Query API over the indexer's data store.
   the shared `navHashPerShare` in `@nvhash/api-types`. Envelope heights come
   from the latest `reconciler_runs` row (fallback: max non-`meta:` worker
   checkpoint with a null chain head).
+- `/redemptions/stats` (PR 5.4, app-spec §9.5.3/§14.12) is the **public,
+  aggregate** typical time-to-payout — median/p90 of `(expedited_at ??
+  matured_at) − enqueued_at` over the recent terminal-request window
+  (`derivePayoutStats`; no owner keying, so no PII, unlike `/portfolio`).
+  Since `redemption_requests` has no epoch-index column, the "recent-epoch
+  cohort" is a rolling window (`PAYOUT_STATS_WINDOW_DAYS`). The ≥ 10-terminal
+  and ≥ 1-completed-epoch gates null the stats server-side (the web tier then
+  shows the 60-day guarantee alone); the 21–60-day band bounds ride in the
+  payload as data. Honest-empty (`sample_count: 0`, null stats, `cold_start:
+  true`) until data + an epoch exist — the `/market` precedent.
 - `/market` (PR 3.2) is shape-complete but honest-empty until the market
   sampler (plan PR 2.4, parked on spec §14.3) produces data: venue +
   `sampled_at` ride in the payload, the premium is computed against the NAV

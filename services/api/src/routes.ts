@@ -278,6 +278,34 @@ const marketRoute = defineEnveloped<unknown>({
 });
 
 /**
+ * `GET /api/v1/redemptions/stats` — the program-wide typical time-to-payout
+ * (PR 5.4; app-spec §8.4, §9.5.3, §14.12). PUBLIC and aggregate over the
+ * recent terminal-request cohort — no owner keying, so no PII. The ≥ 10-
+ * terminal threshold and the epoch cold-start gate are applied in the
+ * derivation (median/p90 null below them), and the physical 21–60-day band
+ * rides in the payload — the web tier renders the honest state without
+ * re-deciding the rule. Honest-empty (`sample_count: 0`, null stats,
+ * `cold_start: true`) until data and a completed epoch exist.
+ */
+const payoutStatsRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/redemptions/stats`,
+  auth: "public",
+  enveloped: true,
+  querySchema: null,
+  summary: "Typical time-to-payout (median/p90, gated + banded)",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.payoutStats()]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
  * `GET /api/v1/portfolio?address=` — address-scoped (PR 3.3, ADR-001
  * Decision 2): the indexed facts for one address — first activity, event
  * count, escrowed shares, active redemptions. Deliberately NO balance and no
@@ -414,6 +442,7 @@ export const routes: readonly Route[] = [
   epochsRoute,
   validatorsRoute,
   marketRoute,
+  payoutStatsRoute,
   portfolioRoute,
   portfolioMetricsRoute,
   transactionsRoute,

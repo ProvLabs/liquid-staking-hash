@@ -60,16 +60,22 @@ export function ActiveRedemptions({
         <ul className="flex flex-col gap-2">
           {redemptions.map((r) => {
             const status = STATUS[r.status];
-            const settled =
-              r.statusTimestamps.refundedAt ??
-              r.statusTimestamps.maturedAt ??
-              r.statusTimestamps.expeditedAt;
-            const settledKey: MessageKey =
+            // Literal keys per branch so the i18n coverage test can check the
+            // {time} param statically at each call site.
+            const settledLabel =
               r.statusTimestamps.refundedAt !== null
-                ? "portfolio.redemption-refunded-at"
+                ? t(locale, "portfolio.redemption-refunded-at", {
+                    time: dateOf(r.statusTimestamps.refundedAt),
+                  })
                 : r.statusTimestamps.maturedAt !== null
-                  ? "portfolio.redemption-matured-at"
-                  : "portfolio.redemption-expedited-at";
+                  ? t(locale, "portfolio.redemption-matured-at", {
+                      time: dateOf(r.statusTimestamps.maturedAt),
+                    })
+                  : r.statusTimestamps.expeditedAt !== null
+                    ? t(locale, "portfolio.redemption-expedited-at", {
+                        time: dateOf(r.statusTimestamps.expeditedAt),
+                      })
+                    : null;
             return (
               <li key={r.requestId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-4">
                 <div className="flex flex-col gap-1">
@@ -78,7 +84,7 @@ export function ActiveRedemptions({
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {t(locale, "portfolio.redemption-enqueued-at", { time: dateOf(r.enqueuedAt) })}
-                    {settled !== null ? ` · ${t(locale, settledKey, { time: dateOf(settled) })}` : ""}
+                    {settledLabel !== null ? ` · ${settledLabel}` : ""}
                   </span>
                 </div>
                 <span className="inline-flex items-center gap-1.5 text-sm">

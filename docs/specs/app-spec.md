@@ -459,6 +459,27 @@ The guided `SwapIn` flow (§10.3 for the transaction mechanics):
 - **Vesting-HASH honesty:** unvested HASH cannot be deposited (contract §13); if the connected account holds locked HASH the flow says so rather than letting the transaction fail cryptically.
 - **Preview → sign → track** per §10.2, then land on Portfolio with the new position and a first-timer explainer of the accrual model.
 
+> **Revision 2026-07-24 (PR 5.3, delivered):** `/stake` (`app/routes/stake.tsx`)
+> is the guided SwapIn on the 5.2 lifecycle. Inline education states the four
+> facts plus the **next-epoch date** — the first of the civil month after
+> `EpochStatus.lastRunSeconds` (`nextEpochIso`, E-CAL cadence). Amount entry
+> parses a decimal HASH string to base units at the boundary
+> (`app/lib/amount.ts`, reject-never-clamp, no floats — `test/amount.test.ts`),
+> shows spendable balance and vault min/max, and previews expected nvHASH via
+> **`previewSharesOut`** (the vault's floor share-math from the live NAV pair;
+> `estimate_swap_in` is gRPC-only, §14.2) **labeled an execution-time-rate
+> estimate** (§10.3) — cross-checked against the real mint by the e2e-live
+> stake drill (`e2e-live/stake.spec.ts`). Preflight reasons (paused, disabled,
+> min/max, balance-incl-fee, vesting-lock) render as localized copy
+> (`app/tx/reasons.ts`); the confirm step reuses the 5.2 exact-JSON disclosure;
+> the flow is driven by `useTxFlow` (`app/tx/use-tx-flow.ts`). The wallet
+> provider now surfaces `signDirect`/`pubkeyBase64`/`canSign` to pages and a
+> `ReconnectToSignError` for the post-reload adapter-gone case. **Land-on-
+> Portfolio** is a minimal live position strip (nvHASH balance + HASH value at
+> NAV) on the `/portfolio` stub; the full §8.2 page remains M6.1. Gates:
+> `test/amount.test.ts`, `test/stake-preview.test.ts`, `test/stake-data.test.ts`,
+> `e2e/stake.spec.ts` (+ axe both themes), `e2e-live/stake.spec.ts`.
+
 ### 8.4 Redeem & Exit (route `/exit`)
 
 The most communication-critical surface in the program (contract §17.1 "the 60-day headline number needs communication"). It opens with the **exit-path comparison**, not a form:
@@ -473,6 +494,27 @@ The most communication-critical surface in the program (contract §17.1 "the 60-
 - **Native redemption flow:** shares amount → payout estimate with the maturity re-pricing explained ("estimates rise if an epoch lands before payout") → preview/sign/track (§10.3) → the **redemption tracker**: queue position, live funded state, countdown, and what "expedited" means; subscribes the user to the matured/expedited/refunded alerts by default.
 - **DEX path (v1): a labeled "coming soon" shell (§14.4 decided).** No bridged nvHASH exists at launch, so there is no live DEX quote; the DEX column renders as a **post-launch capability** — its honest quote + premium/discount + depth bands from `market_samples`, plus the destination pool link, activate when NUVA's bridge deliverable lands. In-app swap execution is out of v1 scope regardless. **v1 exit is native-redemption-only in practice.**
 - **Direct-vault redemptions appear here too** — the tracker reads the on-chain queue, so a redemption made with any tool shows up (same property the contract guarantees, contract §8).
+
+> **Revision 2026-07-24 (PR 5.4, delivered):** `/exit` (`app/routes/exit.tsx`)
+> opens with the comparison table (`app/components/exit/comparison-table.tsx`),
+> not a form. The **guaranteed-vs-typical framing is enforced**: the 60-day
+> ceiling occupies the promise position unqualified; the typical median/p90 is
+> shown only when the new endpoint reports it (below), always labeled "typical,
+> not guaranteed" — `test/exit-typical.test.ts` + `e2e/exit.spec.ts` pin that
+> the typical never fills the guarantee slot and that cold-start renders the
+> guarantee alone. The DEX column is a static labeled "coming soon" shell
+> (§14.4). The native flow reuses the 5.2 lifecycle (`useTxFlow`) with a
+> **warning-tier** confirm restating the three §10.3 timing facts in fixed
+> order (escrow-now, guaranteed-ceiling, refund-not-loss); the payout preview
+> is NAV-math redemption value labeled "re-prices at payout" (§8.4). The
+> **redemption tracker** (`app/components/exit/redemption-tracker.tsx`)
+> composes three reads through web-tier loaders — live `pendingSwapOuts`
+> (queue position + refund-moment countdown), `/portfolio` active redemptions,
+> and `/transactions` `redemption_payout`/`redemption_refund` terminal legs —
+> so direct-vault redemptions appear. Gates: `test/exit-data.test.ts`,
+> `e2e-live/redeem.spec.ts` (terminal states from drill history). The
+> default-on matured/expedited alert subscription is deferred to M6.2 (the
+> tracker records the hook site).
 
 ### 8.5 Market (route `/market`)
 
@@ -575,7 +617,7 @@ On first deployment (and after any reset) the epoch-history and chain-events wor
 
 Versioned JSON under `/api/v1/`, split across the two serving processes per ADR-001 (amended 2026-07-14; previously the nuva `api+/v1+` single-process convention):
 
-- **`services/api`** serves everything derived from indexed data: public program endpoints (`/metrics`, `/epochs`, `/validators`, `/market`, `/incidents` — unauthenticated, read-only, rate-limited), address-scoped endpoints (`/portfolio`, `/transactions?format=csv`), and admin analytics endpoints. Address-scoped and admin endpoints are authorized **in-process** by a short-lived scoped service assertion minted by the web tier's session layer (HMAC, `exp − iat ≤ 60 s`, key `API_SERVICE_ASSERTION_KEY` from environment): an `address:<bech32>` scope must match the requested address exactly or the request is rejected (403; absent/expired/invalid → 401). This is an enforced mechanism, never a caller-topology assumption — the cross-address-rejection contract tests gate `services/api` CI (ADR-001 Decision 2, §12.3). A read-only `internal:notifier`-scoped surface serves the notifier's cross-address evaluation reads and grants nothing else.
+- **`services/api`** serves everything derived from indexed data: public program endpoints (`/metrics`, `/epochs`, `/validators`, `/market`, `/incidents`, `/redemptions/stats` — unauthenticated, read-only, rate-limited; `/redemptions/stats` is the §9.5.3 typical time-to-payout, aggregate over all owners so it carries no PII, added PR 5.4), address-scoped endpoints (`/portfolio`, `/transactions?format=csv`), and admin analytics endpoints. Address-scoped and admin endpoints are authorized **in-process** by a short-lived scoped service assertion minted by the web tier's session layer (HMAC, `exp − iat ≤ 60 s`, key `API_SERVICE_ASSERTION_KEY` from environment): an `address:<bech32>` scope must match the requested address exactly or the request is rejected (403; absent/expired/invalid → 401). This is an enforced mechanism, never a caller-topology assumption — the cross-address-rejection contract tests gate `services/api` CI (ADR-001 Decision 2, §12.3). A read-only `internal:notifier`-scoped surface serves the notifier's cross-address evaluation reads and grants nothing else.
 - **`apps/web`** serves the app-state routes over its own schema: sessions, `/alerts` rule CRUD, the notification log, push-subscription management, and the aggregate counters. It never reads indexed tables directly; indexed history reaches it only through `services/api`.
 
 Every response from either process carries the freshness envelope `{ data, meta: { chain_height, indexed_height, generated_at, source: "live" | "indexed" } }` — a shared response type (`@nvhash/api-types`) so the freshness contract is in the API shape, not just the UI. `chain_height`/`indexed_height` are `number | null`: `null` is the honest "height not yet known" state (a cold start, or the M1 scaffold before the M2/M3 workers and reader land) that the UI renders as "n/a" per §12.1 — never a fabricated number. `source` stays the closed `live | indexed` union; unwiredness is expressed by null heights, not a third source value.
@@ -702,6 +744,22 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 1. **Cost basis & accrued gain (per address):** cost basis uses **average-cost** (§14.11 decided) — average deposit cost per share × remaining shares; accrued gain = current shares × current NAV − remaining (average-cost) basis, plus realized gains on completed redemptions. The CSV export is raw per-event rows (share price in HASH at each swap), not a computed lot-matched basis (§14.11).
 2. **Effective yield (per address):** over window W, gain = Σ per-interval (shares held × ΔNAV at each epoch step inside W); effective APR = gain ÷ time-weighted average invested value, annualized. Rendered per epoch beside the program's `net_apr_bps` for the same window. Sub-day windows follow the shared minimum-window rule (render "n/a").
 3. **Typical time-to-payout:** per recent-epoch cohort of terminal `redemption_requests`, the median and p90 of (`expedited_at ?? matured_at`) − `enqueued_at`. Displayed only with **≥ 10 terminal requests** in the cohort (§14.12 decided); below it, the flow shows the 60-day guarantee alone — a small-sample "typical" would be a lie with extra steps. The statistic is physically bounded to the **~21-to-60-day band** (unbonding floor to guarantee ceiling); labeling never implies precision outside that band.
+   > **Revision 2026-07-24 (PR 5.4, delivered):** served by the new public
+   > **`GET /api/v1/redemptions/stats`** (`services/api`; `derivePayoutStats`).
+   > Aggregate over all owners → **no PII, unauthenticated** (unlike the
+   > address-scoped `/portfolio`). Since `redemption_requests` carries no
+   > epoch-index column, "recent-epoch cohort" is delivered as a **recent
+   > rolling terminal-request window** (`PAYOUT_STATS_WINDOW_DAYS`, default 90;
+   > terminal = matured or expedited) — a literal per-epoch cohort is a later
+   > indexer-decoder change. Payload `{ sample_count, median_seconds,
+   > p90_seconds, band_floor_seconds, band_ceiling_seconds, cold_start }`: the
+   > ≥ 10-terminal gate and the ≥ 1-completed-epoch cold-start gate null the
+   > stats server-side (the web tier then shows the guarantee alone), and the
+   > 21–60-day band bounds ride as data. Gates: `derive.test.ts` (percentile +
+   > gates), `envelope-contract.test.ts` (honest cold-start + sufficient +
+   > below-threshold), `integration/reader.test.ts` (real Prisma cohort query
+   > as `api_reader`); a terminal-timestamp index was added
+   > (`redemption_requests_maturedAt_idx` / `_expeditedAt_idx`).
 4. **Premium/discount:** `(market_price − NAV) / NAV` in bps, computed at each market sample against the NAV current at that sample's time.
 5. **Upkeep lag:** for each crank kind, actual execution time − earliest-eligible time (from config intervals + prior state), distribution per epoch.
 6. **Reconciliation deltas (§12):** indexed vs live for NAV inputs, total shares, epoch index, queue length — the reconciler's inputs, stored with each run. **Per-metric tolerances live in code** (`services/indexer/src/reconciler/tolerances.ts`), reviewed like the schema allowlist and **not env-tunable** — a widened tolerance would silence the alarm, which §12.1.3 forbids (RESOLVED 2026-07-21, PR 2.5). The "live plane" the reconciler compares against is the chain's retained latest epoch snapshot (the authoritative current record); copied snapshot values use an exact (0) tolerance, so any indexed divergence trips `reconciler_divergence`. **Queue-length delta is deferred** to a fast-follow (it needs a vault `pending_swap_outs` decoder the indexer does not yet carry).

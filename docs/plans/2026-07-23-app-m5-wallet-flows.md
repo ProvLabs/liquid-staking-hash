@@ -270,7 +270,38 @@ item blocks the PR and reopens §14.1 rather than shipping a degraded flow.
   the suite skips cleanly without them. Running it on the real stack — and
   §14.1 items (d)/(e) — remain the human steps before Tranche A merges.
 
-### 5.3 — Stake flow (Tranche B; refine before build, §7 Q7)
+### 5.3 — Stake flow (Tranche B — refined to full grain 2026-07-24, §7 Q7)
+
+> **Tranche B refinement (2026-07-24, resolves §7 Q4/Q5/Q7).** Tranche A
+> (5.1 + 5.2) merged as PR #17; this revision expands 5.3/5.4 to build
+> grain and records the two open decisions (Ira, 2026-07-24):
+> - **Q4 — payout-stat endpoint home:** the new public `/redemptions/stats`
+>   endpoint **rides inside the 5.4 commit** (its sole consumer is the §8.4
+>   exit surface), so Tranche B stays two commits. It is built
+>   **shape-complete + honest** (the §14.12 "60-day guarantee alone" state
+>   below the ≥ 10-terminal threshold is the correct rendering even with no
+>   devnet data), the §3.2 `/market` precedent.
+> - **Q4 — cohort:** `redemption_requests` carries no epoch-index column, so
+>   the §9.5.3 "recent-epoch cohort" is delivered as a **recent rolling
+>   terminal-request window** (terminal = matured or expedited; window
+>   default ~90 days), computed in the derive layer from the existing
+>   `enqueuedAt`/`expeditedAt`/`maturedAt` timestamps; a terminal-timestamp
+>   index is added. The ≥ 10-terminal gate and the ≥ 1-completed-epoch
+>   cold-start both apply server-side. Recorded as a §9.5.3 interpretation
+>   note; a literal per-epoch cohort is a later indexer-decoder change, not
+>   v1.
+> - **Q5 — post-stake landing:** 5.3 upgrades the `/portfolio` stub with a
+>   minimal **position/pending strip** (live nvHASH balance, HASH-value at
+>   current NAV, and the just-submitted pending row handed off from the
+>   stake flow); the full §8.2 Portfolio page remains M6.1.
+> - **Two web seams 5.2 left for the pages** (found at refinement): the
+>   wallet provider surfaces no `signDirect` to pages (5.2 added it to the
+>   adapter interface only) and there is no user-input amount parser. Both
+>   are built in 5.3 as the connective tissue between the 5.2 machinery and
+>   the flows — `useWallet()` gains a `signDirect` passthrough that handles
+>   the post-reload `adapter: null` (cookie session live, adapter gone)
+>   "reconnect to sign" case, and `app/lib/amount.ts` parses a decimal HASH
+>   string to base-unit BigInt (reject floats over precision, never clamp).
 
 `app/routes/stake.tsx` becomes real (replacing the 4.1 stub): the §8.3
 sequence — inline education with the next-epoch date (first of the calendar
@@ -283,6 +314,24 @@ labeled as an execution-time-rate estimate (§10.3 SwapIn rule); e2e-live
 cross-checks the preview against the actual `EventSwapIn` shares. Lands on
 Portfolio per §8.3 — the landing shape before M6.1 exists is §7 Q5. First
 fund-moving e2e-live drill spec rides here.
+
+*Delivery notes (5.3, 2026-07-24):*
+- *Two 5.2 seams built as planned:* `useWallet()` now exposes
+  `signDirect`/`pubkeyBase64`/`canSign` + `ReconnectToSignError` (the
+  post-reload adapter-gone case is surfaced, never a silent no-op);
+  `app/lib/amount.ts` is the float-rejecting boundary parser.
+- *Shared flow driver:* `app/tx/use-tx-flow.ts` (`useTxFlow`) runs the whole
+  lifecycle for both /stake and /exit; `app/tx/reasons.ts` +
+  `app/tx/flow-status.tsx` are the shared reason/status surfaces so honesty
+  copy is identical across flows.
+- *NAV preview is pure + cross-checked:* `app/stake/preview.ts`
+  (`previewSharesOut`, vault floor math, empty-vault honest) is unit-tested
+  and the e2e-live stake drill asserts minted shares match the preview
+  within 0.01% (execution-time-rate honesty, §10.3).
+- *Q5 landing:* the `/portfolio` stub gained a live position strip
+  (`app/portfolio/portfolio.server.ts`); the full page stays M6.1.
+- *e2e-live gains `E2E_LIVE_LCD_URL`* for the stake drill's balance
+  cross-check (skips cleanly when unset, like the rest).
 
 ### 5.4 — Redeem & Exit (Tranche B; refine before build, §7 Q7)
 
@@ -302,8 +351,54 @@ appear because the tracker reads the chain queue. The matured/expedited
 default-on alert is M6.2 machinery — 5.4 records the hook as deferred.
 e2e-live must render **every terminal state from real drill history**
 (p2p-drill expedite + maturity legs; the refund leg per the 0.2 corpus).
-The typical-payout statistic needs a serving source the API does not yet
-expose — resolved before Tranche B starts (§7 Q4).
+
+> **Build grain (2026-07-24 refinement).** The typical-payout statistic is
+> served by the new **`GET /api/v1/redemptions/stats`** (public, aggregate,
+> no PII — Q4 above): `derivePayoutStats` computes median/p90 of
+> `(expeditedAt ?? maturedAt) − enqueuedAt` over the recent terminal window,
+> returns `{ sample_count, median_seconds, p90_seconds, band_floor_seconds,
+> band_ceiling_seconds }` with the ≥ 10-terminal gate applied (below it the
+> stat fields are null and the web tier renders the guarantee alone) and a
+> `cold_start` flag when < 1 completed epoch; the 21–60-day band bounds ride
+> in the payload as data (never hard-coded copy). The **redemption tracker**
+> composes three reads through web-tier loaders (browser hits neither LCD
+> nor API directly): live `pendingSwapOuts` (queue membership + `timeout`
+> refund-moment for the countdown + funded state), `/api/v1/portfolio`
+> active redemptions (enqueued/expedited lifecycle timestamps), and
+> `/api/v1/transactions` `redemption_payout`/`redemption_refund` rows for
+> the terminal legs — because `/portfolio` returns active requests only.
+> The matured/expedited default-on alert subscription is M6.2 machinery;
+> 5.4 records the deferred hook. `estimate_swap_out` re-pricing copy states
+> that estimates rise if an epoch lands before payout (§8.4).
+
+*Delivery notes (5.4, 2026-07-24):*
+- *Endpoint folded into the 5.4 commit* (Q4): `/api/v1/redemptions/stats`
+  spans `packages/api-types` (PayoutStats), `services/api` (derive + reader
+  port + Prisma reader + route + fake), and a `services/indexer` migration
+  (terminal-timestamp indexes). Validated at all three layers: pure derive
+  unit, envelope-contract (cold-start / sample-sufficient / below-threshold),
+  and the DB-backed reader gate as `api_reader` (run locally against the dev
+  Postgres with the CI db-grants sequence: roles.sql → migrate:deploy →
+  test:db, all green).
+- *Preview uses NAV redemption-value math*, not `estimate_swap_out` per
+  keystroke — parity with the stake preview, labeled "re-prices at payout"
+  (§8.4); the precise on-chain estimate would be a round-trip per amount.
+- *Tracker "funded state"* beyond queue membership has no readable source in
+  v1 (the pending entry carries owner/shares/redeem-denom/timeout only), so
+  the tracker shows queue position + the guaranteed-by countdown + terminal
+  outcomes honestly, and does not fabricate a funded flag.
+- *Nav gains a "Redeem" entry* (`/exit`, grouped with Stake) — a small §8.0
+  addition recorded in the nav comment and the §8.4 revision.
+- *e2e-live redeem drill* exercises the real SwapOut + tracker render;
+  every-terminal-state rendering activates against a stack with p2p-drill
+  history (`E2E_LIVE_DRILL_HISTORY=1`).
+
+**Status (2026-07-24):** Tranche B code complete — 5.3 committed
+(`ca382ba`); 5.4 staged for review (this working plan is not a merged-work
+ledger, so the master-plan revision log is left for the merge commit per the
+revision-log-only-for-merged-work convention). Remaining human step for the
+live gates: run `test:e2e:live` (stake + redeem drills) against the devnet
+stack, and the §14.1 vendor checklist.
 
 ## 4. Security & invariants (enforced mechanisms with gating tests)
 
@@ -424,17 +519,16 @@ The tranche split adds no ordering beyond master plan §3 (`5.1 → 5.2 →
    renderer, no modal SDK (proposal — smaller supply-chain surface per
    SECURITY.md; the modal SDK adds UI we re-skin anyway). Confirm at 5.1
    review.
-4. **Typical-payout statistic source (5.4):** §9.5(3) median/p90 has no
-   serving endpoint. Options: extend `/api/v1/metrics`, or a small
-   `/redemptions/stats` addition. A services-lane change — decide whether it
-   rides inside the 5.4 PR or lands as a small 3.x follow-up first. Must be
-   resolved before Tranche B starts.
-5. **Post-stake landing before M6.1:** §8.3 says land-on-Portfolio, but the
-   real portfolio page is M6.1. Proposal: 5.3 upgrades the portfolio stub
-   with a minimal position/pending strip. Resolve in the Q7 refinement.
-6. **Session lifetimes:** absolute TTL, sliding-refresh cadence, and the
-   role-re-check cache TTL (the spec pins the mechanisms, not the numbers).
-   Proposal: 7-day absolute / 24 h sliding refresh / ≤ 60 s role cache.
-7. **Tranche B refinement:** before 5.3/5.4 build starts, this file gains a
-   revision expanding §3's 5.3/5.4 sections to 5.1/5.2 grain and resolving
-   Q4/Q5 (same-file revision, the M3 precedent).
+4. **Typical-payout statistic source (5.4):** ~~§9.5(3) median/p90 has no
+   serving endpoint.~~ **RESOLVED 2026-07-24 (Ira):** a new public
+   `/api/v1/redemptions/stats` endpoint, folded into the 5.4 commit;
+   cohort = recent rolling terminal-request window (no epoch-index column
+   exists). See the §3 5.3 refinement box and the 5.4 build-grain box.
+5. **Post-stake landing before M6.1:** ~~§8.3 says land-on-Portfolio, but the
+   real portfolio page is M6.1.~~ **RESOLVED 2026-07-24:** 5.3 upgrades the
+   `/portfolio` stub with a minimal position/pending strip; full page = M6.1.
+6. **Session lifetimes:** ~~absolute TTL, sliding-refresh cadence, role cache
+   TTL.~~ **RESOLVED in 5.1 delivery:** 7-day absolute / 24 h sliding /
+   ≤ 60 s role cache (`session.server.ts`, `roles.server.ts`).
+7. **Tranche B refinement:** ~~before 5.3/5.4 build.~~ **DONE 2026-07-24**
+   (the §3 refinement box + 5.4 build-grain box above resolve Q4/Q5).

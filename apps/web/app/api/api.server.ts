@@ -19,10 +19,13 @@ import type {
   MarketDepthBand,
   MarketSample,
   MarketSummary,
+  PayoutStats,
   PortfolioMetrics,
   PortfolioSummary,
   ProgramMetrics,
   RedemptionRow,
+  RedemptionStatus,
+  TransactionKind,
   TransactionRow,
   ValidatorRow,
   ValidatorSetHealth,
@@ -100,6 +103,17 @@ export const programMetricsSchema = z.object({
   epoch_count: z.number().int().nonnegative().nullable(),
 }) satisfies z.ZodType<ProgramMetrics>;
 
+// PR 5.4: the §9.5.3 typical time-to-payout. Stats are null below the gates
+// (the web tier then shows the guarantee alone); the band bounds are data.
+export const payoutStatsSchema = z.object({
+  sample_count: z.number().int().nonnegative(),
+  median_seconds: z.number().int().nonnegative().nullable(),
+  p90_seconds: z.number().int().nonnegative().nullable(),
+  band_floor_seconds: z.number().int().nonnegative(),
+  band_ceiling_seconds: z.number().int().nonnegative(),
+  cold_start: z.boolean(),
+}) satisfies z.ZodType<PayoutStats>;
+
 // PR 3.1 owns /validators: ValidatorsPayload = per-validator rows (registry
 // enrollment joined to the latest sample) plus the set-health aggregates.
 export const apiValidatorRowSchema = z.object({
@@ -158,13 +172,15 @@ export const marketSummarySchema = z.object({
 // M6.1 personal surfaces (address-scoped /portfolio, /portfolio/metrics,
 // /transactions). Amounts are base-unit integer strings; only realized_gain_nhash
 // is signed (the accrual/marker legs are unsigned). Closed unions are pinned so
-// an unknown wire variant is a shape error, not a guess.
+// an unknown wire variant is a shape error, not a guess. The PR 5.4 redemption
+// tracker consumes the same /portfolio (active redemptions) and /transactions
+// (terminal payout/refund rows) shapes.
 export const redemptionStatusSchema = z.enum([
   "enqueued",
   "expedited",
   "matured",
   "refunded",
-]);
+]) satisfies z.ZodType<RedemptionStatus>;
 
 export const redemptionRowSchema = z.object({
   request_id: z.string().max(128),
@@ -193,7 +209,7 @@ export const transactionKindSchema = z.enum([
   "redemption_refund",
   "transfer_in",
   "transfer_out",
-]);
+]) satisfies z.ZodType<TransactionKind>;
 
 export const transactionRowSchema = z.object({
   txhash: z.string().max(64),
@@ -250,6 +266,7 @@ export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(2
 export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
 export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
+export const payoutStatsEnvelopeSchema = envelopeSchema(payoutStatsSchema);
 export const statusEnvelopeSchema = envelopeSchema(z.unknown());
 export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
 export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);

@@ -9,18 +9,25 @@ import { describe, expect, it } from "vitest";
 import {
   deriveHeads,
   deriveMetrics,
+  derivePayoutStats,
   derivePortfolio,
   deriveSetHealth,
   deriveValidatorsPayload,
   navPriceNhash,
   parseDepthBands,
+  payoutDurationSeconds,
+  PAYOUT_STATS_MIN_SAMPLE,
+  percentileSeconds,
   premiumDiscountBps,
+  REDEMPTION_BAND_CEILING_SECONDS,
+  REDEMPTION_BAND_FLOOR_SECONDS,
   toEpochRow,
   toIncidentRow,
   toMarketSample,
   toSafeInt,
   toSafeSignedInt,
   toValidatorRow,
+  type RedemptionFacts,
 } from "../src/derive.ts";
 
 // Corpus values (@nvhash/fixtures queries/vault/get.json) — the same goldens
@@ -251,5 +258,80 @@ describe("market derivation (PR 3.2)", () => {
       depth_bands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
       sampled_at: "2026-07-10T12:00:00.000Z",
     });
+  });
+});
+
+describe("payout statistics (§9.5.3, §14.12)", () => {
+  const DAY = 24 * 60 * 60;
+
+  function terminal(enqueuedIso: string, expedited: string | null, matured: string | null): RedemptionFacts {
+    return {
+      requestId: "r",
+      owner: "pb1owner",
+      shares: 1_000n,
+      status: matured !== null ? "matured" : "expedited",
+      enqueuedAt: new Date(enqueuedIso),
+      expeditedAt: expedited === null ? null : new Date(expedited),
+      maturedAt: matured === null ? null : new Date(matured),
+      refundedAt: null,
+      lastHeight: 1n,
+      lastTxhash: "tx",
+    };
+  }
+
+  it("percentileSeconds interpolates linearly", () => {
+    expect(percentileSeconds([10], 50)).toBe(10);
+    expect(percentileSeconds([10, 20, 30, 40], 50)).toBe(25);
+    expect(percentileSeconds([10, 20, 30, 40, 50], 90)).toBe(46);
+  });
+
+  it("payoutDurationSeconds uses expedited over matured; null when never paid", () => {
+    expect(
+      payoutDurationSeconds(terminal("2026-06-01T00:00:00Z", "2026-06-22T00:00:00Z", null)),
+    ).toBe(21 * DAY);
+    // expedited wins even when both are set.
+    expect(
+      payoutDurationSeconds(terminal("2026-06-01T00:00:00Z", "2026-06-25T00:00:00Z", "2026-07-30T00:00:00Z")),
+    ).toBe(24 * DAY);
+    // refund-only (no payout) → null, excluded from the cohort.
+    const refundOnly: RedemptionFacts = {
+      ...terminal("2026-06-01T00:00:00Z", null, null),
+      status: "refunded",
+      refundedAt: new Date("2026-08-01T00:00:00Z"),
+    };
+    expect(payoutDurationSeconds(refundOnly)).toBeNull();
+  });
+
+  it("exposes median/p90 only at/above the ≥10-terminal threshold", () => {
+    const below = derivePayoutStats(
+      Array.from({ length: PAYOUT_STATS_MIN_SAMPLE - 1 }, () => 30 * DAY),
+      2,
+    );
+    expect(below.sample_count).toBe(9);
+    expect(below.median_seconds).toBeNull();
+    expect(below.p90_seconds).toBeNull();
+    expect(below.cold_start).toBe(false);
+
+    const durations = Array.from({ length: 12 }, (_, i) => (20 + i) * DAY); // 20..31d
+    const ok = derivePayoutStats(durations, 2);
+    expect(ok.sample_count).toBe(12);
+    expect(ok.median_seconds).toBe(percentileSeconds([...durations].sort((a, b) => a - b), 50));
+    expect(ok.p90_seconds).toBe(percentileSeconds([...durations].sort((a, b) => a - b), 90));
+  });
+
+  it("cold-start (no completed epoch) gates the stat regardless of sample size", () => {
+    const stats = derivePayoutStats(Array.from({ length: 50 }, () => 30 * DAY), 0);
+    expect(stats.cold_start).toBe(true);
+    expect(stats.median_seconds).toBeNull();
+    expect(stats.p90_seconds).toBeNull();
+    expect(stats.sample_count).toBe(50);
+  });
+
+  it("always carries the 21–60-day band bounds as data", () => {
+    const stats = derivePayoutStats([], 0);
+    expect(stats.band_floor_seconds).toBe(REDEMPTION_BAND_FLOOR_SECONDS);
+    expect(stats.band_ceiling_seconds).toBe(REDEMPTION_BAND_CEILING_SECONDS);
+    expect(REDEMPTION_BAND_FLOOR_SECONDS).toBe(21 * DAY);
+    expect(REDEMPTION_BAND_CEILING_SECONDS).toBe(60 * DAY);
   });
 });
