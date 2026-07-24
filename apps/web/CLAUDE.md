@@ -108,6 +108,25 @@ End-user web interface. Production quality.
   (closed identifier-only payloads, no amount keys), `test/alerts-models.test.ts`
   (store contract, both impls), `test/notifier-config.test.ts` (config bounds);
   the app-schema allowlist now covers the three alert tables.
+  **Bell + settings + rule CRUD (PR 6.2 commit C):** two session-gated resource
+  routes **outside `:lang?`** (`app/routes/alerts-{notifications,rules}.tsx`,
+  the `portfolio/export` precedent) over `app/alerts/alerts.server.ts` (the seam
+  that wraps the store + the pure effective-settings merge, and holds the
+  route boundary schemas). The acting address is ALWAYS `requireSession`'s
+  address; mark-read is store-scoped by address. The chrome **bell**
+  (`components/chrome/alerts-bell.tsx`) keeps the anonymous advert verbatim and,
+  for a session, renders the bell + unread badge (the count rides the `root.tsx`
+  loader — only the integer crosses; the popover fetches notifications via
+  `useFetcher` on open). The Portfolio **Alert settings** section
+  (`components/portfolio/alert-settings.tsx`, id `alert-settings`) toggles the
+  closed kind list (default-on annotated, `operator_arrears` operator-only,
+  market-spread absent). Both client components consume JSON with **string
+  kinds** — they never import the `.server` alert modules — and every
+  user-visible string is an `alerts.*` i18n key (hyphenated, no underscores).
+  New standing gates: `test/alerts-routes.test.ts`, `test/session-scope.test.ts`
+  (alerts join it), offline `e2e/alerts.spec.ts`, skip-clean
+  `e2e-live/alerts.spec.ts`. Offline e2e has no session, so the authenticated
+  settings section is not offline-axe'd (the portfolio precedent).
 - The session layer mints the short-lived scoped service assertions
   `services/api` requires for address-scoped reads (ADR-001 Decision 2);
   `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client

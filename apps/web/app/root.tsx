@@ -20,6 +20,7 @@ import { WalletButton } from "~/components/chrome/wallet-button";
 import { ThemeToggle } from "~/components/theme-toggle";
 import { getBootedConfig, toClientConfig } from "~/config/config.server";
 import { DEFAULT_LOCALE, isLocale, t, type Locale } from "~/i18n";
+import { countUnread } from "~/alerts/alerts.server";
 import { getSessionContext } from "~/lib/services/session.server";
 import { themeFromCookieHeader } from "~/theme/theme";
 import { WalletProvider } from "~/wallet/provider";
@@ -42,11 +43,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     // cookie is HttpOnly and the id never appears in loader data).
     getSessionContext(config, request),
   ]);
+  // M6.2: the bell's unread badge — only the integer crosses to the client
+  // (never the notifications themselves; the popover fetches those on open).
+  const unreadCount = session === null ? null : await countUnread(config, session.address);
   return {
     clientConfig: toClientConfig(config),
     theme: themeFromCookieHeader(request.headers.get("Cookie")),
     chrome,
     session: session === null ? null : { address: session.address },
+    unreadCount,
   };
 }
 
@@ -88,7 +93,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   />
                 ) : null}
                 {data ? <WalletButton locale={locale} /> : null}
-                <AlertsBell locale={locale} />
+                <AlertsBell
+                  locale={locale}
+                  sessionAddress={data?.session?.address ?? null}
+                  unreadCount={data?.unreadCount ?? null}
+                />
                 <ThemeToggle locale={locale} initialTheme={theme} />
               </div>
             </div>

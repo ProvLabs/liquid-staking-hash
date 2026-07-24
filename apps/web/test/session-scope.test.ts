@@ -95,6 +95,29 @@ describe("personal-route session scope (standing gate, plan §4)", () => {
   });
 });
 
+describe("alerts routes join the standing gate (M6.2 §2.6)", () => {
+  for (const path of ["/alerts/notifications", "/alerts/rules"]) {
+    it(`requireSession rejects an anonymous ${path} request with a reasonless 401`, async () => {
+      const store = new InMemorySessionStore();
+      const request = new Request(`http://app.local${path}`);
+      await expect(requireSession(config, request, { store })).rejects.toSatisfy(
+        (thrown) => thrown instanceof Response && thrown.status === 401,
+      );
+    });
+
+    it(`resolves the SESSION address on ${path} — a ?address= query has no effect`, async () => {
+      const store = new InMemorySessionStore();
+      const cookie = await sessionCookie(store);
+      const request = new Request(`http://app.local${path}?address=${OTHER}`, {
+        headers: { Cookie: cookie },
+      });
+      const context = await requireSession(config, request, { store });
+      expect(context.address).toBe(ADDRESS);
+      expect(context.address).not.toBe(OTHER);
+    });
+  }
+});
+
 describe("portfolio/export joins the standing gate", () => {
   it("rejects an anonymous request with a reasonless 401", async () => {
     const store = new InMemorySessionStore();

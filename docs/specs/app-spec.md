@@ -450,6 +450,32 @@ Priya's home. Composes additional roles additively (register F1): operator and a
 > `/portfolio` in the axe route list (both themes), and the skip-clean
 > `e2e-live/portfolio.spec.ts` (authenticated summary + CSV freshness headers).
 
+> **Revision 2026-07-24 (PR 6.2 commit C, alert settings delivered):** the 6.1
+> deferral above is closed — the Portfolio page carries an **Alert settings**
+> section (`app/components/portfolio/alert-settings.tsx`, id `alert-settings`).
+> One toggle per kind in the **closed §8.2 list**; the default-on kinds
+> (redemption_update, operator_arrears — §14.7) are annotated "on by default"
+> (rendered as ON from the effective-settings merge, **never a fake rule row** —
+> absence means default). `operator_arrears` shows only when the live role read
+> reports operator (UI convenience; the notifier's server-side operator filter
+> is the mechanism). The **market-spread row is absent** (deferred with §14.4),
+> not an empty shell. Toggles POST to `/alerts/rules` (a locale-independent,
+> session-gated resource route outside `:lang?`, the `portfolio/export`
+> precedent); the sibling `/alerts/notifications` serves the log + mark-read.
+> The chrome **bell** (`chrome/alerts-bell.tsx`) keeps the anonymous advert
+> verbatim (§8.0) and, for a session, renders the bell + unread badge (the count
+> rides the root loader — only the integer crosses); opening the popover fetches
+> the notifications and posts mark-read, each item deep-linking to its surface
+> (`/portfolio`, `/exit`; validator-set → `/validators` until 6.4 ships
+> `/validators/mine`). Gates: `test/alerts-routes.test.ts` (mark-read scoping,
+> body/query bounds, unknown kind → 400), `test/session-scope.test.ts`
+> (anonymous `/alerts/*` → 401, session-wins), the offline `e2e/alerts.spec.ts`
+> (advert unchanged, anonymous 401), and the skip-clean `e2e-live/alerts.spec.ts`
+> (authenticated settings CRUD + the section renders). Offline e2e has no
+> session, so the authenticated-only settings section is not in the offline axe
+> route list (the portfolio precedent) — its accessibility rides the live suite
+> and the semantic markup (labeled checkboxes, headings, aria-describedby).
+
 ### 8.3 Stake (route `/stake`, wallet required to submit)
 
 The guided `SwapIn` flow (§10.3 for the transaction mechanics):
@@ -515,6 +541,17 @@ The most communication-critical surface in the program (contract §17.1 "the 60-
 > `e2e-live/redeem.spec.ts` (terminal states from drill history). The
 > default-on matured/expedited alert subscription is deferred to M6.2 (the
 > tracker records the hook site).
+
+> **Revision 2026-07-24 (PR 6.2 commit C, the §8.4 hook resolves to copy):**
+> under absence-means-default (§9.1) the "subscribes by default" behavior needs
+> **no write at SwapOut time** — the owner is covered the moment the redemption
+> exists (a `redemption_update` alert has no rule row to create; it is on by
+> default, §14.7). The recorded hook site is closed as a single sentence in the
+> redemption tracker ("You'll be alerted here and in the bell when this matures
+> or is expedited — manage in alert settings") linking to the Portfolio
+> `#alert-settings` section. Payout-timing copy in the redemption notifications
+> and the settings descriptions keeps the §14.12 guarantee-first framing: the
+> 60-day guarantee is the promise position, "typical" language never a promise.
 
 ### 8.5 Market (route `/market`)
 
