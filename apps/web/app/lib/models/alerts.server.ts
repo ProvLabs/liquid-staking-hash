@@ -370,35 +370,53 @@ export class PrismaAlertStore implements AlertStore {
   }
 }
 
-let storeSingleton: AlertStore | undefined;
+// The PROMISE is the singleton, not the store: `await import("@prisma/client")`
+// yields the event loop, so caching the resolved store would let two
+// concurrent first requests both pass the guard and construct two
+// PrismaClients (one silently orphaned with its pool). Callers race on the
+// same promise instead.
+let storePromise: Promise<AlertStore> | undefined;
+
+async function createAlertStore(config: {
+  databaseUrl?: string | undefined;
+  appEnv: string;
+}): Promise<AlertStore> {
+  if (config.databaseUrl !== undefined) {
+    const { PrismaClient } = await import("@prisma/client");
+    return new PrismaAlertStore(
+      new PrismaClient({ datasources: { db: { url: config.databaseUrl } } }) as unknown as AlertPrismaLike,
+    );
+  }
+  if (config.appEnv !== "development") {
+    console.warn(
+      "[nvhash-web] DATABASE_URL is not configured — alerts are in-memory and " +
+        "will not survive a restart. Production profiles must set it.",
+    );
+  }
+  return new InMemoryAlertStore();
+}
 
 /**
  * Process-wide alert store: Prisma when DATABASE_URL is configured, else the
  * non-durable in-memory store (dev/mock posture; the session-store precedent).
  */
-export async function getAlertStore(config: {
+export function getAlertStore(config: {
   databaseUrl?: string | undefined;
   appEnv: string;
 }): Promise<AlertStore> {
-  if (storeSingleton !== undefined) return storeSingleton;
-  if (config.databaseUrl !== undefined) {
-    const { PrismaClient } = await import("@prisma/client");
-    storeSingleton = new PrismaAlertStore(
-      new PrismaClient({ datasources: { db: { url: config.databaseUrl } } }) as unknown as AlertPrismaLike,
-    );
-  } else {
-    if (config.appEnv !== "development") {
-      console.warn(
-        "[nvhash-web] DATABASE_URL is not configured — alerts are in-memory and " +
-          "will not survive a restart. Production profiles must set it.",
-      );
-    }
-    storeSingleton = new InMemoryAlertStore();
+  if (storePromise === undefined) {
+    const promise = createAlertStore(config);
+    // A failed init (e.g. the client import) must not stick as the singleton;
+    // the caller still sees the rejection from its own returned promise.
+    promise.catch(() => {
+      if (storePromise === promise) storePromise = undefined;
+    });
+    storePromise = promise;
   }
-  return storeSingleton;
+  return storePromise;
 }
 
 /** Test seam: reset the process-wide store singleton. */
 export function resetAlertStoreForTests(): void {
-  storeSingleton = undefined;
+  storePromise = undefined;
 }

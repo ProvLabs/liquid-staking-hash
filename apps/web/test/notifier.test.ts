@@ -281,6 +281,27 @@ describe("notifier: nav_step_posted (default-off, cursor windows epochs)", () =>
   });
 });
 
+describe("notifier: idle ticks are free", () => {
+  it("writes no checkpoint when nothing arrived and the cursor is unmoved", async () => {
+    // A tick with no facts must not open a commit per stream (4 empty
+    // checkpoint transactions per minute at the default cadence, forever).
+    const store = new InMemoryAlertStore(() => NOW);
+    const result = await runTick(makeDeps(store, {}));
+    expect(result.inserted).toEqual({ nav_step: 0, redemptions: 0, incidents: 0, arrears: 0 });
+    for (const stream of ["nav_step", "redemptions", "incidents", "arrears"]) {
+      expect(await store.getCheckpoint(stream), stream).toBeNull(); // never written
+    }
+  });
+
+  it("still advances the cursor when facts arrive but nobody is notified", async () => {
+    // Not idle: an un-notifiable fact page must STILL move the cursor, or the
+    // stream would refetch the same page every tick.
+    const store = new InMemoryAlertStore(() => NOW); // OWNER not present
+    await runTick(makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }));
+    expect(await store.getCheckpoint("redemptions")).toBe("100:r1");
+  });
+});
+
 describe("notifier: failure isolation + retention", () => {
   it("one stream's API error never blocks the others; its cursor is unmoved", async () => {
     const store = new InMemoryAlertStore(() => NOW);

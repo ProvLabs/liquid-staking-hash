@@ -15,6 +15,7 @@ import {
   loadNotifications,
   markNotificationsRead,
   markReadBodySchema,
+  MAX_NOTIFICATIONS_PAGE,
   notificationsPageSchema,
   ruleUpsertBodySchema,
   setAlertRule,
@@ -127,11 +128,15 @@ describe("route boundary schemas (reject, never clamp)", () => {
     expect(ruleUpsertBodySchema.safeParse({ kind: "vault_status", enabled: "yes" }).success).toBe(false);
   });
 
-  it("page query: non-negative integer, reject-never-clamp", () => {
+  it("page query: non-negative integer, reject-never-clamp, bounded ceiling", () => {
     expect(notificationsPageSchema.safeParse("0").success).toBe(true);
     expect(notificationsPageSchema.safeParse("3").success).toBe(true);
     expect(notificationsPageSchema.safeParse("-1").success).toBe(false);
     expect(notificationsPageSchema.safeParse("1.5").success).toBe(false);
     expect(notificationsPageSchema.safeParse("abc").success).toBe(false);
+    // The ceiling keeps the offset (pages × 30) inside the cross-system
+    // MAX_PAGE_OFFSET posture — deep-pagination is rejected, never served.
+    expect(notificationsPageSchema.safeParse(String(MAX_NOTIFICATIONS_PAGE)).success).toBe(true);
+    expect(notificationsPageSchema.safeParse(String(MAX_NOTIFICATIONS_PAGE + 1)).success).toBe(false);
   });
 });

@@ -20,8 +20,14 @@ export const NOTIFICATIONS_PAGE_SIZE = 30;
 /** Max ids one mark-read call may carry (plan §2.6). */
 export const MAX_MARK_READ_IDS = 100;
 
-/** `?page=` bound: a non-negative integer, reject-never-clamp (400 on bad). */
-export const notificationsPageSchema = z.coerce.number().int().min(0).max(100_000);
+/**
+ * `?page=` bound: a non-negative integer, reject-never-clamp (400 on bad).
+ * 1 000 pages × 30 rows = a 30 000-row offset ceiling — well inside the
+ * cross-system `MAX_PAGE_OFFSET` (1 000 000) and generous against a log the
+ * retention sweep caps at 180 days.
+ */
+export const MAX_NOTIFICATIONS_PAGE = 1_000;
+export const notificationsPageSchema = z.coerce.number().int().min(0).max(MAX_NOTIFICATIONS_PAGE);
 
 /** POST /alerts/notifications body: explicit ids or the whole unread set. */
 export const markReadBodySchema = z.union([

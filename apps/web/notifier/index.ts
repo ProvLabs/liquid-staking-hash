@@ -127,6 +127,9 @@ export async function runRedemptions(deps: NotifierDeps): Promise<number> {
     last === undefined
       ? `${cursor.height}:${cursor.afterId}` // empty page: cursor unmoved
       : `${last.last_height}:${last.request_id}`;
+  // Idle: nothing to insert and the cursor is unmoved — skip the commit
+  // entirely (no empty checkpoint transaction per tick).
+  if (candidates.length === 0 && newCursor === `${cursor.height}:${cursor.afterId}`) return 0;
   return deps.store.commitTick("redemptions", newCursor, candidates);
 }
 
@@ -144,6 +147,7 @@ export async function runArrears(deps: NotifierDeps): Promise<number> {
   const candidates = evaluateArrears(facts, present, optedOut);
   // Cursor is the latest epoch in arrears (informational; dedupe is correctness).
   const newCursor = facts.reduce((m, f) => Math.max(m, f.epoch_index), cursor);
+  if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
   return deps.store.commitTick("arrears", String(newCursor), candidates);
 }
 
@@ -161,6 +165,7 @@ export async function runIncidents(deps: NotifierDeps): Promise<number> {
     kind === "vault_status" ? vaultOptIns : kind === "validator_set_incident" ? validatorOptIns : new Set();
   const candidates = evaluateIncidents(facts, optInsForKind);
   const newCursor = facts.reduce((m, f) => Math.max(m, f.id), cursor);
+  if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
   return deps.store.commitTick("incidents", String(newCursor), candidates);
 }
 
@@ -177,6 +182,7 @@ export async function runNavSteps(deps: NotifierDeps): Promise<number> {
   const optIns = await deps.store.optInAddresses("nav_step_posted");
   const candidates = evaluateNavSteps(newIndexes, optIns);
   const newCursor = rows.reduce((m, r) => Math.max(m, r.epoch_index), cursor);
+  if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
   return deps.store.commitTick("nav_step", String(newCursor), candidates);
 }
 

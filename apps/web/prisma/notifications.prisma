@@ -38,7 +38,8 @@ model Notification {
 
   @@unique([address, kind, dedupeKey]) // THE exactly-once mechanism
   @@index([address, readAt]) // bell unread count
-  @@index([deliveredAt]) // retention sweep
+  @@index([deliveredAt]) // retention sweep (absolute-age arm)
+  @@index([readAt]) // retention sweep (read-cutoff arm; global, so the composite can't serve it)
   @@map("notifications")
   @@schema("app")
 }
