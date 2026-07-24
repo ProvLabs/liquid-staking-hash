@@ -390,13 +390,21 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return facts;
     },
 
-    async redemptionsChangedSince(sinceHeight: number, limit: number): Promise<AlertRedemptionFact[]> {
-      // Rows whose last lifecycle height is past the cursor, ascending by
-      // height so the notifier advances its cursor monotonically. `take`
-      // bounds the page; the `@@index([lastHeight])` migration on this branch
-      // keeps the range scan cheap.
+    async redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]> {
+      // Compound keyset pagination: `(lastHeight, requestId) > (sinceHeight,
+      // afterId)` in `(lastHeight asc, requestId asc)` order, so a same-height
+      // burst larger than one page (mass maturation at an epoch settlement)
+      // pages through completely — a strictly-greater height cursor alone
+      // would skip the overflow forever. `take` bounds the page; the
+      // `@@index([lastHeight])` migration on this branch keeps the scan cheap.
+      const height = BigInt(sinceHeight);
       const rows = await prisma.redemptionRequest.findMany({
-        where: { lastHeight: { gt: BigInt(sinceHeight) } },
+        where: {
+          OR: [
+            { lastHeight: { gt: height } },
+            { lastHeight: height, requestId: { gt: afterId } },
+          ],
+        },
         orderBy: [{ lastHeight: "asc" }, { requestId: "asc" }],
         take: limit,
       });

@@ -93,20 +93,35 @@ export function AlertsBell({
 
 function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialUnread: number }) {
   const [open, setOpen] = useState(false);
-  const fetcher = useFetcher();
+  // TWO fetchers: the list survives a mark-read POST (one shared fetcher would
+  // replace the list data with the mark-read result and blank the popover).
+  const listFetcher = useFetcher();
+  const markFetcher = useFetcher();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // The fetcher's latest data (list load OR mark-read result both return unread).
-  const data = fetcher.data as { notifications?: NotificationView[]; unread?: number } | undefined;
-  const notifications = data?.notifications ?? [];
-  const unread = data?.unread ?? initialUnread;
+  const listData = listFetcher.data as { notifications?: NotificationView[]; unread?: number } | undefined;
+  const markData = markFetcher.data as { unread?: number } | undefined;
+  const notifications = listData?.notifications ?? [];
+  // The freshest unread wins: a completed mark-read supersedes the list load,
+  // which supersedes the loader's initial integer.
+  const unread = markData?.unread ?? listData?.unread ?? initialUnread;
 
   // Load the list the first time the popover opens.
   useEffect(() => {
-    if (open && fetcher.state === "idle" && data === undefined) {
-      fetcher.load("/alerts/notifications");
+    if (open && listFetcher.state === "idle" && listData === undefined) {
+      listFetcher.load("/alerts/notifications");
     }
-  }, [open, fetcher, data]);
+  }, [open, listFetcher, listData]);
+
+  // After a mark-read completes, refresh the list ONCE so read states are
+  // honest (the ref guards against re-firing on the reload's own re-renders).
+  const handledMark = useRef<unknown>(undefined);
+  useEffect(() => {
+    if (markFetcher.state === "idle" && markData !== undefined && handledMark.current !== markData) {
+      handledMark.current = markData;
+      listFetcher.load("/alerts/notifications");
+    }
+  }, [markFetcher.state, markData, listFetcher]);
 
   // Close on Escape / outside click (keyboard + pointer parity).
   useEffect(() => {
@@ -126,7 +141,7 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
   }, [open]);
 
   const markAllRead = () => {
-    fetcher.submit(JSON.stringify({ all: true }), {
+    markFetcher.submit(JSON.stringify({ all: true }), {
       method: "post",
       action: "/alerts/notifications",
       encType: "application/json",
@@ -170,7 +185,7 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
             ) : null}
           </div>
 
-          {fetcher.state !== "idle" && data === undefined ? (
+          {listFetcher.state !== "idle" && listData === undefined ? (
             <p className="text-muted-foreground">{t(locale, "alerts.loading")}</p>
           ) : notifications.length === 0 ? (
             <p className="text-muted-foreground">{t(locale, "alerts.empty")}</p>

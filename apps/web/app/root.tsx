@@ -45,7 +45,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   ]);
   // M6.2: the bell's unread badge — only the integer crosses to the client
   // (never the notifications themselves; the popover fetches those on open).
-  const unreadCount = session === null ? null : await countUnread(config, session.address);
+  // A store failure degrades to no badge (null), never a 500 on every page:
+  // the badge is a convenience read, not part of the shell's contract.
+  const unreadCount =
+    session === null ? null : await countUnread(config, session.address).catch(() => null);
   return {
     clientConfig: toClientConfig(config),
     theme: themeFromCookieHeader(request.headers.get("Cookie")),

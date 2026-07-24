@@ -4,6 +4,8 @@
 // Every value is chain/API-derived (§12.1 never-lie); nothing here is
 // fabricated, and a request in flight is never rendered as settled.
 
+import { Link } from "react-router";
+
 import { formatBaseAmount, HASH_EXPONENT, SHARE_EXPONENT } from "~/learn/amounts";
 import { t, type Locale } from "~/i18n";
 import type { ExitContext } from "~/exit/exit.server";
@@ -52,6 +54,15 @@ export function RedemptionTracker({
                   </>
                 ) : null}
                 <span className="text-xs text-muted-foreground">{t(locale, "exit.tracker-expedite-note")}</span>
+                {/* 6.2: default-on redemption alerts resolve to copy under
+                    absence-means-default — the owner is covered the moment the
+                    redemption exists; no subscribe write at SwapOut time. */}
+                <span className="text-xs text-muted-foreground">
+                  {t(locale, "exit.tracker-alert-note")}{" "}
+                  <Link to="/portfolio#alert-settings" className="underline">
+                    {t(locale, "exit.tracker-alert-settings-link")}
+                  </Link>
+                </span>
               </div>
             );
           })}

@@ -197,10 +197,14 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
           ),
       ),
     // --- M6.2 internal alert-facts (mirror reader-prisma.ts semantics) ------
-    redemptionsChangedSince: (sinceHeight, limit) =>
+    redemptionsChangedSince: (sinceHeight, afterId, limit) =>
       Promise.resolve(
         [...(facts.redemptions ?? [])]
-          .filter((r) => r.lastHeight > BigInt(sinceHeight))
+          .filter(
+            (r) =>
+              r.lastHeight > BigInt(sinceHeight) ||
+              (r.lastHeight === BigInt(sinceHeight) && r.requestId > afterId),
+          )
           .sort((a, b) =>
             a.lastHeight === b.lastHeight
               ? a.requestId < b.requestId

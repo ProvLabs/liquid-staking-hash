@@ -465,7 +465,8 @@ Priya's home. Composes additional roles additively (register F1): operator and a
 > The chrome **bell** (`chrome/alerts-bell.tsx`) keeps the anonymous advert
 > verbatim (§8.0) and, for a session, renders the bell + unread badge (the count
 > rides the root loader — only the integer crosses); opening the popover fetches
-> the notifications and posts mark-read, each item deep-linking to its surface
+> the notifications, and mark-read is an explicit "Mark all read" action (never
+> a silent side effect of opening), each item deep-linking to its surface
 > (`/portfolio`, `/exit`; validator-set → `/validators` until 6.4 ships
 > `/validators/mine`). Gates: `test/alerts-routes.test.ts` (mark-read scoping,
 > body/query bounds, unknown kind → 400), `test/session-scope.test.ts`
@@ -804,9 +805,13 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > (ADR-001 checklist item 6). Three new `GET`, `auth: "internal:notifier"`,
 > enveloped, zod-bounded routes under `services/api`, each auto-joined to the
 > envelope/read-only/query-bounds/rate-limit harnesses by registry membership:
-> - `/api/v1/internal/alert-facts/redemptions?since_height=&limit=`
->   (`since_height` int ≥ 0 default 0; `limit` 1–500 default 200): redemptions
->   with `lastHeight > since_height`, ascending by height —
+> - `/api/v1/internal/alert-facts/redemptions?since_height=&after_id=&limit=`
+>   (`since_height` int ≥ 0 default 0; `after_id` string ≤ 128 default "" — the
+>   requestId tie-break of a compound keyset cursor, so a same-height burst
+>   larger than one page, e.g. mass maturation at an epoch settlement, pages
+>   through completely; `limit` 1–500 default 200): redemptions with
+>   `(lastHeight, requestId) > (since_height, after_id)`, ascending by
+>   `(lastHeight, requestId)` —
 >   `{ request_id, owner, status, enqueued_at, expedited_at, matured_at,
 >   refunded_at, last_height }`. **No amount field** (the notifier stores none,
 >   §10.4). Owner-keyed transitions have no public surface, so this is not
@@ -993,7 +998,12 @@ Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notificatio
 > ones. (b) **Exactly-once is two-layered**, correctness never resting on the
 > cursor: the `notifications` unique constraint (`ON CONFLICT DO NOTHING` on
 > every insert) plus a per-stream cursor advanced in the SAME transaction as
-> the insert batch. Dedupe keys are replay-stable chain/indexed identities
+> the insert batch. The redemptions stream cursors on the compound
+> `(height, request_id)` keyset (§9.4 `after_id`), so a same-height burst
+> larger than one fact page — mass maturation at an epoch settlement — pages
+> through completely rather than being skipped by a height-only cursor; the
+> nav-step stream clamps its `/epochs` page to the public cap. Dedupe keys
+> are replay-stable chain/indexed identities
 > (`epoch:<i>`, `req:<id>:<event>`, `incident:<kind>:<dedupeKey>`,
 > `arrears:<valoper>:<epoch>`), never autoincrement ids. (c) **Incident→kind
 > mapping is a closed table**: `vault_status ← {vault_paused, contract_halted}`,

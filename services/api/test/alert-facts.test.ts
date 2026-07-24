@@ -86,14 +86,24 @@ describe("internal alert-facts: redemptions", () => {
     }
   });
 
-  it("windows by the since_height cursor and honors the page limit", async () => {
+  it("windows by the compound cursor and honors the page limit", async () => {
     const s = await server();
     try {
+      // Empty after_id: the boundary height is INCLUDED (tuple (100, id) >
+      // (100, "")) — a height-only cursor re-scans its boundary and the
+      // notifier's unique constraint absorbs it (plan §2.4).
       const { data } = await getData<Array<{ request_id: string }>>(
         s,
         `${API_BASE}/internal/alert-facts/redemptions?since_height=100`,
       );
-      expect(data.map((r) => r.request_id)).toEqual(["req-2", "req-3"]); // 100 excluded (gt)
+      expect(data.map((r) => r.request_id)).toEqual(["req-1", "req-2", "req-3"]);
+
+      // With the tie-break, the boundary row itself is excluded.
+      const strict = await getData<Array<{ request_id: string }>>(
+        s,
+        `${API_BASE}/internal/alert-facts/redemptions?since_height=100&after_id=req-1`,
+      );
+      expect(strict.data.map((r) => r.request_id)).toEqual(["req-2", "req-3"]);
 
       const limited = await getData<Array<{ request_id: string }>>(
         s,
@@ -105,10 +115,46 @@ describe("internal alert-facts: redemptions", () => {
     }
   });
 
+  it("pages through a same-height burst via the after_id tie-break (no loss)", async () => {
+    // Mass maturation at an epoch settlement puts MANY rows on ONE lastHeight;
+    // a strictly-greater height cursor alone would skip whatever overflows the
+    // page. The compound `(since_height, after_id)` cursor resumes inside the
+    // height instead.
+    const burst: FakeFacts = {
+      redemptions: ["req-a", "req-b", "req-c"].map((requestId) => ({
+        requestId,
+        owner: OWNER_A,
+        shares: 100n,
+        status: "matured" as const,
+        enqueuedAt: new Date("2026-05-01T00:00:00Z"),
+        expeditedAt: null,
+        maturedAt: new Date("2026-05-20T00:00:00Z"),
+        refundedAt: null,
+        lastHeight: 500n,
+        lastTxhash: "DD",
+      })),
+    };
+    const s = await startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(burst));
+    try {
+      const first = await getData<Array<{ request_id: string }>>(
+        s,
+        `${API_BASE}/internal/alert-facts/redemptions?limit=2`,
+      );
+      expect(first.data.map((r) => r.request_id)).toEqual(["req-a", "req-b"]);
+      const rest = await getData<Array<{ request_id: string }>>(
+        s,
+        `${API_BASE}/internal/alert-facts/redemptions?since_height=500&after_id=req-b`,
+      );
+      expect(rest.data.map((r) => r.request_id)).toEqual(["req-c"]); // resumed, not skipped
+    } finally {
+      await s.close();
+    }
+  });
+
   it("rejects out-of-bounds query params with 400 (bounded at entry)", async () => {
     const s = await server();
     try {
-      for (const qs of ["?limit=0", "?limit=501", "?since_height=-1", "?limit=abc"]) {
+      for (const qs of ["?limit=0", "?limit=501", "?since_height=-1", "?limit=abc", `?after_id=${"x".repeat(129)}`]) {
         const res = await fetch(`${s.baseUrl}${API_BASE}/internal/alert-facts/redemptions${qs}`, {
           headers: NOTIFIER,
         });

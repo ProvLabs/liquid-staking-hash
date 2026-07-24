@@ -87,7 +87,7 @@ export interface IndexedReader {
    * single latest-epoch snapshot); the cursor is efficiency, the notifier's
    * unique constraint is correctness (plan §2.4).
    */
-  redemptionsChangedSince(sinceHeight: number, limit: number): Promise<AlertRedemptionFact[]>;
+  redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]>;
   incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]>;
   /** Validators with commission due in the latest sampled epoch (active only). */
   latestArrears(): Promise<AlertArrearsFact[]>;

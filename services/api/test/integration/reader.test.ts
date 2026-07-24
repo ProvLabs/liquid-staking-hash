@@ -289,7 +289,13 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
   it("reads redemptions changed since a height cursor, ascending, owner + no amount", async () => {
     // Past cursor 300: only the payout-N cohort (lastHeight 400) — req-1 (300)
     // and req-0 (50) excluded. Confirms the `@@index([lastHeight])` range read.
-    const rows = await reader.redemptionsChangedSince(300, 500);
+    // Empty after_id INCLUDES the boundary height (a legacy height-only
+    // cursor re-scans its boundary row; dedupe absorbs): req-1 at 300 rides
+    // ahead of the 11-row lastHeight-400 cohort.
+    const all = await reader.redemptionsChangedSince(300, "", 500);
+    expect(all.length).toBe(12);
+    expect(all[0]!.last_height).toBe(300);
+    const rows = all.slice(1);
     expect(rows.length).toBe(11);
     for (const r of rows) {
       expect(r.last_height).toBe(400);
@@ -299,7 +305,20 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
       expect(Object.keys(r)).not.toContain("shares");
     }
     // Cursor 0 sees every changed redemption (all lastHeight > 0).
-    expect((await reader.redemptionsChangedSince(0, 500)).length).toBeGreaterThanOrEqual(13);
+    expect((await reader.redemptionsChangedSince(0, "", 500)).length).toBeGreaterThanOrEqual(13);
+  });
+
+  it("pages through a same-height burst via the after_id tie-break", async () => {
+    // The 11-row lastHeight-400 cohort stands in for a mass-maturation burst:
+    // with the compound cursor `(height, requestId)`, a page boundary inside
+    // the cohort resumes exactly after the last row served — no row skipped.
+    const first = await reader.redemptionsChangedSince(300, "req-1", 5); // past the 300 boundary, into the burst
+    expect(first.length).toBe(5);
+    expect(first.every((r) => r.last_height === 400)).toBe(true);
+    const rest = await reader.redemptionsChangedSince(400, first[4]!.request_id, 500);
+    expect(rest.length).toBe(6);
+    const seen = [...first, ...rest].map((r) => r.request_id);
+    expect(new Set(seen).size).toBe(11); // complete, no overlap, no loss
   });
 
   it("reads incidents since an id cursor with identity only (no payload)", async () => {

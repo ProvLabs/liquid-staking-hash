@@ -448,7 +448,7 @@ const alertRedemptionsRoute = defineEnveloped<AlertRedemptionsQuery>({
   handle: async (ctx) => {
     const [heads, data] = await Promise.all([
       ctx.reader.heads(),
-      ctx.reader.redemptionsChangedSince(ctx.query.since_height, ctx.query.limit),
+      ctx.reader.redemptionsChangedSince(ctx.query.since_height, ctx.query.after_id, ctx.query.limit),
     ]);
     return {
       data,

@@ -66,13 +66,20 @@ export const MAX_ALERT_FACT_LIMIT = 500;
 export const DEFAULT_ALERT_FACT_LIMIT = 200;
 
 /**
- * `GET /internal/alert-facts/redemptions` query: a height cursor + bounded
- * page. `since_height` selects rows whose last lifecycle height exceeds the
- * notifier's cursor; the cursor is an efficiency device, and the notifier's
- * unique constraint absorbs any re-scan (plan §2.1).
+ * `GET /internal/alert-facts/redemptions` query: a compound keyset cursor +
+ * bounded page — rows `(lastHeight, requestId) > (since_height, after_id)` in
+ * `(lastHeight asc, requestId asc)` page order. `after_id` tie-breaks WITHIN
+ * `since_height`, so a burst of same-height transitions larger than one page —
+ * e.g. mass maturation at an epoch settlement — pages through completely
+ * instead of being skipped by a strictly-greater height cursor. An empty
+ * `after_id` therefore INCLUDES the boundary height's rows (a re-scan the
+ * notifier's unique constraint absorbs — the cursor is an efficiency device,
+ * plan §2.1/§2.4).
  */
 export const alertRedemptionsQuerySchema = z.object({
   since_height: z.coerce.number().int().min(0).default(0),
+  /** requestId tie-break at `since_height`; empty = the whole height is new. */
+  after_id: z.string().max(128).default(""),
   limit: z.coerce.number().int().min(1).max(MAX_ALERT_FACT_LIMIT).default(DEFAULT_ALERT_FACT_LIMIT),
 });
 

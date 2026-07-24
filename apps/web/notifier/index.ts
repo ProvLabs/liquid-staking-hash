@@ -78,6 +78,26 @@ function parseCursor(raw: string | null): number {
   return cursorSchema.parse(raw ?? "0");
 }
 
+/**
+ * The redemptions stream cursors on a COMPOUND key `<height>:<request_id>`
+ * (the API's `(since_height, after_id)` keyset), so a same-height burst larger
+ * than one page — mass maturation at an epoch settlement — pages through
+ * completely instead of being skipped by a height-only strictly-greater
+ * cursor. A legacy plain-height or garbage cursor degrades to a re-scan
+ * (dedupe absorbs); request ids may themselves contain `:`, so only the FIRST
+ * separator splits.
+ */
+export function parseRedemptionsCursor(raw: string | null): { height: number; afterId: string } {
+  const match = /^(\d+)(?::(.*))?$/.exec(raw ?? "");
+  if (match === null) return { height: 0, afterId: "" };
+  return { height: cursorSchema.parse(match[1]), afterId: match[2] ?? "" };
+}
+
+/** The public `/epochs` page cap (services/api MAX_PAGE_LIMIT); the nav-step
+ * stream clamps its page to it — `factLimit` may lawfully exceed it (the
+ * alert-facts ceiling is 500) and `/epochs` rejects, never clamps. */
+export const EPOCHS_PAGE_LIMIT = 200;
+
 function internalHeaders(deps: NotifierDeps): Record<string, string> {
   const nowSeconds = Math.floor(deps.now().getTime() / 1000);
   return { Authorization: mintInternalAssertion(deps.assertionKey, nowSeconds) };
@@ -87,8 +107,10 @@ function internalHeaders(deps: NotifierDeps): Record<string, string> {
 
 /** `redemption_update` (default-on): owner present ∧ not opted out. */
 export async function runRedemptions(deps: NotifierDeps): Promise<number> {
-  const cursor = parseCursor(await deps.store.getCheckpoint("redemptions"));
-  const url = `${deps.apiBase}/api/v1/internal/alert-facts/redemptions?since_height=${cursor}&limit=${deps.factLimit}`;
+  const cursor = parseRedemptionsCursor(await deps.store.getCheckpoint("redemptions"));
+  const url =
+    `${deps.apiBase}/api/v1/internal/alert-facts/redemptions` +
+    `?since_height=${cursor.height}&after_id=${encodeURIComponent(cursor.afterId)}&limit=${deps.factLimit}`;
   const body = await deps.fetchJson(url, internalHeaders(deps));
   const facts = alertRedemptionsEnvelopeSchema.parse(body).data;
   const owners = [...new Set(facts.map((f) => f.owner))];
@@ -97,8 +119,15 @@ export async function runRedemptions(deps: NotifierDeps): Promise<number> {
     deps.store.optedOutAddresses("redemption_update", owners),
   ]);
   const candidates = evaluateRedemptions(facts, present, optedOut);
-  const newCursor = facts.reduce((m, f) => Math.max(m, f.last_height), cursor);
-  return deps.store.commitTick("redemptions", String(newCursor), candidates);
+  // The page is `(last_height, request_id)` ascending, so its LAST row is the
+  // exact resume point — a full page inside a same-height burst continues at
+  // the next request id, never skipping the height's overflow.
+  const last = facts[facts.length - 1];
+  const newCursor =
+    last === undefined
+      ? `${cursor.height}:${cursor.afterId}` // empty page: cursor unmoved
+      : `${last.last_height}:${last.request_id}`;
+  return deps.store.commitTick("redemptions", newCursor, candidates);
 }
 
 /** `operator_arrears` (default-on): operator present ∧ not opted out. */
@@ -139,7 +168,9 @@ export async function runIncidents(deps: NotifierDeps): Promise<number> {
 export async function runNavSteps(deps: NotifierDeps): Promise<number> {
   const cursor = parseCursor(await deps.store.getCheckpoint("nav_step"));
   // Public `/epochs` (newest first); no assertion needed. New = index > cursor.
-  const url = `${deps.apiBase}/api/v1/epochs?limit=${deps.factLimit}`;
+  // Clamped to the public page cap: /epochs rejects (never clamps) limits
+  // past MAX_PAGE_LIMIT, and factLimit may lawfully be up to 500.
+  const url = `${deps.apiBase}/api/v1/epochs?limit=${Math.min(deps.factLimit, EPOCHS_PAGE_LIMIT)}`;
   const body = await deps.fetchJson(url);
   const rows = epochsEnvelopeSchema.parse(body).data;
   const newIndexes = rows.map((r) => r.epoch_index).filter((i) => i > cursor);

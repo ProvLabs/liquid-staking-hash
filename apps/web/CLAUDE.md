@@ -97,7 +97,11 @@ End-user web interface. Production quality.
   is the AlertStore port — the **sole new Prisma import site** (the
   `session.server.ts` split: Prisma + in-memory behind one contract, so routes
   and tests run storeless). The exactly-once mechanism is `commitTick` (insert
-  `skipDuplicates` + cursor advance in one transaction). The pure evaluation
+  `skipDuplicates` + cursor advance in one transaction). The redemptions
+  stream cursors on the compound `<height>:<request_id>` keyset (the API's
+  `after_id` tie-break) so a same-height burst larger than one fact page pages
+  through completely; the nav-step stream clamps its public `/epochs` page to
+  `EPOCHS_PAGE_LIMIT` (200) since `factLimit` may lawfully be up to 500. The pure evaluation
   core, effective-settings merge (absence-means-default), payload zod shapes,
   and incident→kind mapping live in **`app/lib/services/alerts.server.ts`** (no
   Prisma, no fetch, no clock). `mintInternalAssertion` (in

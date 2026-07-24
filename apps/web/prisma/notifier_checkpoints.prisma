@@ -15,7 +15,9 @@
 model NotifierCheckpoint {
   /** "nav_step" | "redemptions" | "incidents" | "arrears". */
   stream    String   @id
-  /** Per-stream monotonic value, decimal-serialized; re-parsed on read. */
+  /** Per-stream monotonic cursor, re-parsed on read: a decimal ordinal, except
+   * `redemptions` which is the compound keyset `<height>:<request_id>` (so a
+   * same-height burst larger than one page resumes inside the height). */
   cursor    String
   updatedAt DateTime @updatedAt
 

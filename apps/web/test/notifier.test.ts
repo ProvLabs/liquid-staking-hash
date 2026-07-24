@@ -9,7 +9,11 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryAlertStore } from "~/lib/models/alerts.server";
 import {
+  EPOCHS_PAGE_LIMIT,
+  parseRedemptionsCursor,
   RETENTION_ABSOLUTE_DAYS,
+  runNavSteps,
+  runRedemptions,
   runTick,
   type Logger,
   type NotifierDeps,
@@ -144,7 +148,7 @@ describe("notifier: exactly-once (the unique constraint, not the cursor)", () =>
     expect(await allFor(store, OWNER)).toHaveLength(1);
   });
 
-  it("advances the per-stream cursor to the max height seen", async () => {
+  it("advances the compound cursor to the page's last (height, request_id)", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     store.setPresent(OWNER);
     await runTick(
@@ -155,7 +159,45 @@ describe("notifier: exactly-once (the unique constraint, not the cursor)", () =>
         ],
       }),
     );
-    expect(await store.getCheckpoint("redemptions")).toBe("250");
+    expect(await store.getCheckpoint("redemptions")).toBe("250:r2");
+  });
+
+  it("pages through a same-height burst without losing the overflow", async () => {
+    // Mass maturation at an epoch settlement: MANY redemptions share one
+    // last_height. With factLimit below the burst size, the compound
+    // `(since_height, after_id)` cursor must resume INSIDE the height — a
+    // height-only strictly-greater cursor would skip the overflow forever.
+    const store = new InMemoryAlertStore(() => NOW);
+    store.setPresent(OWNER);
+    const burst = ["req-a", "req-b", "req-c"].map((id) =>
+      redemption({ request_id: id, owner: OWNER, last_height: 500 }),
+    ) as Array<{ request_id: string; last_height: number }>;
+    // A fetch honoring the API's keyset semantics ((height, id) ascending).
+    const fetchJson: NotifierDeps["fetchJson"] = async (url) => {
+      const params = new URL(url).searchParams;
+      const sinceHeight = Number(params.get("since_height") ?? "0");
+      const afterId = params.get("after_id") ?? "";
+      const limit = Number(params.get("limit") ?? "200");
+      const page = burst
+        .filter((f) => f.last_height > sinceHeight || (f.last_height === sinceHeight && f.request_id > afterId))
+        .slice(0, limit);
+      return envelope(page);
+    };
+    const deps: NotifierDeps = { ...makeDeps(store, {}), fetchJson, factLimit: 2 };
+
+    const first = await runRedemptions(deps);
+    expect(first).toBe(2);
+    expect(await store.getCheckpoint("redemptions")).toBe("500:req-b"); // resume point
+    const second = await runRedemptions(deps);
+    expect(second).toBe(1); // the overflow row, not skipped
+    expect(await allFor(store, OWNER)).toHaveLength(3);
+  });
+
+  it("degrades a legacy or garbage redemptions cursor to a re-scan", () => {
+    expect(parseRedemptionsCursor("250")).toEqual({ height: 250, afterId: "" }); // legacy height-only
+    expect(parseRedemptionsCursor("500:req:with:colons")).toEqual({ height: 500, afterId: "req:with:colons" });
+    expect(parseRedemptionsCursor(null)).toEqual({ height: 0, afterId: "" });
+    expect(parseRedemptionsCursor("garbage")).toEqual({ height: 0, afterId: "" });
   });
 });
 
@@ -218,6 +260,24 @@ describe("notifier: nav_step_posted (default-off, cursor windows epochs)", () =>
     // Second tick: same epochs, cursor now 12 → nothing new.
     const second = await runTick(makeDeps(store, { epochs }));
     expect(second.inserted.nav_step).toBe(0);
+  });
+
+  it("clamps the public /epochs page to its cap even when factLimit exceeds it", async () => {
+    // factLimit may lawfully be up to 500 (the alert-facts ceiling), but the
+    // public /epochs limit rejects (never clamps) past MAX_PAGE_LIMIT — an
+    // unclamped request would 400 the nav stream on every tick.
+    const store = new InMemoryAlertStore(() => NOW);
+    let requestedLimit: number | null = null;
+    const deps: NotifierDeps = {
+      ...makeDeps(store, {}),
+      factLimit: 500,
+      fetchJson: async (url) => {
+        requestedLimit = Number(new URL(url).searchParams.get("limit"));
+        return envelope([]);
+      },
+    };
+    await runNavSteps(deps);
+    expect(requestedLimit).toBe(EPOCHS_PAGE_LIMIT);
   });
 });
 
