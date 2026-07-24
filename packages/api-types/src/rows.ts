@@ -62,6 +62,40 @@ export interface ProgramMetrics {
 }
 
 /**
+ * `GET /api/v1/redemptions/stats` payload (app-spec §8.4 exit surface,
+ * §9.5.3, §14.12): the program-wide "typical time-to-payout" statistic —
+ * median / p90 of `(expedited_at ?? matured_at) − enqueued_at` over the
+ * recent terminal-request cohort (matured or expedited). Public + aggregate,
+ * never keyed by owner (no PII).
+ *
+ * Honesty gates carried IN the payload so the web tier renders them without
+ * re-deciding the rule:
+ * - `median_seconds`/`p90_seconds` are null below the **≥ 10-terminal
+ *   threshold** (§14.12) OR during epoch cold-start — the flow then shows
+ *   the 60-day guarantee alone (a small-sample "typical" would be a lie).
+ * - `cold_start` is true before the first completed epoch (time-to-payout is
+ *   an epoch-step metric, §14.12) — an explicit "first epoch not yet
+ *   settled" state, never a zero.
+ * - the physical **21–60-day band** bounds ride as data (`band_floor_seconds`
+ *   / `band_ceiling_seconds`), so copy never implies precision outside what
+ *   the mechanism can deliver (§9.5.3).
+ */
+export interface PayoutStats {
+  /** Terminal (matured/expedited) requests in the recent window. */
+  sample_count: number;
+  /** Median seconds enqueue→payout, or null below threshold / cold-start. */
+  median_seconds: number | null;
+  /** p90 seconds enqueue→payout, or null below threshold / cold-start. */
+  p90_seconds: number | null;
+  /** Unbonding floor of the physical band (~21 days), in seconds. */
+  band_floor_seconds: number;
+  /** Guarantee ceiling of the physical band (60 days), in seconds. */
+  band_ceiling_seconds: number;
+  /** True before the first completed epoch — stats gated regardless of count. */
+  cold_start: boolean;
+}
+
+/**
  * One row of `GET /api/v1/validators` (public set view, app-spec §8.6):
  * enrollment facts from `validator_registry` joined with the validator's
  * latest `validator_epochs` sample. Per-epoch fields are null before the

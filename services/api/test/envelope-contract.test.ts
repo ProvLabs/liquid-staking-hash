@@ -206,6 +206,34 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
     }
   });
 
+  it("/redemptions/stats serves the honest cold-start state (no data, no epoch)", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/redemptions/stats`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Record<string, unknown>; meta: { indexed_height: unknown } };
+      // Exact PayoutStats field set (frozen shape).
+      expect(Object.keys(body.data).sort()).toEqual([
+        "band_ceiling_seconds",
+        "band_floor_seconds",
+        "cold_start",
+        "median_seconds",
+        "p90_seconds",
+        "sample_count",
+      ]);
+      expect(body.data.sample_count).toBe(0);
+      expect(body.data.median_seconds).toBeNull();
+      expect(body.data.p90_seconds).toBeNull();
+      expect(body.data.cold_start).toBe(true);
+      // The 21–60-day band rides in the payload as data (§9.5.3).
+      expect(body.data.band_floor_seconds).toBe(21 * 24 * 60 * 60);
+      expect(body.data.band_ceiling_seconds).toBe(60 * 24 * 60 * 60);
+      expect(body.meta.indexed_height).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
   it("address-scoped routes serve honest-empty facts for an unseen address", async () => {
     const server = await startServer({ assertionKey: TEST_ASSERTION_KEY });
     const auth = { authorization: mintAssertion(`address:${EXAMPLE_ADDRESS}`) };
@@ -290,7 +318,7 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
   it("serves real envelope heights from the reconciler run on every data route", async () => {
     const server = await startServer({}, undefined, fakeReader(facts));
     try {
-      for (const path of ["/status", "/metrics", "/epochs", "/incidents", "/validators", "/market"]) {
+      for (const path of ["/status", "/metrics", "/epochs", "/incidents", "/validators", "/market", "/redemptions/stats"]) {
         const res = await fetch(`${server.baseUrl}${API_BASE}${path}`);
         const body = (await res.json()) as { meta: { chain_height: number; indexed_height: number } };
         expect(body.meta.chain_height, path).toBe(4242);
@@ -415,6 +443,73 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
       expect(bravo?.epoch_index).toBeNull();
       expect(bravo?.eligible).toBeNull();
       expect(body.data.set_health).toEqual({ total: 2, active: 2, eligible: 1, in_arrears: 1 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/redemptions/stats derives median/p90 once sample-sufficient (§9.5.3, §14.12)", async () => {
+    // 12 terminal requests in-window, durations 20..31 days → cohort ≥ 10 and
+    // epochCount 2 (from `facts.epochs`) clears the cold-start gate.
+    const now = new Date("2026-07-24T00:00:00Z");
+    const DAY = 24 * 60 * 60 * 1000;
+    const redemptions = Array.from({ length: 12 }, (_, i) => {
+      const days = 20 + i; // 20,21,…,31 days enqueue→payout
+      const paid = new Date(now.getTime() - 5 * DAY); // recent (within 90d)
+      return {
+        requestId: `r${i}`,
+        owner: `pb1owner${i}`,
+        shares: 1_000n,
+        status: "matured" as const,
+        enqueuedAt: new Date(paid.getTime() - days * DAY),
+        expeditedAt: null,
+        maturedAt: paid,
+        refundedAt: null,
+        lastHeight: 1n,
+        lastTxhash: `tx${i}`,
+      };
+    });
+    const server = await startServer({}, undefined, fakeReader({ ...facts, redemptions, payoutNow: now }));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/redemptions/stats`);
+      const body = (await res.json()) as { data: Record<string, number | boolean | null> };
+      expect(body.data.sample_count).toBe(12);
+      expect(body.data.cold_start).toBe(false);
+      // durations 20..31 days in seconds: median = p50 of 12 points, p90 near 31d.
+      expect(body.data.median_seconds).not.toBeNull();
+      expect(body.data.p90_seconds).not.toBeNull();
+      // Both inside the 21–60-day band by construction (payout ≥ 20d here; the
+      // band is the physical bound the copy leans on, not a clamp).
+      expect(body.data.median_seconds as number).toBeGreaterThan(0);
+      expect((body.data.p90_seconds as number) >= (body.data.median_seconds as number)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/redemptions/stats stays null below the ≥10-terminal threshold", async () => {
+    const now = new Date("2026-07-24T00:00:00Z");
+    const DAY = 24 * 60 * 60 * 1000;
+    const redemptions = Array.from({ length: 9 }, (_, i) => ({
+      requestId: `r${i}`,
+      owner: `pb1owner${i}`,
+      shares: 1_000n,
+      status: "matured" as const,
+      enqueuedAt: new Date(now.getTime() - 30 * DAY),
+      expeditedAt: null,
+      maturedAt: new Date(now.getTime() - 5 * DAY),
+      refundedAt: null,
+      lastHeight: 1n,
+      lastTxhash: `tx${i}`,
+    }));
+    const server = await startServer({}, undefined, fakeReader({ ...facts, redemptions, payoutNow: now }));
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/redemptions/stats`);
+      const body = (await res.json()) as { data: Record<string, number | boolean | null> };
+      expect(body.data.sample_count).toBe(9);
+      expect(body.data.median_seconds).toBeNull();
+      expect(body.data.p90_seconds).toBeNull();
+      expect(body.data.cold_start).toBe(false); // epochs exist; just too few requests
     } finally {
       await server.close();
     }

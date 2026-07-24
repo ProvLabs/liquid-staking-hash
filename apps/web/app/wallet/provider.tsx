@@ -12,7 +12,14 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useRevalidator } from "react-router";
 
-import { isVendorId, WALLET_VENDORS, type VendorId, type WalletAdapter } from "./adapter";
+import {
+  isVendorId,
+  WALLET_VENDORS,
+  type DirectSignDoc,
+  type SignArbitraryResult,
+  type VendorId,
+  type WalletAdapter,
+} from "./adapter";
 
 export type WalletState =
   | { phase: "disconnected" }
@@ -26,10 +33,33 @@ export type WalletErrorReason =
   | "extension-not-found"
   | "rejected-or-failed";
 
+/** Thrown by `signDirect` when the cookie session is live but the in-memory
+ * adapter is gone (post-reload) — the UI must prompt a reconnect to sign. */
+export class ReconnectToSignError extends Error {
+  constructor() {
+    super("reconnect-to-sign");
+    this.name = "ReconnectToSignError";
+  }
+}
+
 interface WalletContextValue {
   state: WalletState;
   connect(vendor: VendorId): Promise<void>;
   disconnect(): Promise<void>;
+  /**
+   * SIGN_MODE_DIRECT sign of a transaction sign doc (PR 5.2 machinery, wired
+   * to pages in 5.3). Throws ReconnectToSignError when no live adapter backs
+   * the current session (the reload case) — signing never silently no-ops.
+   */
+  signDirect(signerAddress: string, signDoc: DirectSignDoc): Promise<SignArbitraryResult>;
+  /** True when a transaction can be signed now without reconnecting. */
+  canSign: boolean;
+  /**
+   * The connected account's compressed secp256k1 pubkey (base64), needed by
+   * simulate + sign-doc building. Null unless a live adapter is connected
+   * this page-load (a public value — never key material).
+   */
+  pubkeyBase64: string | null;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -64,6 +94,7 @@ export function WalletProvider({
 }: WalletProviderProps) {
   const revalidator = useRevalidator();
   const [adapter, setAdapter] = useState<WalletAdapter | null>(null);
+  const [pubkeyBase64, setPubkeyBase64] = useState<string | null>(null);
   const [clientState, setClientState] = useState<WalletState | null>(null);
 
   // Server session wins: a valid cookie session renders connected even after
@@ -87,6 +118,7 @@ export function WalletProvider({
         });
         const account = await created.connect();
         setAdapter(created);
+        setPubkeyBase64(account.pubkeyBase64);
         setClientState({ phase: "signing", vendor, address: account.address });
 
         const nonceRes = await postJson("/session/nonce", { address: account.address });
@@ -126,14 +158,28 @@ export function WalletProvider({
     } finally {
       await adapter?.disconnect();
       setAdapter(null);
+      setPubkeyBase64(null);
       setClientState({ phase: "disconnected" });
       revalidator.revalidate();
     }
   }, [adapter, revalidator]);
 
+  const signDirect = useCallback(
+    async (signerAddress: string, signDoc: DirectSignDoc): Promise<SignArbitraryResult> => {
+      // The adapter is the only thing that can sign; when the session cookie
+      // outlived the in-memory adapter (reload), we cannot — and must say so
+      // rather than fail obscurely deep in the flow.
+      if (adapter === null) throw new ReconnectToSignError();
+      return adapter.signDirect(signerAddress, signDoc);
+    },
+    [adapter],
+  );
+
+  const canSign = adapter !== null;
+
   const value = useMemo(
-    () => ({ state, connect, disconnect }),
-    [state, connect, disconnect],
+    () => ({ state, connect, disconnect, signDirect, canSign, pubkeyBase64 }),
+    [state, connect, disconnect, signDirect, canSign, pubkeyBase64],
   );
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

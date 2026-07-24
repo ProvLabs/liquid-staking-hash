@@ -16,7 +16,13 @@ import type {
   MarketDepthBand,
   MarketSample,
   MarketSummary,
+  PayoutStats,
+  PortfolioSummary,
   ProgramMetrics,
+  RedemptionRow,
+  RedemptionStatus,
+  TransactionKind,
+  TransactionRow,
   ValidatorRow,
   ValidatorSetHealth,
   ValidatorsPayload,
@@ -88,6 +94,17 @@ export const programMetricsSchema = z.object({
   epoch_count: z.number().int().nonnegative().nullable(),
 }) satisfies z.ZodType<ProgramMetrics>;
 
+// PR 5.4: the §9.5.3 typical time-to-payout. Stats are null below the gates
+// (the web tier then shows the guarantee alone); the band bounds are data.
+export const payoutStatsSchema = z.object({
+  sample_count: z.number().int().nonnegative(),
+  median_seconds: z.number().int().nonnegative().nullable(),
+  p90_seconds: z.number().int().nonnegative().nullable(),
+  band_floor_seconds: z.number().int().nonnegative(),
+  band_ceiling_seconds: z.number().int().nonnegative(),
+  cold_start: z.boolean(),
+}) satisfies z.ZodType<PayoutStats>;
+
 // PR 3.1 owns /validators: ValidatorsPayload = per-validator rows (registry
 // enrollment joined to the latest sample) plus the set-health aggregates.
 export const apiValidatorRowSchema = z.object({
@@ -149,7 +166,60 @@ export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(2
 export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
 export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
+export const payoutStatsEnvelopeSchema = envelopeSchema(payoutStatsSchema);
 export const statusEnvelopeSchema = envelopeSchema(z.unknown());
+
+// PR 5.4: the redemption tracker consumes the address-scoped /portfolio
+// (active redemptions) and /transactions (terminal payout/refund rows).
+export const redemptionStatusSchema = z.enum([
+  "enqueued",
+  "expedited",
+  "matured",
+  "refunded",
+]) satisfies z.ZodType<RedemptionStatus>;
+
+export const redemptionRowSchema = z.object({
+  request_id: z.string().max(128),
+  shares: baseUnitString,
+  status: redemptionStatusSchema,
+  enqueued_at: isoTimestamp,
+  expedited_at: isoTimestamp.nullable(),
+  matured_at: isoTimestamp.nullable(),
+  refunded_at: isoTimestamp.nullable(),
+  last_height: z.number().int().nonnegative(),
+  last_txhash: z.string().max(64),
+}) satisfies z.ZodType<RedemptionRow>;
+
+export const portfolioSummarySchema = z.object({
+  address: z.string().max(90),
+  first_activity_at: isoTimestamp.nullable(),
+  transaction_count: z.number().int().nonnegative(),
+  escrowed_shares: baseUnitString,
+  active_redemptions: z.array(redemptionRowSchema).max(200),
+}) satisfies z.ZodType<PortfolioSummary>;
+
+export const transactionKindSchema = z.enum([
+  "swap_in",
+  "swap_out_request",
+  "redemption_payout",
+  "redemption_refund",
+  "transfer_in",
+  "transfer_out",
+]) satisfies z.ZodType<TransactionKind>;
+
+export const transactionRowSchema = z.object({
+  txhash: z.string().max(64),
+  msg_index: z.number().int().nonnegative(),
+  kind: transactionKindSchema,
+  shares: baseUnitString,
+  nhash: baseUnitString,
+  nav_at_height: decimalString,
+  height: z.number().int().nonnegative(),
+  block_time: isoTimestamp,
+}) satisfies z.ZodType<TransactionRow>;
+
+export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
+export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));
 
 /**
  * Bounded-timeout GET returning parsed JSON. Throws on non-OK status,

@@ -33,18 +33,24 @@ export async function trackTransaction(
   dispatch: Dispatch,
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
-  // Phase 1: chain inclusion.
+  // Phase 1: chain inclusion. A thrown fetch (transient network drop) counts
+  // as a failed attempt and polling continues — tracking must never abort by
+  // exception, or the flow strands in `pending` with no further events.
   let included: { height: string; code: number; raw_log: string } | null = null;
   for (let attempt = 0; attempt < INCLUSION_MAX_ATTEMPTS; attempt += 1) {
-    const res = await fetchImpl(`/tx/status?hash=${txhash}`);
-    if (res.ok) {
-      const body = (await res.json()) as
-        | { included: false }
-        | { included: true; height: string; code: number; raw_log: string };
-      if (body.included) {
-        included = body;
-        break;
+    try {
+      const res = await fetchImpl(`/tx/status?hash=${txhash}`);
+      if (res.ok) {
+        const body = (await res.json()) as
+          | { included: false }
+          | { included: true; height: string; code: number; raw_log: string };
+        if (body.included) {
+          included = body;
+          break;
+        }
       }
+    } catch {
+      // fall through to the sleep + next attempt
     }
     await sleep(INCLUSION_POLL_MS);
   }
@@ -70,10 +76,14 @@ export async function trackTransaction(
 
   // Phase 2: indexer fast-poll reconcile (bounded; see honesty note above).
   for (let attempt = 0; attempt < RECONCILE_MAX_ATTEMPTS; attempt += 1) {
-    const res = await fetchImpl("/tx/recent");
-    if (res.ok) {
-      const body = (await res.json()) as { available: boolean; txhashes: string[] };
-      if (body.available && body.txhashes.includes(txhash)) break;
+    try {
+      const res = await fetchImpl("/tx/recent");
+      if (res.ok) {
+        const body = (await res.json()) as { available: boolean; txhashes: string[] };
+        if (body.available && body.txhashes.includes(txhash)) break;
+      }
+    } catch {
+      // transient — the reconcile wait is already bounded
     }
     await sleep(RECONCILE_POLL_MS);
   }

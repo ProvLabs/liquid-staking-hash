@@ -18,12 +18,17 @@ import type {
   EpochRow,
   IncidentRow,
   MarketSummary,
+  PayoutStats,
   PortfolioSummary,
   ProgramMetrics,
   TransactionRow,
   ValidatorsPayload,
 } from "@nvhash/api-types";
-import type { Heads } from "./derive.ts";
+import {
+  REDEMPTION_BAND_CEILING_SECONDS,
+  REDEMPTION_BAND_FLOOR_SECONDS,
+  type Heads,
+} from "./derive.ts";
 import type { Pagination } from "./query.ts";
 
 export type { Heads } from "./derive.ts";
@@ -45,6 +50,13 @@ export interface IndexedReader {
    * parked — the v1 "coming soon" state (app-spec §13 decision 4).
    */
   latestMarket(): Promise<MarketSummary>;
+  /**
+   * Program-wide typical time-to-payout (PR 5.4; app-spec §9.5.3, §14.12).
+   * Public + aggregate over the recent terminal-request cohort — no owner
+   * keying, so no PII. Honest-empty (`sample_count: 0`, null stats,
+   * `cold_start: true`) until data + a completed epoch exist.
+   */
+  payoutStats(): Promise<PayoutStats>;
   /**
    * Address-scoped reads (PR 3.3). Callers reach these ONLY through routes
    * whose registry `auth: "address"` requirement passed the in-process
@@ -73,6 +85,15 @@ export const emptyReader: IndexedReader = {
       set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 },
     }),
   latestMarket: () => Promise.resolve({ sample: null, bridged_supply: [] }),
+  payoutStats: () =>
+    Promise.resolve({
+      sample_count: 0,
+      median_seconds: null,
+      p90_seconds: null,
+      band_floor_seconds: REDEMPTION_BAND_FLOOR_SECONDS,
+      band_ceiling_seconds: REDEMPTION_BAND_CEILING_SECONDS,
+      cold_start: true,
+    }),
   portfolioFor: (address) =>
     Promise.resolve({
       address,
