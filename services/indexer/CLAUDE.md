@@ -190,6 +190,13 @@ these up automatically. `test` includes the security-executable gates
   reference an IP/device/identity token (`test/security/scan-logs.ts`); the
   logger's `SAFE_FIELDS` allowlist is asserted identity-free.
 
+Index-only migrations may ride another lane's branch (one-PR-per-milestone
+precedent): the M6.2 notifier's redemption cursor read added
+`@@index([lastHeight])` on `redemption_requests`
+(`20260724010000_redemption_last_height_index`) via `apps/web`'s PR 6.2 — no
+column, schema-allowlist unaffected, rebuildable. The `indexed` schema stays
+indexer-owned; only DDL runs as `indexer_writer`.
+
 - **Grant boundary** (`test/integration/grant-boundary.test.ts`, standing from
   PR 1.5): against a live Postgres bootstrapped by `roles.sql` and this
   service's migration, it asserts the ADR-001 Decision 1 ownership split —

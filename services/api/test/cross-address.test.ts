@@ -41,6 +41,13 @@ const PERSONAL_PATHS = [
   `${API_BASE}/transactions`,
 ] as const;
 
+// Registry-derived, like the public-route loop below: every current AND future
+// `internal:notifier` route joins this matrix automatically — a new internal
+// route cannot slip past the gate (plan §2.3).
+const INTERNAL_PATHS = routes
+  .filter((r) => r.auth === "internal:notifier")
+  .map((r) => r.path);
+
 describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
   it("rejects an assertion for A requesting B with 403 on every personal route", async () => {
     const server = await startAuthServer();
@@ -106,6 +113,35 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
           headers: { authorization: mintAssertion("internal:notifier") },
         });
         expect(res.status, path).toBe(403);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("holds the INTERNAL_PATHS matrix: no cred → 401, address scope → 403, notifier → 200", async () => {
+    const server = await startAuthServer();
+    try {
+      expect(INTERNAL_PATHS.length).toBeGreaterThan(0); // the routes exist (M6.2)
+      for (const path of INTERNAL_PATHS) {
+        // No credential → 401 (credential validity precedes everything else).
+        const noCred = await fetch(`${server.baseUrl}${path}`);
+        expect(noCred.status, `${path} no-cred`).toBe(401);
+
+        // An `address:` scope never grants an internal path → 403.
+        const addrScope = await fetch(`${server.baseUrl}${path}`, {
+          headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+        });
+        expect(addrScope.status, `${path} address-scope`).toBe(403);
+
+        // The `internal:notifier` scope is accepted → 200 (enveloped).
+        const notifier = await fetch(`${server.baseUrl}${path}`, {
+          headers: { authorization: mintAssertion("internal:notifier") },
+        });
+        expect(notifier.status, `${path} notifier`).toBe(200);
+        const body = (await notifier.json()) as { data: unknown; meta: { source: string } };
+        expect(Array.isArray(body.data), `${path} data is an array`).toBe(true);
+        expect(body.meta.source).toBe("indexed");
       }
     } finally {
       await server.close();

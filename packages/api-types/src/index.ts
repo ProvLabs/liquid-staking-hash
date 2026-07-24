@@ -13,6 +13,9 @@ export {
 export {
   type AccrualMarker,
   type AccrualPoint,
+  type AlertArrearsFact,
+  type AlertIncidentFact,
+  type AlertRedemptionFact,
   type BridgedSupplyRow,
   type EffectiveYieldPoint,
   type EpochRow,

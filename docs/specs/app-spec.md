@@ -737,6 +737,44 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > `X-Chain-Height` / `X-Indexed-Height` / `X-Generated-At` freshness headers
 > are unchanged.
 
+> **Revision 2026-07-24 (PR 6.2 commit A, internal alert-facts surface):** the
+> `internal:notifier` scope (ADR-001 Decisions 2/3), scaffolded-but-dead since
+> PR 3.3, is now **live** — the notifier's cross-address evaluation reads
+> (ADR-001 checklist item 6). Three new `GET`, `auth: "internal:notifier"`,
+> enveloped, zod-bounded routes under `services/api`, each auto-joined to the
+> envelope/read-only/query-bounds/rate-limit harnesses by registry membership:
+> - `/api/v1/internal/alert-facts/redemptions?since_height=&limit=`
+>   (`since_height` int ≥ 0 default 0; `limit` 1–500 default 200): redemptions
+>   with `lastHeight > since_height`, ascending by height —
+>   `{ request_id, owner, status, enqueued_at, expedited_at, matured_at,
+>   refunded_at, last_height }`. **No amount field** (the notifier stores none,
+>   §10.4). Owner-keyed transitions have no public surface, so this is not
+>   redundant with `/redemptions/stats` (aggregate) or `/portfolio`
+>   (address-scoped).
+> - `/api/v1/internal/alert-facts/incidents?since_id=&limit=` (same bounds):
+>   incidents with `id > since_id`, ascending by id —
+>   `{ id, kind, severity, dedupe_key, opened_at, opened_height }`. **No
+>   payload passthrough** (identity, not detail): the notifier keys its
+>   replay-stable dedupe on `(kind, dedupe_key)`, never the autoincrement id.
+>   Public `/incidents` omits the dedupe identity, so this surface is distinct.
+> - `/api/v1/internal/alert-facts/arrears` (no query): validators with
+>   commission due in the latest sampled epoch, joined to their operator —
+>   `{ valoper, operator, epoch_index, commission_due }` — active registry rows
+>   only (unregistered excluded). Operator economics are excluded from public
+>   `/validators`, so this surface is distinct.
+>
+> Mechanism, not topology: the handler pipeline enforces the registry `auth`
+> declaration (401 without a valid assertion; 403 for an `address:` scope on an
+> internal path; `internal:notifier` never grants a personal endpoint), gated
+> by the registry-derived `INTERNAL_PATHS` matrix now standing in
+> `services/api/test/cross-address.test.ts`. The `internal:notifier` assertion
+> golden vector is cross-pinned in both assertion suites (the standing drift
+> gate). `IndexedReader` gains `redemptionsChangedSince`/`incidentsSince`/
+> `latestArrears`; the row shapes (`AlertRedemptionFact`/`AlertIncidentFact`/
+> `AlertArrearsFact`) are frozen in `@nvhash/api-types`. An index-only indexer
+> migration (`@@index([lastHeight])` on `redemption_requests`) rides this
+> branch (no column, schema-allowlist unaffected, rebuildable).
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.

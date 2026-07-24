@@ -15,6 +15,9 @@
 import {
   navHashPerShare,
   SHARE_EXPONENT,
+  type AlertArrearsFact,
+  type AlertIncidentFact,
+  type AlertRedemptionFact,
   type BridgedSupplyRow,
   type EpochRow,
   type IncidentKind,
@@ -88,6 +91,12 @@ export interface ValidatorRegistryFacts {
   readonly valoper: string;
   readonly moniker: string;
   readonly unregisteredAt: Date | null;
+  /**
+   * Operator account (public chain data). Optional because the public
+   * `/validators` derivation never surfaces it (it is excluded from public
+   * economics, app-spec §9.4); only the M6.2 arrears join reads it.
+   */
+  readonly operator?: string;
 }
 
 export interface ValidatorEpochFacts {
@@ -350,6 +359,70 @@ export function toRedemptionRow(f: RedemptionFacts): RedemptionRow {
 /** A redemption escrows shares while it is enqueued or expedited. */
 export function isActiveRedemption(status: RedemptionStatus): boolean {
   return status === "enqueued" || status === "expedited";
+}
+
+// --- internal alert-facts (M6.2, `internal:notifier` scope) -----------------
+//
+// The notifier's cross-address evaluation reads (ADR-001 Decision 3). Each is
+// a pure projection to the identity/ordinal fields the notifier keys off —
+// NEVER amounts on the redemption/incident facts (the stored notification
+// carries no amount, plan §2.1). The heights/ids cross into JS number domain
+// through the same loud safe-integer guard as every other fact.
+
+/** Structural facts for one alert-incident projection (id + dedupe identity). */
+export interface AlertIncidentFacts {
+  readonly id: bigint;
+  readonly kind: IncidentKind;
+  readonly severity: IncidentSeverity;
+  readonly dedupeKey: string;
+  readonly openedAt: Date;
+  readonly openedHeight: bigint | null;
+}
+
+/** Structural facts for one arrears projection (validator × operator × epoch). */
+export interface AlertArrearsFacts {
+  readonly valoper: string;
+  readonly operator: string;
+  readonly epochIndex: bigint;
+  readonly commissionDue: bigint;
+}
+
+/**
+ * A redemption fact for the notifier: owner + terminal timestamps + the height
+ * cursor. Reuses `RedemptionFacts` (only a subset is read); deliberately drops
+ * `shares` — the alert surface carries no amount (plan §2.1).
+ */
+export function toAlertRedemptionFact(f: RedemptionFacts): AlertRedemptionFact {
+  return {
+    request_id: f.requestId,
+    owner: f.owner,
+    status: f.status,
+    enqueued_at: f.enqueuedAt.toISOString(),
+    expedited_at: f.expeditedAt === null ? null : f.expeditedAt.toISOString(),
+    matured_at: f.maturedAt === null ? null : f.maturedAt.toISOString(),
+    refunded_at: f.refundedAt === null ? null : f.refundedAt.toISOString(),
+    last_height: toSafeInt(f.lastHeight, "last_height"),
+  };
+}
+
+export function toAlertIncidentFact(f: AlertIncidentFacts): AlertIncidentFact {
+  return {
+    id: toSafeInt(f.id, "incident id"),
+    kind: f.kind,
+    severity: f.severity,
+    dedupe_key: f.dedupeKey,
+    opened_at: f.openedAt.toISOString(),
+    opened_height: f.openedHeight === null ? null : toSafeInt(f.openedHeight, "opened_height"),
+  };
+}
+
+export function toAlertArrearsFact(f: AlertArrearsFacts): AlertArrearsFact {
+  return {
+    valoper: f.valoper,
+    operator: f.operator,
+    epoch_index: toSafeInt(f.epochIndex, "epoch_index"),
+    commission_due: f.commissionDue.toString(),
+  };
 }
 
 // ── Payout statistics (§9.5.3, §14.12) ───────────────────────────────────

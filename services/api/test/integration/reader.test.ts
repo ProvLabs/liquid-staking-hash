@@ -284,6 +284,67 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     expect(stats.band_ceiling_seconds).toBe(60 * 24 * 60 * 60);
   });
 
+  // --- M6.2 internal alert-facts reads (the notifier's cross-address reads) ---
+
+  it("reads redemptions changed since a height cursor, ascending, owner + no amount", async () => {
+    // Past cursor 300: only the payout-N cohort (lastHeight 400) — req-1 (300)
+    // and req-0 (50) excluded. Confirms the `@@index([lastHeight])` range read.
+    const rows = await reader.redemptionsChangedSince(300, 500);
+    expect(rows.length).toBe(11);
+    for (const r of rows) {
+      expect(r.last_height).toBe(400);
+      expect(r.owner.startsWith("pb1holder")).toBe(true);
+      expect(r.status).toBe("matured");
+      // No amount field crosses the boundary (plan §2.1).
+      expect(Object.keys(r)).not.toContain("shares");
+    }
+    // Cursor 0 sees every changed redemption (all lastHeight > 0).
+    expect((await reader.redemptionsChangedSince(0, 500)).length).toBeGreaterThanOrEqual(13);
+  });
+
+  it("reads incidents since an id cursor with identity only (no payload)", async () => {
+    const all = await reader.incidentsSince(0, 500);
+    expect(all.length).toBeGreaterThanOrEqual(1);
+    const seeded = all.find((i) => i.dedupe_key === "test");
+    expect(seeded).toMatchObject({
+      kind: "indexer_lag",
+      severity: "warning",
+      dedupe_key: "test",
+      opened_at: "2026-07-01T00:00:00.000Z",
+      opened_height: 900,
+    });
+    expect(seeded && "payload" in seeded).toBe(false);
+    // The id cursor excludes rows at or below it (gt).
+    const past = await reader.incidentsSince(seeded!.id, 500);
+    expect(past.map((i) => i.id)).not.toContain(seeded!.id);
+  });
+
+  it("reads latest-epoch arrears joined to the active operator", async () => {
+    // Latest epoch is 12: alpha owes 5 (active) → surfaces with its operator.
+    // bravo has no epoch-12 sample → not in arrears.
+    const arrears = await reader.latestArrears();
+    expect(arrears).toEqual([
+      { valoper: "pbvaloper1aaa", operator: "pb1aaa", epoch_index: 12, commission_due: "5" },
+    ]);
+  });
+
+  it("excludes an unregistered validator's arrears from the join", async () => {
+    // Unregister alpha, add a fresh owing validator: alpha (now unregistered)
+    // must drop out even though it still owes in epoch 12 (plan §2.3).
+    await writer.validatorRegistry.update({
+      where: { valoper: "pbvaloper1aaa" },
+      data: { unregisteredAt: new Date("2026-07-15T00:00:00Z") },
+    });
+    try {
+      expect(await reader.latestArrears()).toEqual([]);
+    } finally {
+      await writer.validatorRegistry.update({
+        where: { valoper: "pbvaloper1aaa" },
+        data: { unregisteredAt: null },
+      });
+    }
+  });
+
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {
     await writer.reconcilerRun.deleteMany();
     // 4200 from chain-events — NOT 999999 from the meta:provenance marker.

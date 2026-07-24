@@ -22,6 +22,9 @@ import {
   navPriceNhash,
   payoutDurationSeconds,
   PAYOUT_STATS_WINDOW_DAYS,
+  toAlertArrearsFact,
+  toAlertIncidentFact,
+  toAlertRedemptionFact,
   toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
@@ -35,8 +38,13 @@ import type { Heads, IndexedReader } from "./reader.ts";
 import type { Pagination } from "./query.ts";
 import type { TransactionFacts } from "./derive.ts";
 import type {
+  AlertArrearsFact,
+  AlertIncidentFact,
+  AlertRedemptionFact,
   EpochRow,
+  IncidentKind,
   IncidentRow,
+  IncidentSeverity,
   MarketSummary,
   PayoutStats,
   PortfolioSummary,
@@ -378,6 +386,97 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           });
         }
         if (rows.length < CHUNK) break;
+      }
+      return facts;
+    },
+
+    async redemptionsChangedSince(sinceHeight: number, limit: number): Promise<AlertRedemptionFact[]> {
+      // Rows whose last lifecycle height is past the cursor, ascending by
+      // height so the notifier advances its cursor monotonically. `take`
+      // bounds the page; the `@@index([lastHeight])` migration on this branch
+      // keeps the range scan cheap.
+      const rows = await prisma.redemptionRequest.findMany({
+        where: { lastHeight: { gt: BigInt(sinceHeight) } },
+        orderBy: [{ lastHeight: "asc" }, { requestId: "asc" }],
+        take: limit,
+      });
+      return rows.map((r) =>
+        toAlertRedemptionFact({
+          requestId: r.requestId,
+          owner: r.owner,
+          shares: toBigint(r.shares),
+          status: r.status,
+          enqueuedAt: r.enqueuedAt,
+          expeditedAt: r.expeditedAt,
+          maturedAt: r.maturedAt,
+          refundedAt: r.refundedAt,
+          lastHeight: r.lastHeight,
+          lastTxhash: r.lastTxhash,
+        }),
+      );
+    },
+
+    async incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]> {
+      // Ascending by id past the cursor. No payload passthrough (plan §2.3):
+      // the notifier needs identity, so only id + (kind, dedupeKey) + open
+      // facts are selected — never the incident payload.
+      const rows = await prisma.incident.findMany({
+        where: { id: { gt: BigInt(sinceId) } },
+        orderBy: { id: "asc" },
+        take: limit,
+        select: {
+          id: true,
+          kind: true,
+          severity: true,
+          dedupeKey: true,
+          openedAt: true,
+          openedHeight: true,
+        },
+      });
+      return rows.map((r) =>
+        toAlertIncidentFact({
+          id: r.id,
+          kind: r.kind as IncidentKind,
+          severity: r.severity as IncidentSeverity,
+          dedupeKey: r.dedupeKey,
+          openedAt: r.openedAt,
+          openedHeight: r.openedHeight,
+        }),
+      );
+    },
+
+    async latestArrears(): Promise<AlertArrearsFact[]> {
+      // The latest sampled epoch bounds the scan (arrears is a point-in-time
+      // "who owes now" read, not a history). No epoch → no arrears.
+      const latest = await prisma.validatorEpoch.aggregate({ _max: { epochIndex: true } });
+      const epochIndex = latest._max.epochIndex;
+      if (epochIndex === null) return [];
+      const [rows, registry] = await Promise.all([
+        prisma.validatorEpoch.findMany({
+          where: { epochIndex, commissionDue: { gt: 0 } },
+          orderBy: { valoper: "asc" },
+          select: { valoper: true, epochIndex: true, commissionDue: true },
+        }),
+        // Active registry rows only: an unregistered validator has no operator
+        // session to alert (plan §2.3 — the join excludes unregisteredAt rows).
+        prisma.validatorRegistry.findMany({
+          where: { unregisteredAt: null },
+          select: { valoper: true, operator: true },
+        }),
+      ]);
+      const operatorByValoper = new Map(registry.map((r) => [r.valoper, r.operator]));
+      const facts: AlertArrearsFact[] = [];
+      for (const r of rows) {
+        const operator = operatorByValoper.get(r.valoper);
+        if (operator === undefined) continue; // unregistered → excluded
+        facts.push(
+          toAlertArrearsFact({
+            valoper: r.valoper,
+            operator,
+            epochIndex: r.epochIndex,
+            commissionDue: toBigint(r.commissionDue),
+          }),
+        );
       }
       return facts;
     },

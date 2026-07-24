@@ -54,6 +54,38 @@ export const transactionsQuerySchema = z.object({
 
 export type TransactionsQuery = z.infer<typeof transactionsQuerySchema>;
 
+/**
+ * Hard ceiling on an internal alert-facts page (M6.2). Higher than the public
+ * page limit because the notifier scans a bounded fact stream per tick, but
+ * still a firm bound — an internal caller may not request an unbounded scan
+ * (SECURITY.md: bound every query param; the cursor is efficiency, the bound
+ * is safety).
+ */
+export const MAX_ALERT_FACT_LIMIT = 500;
+/** Default alert-facts page size (matches the notifier's `NOTIFIER_FACT_LIMIT`). */
+export const DEFAULT_ALERT_FACT_LIMIT = 200;
+
+/**
+ * `GET /internal/alert-facts/redemptions` query: a height cursor + bounded
+ * page. `since_height` selects rows whose last lifecycle height exceeds the
+ * notifier's cursor; the cursor is an efficiency device, and the notifier's
+ * unique constraint absorbs any re-scan (plan §2.1).
+ */
+export const alertRedemptionsQuerySchema = z.object({
+  since_height: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(MAX_ALERT_FACT_LIMIT).default(DEFAULT_ALERT_FACT_LIMIT),
+});
+
+export type AlertRedemptionsQuery = z.infer<typeof alertRedemptionsQuerySchema>;
+
+/** `GET /internal/alert-facts/incidents` query: an id cursor + bounded page. */
+export const alertIncidentsQuerySchema = z.object({
+  since_id: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(MAX_ALERT_FACT_LIMIT).default(DEFAULT_ALERT_FACT_LIMIT),
+});
+
+export type AlertIncidentsQuery = z.infer<typeof alertIncidentsQuerySchema>;
+
 /** Convert a URLSearchParams into a plain record for zod parsing (last wins). */
 export function searchParamsToRecord(params: URLSearchParams): Record<string, string> {
   const record: Record<string, string> = {};

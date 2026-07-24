@@ -29,9 +29,13 @@ import { transactionsCsv } from "./csv.ts";
 import { toTransactionRow } from "./derive.ts";
 import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
 import {
+  alertIncidentsQuerySchema,
+  alertRedemptionsQuerySchema,
   paginationSchema,
   portfolioQuerySchema,
   transactionsQuerySchema,
+  type AlertIncidentsQuery,
+  type AlertRedemptionsQuery,
   type Pagination,
   type TransactionsQuery,
 } from "./query.ts";
@@ -418,6 +422,96 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
   },
 });
 
+// --- internal alert-facts surface (M6.2, `internal:notifier` scope) ---------
+//
+// The notifier's cross-address evaluation reads (ADR-001 Decision 3; app-spec
+// §9.4). All `auth: "internal:notifier"`: the handler pipeline enforces that
+// declaration (401 without a valid assertion; 403 for an `address:` scope on
+// these paths — the standing INTERNAL_PATHS matrix in cross-address.test.ts),
+// and `internal:notifier` never grants a personal endpoint. Enveloped, so
+// their freshness heights ride the same contract every route carries — a
+// stale indexer is observable, never fabricated (plan §2.5).
+
+/**
+ * `GET /api/v1/internal/alert-facts/redemptions` — redemptions whose lifecycle
+ * advanced past the notifier's height cursor (`since_height`), ascending by
+ * height, bounded page. Owner-keyed transitions have no public surface; the
+ * notifier keys `redemption_update` off these terminal timestamps (plan §2.3).
+ */
+const alertRedemptionsRoute = defineEnveloped<AlertRedemptionsQuery>({
+  method: "GET",
+  path: `${API_BASE}/internal/alert-facts/redemptions`,
+  auth: "internal:notifier",
+  enveloped: true,
+  querySchema: alertRedemptionsQuerySchema,
+  summary: "Internal: redemption transitions since a height cursor",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.redemptionsChangedSince(ctx.query.since_height, ctx.query.limit),
+    ]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/internal/alert-facts/incidents` — incidents past the notifier's
+ * id cursor (`since_id`), ascending by id, bounded page. No payload
+ * passthrough: identity only (id + `(kind, dedupe_key)`), the replay-stable
+ * pair the notifier's dedupe keys off (plan §2.3/§2.4). Public `/incidents`
+ * omits the dedupe identity, so this surface is not redundant with it.
+ */
+const alertIncidentsRoute = defineEnveloped<AlertIncidentsQuery>({
+  method: "GET",
+  path: `${API_BASE}/internal/alert-facts/incidents`,
+  auth: "internal:notifier",
+  enveloped: true,
+  querySchema: alertIncidentsQuerySchema,
+  summary: "Internal: incidents since an id cursor (identity only)",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.incidentsSince(ctx.query.since_id, ctx.query.limit),
+    ]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/internal/alert-facts/arrears` — validators with commission due
+ * in the latest sampled epoch, joined to their operator account (active
+ * registry rows only). No cursor: arrears is a point-in-time "who owes now"
+ * read. Operator economics are excluded from public `/validators`, so this
+ * surface is not redundant with it (plan §2.3).
+ */
+const alertArrearsRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/internal/alert-facts/arrears`,
+  auth: "internal:notifier",
+  enveloped: true,
+  querySchema: null,
+  summary: "Internal: validators in commission arrears (latest epoch)",
+  handle: async (ctx) => {
+    const [heads, data] = await Promise.all([ctx.reader.heads(), ctx.reader.latestArrears()]);
+    return {
+      data,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
 /**
  * `GET /api/v1/health` — operational liveness for load balancers. Deliberately
  * NOT enveloped: it is not chain-derived data, so forcing a freshness envelope
@@ -446,6 +540,9 @@ export const routes: readonly Route[] = [
   portfolioRoute,
   portfolioMetricsRoute,
   transactionsRoute,
+  alertRedemptionsRoute,
+  alertIncidentsRoute,
+  alertArrearsRoute,
   healthRoute,
 ];
 

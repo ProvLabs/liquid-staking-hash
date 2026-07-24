@@ -30,6 +30,14 @@ function validRequest(route: Route, baseUrl: string): { url: string; init: Reque
       init: { headers: { authorization: mintAssertion(`address:${EXAMPLE_ADDRESS}`) } },
     };
   }
+  if (route.auth === "internal:notifier") {
+    // Internal alert-facts routes (M6.2): the notifier scope, no address. They
+    // serve honest-empty arrays on the default reader, still a valid envelope.
+    return {
+      url: `${baseUrl}${route.path}`,
+      init: { headers: { authorization: mintAssertion("internal:notifier") } },
+    };
+  }
   throw new Error(`no valid-request builder for auth kind ${route.auth} (${route.path})`);
 }
 

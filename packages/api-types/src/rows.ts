@@ -390,6 +390,75 @@ export interface MarketSummary {
   bridged_supply: BridgedSupplyRow[];
 }
 
+// --- internal alert-facts surface (M6.2, `internal:notifier` scope) ---------
+//
+// The notifier (an apps/web worker, ADR-001 Decision 3) evaluates alert rules
+// against indexed facts it cannot read directly — its `app_writer` credential
+// has no `indexed` grants. These three shapes are the cross-address evaluation
+// reads served under the `internal:notifier` scope (app-spec §9.4): identity
+// and ordinals only, no amounts on the redemption/incident facts (the notifier
+// stores no amounts — plan §2.1), so the surface stays minimal. Producer:
+// services/api. Consumer: the apps/web notifier. A field change here is an
+// app-spec §9.4 revision, never a silent edit.
+
+/**
+ * One row of `GET /api/v1/internal/alert-facts/redemptions` (M6.2): a
+ * redemption whose lifecycle advanced past the notifier's height cursor. The
+ * notifier keys `redemption_update` alerts off the terminal timestamps
+ * (matured/expedited/refunded) and the `owner` account (both public chain
+ * data). Deliberately NO `shares`/amount field — the notification payload
+ * carries identifiers only (plan §2.1), and the linked surface shows the live
+ * amount with a freshness label (§12.1).
+ */
+export interface AlertRedemptionFact {
+  request_id: string;
+  /** Owning bech32 account (public chain data) — the alert's target address. */
+  owner: string;
+  status: RedemptionStatus;
+  enqueued_at: string;
+  expedited_at: string | null;
+  matured_at: string | null;
+  refunded_at: string | null;
+  /** Height of the last lifecycle event — the notifier's redemption cursor. */
+  last_height: number;
+}
+
+/**
+ * One row of `GET /api/v1/internal/alert-facts/incidents` (M6.2): a computed
+ * incident, projected to the identity the notifier needs — `id` (its id
+ * cursor) and `(kind, dedupe_key)` (the replay-stable notification identity,
+ * NOT the autoincrement id; plan §2.4). NO payload passthrough: the notifier
+ * needs identity, not detail (plan §2.3). `opened_at`/`opened_height` locate
+ * the event; there is no `closed_at` (v1 sends no close notifications, §7 Q3).
+ */
+export interface AlertIncidentFact {
+  /** Autoincrement incident id — the notifier's incidents cursor only. */
+  id: number;
+  kind: IncidentKind;
+  severity: IncidentSeverity;
+  /** The indexer's own dedupe key; `(kind, dedupe_key)` is replay-stable. */
+  dedupe_key: string;
+  opened_at: string;
+  opened_height: number | null;
+}
+
+/**
+ * One row of `GET /api/v1/internal/alert-facts/arrears` (M6.2): a program
+ * validator with commission still due in the latest sampled epoch, joined to
+ * its operator account. Only active registry rows (unregistered validators
+ * excluded). The `operator` account is the `operator_arrears` alert's target
+ * address. `commission_due` rides as a decimal string per the boundary
+ * amount convention, though the stored notification carries no amount.
+ */
+export interface AlertArrearsFact {
+  valoper: string;
+  /** Operator bech32 account (public) — the alert's target address. */
+  operator: string;
+  epoch_index: number;
+  /** Commission due in nhash base units, decimal string. */
+  commission_due: string;
+}
+
 /**
  * One row of `GET /api/v1/epochs` (newest first): the per-epoch series behind
  * the Learn NAV step chart and the §8.5 history views. NAV and TVV are
