@@ -15,6 +15,9 @@
 // Postgres-backed integration gate exercises the real queries.
 
 import type {
+  AlertArrearsFact,
+  AlertIncidentFact,
+  AlertRedemptionFact,
   EpochRow,
   IncidentRow,
   MarketSummary,
@@ -76,6 +79,18 @@ export interface IndexedReader {
   transactionsAscFor(address: string): Promise<TransactionFacts[]>;
   /** All epoch snapshots ascending by epochIndex, as the fold's step facts. */
   listEpochsAsc(): Promise<EpochStepFact[]>;
+  /**
+   * Internal alert-facts reads (M6.2, `internal:notifier` scope; ADR-001
+   * Decision 3). Cross-address by nature — the notifier evaluates rules over
+   * every present address — so they carry no `address:` scope and never touch
+   * a personal endpoint. All three are bounded (a cursor + a page limit, or a
+   * single latest-epoch snapshot); the cursor is efficiency, the notifier's
+   * unique constraint is correctness (plan §2.4).
+   */
+  redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]>;
+  incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]>;
+  /** Validators with commission due in the latest sampled epoch (active only). */
+  latestArrears(): Promise<AlertArrearsFact[]>;
 }
 
 /**
@@ -115,4 +130,7 @@ export const emptyReader: IndexedReader = {
   transactionsFor: () => Promise.resolve([]),
   transactionsAscFor: () => Promise.resolve([]),
   listEpochsAsc: () => Promise.resolve([]),
+  redemptionsChangedSince: () => Promise.resolve([]),
+  incidentsSince: () => Promise.resolve([]),
+  latestArrears: () => Promise.resolve([]),
 };

@@ -196,6 +196,43 @@ export default {
   "exit.tracker-refunded": "Refunded (unfunded maturity — shares returned, no loss)",
   "exit.tracker-payout-amount": "Received {amount} HASH",
   "exit.tracker-refund-shares": "{shares} nvHASH returned",
+  "exit.tracker-alert-note": "You'll be alerted here and in the bell when this matures or is expedited.",
+  "exit.tracker-alert-settings-link": "Manage in alert settings",
+
+  "alerts.bell-label": "Alerts",
+  "alerts.bell-aria": "Alerts, {count} unread",
+  "alerts.bell-aria-none": "Alerts, none unread",
+  "alerts.loading": "Loading…",
+  "alerts.empty": "No notifications yet.",
+  "alerts.mark-all-read": "Mark all read",
+  "alerts.notif.nav-step-posted": "NAV stepped up — epoch {epoch} settled.",
+  "alerts.notif.redemption-matured": "Your redemption matured — request {request}.",
+  "alerts.notif.redemption-expedited": "Your redemption was expedited — request {request}.",
+  "alerts.notif.redemption-refunded": "Your redemption was refunded, no loss — request {request}.",
+  "alerts.notif.vault-status": "Vault status changed: {incident}.",
+  "alerts.notif.validator-set-incident": "Validator-set incident: {incident}.",
+  "alerts.notif.operator-arrears": "Commission still owed for {valoper} at epoch {epoch}.",
+  "alerts.incident.vault-paused": "vault paused",
+  "alerts.incident.contract-halted": "contract halted",
+  "alerts.incident.jail-report": "validator jailed",
+  "alerts.incident.slash-write-down": "slashing write-down",
+
+  "alerts.settings-title": "Alert settings",
+  "alerts.settings-lede":
+    "Choose what you're alerted about. In-app alerts always appear in the bell; these toggles decide which events create one.",
+  "alerts.settings-default": "on by default",
+  "alerts.kind.nav-step-posted": "Monthly NAV step",
+  "alerts.kind.nav-step-posted-desc": "When an epoch settles and your redemption value steps up.",
+  "alerts.kind.redemption-update": "Redemption updates",
+  "alerts.kind.redemption-update-desc":
+    "When your redemption matures, is expedited, or is refunded. The 60-day guarantee always holds; a “typical” time is never a promise.",
+  "alerts.kind.vault-status": "Vault paused or halted",
+  "alerts.kind.vault-status-desc": "When the vault is paused or the contract is halted.",
+  "alerts.kind.validator-set-incident": "Validator-set incidents",
+  "alerts.kind.validator-set-incident-desc":
+    "When a program validator is jailed or takes a slashing write-down.",
+  "alerts.kind.operator-arrears": "Commission arrears",
+  "alerts.kind.operator-arrears-desc": "When one of your validators still has commission owed at epoch close.",
 
   "portfolio.title": "Portfolio",
   "portfolio.placeholder":

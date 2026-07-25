@@ -1,0 +1,26 @@
+// notifier_checkpoints (plan 6.2 §2.1) — one row per notifier stream. The
+// cursor is an **efficiency device, never the correctness mechanism** (that is
+// the notifications unique constraint): streams cursor on different monotonic
+// values (height, incident id, epoch index), each stream zod-parses its own
+// cursor on read, and a garbage or stale cursor merely re-scans — the
+// duplicates it produces are absorbed by `@@unique([address, kind, dedupeKey])`.
+// After a full indexer rebuild the incidents id-cursor may overshoot; the
+// bounded re-scan + dedupe-key identity (never autoincrement ids, §2.4) is the
+// honest answer.
+//
+// Columns gated by test/app-schema-allowlist.test.ts: `stream` (a fixed name),
+// `cursor` (a decimal-serialized ordinal), `updatedAt` — pure operational
+// metadata, nothing identity-shaped.
+
+model NotifierCheckpoint {
+  /** "nav_step" | "redemptions" | "incidents" | "arrears". */
+  stream    String   @id
+  /** Per-stream monotonic cursor, re-parsed on read: a decimal ordinal, except
+   * `redemptions` which is the compound keyset `<height>:<request_id>` (so a
+   * same-height burst larger than one page resumes inside the height). */
+  cursor    String
+  updatedAt DateTime @updatedAt
+
+  @@map("notifier_checkpoints")
+  @@schema("app")
+}

@@ -86,6 +86,51 @@ End-user web interface. Production quality.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).
+  **Delivered PR 6.2 commit B:** `notifier/index.ts` (`pnpm notifier` →
+  `node notifier/index.ts`) lives **outside `app/`** so the React Router build
+  never bundles it (`check:bundle` confirms). It uses **relative** imports, not
+  the `~` alias, because `node`'s strip-only TS runs it directly — for the same
+  reason, files it loads at runtime must avoid **parameter properties** (use
+  explicit field assignment) and `enum`/`namespace`. Its config
+  (`notifier/config.ts`) is zod-bounded and **fail-fast**: `DATABASE_URL` and
+  `API_SERVICE_ASSERTION_KEY` (≥ 32) are required. **`app/lib/models/alerts.server.ts`**
+  is the AlertStore port — the **sole new Prisma import site** (the
+  `session.server.ts` split: Prisma + in-memory behind one contract, so routes
+  and tests run storeless). The exactly-once mechanism is `commitTick` (insert
+  `skipDuplicates` + cursor advance in one transaction). The redemptions
+  stream cursors on the compound `<height>:<request_id>` keyset (the API's
+  `after_id` tie-break) so a same-height burst larger than one fact page pages
+  through completely; the nav-step stream clamps its public `/epochs` page to
+  `EPOCHS_PAGE_LIMIT` (200) since `factLimit` may lawfully be up to 500. The pure evaluation
+  core, effective-settings merge (absence-means-default), payload zod shapes,
+  and incident→kind mapping live in **`app/lib/services/alerts.server.ts`** (no
+  Prisma, no fetch, no clock). `mintInternalAssertion` (in
+  `assertion.server.ts`) mints the `internal:notifier` scope, golden-vector
+  cross-pinned with `services/api`. New standing gates: `test/notifier.test.ts`
+  (exactly-once, presence filter, opt-out suppression, opt-in fan-out, incident
+  mapping, failure isolation, retention sweep), `test/notification-payload.test.ts`
+  (closed identifier-only payloads, no amount keys), `test/alerts-models.test.ts`
+  (store contract, both impls), `test/notifier-config.test.ts` (config bounds);
+  the app-schema allowlist now covers the three alert tables.
+  **Bell + settings + rule CRUD (PR 6.2 commit C):** two session-gated resource
+  routes **outside `:lang?`** (`app/routes/alerts-{notifications,rules}.tsx`,
+  the `portfolio/export` precedent) over `app/alerts/alerts.server.ts` (the seam
+  that wraps the store + the pure effective-settings merge, and holds the
+  route boundary schemas). The acting address is ALWAYS `requireSession`'s
+  address; mark-read is store-scoped by address. The chrome **bell**
+  (`components/chrome/alerts-bell.tsx`) keeps the anonymous advert verbatim and,
+  for a session, renders the bell + unread badge (the count rides the `root.tsx`
+  loader — only the integer crosses; the popover fetches notifications via
+  `useFetcher` on open). The Portfolio **Alert settings** section
+  (`components/portfolio/alert-settings.tsx`, id `alert-settings`) toggles the
+  closed kind list (default-on annotated, `operator_arrears` operator-only,
+  market-spread absent). Both client components consume JSON with **string
+  kinds** — they never import the `.server` alert modules — and every
+  user-visible string is an `alerts.*` i18n key (hyphenated, no underscores).
+  New standing gates: `test/alerts-routes.test.ts`, `test/session-scope.test.ts`
+  (alerts join it), offline `e2e/alerts.spec.ts`, skip-clean
+  `e2e-live/alerts.spec.ts`. Offline e2e has no session, so the authenticated
+  settings section is not offline-axe'd (the portfolio precedent).
 - The session layer mints the short-lived scoped service assertions
   `services/api` requires for address-scoped reads (ADR-001 Decision 2);
   `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client

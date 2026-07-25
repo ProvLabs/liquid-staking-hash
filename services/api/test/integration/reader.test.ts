@@ -284,6 +284,86 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     expect(stats.band_ceiling_seconds).toBe(60 * 24 * 60 * 60);
   });
 
+  // --- M6.2 internal alert-facts reads (the notifier's cross-address reads) ---
+
+  it("reads redemptions changed since a height cursor, ascending, owner + no amount", async () => {
+    // Past cursor 300: only the payout-N cohort (lastHeight 400) — req-1 (300)
+    // and req-0 (50) excluded. Confirms the `@@index([lastHeight])` range read.
+    // Empty after_id INCLUDES the boundary height (a legacy height-only
+    // cursor re-scans its boundary row; dedupe absorbs): req-1 at 300 rides
+    // ahead of the 11-row lastHeight-400 cohort.
+    const all = await reader.redemptionsChangedSince(300, "", 500);
+    expect(all.length).toBe(12);
+    expect(all[0]!.last_height).toBe(300);
+    const rows = all.slice(1);
+    expect(rows.length).toBe(11);
+    for (const r of rows) {
+      expect(r.last_height).toBe(400);
+      expect(r.owner.startsWith("pb1holder")).toBe(true);
+      expect(r.status).toBe("matured");
+      // No amount field crosses the boundary (plan §2.1).
+      expect(Object.keys(r)).not.toContain("shares");
+    }
+    // Cursor 0 sees every changed redemption (all lastHeight > 0).
+    expect((await reader.redemptionsChangedSince(0, "", 500)).length).toBeGreaterThanOrEqual(13);
+  });
+
+  it("pages through a same-height burst via the after_id tie-break", async () => {
+    // The 11-row lastHeight-400 cohort stands in for a mass-maturation burst:
+    // with the compound cursor `(height, requestId)`, a page boundary inside
+    // the cohort resumes exactly after the last row served — no row skipped.
+    const first = await reader.redemptionsChangedSince(300, "req-1", 5); // past the 300 boundary, into the burst
+    expect(first.length).toBe(5);
+    expect(first.every((r) => r.last_height === 400)).toBe(true);
+    const rest = await reader.redemptionsChangedSince(400, first[4]!.request_id, 500);
+    expect(rest.length).toBe(6);
+    const seen = [...first, ...rest].map((r) => r.request_id);
+    expect(new Set(seen).size).toBe(11); // complete, no overlap, no loss
+  });
+
+  it("reads incidents since an id cursor with identity only (no payload)", async () => {
+    const all = await reader.incidentsSince(0, 500);
+    expect(all.length).toBeGreaterThanOrEqual(1);
+    const seeded = all.find((i) => i.dedupe_key === "test");
+    expect(seeded).toMatchObject({
+      kind: "indexer_lag",
+      severity: "warning",
+      dedupe_key: "test",
+      opened_at: "2026-07-01T00:00:00.000Z",
+      opened_height: 900,
+    });
+    expect(seeded && "payload" in seeded).toBe(false);
+    // The id cursor excludes rows at or below it (gt).
+    const past = await reader.incidentsSince(seeded!.id, 500);
+    expect(past.map((i) => i.id)).not.toContain(seeded!.id);
+  });
+
+  it("reads latest-epoch arrears joined to the active operator", async () => {
+    // Latest epoch is 12: alpha owes 5 (active) → surfaces with its operator.
+    // bravo has no epoch-12 sample → not in arrears.
+    const arrears = await reader.latestArrears();
+    expect(arrears).toEqual([
+      { valoper: "pbvaloper1aaa", operator: "pb1aaa", epoch_index: 12, commission_due: "5" },
+    ]);
+  });
+
+  it("excludes an unregistered validator's arrears from the join", async () => {
+    // Unregister alpha, add a fresh owing validator: alpha (now unregistered)
+    // must drop out even though it still owes in epoch 12 (plan §2.3).
+    await writer.validatorRegistry.update({
+      where: { valoper: "pbvaloper1aaa" },
+      data: { unregisteredAt: new Date("2026-07-15T00:00:00Z") },
+    });
+    try {
+      expect(await reader.latestArrears()).toEqual([]);
+    } finally {
+      await writer.validatorRegistry.update({
+        where: { valoper: "pbvaloper1aaa" },
+        data: { unregisteredAt: null },
+      });
+    }
+  });
+
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {
     await writer.reconcilerRun.deleteMany();
     // 4200 from chain-events — NOT 999999 from the meta:provenance marker.

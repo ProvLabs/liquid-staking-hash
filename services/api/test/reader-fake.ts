@@ -4,6 +4,7 @@
 // and pagination mirror reader-prisma.ts semantics: epochs newest-first by
 // epochIndex, incidents newest-first by openedAt, skip/take slicing.
 
+import type { AlertArrearsFact } from "@nvhash/api-types";
 import type { IndexedReader } from "../src/reader.ts";
 import type { EpochStepFact } from "../src/portfolio-metrics.ts";
 import {
@@ -16,11 +17,15 @@ import {
   navPriceNhash,
   payoutDurationSeconds,
   PAYOUT_STATS_WINDOW_DAYS,
+  toAlertArrearsFact,
+  toAlertIncidentFact,
+  toAlertRedemptionFact,
   toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
   toMarketSample,
   toTransactionRow,
+  type AlertIncidentFacts,
   type BridgedSupplyFacts,
   type EpochSnapshotFacts,
   type IncidentFacts,
@@ -47,6 +52,14 @@ export interface FakeFacts {
   readonly redemptions?: readonly RedemptionFacts[] | undefined;
   /** Fixed "now" for the payout-stats recent-window filter (deterministic). */
   readonly payoutNow?: Date | undefined;
+  /**
+   * M6.2 internal alert-facts fixtures. `alertIncidents` backs the internal
+   * incidents projection (id + dedupeKey), distinct from `incidents` (the
+   * public `/incidents` projection, which carries neither). Arrears derives
+   * from `registry` (needs `operator`) + `validatorEpochs`, mirroring the
+   * Prisma reader's join; redemptions reuse the `redemptions` fixtures.
+   */
+  readonly alertIncidents?: readonly AlertIncidentFacts[] | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -183,5 +196,63 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
             }),
           ),
       ),
+    // --- M6.2 internal alert-facts (mirror reader-prisma.ts semantics) ------
+    redemptionsChangedSince: (sinceHeight, afterId, limit) =>
+      Promise.resolve(
+        [...(facts.redemptions ?? [])]
+          .filter(
+            (r) =>
+              r.lastHeight > BigInt(sinceHeight) ||
+              (r.lastHeight === BigInt(sinceHeight) && r.requestId > afterId),
+          )
+          .sort((a, b) =>
+            a.lastHeight === b.lastHeight
+              ? a.requestId < b.requestId
+                ? -1
+                : 1
+              : a.lastHeight < b.lastHeight
+                ? -1
+                : 1,
+          )
+          .slice(0, limit)
+          .map(toAlertRedemptionFact),
+      ),
+    incidentsSince: (sinceId, limit) =>
+      Promise.resolve(
+        [...(facts.alertIncidents ?? [])]
+          .filter((i) => i.id > BigInt(sinceId))
+          .sort((a, b) => (a.id === b.id ? 0 : a.id < b.id ? -1 : 1))
+          .slice(0, limit)
+          .map(toAlertIncidentFact),
+      ),
+    latestArrears: () => {
+      const epochs = facts.validatorEpochs ?? [];
+      if (epochs.length === 0) return Promise.resolve([]);
+      let maxEpoch = epochs[0]!.epochIndex;
+      for (const e of epochs) if (e.epochIndex > maxEpoch) maxEpoch = e.epochIndex;
+      // Active registry rows carry the operator to alert (unregistered → excluded).
+      const operatorByValoper = new Map<string, string>();
+      for (const r of facts.registry ?? []) {
+        if (r.unregisteredAt === null && r.operator !== undefined) {
+          operatorByValoper.set(r.valoper, r.operator);
+        }
+      }
+      const out: AlertArrearsFact[] = [];
+      for (const e of [...epochs].sort((a, b) => (a.valoper < b.valoper ? -1 : 1))) {
+        if (e.epochIndex !== maxEpoch) continue;
+        if (e.commissionDue <= 0n) continue;
+        const operator = operatorByValoper.get(e.valoper);
+        if (operator === undefined) continue; // unregistered → excluded
+        out.push(
+          toAlertArrearsFact({
+            valoper: e.valoper,
+            operator,
+            epochIndex: e.epochIndex,
+            commissionDue: e.commissionDue,
+          }),
+        );
+      }
+      return Promise.resolve(out);
+    },
   };
 }

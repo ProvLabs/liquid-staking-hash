@@ -9,6 +9,9 @@
 import type {
   AccrualMarker,
   AccrualPoint,
+  AlertArrearsFact,
+  AlertIncidentFact,
+  AlertRedemptionFact,
   BridgedSupplyRow,
   EffectiveYieldPoint,
   EpochRow,
@@ -260,6 +263,41 @@ export const portfolioMetricsSchema = z.object({
   markers_truncated: z.boolean(),
 }) satisfies z.ZodType<PortfolioMetrics>;
 
+// M6.2 internal alert-facts (the notifier's `internal:notifier` reads). Bounded
+// at the boundary like every other API input; amounts stay decimal strings.
+// `commission_due` is the one amount that rides (arrears), a decimal string.
+export const alertRedemptionFactSchema = z.object({
+  request_id: z.string().max(128),
+  owner: z.string().max(90),
+  status: redemptionStatusSchema,
+  enqueued_at: isoTimestamp,
+  expedited_at: isoTimestamp.nullable(),
+  matured_at: isoTimestamp.nullable(),
+  refunded_at: isoTimestamp.nullable(),
+  last_height: z.number().int().nonnegative(),
+}) satisfies z.ZodType<AlertRedemptionFact>;
+
+export const alertIncidentFactSchema = z.object({
+  id: z.number().int().nonnegative(),
+  kind: incidentKindSchema,
+  severity: incidentSeveritySchema,
+  dedupe_key: z.string().max(256),
+  opened_at: isoTimestamp,
+  opened_height: z.number().int().nonnegative().nullable(),
+}) satisfies z.ZodType<AlertIncidentFact>;
+
+export const alertArrearsFactSchema = z.object({
+  valoper: z.string().max(90),
+  operator: z.string().max(90),
+  epoch_index: z.number().int().nonnegative(),
+  commission_due: baseUnitString,
+}) satisfies z.ZodType<AlertArrearsFact>;
+
+/** The notifier caps its fact page at 500 (MAX_ALERT_FACT_LIMIT); bound here. */
+export const alertRedemptionsEnvelopeSchema = envelopeSchema(z.array(alertRedemptionFactSchema).max(500));
+export const alertIncidentsEnvelopeSchema = envelopeSchema(z.array(alertIncidentFactSchema).max(500));
+export const alertArrearsEnvelopeSchema = envelopeSchema(z.array(alertArrearsFactSchema).max(500));
+
 /** Collections stay bounded at the boundary, mirroring the API's page cap. */
 export const incidentsEnvelopeSchema = envelopeSchema(z.array(incidentRowSchema).max(200));
 export const epochsEnvelopeSchema = envelopeSchema(z.array(epochRowSchema).max(200));
@@ -275,16 +313,19 @@ export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowS
 /**
  * Bounded-timeout GET returning parsed JSON. Throws on non-OK status,
  * timeout, or non-JSON; callers degrade the failure to their own null path.
+ * `headers` carries the `internal:notifier` (or personal) assertion where a
+ * route requires it (M6.2); public reads pass none.
  */
 export async function fetchApiJson(
   url: string,
   fetchImpl: FetchLike,
   timeoutMs: number,
+  headers?: Record<string, string>,
 ): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, { signal: controller.signal });
+    const response = await fetchImpl(url, { signal: controller.signal, headers });
     if (!response.ok) {
       throw new Error(`GET ${url}: HTTP ${response.status}`);
     }

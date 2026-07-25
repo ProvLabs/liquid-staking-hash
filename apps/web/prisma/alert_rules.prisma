@@ -1,0 +1,42 @@
+// alert_rules (app-spec §8.2, §9.1; plan 6.2 §2.1) — **preference overrides,
+// not subscription rows.** Absence-means-default is the core simplification:
+// no row for (address, kind) means "the kind's default" — ON for the R2 set
+// (redemption_update, operator_arrears), OFF for the rest. A row is only ever
+// an explicit override: `enabled=false` is the §10.3 opt-out, `enabled=true`
+// an opt-in. A user who never touches settings has ZERO rows — data
+// minimization by construction (SECURITY.md). There is deliberately **no
+// params column**: the only parameterized kind (market-spread, X bps) is
+// deferred with §14.4; adding it later is an enum migration + allowlist review
+// + a `thresholdBps` column, a spec-recorded amendment, not a config toggle.
+//
+// Columns are gated by test/app-schema-allowlist.test.ts: `address` (public
+// chain data), `kind` (a closed enum), `enabled` (a preference bit), and the
+// two timestamps — nothing identity-, device-, or IP-shaped.
+
+model AlertRule {
+  /** bech32 wallet address this override belongs to (public by nature). */
+  address   String
+  kind      AlertKind
+  /** false = opt-out (§10.3), true = opt-in; absence = the kind's default. */
+  enabled   Boolean
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@id([address, kind])
+  @@map("alert_rules")
+  @@schema("app")
+}
+
+// The closed alert-kind set (app-spec §8.2). Shared by AlertRule and
+// Notification. `redemption_update` covers matured|expedited|refunded as ONE
+// settings row (§8.4); the per-event distinction rides the notification
+// payload, not a separate kind.
+enum AlertKind {
+  nav_step_posted
+  redemption_update
+  vault_status
+  validator_set_incident
+  operator_arrears
+
+  @@schema("app")
+}

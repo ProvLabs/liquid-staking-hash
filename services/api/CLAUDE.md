@@ -61,6 +61,27 @@ Query API over the indexer's data store.
   (`IndexedReader.listEpochsAsc`: `epoch_snapshots` ascending as
   `EpochStepFact`), serving the frozen `PortfolioMetrics` shape. Derivation
   stays in the pure fold; the reader adds only the two SELECTs.
+- **Internal alert-facts surface (PR 6.2, M6.2)** — the notifier's
+  cross-address evaluation reads under the `auth: "internal:notifier"` scope
+  (ADR-001 Decision 3; the scope was scaffolded-but-dead until now). Three
+  `GET` enveloped routes under `/api/v1/internal/alert-facts/`:
+  `redemptions` (`since_height`+`after_id`+`limit` — a compound keyset cursor
+  `(lastHeight, requestId) > (since_height, after_id)` in
+  `(lastHeight, requestId)` asc order, so a same-height burst larger than one
+  page pages through completely),
+  `incidents` (`since_id`+`limit`, `id > since_id` asc, **no payload
+  passthrough** — identity only), `arrears` (no query, latest sampled epoch,
+  active-registry join). Limits are bounded 1–500 (`MAX_ALERT_FACT_LIMIT`); the
+  cursor is efficiency, the notifier's unique constraint is correctness. Reader
+  methods `redemptionsChangedSince`/`incidentsSince`/`latestArrears`; row shapes
+  `AlertRedemptionFact`/`AlertIncidentFact`/`AlertArrearsFact` frozen in
+  `@nvhash/api-types` — identity/ordinal fields only, **never amounts** on the
+  redemption/incident facts (the stored notification carries none). The
+  registry-derived **`INTERNAL_PATHS` matrix** in `test/cross-address.test.ts`
+  (no-cred → 401, `address:` scope → 403, `internal:notifier` → 200) joins the
+  standing gate list — a new internal route is covered automatically. The
+  `internal:notifier` assertion golden vector is cross-pinned in
+  `test/assertion-vectors.test.ts` ↔ `apps/web/test/assertion.test.ts`.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.

@@ -22,6 +22,10 @@ model RedemptionRequest {
   // filters the recent terminal cohort by expeditedAt/maturedAt >= cutoff.
   @@index([maturedAt])
   @@index([expeditedAt])
+  // Height cursor index (M6.2): the notifier's `/internal/alert-facts/redemptions`
+  // reads `lastHeight > since_height` ascending each tick — index-only, no
+  // column added (schema-allowlist unaffected; rebuildable).
+  @@index([lastHeight])
   @@map("redemption_requests")
   @@schema("indexed")
 }

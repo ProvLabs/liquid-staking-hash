@@ -1,5 +1,6 @@
 import { AccrualChart } from "~/components/portfolio/accrual-chart";
 import { ActiveRedemptions } from "~/components/portfolio/active-redemptions";
+import { AlertSettings } from "~/components/portfolio/alert-settings";
 import { EffectiveYieldPanel } from "~/components/portfolio/effective-yield-panel";
 import { HistoryTable } from "~/components/portfolio/history-table";
 import { PositionSummary } from "~/components/portfolio/position-summary";
@@ -72,6 +73,10 @@ export default function Portfolio({ loaderData }: Route.ComponentProps) {
           {t(locale, "portfolio.indexed-unavailable")}
         </p>
       )}
+
+      {/* Alert settings (M6.2) — independent of the indexed plane, so it renders
+          for any session even when the indexed reads degrade. */}
+      <AlertSettings locale={locale} />
     </div>
   );
 }

@@ -41,12 +41,20 @@ function parseModels(): PrismaModel[] {
   return models;
 }
 
-/** The complete allowed column set — PR 5.1 scope, nothing else. */
+/** The complete allowed column set — PR 5.1 scope + the M6.2 alert domain. */
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   Session: ["id", "address", "createdAt", "expiresAt", "lastRefreshAt"],
   SessionNonce: ["nonce", "address", "createdAt", "expiresAt"],
   // SECURITY.md accepted exception (Ira, 2026-07-13): first/last-seen only.
   AddressActivity: ["address", "firstSeenAt", "lastSeenAt"],
+  // M6.2 alert domain (plan §2.1 design review). Every column is public chain
+  // data (`address`), a closed enum (`kind`), a preference bit (`enabled`), a
+  // replay-stable event id (`dedupeKey`), a minimal identifier-only payload,
+  // an ordinal cursor, or operational metadata — nothing identity/device/IP-
+  // shaped. A column beyond these lists is a stop-and-ask event (plan §8).
+  AlertRule: ["address", "kind", "enabled", "createdAt", "updatedAt"],
+  Notification: ["id", "address", "kind", "dedupeKey", "payload", "deliveredAt", "readAt"],
+  NotifierCheckpoint: ["stream", "cursor", "updatedAt"],
 };
 
 /**
@@ -70,8 +78,15 @@ const FORBIDDEN_FIELD_SUBSTRINGS = [
 const models = parseModels();
 
 describe("app schema field allowlist (SECURITY.md data minimization)", () => {
-  it("parses exactly the PR 5.1 models", () => {
-    expect(models.map((m) => m.name).sort()).toEqual(["AddressActivity", "Session", "SessionNonce"]);
+  it("parses exactly the app-schema models (PR 5.1 + M6.2 alert domain)", () => {
+    expect(models.map((m) => m.name).sort()).toEqual([
+      "AddressActivity",
+      "AlertRule",
+      "Notification",
+      "NotifierCheckpoint",
+      "Session",
+      "SessionNonce",
+    ]);
   });
 
   it("every column is on its model's allowlist", () => {

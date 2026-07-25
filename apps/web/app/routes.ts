@@ -23,6 +23,10 @@ export default [
   // Portfolio CSV export (M6.1 §2.7): a locale-independent, session-gated
   // resource route, declared outside `:lang?` like the session/tx routes.
   route("portfolio/export", "routes/portfolio-export.tsx"),
+  // Alert resource routes (M6.2 §2.6): session-gated notification log +
+  // mark-read and effective-settings CRUD, outside `:lang?` like the above.
+  route("alerts/notifications", "routes/alerts-notifications.tsx"),
+  route("alerts/rules", "routes/alerts-rules.tsx"),
   route(":lang?", "routes/locale.tsx", [
     index("routes/home.tsx"),
     // §8.0 nav targets (plan 4.1): stubs until their real pages land in
