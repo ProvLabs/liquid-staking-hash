@@ -12,15 +12,24 @@
 //   * a per-address cap (oldest evicted) so a hostile client cannot grow the
 //     table through repeated re-subscription (plan §7 Q4);
 //   * revocability: deleteForSession (opt-out + the session-removal deletion
-//     chain, Commit B) and deleteForEndpoint (404/410 pruning, Commit B).
+//     chain, Commit B) and deleteForEndpoint (404/410 pruning, Commit B);
+//   * the invariant itself: sweepOrphans (the notifier tick) deletes every
+//     subscription whose session is missing or expired — the "no token
+//     outlives its session" enforcement for browsers that never present
+//     their stale cookie, and for crash remnants of the two-step chain.
 //
 // endpoint/p256dh/auth are opaque and NEVER logged (an endpoint URL can
 // fingerprint the browser vendor — treated as secrets-adjacent). Schema
 // content is gated by test/app-schema-allowlist.test.ts.
 
+import { SESSION_IDLE_SECONDS } from "./session.server.ts";
+
 /** Cap on active subscriptions per address; the oldest is evicted past it
  *  (plan §7 Q4 — cheap, bounded, and blunts re-subscription table growth). */
 export const PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP = 5;
+
+/** Serializable-upsert attempts before surfacing the conflict (see below). */
+export const UPSERT_SERIALIZATION_ATTEMPTS = 3;
 
 /** The W3C `PushSubscription.toJSON()` triple (already zod-bounded at the route). */
 export interface PushSubscriptionInput {
@@ -53,6 +62,16 @@ export interface PushStore {
   deleteForEndpoint(endpoint: string): Promise<number>;
   /** Active subscription count for an address (cap tests / diagnostics). */
   countForAddress(address: string): Promise<number>;
+  /**
+   * Invariant sweep (the notifier tick): delete every subscription whose
+   * creating session is missing or no longer live at `now` — the enforcement
+   * of "no push token outlives its session" for browsers that never present
+   * their stale cookie, and for crash remnants of the two-step deletion
+   * chain. Liveness mirrors the session model's rule (absolute `expiresAt`
+   * ceiling AND the SESSION_IDLE_SECONDS sliding bound). Returns the count
+   * removed. Gated by test/push-token-deletion.test.ts.
+   */
+  sweepOrphans(now: Date): Promise<number>;
 }
 
 // ── In-memory implementation ─────────────────────────────────────────────
@@ -69,6 +88,15 @@ interface PushRow {
 export class InMemoryPushStore implements PushStore {
   private readonly rows: PushRow[] = [];
   private nextId = 1n;
+  private readonly isSessionLive?: (sessionId: string, now: Date) => Promise<boolean> | boolean;
+
+  // Optional liveness source for sweepOrphans (explicit assignment — the
+  // notifier's strip-only-TS runtime loads this module). Without one the
+  // sweep is a no-op: the web tier never sweeps, and the notifier's Prisma
+  // store joins the sessions table directly in SQL.
+  constructor(isSessionLive?: (sessionId: string, now: Date) => Promise<boolean> | boolean) {
+    this.isSessionLive = isSessionLive;
+  }
 
   async upsertForSession(address: string, sessionId: string, sub: PushSubscriptionInput): Promise<void> {
     // Idempotent on endpoint: re-home an existing endpoint rather than duplicate.
@@ -115,6 +143,18 @@ export class InMemoryPushStore implements PushStore {
     return this.rows.filter((r) => r.address === address).length;
   }
 
+  async sweepOrphans(now: Date): Promise<number> {
+    if (this.isSessionLive === undefined) return 0; // no liveness source (see constructor)
+    let count = 0;
+    for (let i = this.rows.length - 1; i >= 0; i--) {
+      if (!(await this.isSessionLive(this.rows[i]!.sessionId, now))) {
+        this.rows.splice(i, 1);
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   /** Test seam: the address's endpoints (synchronous mirror of listForAddress). */
   listForAddressSync(address: string): PushSubscriptionRecord[] {
     return this.rows
@@ -143,7 +183,14 @@ interface PushPrismaLike {
     findMany(args: unknown): Promise<Array<{ id?: bigint; endpoint?: string; p256dh?: string; auth?: string }>>;
     count(args: unknown): Promise<number>;
   };
-  $transaction<T>(fn: (tx: PushPrismaLike) => Promise<T>): Promise<T>;
+  $transaction<T>(fn: (tx: PushPrismaLike) => Promise<T>, options?: { isolationLevel?: string }): Promise<T>;
+  /** Tagged-template raw statement (the sweep's anti-join DELETE). Row count. */
+  $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<number>;
+}
+
+/** Prisma surfaces a serialization failure as P2034 ("transaction conflict"). */
+function isSerializationConflict(err: unknown): boolean {
+  return err !== null && typeof err === "object" && "code" in err && (err as { code: unknown }).code === "P2034";
 }
 
 export class PrismaPushStore implements PushStore {
@@ -157,26 +204,42 @@ export class PrismaPushStore implements PushStore {
   }
 
   async upsertForSession(address: string, sessionId: string, sub: PushSubscriptionInput): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      // Idempotent on endpoint (re-home a re-subscribed endpoint, never duplicate).
-      await tx.pushSubscription.upsert({
-        where: { endpoint: sub.endpoint },
-        create: { address, sessionId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
-        update: { address, sessionId, p256dh: sub.p256dh, auth: sub.auth },
-      });
-      // Replace-by-session: drop this session's other endpoints.
-      await tx.pushSubscription.deleteMany({ where: { sessionId, endpoint: { not: sub.endpoint } } });
-      // Per-address cap: keep the newest CAP, evict the rest (oldest first).
-      const owned = await tx.pushSubscription.findMany({
-        where: { address },
-        orderBy: { id: "desc" },
-        select: { id: true },
-      });
-      if (owned.length > PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP) {
-        const evict = owned.slice(PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP).map((r) => r.id);
-        await tx.pushSubscription.deleteMany({ where: { id: { in: evict } } });
+    // SERIALIZABLE + bounded retry: under read committed, two concurrent
+    // upserts can each miss the other's uncommitted row, defeating BOTH
+    // replace-by-session and the per-address cap (parallel authenticated
+    // POSTs could exceed the cap and grow the table — the PR-review finding).
+    // Serializable makes the read-check-evict sequence conflict instead; a
+    // conflicting loser (P2034) re-runs against the winner's committed rows.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.prisma.$transaction(
+          async (tx) => {
+            // Idempotent on endpoint (re-home a re-subscribed endpoint, never duplicate).
+            await tx.pushSubscription.upsert({
+              where: { endpoint: sub.endpoint },
+              create: { address, sessionId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+              update: { address, sessionId, p256dh: sub.p256dh, auth: sub.auth },
+            });
+            // Replace-by-session: drop this session's other endpoints.
+            await tx.pushSubscription.deleteMany({ where: { sessionId, endpoint: { not: sub.endpoint } } });
+            // Per-address cap: keep the newest CAP, evict the rest (oldest first).
+            const owned = await tx.pushSubscription.findMany({
+              where: { address },
+              orderBy: { id: "desc" },
+              select: { id: true },
+            });
+            if (owned.length > PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP) {
+              const evict = owned.slice(PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP).map((r) => r.id);
+              await tx.pushSubscription.deleteMany({ where: { id: { in: evict } } });
+            }
+          },
+          { isolationLevel: "Serializable" },
+        );
+        return;
+      } catch (err) {
+        if (!isSerializationConflict(err) || attempt >= UPSERT_SERIALIZATION_ATTEMPTS) throw err;
       }
-    });
+    }
   }
 
   async deleteForSession(sessionId: string): Promise<number> {
@@ -199,6 +262,24 @@ export class PrismaPushStore implements PushStore {
 
   async countForAddress(address: string): Promise<number> {
     return this.prisma.pushSubscription.count({ where: { address } });
+  }
+
+  async sweepOrphans(now: Date): Promise<number> {
+    // One atomic anti-join DELETE — no cross-client transaction needed; the
+    // per-tick re-run IS the consistency mechanism. The liveness predicate
+    // mirrors the session model's isLive() exactly: absolute ceiling
+    // (`expiresAt > now`) AND the sliding bound
+    // (`lastRefreshAt > now - SESSION_IDLE_SECONDS`). Both tables live in
+    // the `app` schema (ADR-001), so `app_writer` reaches both.
+    const idleCutoff = new Date(now.getTime() - SESSION_IDLE_SECONDS * 1000);
+    return this.prisma.$executeRaw`
+      DELETE FROM "app"."push_subscriptions" ps
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "app"."sessions" s
+        WHERE s."id" = ps."sessionId"
+          AND s."expiresAt" > ${now}
+          AND s."lastRefreshAt" > ${idleCutoff}
+      )`;
   }
 }
 

@@ -33,11 +33,12 @@ self.addEventListener("push", function (event) {
     data = {};
   }
   var kind = typeof data.kind === "string" ? data.kind : "";
-  // App-relative deep links only (a single "/" then a non-"/" path) — the
-  // server already enforces this shape (pushPayloadSchema); re-checking at the
-  // SW entry means even a forged payload can never open an external URL.
+  // App-relative deep links only, by the SAME character allowlist the server
+  // enforces (pushPayloadSchema) — not a blocklist: URL canonicalization
+  // treats "\" as "/", so "/\attacker.example" would otherwise resolve
+  // off-origin. Anything not matching falls back to the App root.
   var url =
-    typeof data.url === "string" && data.url.charAt(0) === "/" && data.url.charAt(1) !== "/"
+    typeof data.url === "string" && /^\/(?:[A-Za-z0-9_-][A-Za-z0-9/_-]*)?$/.test(data.url)
       ? data.url
       : "/";
   var copy = Object.prototype.hasOwnProperty.call(KIND_COPY, kind) ? KIND_COPY[kind] : FALLBACK;

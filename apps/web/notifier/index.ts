@@ -227,6 +227,8 @@ export interface TickResult {
   inserted: Record<string, number>;
   errors: Record<string, string>;
   swept: number;
+  /** Orphaned push subscriptions removed by the invariant sweep (plan §2.4). */
+  pushSwept: number;
 }
 
 /**
@@ -250,7 +252,18 @@ export async function runTick(deps: NotifierDeps): Promise<TickResult> {
   } catch (err) {
     deps.log.error("notifier sweep failed", { reason: err instanceof Error ? err.message : String(err) });
   }
-  return { inserted, errors, swept };
+  let pushSwept = 0;
+  try {
+    // Invariant sweep (the push-token-deletion gate's backstop): no token
+    // outlives its session — covers browsers that never present their stale
+    // cookie and crash remnants of the two-step deletion chain. Runs even
+    // when push is UNconfigured: tokens are created by the web tier, and
+    // deletion hygiene must not depend on VAPID being set here.
+    pushSwept = await deps.pushStore.sweepOrphans(deps.now());
+  } catch (err) {
+    deps.log.error("push orphan sweep failed", { reason: err instanceof Error ? err.message : String(err) });
+  }
+  return { inserted, errors, swept, pushSwept };
 }
 
 /** Drive `runTick` every `tickSeconds` until `signal` aborts. */

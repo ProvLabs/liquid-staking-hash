@@ -8,6 +8,9 @@
 //   2. logout           → the deletion chain removes them with the session.
 //   3. session expiry   → a stale cookie's sweep removes them with the remnant.
 //   4. dead endpoint    → a 404/410 at send time prunes the row.
+//   5. invariant sweep  → the notifier tick deletes any token whose session is
+//      missing or expired — the browser that NEVER presents its stale cookie,
+//      and crash remnants of the two-step chain (PR-review fix).
 //
 // …and nothing else recreates a token (only an explicit opt-in POST does).
 
@@ -17,8 +20,8 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "~/config/config.server";
 import {
   getPushStore,
+  InMemoryPushStore,
   resetPushStoreForTests,
-  type InMemoryPushStore,
 } from "~/lib/models/push.server";
 import { InMemorySessionStore, type SessionRow } from "~/lib/models/session.server";
 import { deleteSubscriptionsForSession } from "~/push/push.server";
@@ -108,6 +111,35 @@ describe("push-token deletion (the SECURITY.md accepted exception's condition)",
       sender,
       log: silentLog,
     });
+    expect(await pushStore.countForAddress(ADDRESS)).toBe(0);
+  });
+
+  it("5. invariant sweep: a never-returning browser's token dies when its session does", async () => {
+    // No cookie is ever presented after opt-in — paths 1–3 never fire. The
+    // notifier tick's sweep alone must revoke the token once the session is
+    // past its bounds (liveness delegated to the session store's own rule).
+    const sessionStore = new InMemorySessionStore();
+    const pushStore = new InMemoryPushStore(
+      async (sessionId, at) => (await sessionStore.getSession(sessionId, at)) !== null,
+    );
+    await seededSession(sessionStore, pushStore);
+    // While the session lives, the sweep removes nothing.
+    expect(await pushStore.sweepOrphans(NOW)).toBe(0);
+    expect(await pushStore.countForAddress(ADDRESS)).toBe(1);
+    // Past the absolute ceiling, with NO request ever made: swept.
+    const later = new Date(NOW.getTime() + (SESSION_ABSOLUTE_TTL_SECONDS + 1) * 1000);
+    expect(await pushStore.sweepOrphans(later)).toBe(1);
+    expect(await pushStore.countForAddress(ADDRESS)).toBe(0);
+  });
+
+  it("5b. invariant sweep: a crash remnant (session row GONE, token left) is swept", async () => {
+    const sessionStore = new InMemorySessionStore();
+    const pushStore = new InMemoryPushStore(
+      async (sessionId, at) => (await sessionStore.getSession(sessionId, at)) !== null,
+    );
+    // A token whose session never made it / was deleted first: orphan.
+    await pushStore.upsertForSession(ADDRESS, "sess-crash-remnant", SUB);
+    expect(await pushStore.sweepOrphans(NOW)).toBe(1);
     expect(await pushStore.countForAddress(ADDRESS)).toBe(0);
   });
 

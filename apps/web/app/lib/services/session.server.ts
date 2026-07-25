@@ -155,15 +155,20 @@ export async function logout(
  *
  * NB: this is a two-step delete, not one DB transaction — 5.1/6.2 give the
  * session and push stores SEPARATE Prisma clients, so cross-store atomicity is
- * not available without unifying them. The security property (no push token
- * survives session removal) still holds: `deleteForSession` is called reliably
- * on every removal path, and a crash between the two steps leaves at most an
- * orphaned token that dead-endpoint pruning (404/410) or a login-replace
- * removes. Push is latency-sugar (§10.4), never load-bearing.
+ * not available without unifying them (the recorded post-milestone follow-on).
+ * The security property (no push token outlives its session) holds by two
+ * mechanisms instead:
+ *   * ORDER: push rows are deleted FIRST, so a failure between the steps
+ *     strands a harmless session remnant (retried on the next logout attempt
+ *     or swept by the stale-cookie path below) — never a live token;
+ *   * the notifier tick's invariant sweep (`PushStore.sweepOrphans`) deletes
+ *     any subscription whose session is missing or expired, every tick —
+ *     covering crash remnants AND browsers that never present their stale
+ *     cookie. Push is latency-sugar (§10.4), never load-bearing.
  */
 async function destroySession(store: SessionStore, pushStore: PushStore, id: string): Promise<void> {
-  await store.deleteSession(id);
   await pushStore.deleteForSession(id);
+  await store.deleteSession(id);
 }
 
 /**

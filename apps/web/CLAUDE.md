@@ -164,9 +164,15 @@ End-user web interface. Production quality.
   wired in `app/lib/services/session.server.ts` (`destroySession`): logout and
   the stale-cookie expiry sweep remove the session's push subscriptions (a
   two-step delete, not one transaction — 5.1/6.2 use separate Prisma clients;
-  the security property holds because deletion fires reliably on every removal
-  path, backstopped by 404/410 pruning + login-replace). New standing gates:
-  **`test/push-token-deletion.test.ts`** (all four deletion paths) and
+  push rows are deleted FIRST so a failure strands a session remnant, never a
+  token). The "no token outlives its session" property is enforced by the
+  notifier tick's **invariant sweep** (`PushStore.sweepOrphans`: one anti-join
+  DELETE mirroring the session liveness rule) — it removes tokens of expired
+  sessions whose browser never returns and any crash remnant, and runs whether
+  or not VAPID is configured; subscription upserts run **Serializable** with a
+  bounded P2034 retry so concurrent POSTs cannot defeat replace-by-session or
+  the per-address cap. New standing gates:
+  **`test/push-token-deletion.test.ts`** (all deletion paths incl. the sweep) and
   `test/push-payload.test.ts` (the closed `{ kind, url }` body); the notifier +
   notifier-config suites gain fan-out/VAPID cases.
 - The session layer mints the short-lived scoped service assertions
@@ -291,7 +297,9 @@ Playwright suite in the pinned Playwright image. Security-executable gates
 - **Push-token deletion** (standing from PR 6.3, `test/push-token-deletion.test.ts`):
   the SECURITY.md accepted exception's condition made mechanical — an opt-in,
   opaque, revocable Web Push token is deleted on ALL of opt-out, logout, session
-  expiry/removal (the deletion chain), and dead-endpoint (404/410) pruning; the
+  expiry/removal (the deletion chain), dead-endpoint (404/410) pruning, and the
+  notifier tick's invariant sweep (any token whose session is missing or expired,
+  covering never-returning browsers and crash remnants); the
   push body is the closed `{ kind, url }` (`test/push-payload.test.ts`), never
   amounts/addresses/ids.
 

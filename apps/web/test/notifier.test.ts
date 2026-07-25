@@ -430,6 +430,22 @@ describe("notifier: failure isolation + retention", () => {
     expect(serialized).not.toContain("AUTH-MATERIAL");
   });
 
+  it("the tick's invariant sweep removes push tokens whose session is dead", async () => {
+    // Wiring gate for the push-token-deletion backstop: runTick must run the
+    // orphan sweep even with push UNconfigured (no sender) — deletion hygiene
+    // never depends on VAPID being set on the notifier host.
+    const store = new InMemoryAlertStore(() => NOW);
+    const pushStore = new InMemoryPushStore(() => false); // every session dead
+    await pushStore.upsertForSession(OWNER, "sess-dead", {
+      endpoint: "https://push.example/ep/1",
+      p256dh: "x".repeat(20),
+      auth: "y".repeat(10),
+    });
+    const result = await runTick(makeDeps(store, {}, { pushStore })); // no pushSender
+    expect(result.pushSwept).toBe(1);
+    expect(await pushStore.countForAddress(OWNER)).toBe(0);
+  });
+
   it("the retention sweep on the tick deletes aged notifications", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     // A read notification older than the absolute window (delivered long ago).

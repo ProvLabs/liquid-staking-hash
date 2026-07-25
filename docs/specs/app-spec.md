@@ -1069,7 +1069,15 @@ Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notificatio
 > SCRUBBED, never the tick); a `404`/`410` **prunes** the dead subscription
 > (revocability in reverse). **Deletion chain:** a token is deleted on opt-out,
 > logout, session expiry/removal, and dead-endpoint pruning — the standing
-> `test/push-token-deletion.test.ts` gate. VAPID config is all-or-none; absent,
+> `test/push-token-deletion.test.ts` gate. The chain deletes push rows BEFORE
+> the session row (a failure strands a harmless session remnant, never a
+> token), and the notifier tick runs an **invariant sweep**
+> (`PushStore.sweepOrphans`, one anti-join DELETE mirroring the session
+> liveness rule): any token whose session is missing or expired is removed
+> even if that browser never returns — the sweep runs whether or not VAPID is
+> configured. Subscription upserts run **Serializable** (bounded P2034 retry),
+> so concurrent POSTs cannot defeat replace-by-session or the per-address cap.
+> VAPID config is all-or-none; absent,
 > the notifier records in-app only and the settings block says "not configured".
 
 ---
@@ -1151,9 +1159,12 @@ This section encodes boundary §5 as build requirements.
   > "deleted on opt-out" clause of the accepted exception is now an enforced,
   > CI-gated mechanism, not a promise. A push token (`push_subscriptions`, §9.1)
   > is deleted on **all** of: opt-out (the DELETE route), logout, session
-  > expiry/removal (the session-lifecycle deletion chain), and dead-endpoint
-  > (`404`/`410`) pruning at send time — asserted by the standing
-  > `test/push-token-deletion.test.ts` (master plan §4). The token triple
+  > expiry/removal (the session-lifecycle deletion chain), dead-endpoint
+  > (`404`/`410`) pruning at send time, and the notifier tick's **invariant
+  > sweep** — a per-tick anti-join DELETE removing any token whose session is
+  > missing or expired, which covers browsers that never present their stale
+  > cookie and any crash remnant of the two-step chain — all asserted by the
+  > standing `test/push-token-deletion.test.ts` (master plan §4). The token triple
   > (`endpoint`/`p256dh`/`auth`) is opaque and NEVER logged (endpoint URLs can
   > fingerprint the browser vendor — treated as secrets-adjacent; the fan-out
   > scrubs them). The single new dependency is `web-push` (lockfile-pinned,

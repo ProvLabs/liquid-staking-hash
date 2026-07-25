@@ -120,7 +120,14 @@ type PrismaClientLike = {
 };
 
 export class PrismaSessionStore implements SessionStore {
-  constructor(private readonly prisma: PrismaClientLike) {}
+  private readonly prisma: PrismaClientLike;
+
+  // Explicit field assignment (not a parameter property): push.server.ts —
+  // loaded by the notifier's strip-only-TS runtime — imports this module for
+  // SESSION_IDLE_SECONDS, so it must stay erasable-syntax-only.
+  constructor(prisma: PrismaClientLike) {
+    this.prisma = prisma;
+  }
 
   async createNonce(nonce: string, address: string, expiresAt: Date): Promise<void> {
     await this.prisma.sessionNonce.create({ data: { nonce, address, expiresAt } });

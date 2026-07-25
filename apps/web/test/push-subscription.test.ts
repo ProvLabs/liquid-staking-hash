@@ -15,8 +15,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "~/config/config.server";
 import {
   getPushStore,
+  PrismaPushStore,
   PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP,
   resetPushStoreForTests,
+  UPSERT_SERIALIZATION_ATTEMPTS,
   type InMemoryPushStore,
 } from "~/lib/models/push.server";
 import {
@@ -137,6 +139,96 @@ describe("opt-in upsert semantics", () => {
     const endpoints = s.listForAddressSync(A).map((r) => r.endpoint);
     expect(endpoints).not.toContain("https://push.example/ep/0");
     expect(endpoints).toContain(`https://push.example/ep/${total - 1}`);
+  });
+});
+
+// ── PrismaPushStore query shaping (the alerts-models capturing precedent) ──
+// Pins the two PR-review mechanisms the in-memory store can't express:
+// SERIALIZABLE upsert (+ bounded P2034 retry) and the sweep's anti-join SQL.
+
+interface Call {
+  method: string;
+  args: unknown;
+}
+
+function capturingPrisma(recorded: Call[], opts?: { conflicts?: number }) {
+  let conflictsLeft = opts?.conflicts ?? 0;
+  const delegate = {
+    upsert: (args: unknown) => {
+      recorded.push({ method: "upsert", args });
+      return Promise.resolve({});
+    },
+    deleteMany: (args: unknown) => {
+      recorded.push({ method: "deleteMany", args });
+      return Promise.resolve({ count: 0 });
+    },
+    findMany: (args: unknown) => {
+      recorded.push({ method: "findMany", args });
+      return Promise.resolve([]);
+    },
+    count: (args: unknown) => {
+      recorded.push({ method: "count", args });
+      return Promise.resolve(0);
+    },
+  };
+  return {
+    pushSubscription: delegate,
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>, options?: unknown) => {
+      recorded.push({ method: "$transaction", args: options });
+      if (conflictsLeft > 0) {
+        conflictsLeft -= 1;
+        const err = new Error("write conflict") as Error & { code: string };
+        err.code = "P2034"; // Prisma's serialization-failure code
+        throw err;
+      }
+      return fn({ pushSubscription: delegate });
+    },
+    $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => {
+      recorded.push({ method: "$executeRaw", args: { sql: strings.join("$?"), values } });
+      return Promise.resolve(0);
+    },
+  };
+}
+
+describe("PrismaPushStore query shaping (concurrency + invariant sweep)", () => {
+  const SUB = { endpoint: "https://push.example/ep/1", p256dh: P256, auth: AUTH };
+
+  it("upsertForSession runs its read-check-evict transaction SERIALIZABLE", async () => {
+    const recorded: Call[] = [];
+    const s = new PrismaPushStore(capturingPrisma(recorded) as never);
+    await s.upsertForSession(A, "sess-1", SUB);
+    const txn = recorded.find((c) => c.method === "$transaction")!;
+    expect(txn.args).toEqual({ isolationLevel: "Serializable" });
+  });
+
+  it("retries a serialization conflict (P2034), then surfaces a persistent one", async () => {
+    // Two conflicts then success: the caller never sees them.
+    const recorded: Call[] = [];
+    const s = new PrismaPushStore(capturingPrisma(recorded, { conflicts: UPSERT_SERIALIZATION_ATTEMPTS - 1 }) as never);
+    await s.upsertForSession(A, "sess-1", SUB);
+    expect(recorded.filter((c) => c.method === "$transaction")).toHaveLength(UPSERT_SERIALIZATION_ATTEMPTS);
+    // Persistent conflict: bounded — rethrown after the attempt budget.
+    const recorded2: Call[] = [];
+    const s2 = new PrismaPushStore(capturingPrisma(recorded2, { conflicts: 99 }) as never);
+    await expect(s2.upsertForSession(A, "sess-1", SUB)).rejects.toThrow("write conflict");
+    expect(recorded2.filter((c) => c.method === "$transaction")).toHaveLength(UPSERT_SERIALIZATION_ATTEMPTS);
+  });
+
+  it("sweepOrphans is ONE anti-join DELETE mirroring the session liveness rule", async () => {
+    const recorded: Call[] = [];
+    const s = new PrismaPushStore(capturingPrisma(recorded) as never);
+    const now = new Date("2026-07-24T12:00:00Z");
+    await s.sweepOrphans(now);
+    const raw = recorded.find((c) => c.method === "$executeRaw");
+    expect(raw).toBeDefined();
+    const { sql, values } = raw!.args as { sql: string; values: unknown[] };
+    expect(sql).toContain('DELETE FROM "app"."push_subscriptions"');
+    expect(sql).toContain("NOT EXISTS");
+    expect(sql).toContain('"app"."sessions"');
+    expect(sql).toContain('"expiresAt"');
+    expect(sql).toContain('"lastRefreshAt"');
+    // Both liveness bounds ride as PARAMETERS: now + the 24 h idle cutoff.
+    expect(values).toEqual([now, new Date("2026-07-23T12:00:00Z")]);
   });
 });
 
