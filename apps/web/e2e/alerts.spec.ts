@@ -24,3 +24,16 @@ test("personal alert routes reject anonymous requests with 401", async ({ page }
   });
   expect(post.status()).toBe(401);
 });
+
+test("the push-subscription route rejects anonymous requests (M6.3)", async ({ page }) => {
+  // The per-browser opt-in is session-gated: POST and DELETE both 401 without
+  // a session. The authenticated opt-in states (unsupported/not-configured/
+  // enable/disable) need a real session + browser push and ride the live lane
+  // (the M6.2 authenticated-settings precedent — offline has no session).
+  const post = await page.request.post("/push/subscription", {
+    data: { endpoint: "https://push.example/ep", keys: { p256dh: "x", auth: "y" } },
+  });
+  expect(post.status()).toBe(401);
+  const del = await page.request.delete("/push/subscription");
+  expect(del.status()).toBe(401);
+});

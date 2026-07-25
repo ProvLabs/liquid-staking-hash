@@ -1,12 +1,13 @@
 {
-  "comment": "Server-only env vars for the bundle-secret gate (SECURITY.md / app-spec §7): the gate builds with a sentinel value in each of these and fails if any sentinel reaches build/client. Includes vars documented but not yet consumed, so the gate is already standing when they land. test/client-config.test.ts asserts every uncommented .env.example key is classified either here or as client-safe. WALLETCONNECT_PROJECT_ID moved to clientSafeEnv in PR 5.1 (§7 allowlist amendment: a WC project id is public by design — it rides in every pairing URI). SESSION_SECRET was retired in PR 5.1: sessions are opaque random ids over a server-side row; nothing to sign.",
+  "comment": "Server-only env vars for the bundle-secret gate (SECURITY.md / app-spec §7): the gate builds with a sentinel value in each of these and fails if any sentinel reaches build/client. Includes vars documented but not yet consumed, so the gate is already standing when they land. test/client-config.test.ts asserts every uncommented .env.example key is classified either here or as client-safe. WALLETCONNECT_PROJECT_ID moved to clientSafeEnv in PR 5.1 (§7 allowlist amendment: a WC project id is public by design — it rides in every pairing URI). M6.3 (§7 allowlist amendment): WEB_PUSH_VAPID_PUBLIC_KEY is client-safe (a VAPID public key ships in pushManager.subscribe); WEB_PUSH_VAPID_PRIVATE_KEY and WEB_PUSH_VAPID_SUBJECT stay server-only. SESSION_SECRET was retired in PR 5.1: sessions are opaque random ids over a server-side row; nothing to sign.",
   "serverOnly": [
     "LCD_URL",
     "CONSOLE_CHAIN_ID",
     "DATABASE_URL",
     "API_SERVICE_ASSERTION_KEY",
     "API_URL",
-    "WEB_PUSH_VAPID_PRIVATE_KEY"
+    "WEB_PUSH_VAPID_PRIVATE_KEY",
+    "WEB_PUSH_VAPID_SUBJECT"
   ],
   "clientSafeEnv": [
     "APP_ENV",
@@ -15,7 +16,8 @@
     "VAULT_ADDRESS",
     "CONSOLE_URL",
     "WALLETCONNECT_PROJECT_ID",
-    "EXPLORER_URL"
+    "EXPLORER_URL",
+    "WEB_PUSH_VAPID_PUBLIC_KEY"
   ],
   "toolingOnly": ["NVHASH_MOCK", "NVHASH_MOCK_LIVE_DOWN", "PORT"]
 }

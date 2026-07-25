@@ -27,6 +27,9 @@ export default [
   // mark-read and effective-settings CRUD, outside `:lang?` like the above.
   route("alerts/notifications", "routes/alerts-notifications.tsx"),
   route("alerts/rules", "routes/alerts-rules.tsx"),
+  // Web Push subscription management (M6.3 §2.2): session-gated per-browser
+  // opt-in/opt-out, outside `:lang?` like the alerts routes above.
+  route("push/subscription", "routes/push-subscription.tsx"),
   route(":lang?", "routes/locale.tsx", [
     index("routes/home.tsx"),
     // §8.0 nav targets (plan 4.1): stubs until their real pages land in

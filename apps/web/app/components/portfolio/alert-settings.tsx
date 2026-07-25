@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 
+import { PushSettings } from "~/components/portfolio/push-settings";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
 // Alert settings (app-spec §8.2; plan 6.2 §2.6) — joins the Portfolio page,
@@ -102,6 +103,10 @@ export function AlertSettings({ locale }: { locale: Locale }) {
           })}
         </ul>
       )}
+
+      {/* Per-browser Web Push opt-in (M6.3) — additive latency, never
+          load-bearing: every kind above still renders in-app (§10.4). */}
+      <PushSettings locale={locale} />
     </section>
   );
 }

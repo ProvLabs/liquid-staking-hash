@@ -281,7 +281,8 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
 | `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. **Client-safe** (PR 5.1 allowlist amendment): a WC project id is public by design — it rides in every pairing URI. |
 | `EXPLORER_URL` | block-explorer base URL | Portfolio transaction verify-links (§8.2). **Client-safe** (PR 6.1 allowlist amendment): an explorer URL is public by construction. Optional; absent, history rows render a plain truncated txhash rather than a broken link. |
-| `WEB_PUSH_VAPID_*` | — | Web Push credentials `[DECIDE §14.7]`. |
+| `WEB_PUSH_VAPID_PUBLIC_KEY` | — | Web Push VAPID public key (§10.4, §14.7). **Client-safe** (PR 6.3 allowlist amendment): public by construction — it ships in every `pushManager.subscribe`. Optional; the three VAPID vars are **all-or-none** (a partial config fails boot), and absent config renders the honest "not configured" push state. |
+| `WEB_PUSH_VAPID_PRIVATE_KEY` / `WEB_PUSH_VAPID_SUBJECT` | — | Web Push VAPID signing key and `sub` contact (`mailto:`/https). **Server-only** — never past the client-safe subset; consumed by the notifier fan-out (PR 6.3). |
 | denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
 | `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
 | `RECONCILE_TOLERANCE` / cadence | tolerance per metric; ~1 min cadence | §12 reconciler thresholds. |
@@ -325,6 +326,23 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 > event recorded here in the same change as the allowlist edit, and it stays
 > subject to the standing bundle-secret gate (`check:bundle` +
 > `test/client-config.test.ts`).
+
+> **Revision 2026-07-24 (PR 6.3 commit A, `WEB_PUSH_VAPID_*`):** the three
+> Web Push VAPID vars become consumed config (`apps/web/app/config/config.server.ts`),
+> replacing the `[DECIDE §14.7]` placeholder. They are **all-or-none**: a
+> deployment sets all three or none, and a partial config fails boot (a
+> `superRefine` at the config boundary — SECURITY.md: bound at entry, reject
+> never continue). `WEB_PUSH_VAPID_PUBLIC_KEY` is **amended into the client-safe
+> allowlist** (`apps/web/app/config/client.ts`): a VAPID public key is public by
+> construction — it ships in every `pushManager.subscribe` call, so it must
+> cross to the browser to subscribe. `WEB_PUSH_VAPID_PRIVATE_KEY` (the signing
+> key) and `WEB_PUSH_VAPID_SUBJECT` (the VAPID `sub` contact) stay **server-only**
+> (`scripts/server-only-env.json`); `check:bundle` classifies all three and the
+> service worker (`apps/web/public/push-sw.js`) holds no keys. Absent config
+> renders the honest "not configured for this environment" push state (devnet
+> default) and exposes no subscribe path. The client-visible addition is
+> recorded here in the same change as the allowlist edit, and stays under the
+> standing bundle-secret gate (`check:bundle` + `test/client-config.test.ts`).
 
 ### 8.0 Site map & global chrome
 

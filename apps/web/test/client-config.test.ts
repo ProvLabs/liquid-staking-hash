@@ -48,6 +48,41 @@ describe("client-safe config subset (§7)", () => {
     expect(overlap).toEqual([]);
   });
 
+  it("the VAPID public key is client-safe; private key/subject never cross (M6.3)", () => {
+    const withPush = loadConfig({
+      ...SAMPLE_ENV,
+      WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86),
+      WEB_PUSH_VAPID_PRIVATE_KEY: "y".repeat(43),
+      WEB_PUSH_VAPID_SUBJECT: "mailto:ops@example.com",
+    } as NodeJS.ProcessEnv);
+    const client = toClientConfig(withPush);
+    expect(client.webPushVapidPublicKey).toBe("B" + "x".repeat(86));
+    const serialized = JSON.stringify(client);
+    expect(serialized).not.toContain("y".repeat(43)); // private key
+    expect(serialized).not.toContain("mailto:ops@example.com"); // subject
+    expect(Object.keys(client)).not.toContain("webPushVapidPrivateKey");
+    expect(Object.keys(client)).not.toContain("webPushVapidSubject");
+  });
+
+  it("absent VAPID config yields the honest not-configured state (undefined key)", () => {
+    const client = toClientConfig(loadConfig(SAMPLE_ENV));
+    expect(client.webPushVapidPublicKey).toBeUndefined();
+  });
+
+  it("a PARTIAL VAPID config is a boot error (all-or-none, plan §2.2)", () => {
+    expect(() =>
+      loadConfig({ ...SAMPLE_ENV, WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86) } as NodeJS.ProcessEnv),
+    ).toThrow(/Invalid web configuration/);
+    expect(() =>
+      loadConfig({
+        ...SAMPLE_ENV,
+        WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86),
+        WEB_PUSH_VAPID_PRIVATE_KEY: "y".repeat(43),
+        // subject missing → partial
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/Invalid web configuration/);
+  });
+
   it("every uncommented .env.example key is classified", () => {
     const example = readFileSync(join(__dirname, "../.env.example"), "utf8");
     const keys = [...example.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]!);

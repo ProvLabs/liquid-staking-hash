@@ -19,6 +19,10 @@ export const CLIENT_SAFE_CONFIG_KEYS = [
   // M6.1 (§7 allowlist amendment): a block-explorer base URL is public by
   // construction (verify-link target for the Portfolio history).
   "explorerUrl",
+  // M6.3 (§7 allowlist amendment): a VAPID public key is public by
+  // construction — it ships in every `pushManager.subscribe` call. The private
+  // key and subject stay server-only (scripts/server-only-env.json).
+  "webPushVapidPublicKey",
 ] as const;
 
 export type ClientSafeConfigKey = (typeof CLIENT_SAFE_CONFIG_KEYS)[number];
@@ -33,4 +37,7 @@ export interface ClientConfig {
   walletConnectProjectId: string | null;
   /** undefined = no explorer configured (history rows omit the verify-link). */
   explorerUrl: string | undefined;
+  /** undefined = Web Push not configured for this environment (the honest
+   *  "not configured" state; no subscribe path exists). Public by construction. */
+  webPushVapidPublicKey: string | undefined;
 }

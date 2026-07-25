@@ -131,6 +131,27 @@ End-user web interface. Production quality.
   (alerts join it), offline `e2e/alerts.spec.ts`, skip-clean
   `e2e-live/alerts.spec.ts`. Offline e2e has no session, so the authenticated
   settings section is not offline-axe'd (the portfolio precedent).
+- **Web Push channel (PR 6.3, app-spec §10.4/§12.3/§14.7):** the ONE accepted
+  SECURITY.md exception — opt-in, opaque, revocable push tokens. **Service
+  worker** `public/push-sw.js` is a **static file served straight from `public/`
+  with NO bundler involvement** (auditable as one small file): it holds no keys,
+  performs **no fetches** (no `fetch` handler), caches nothing, and renders a
+  notification from the closed `{ kind, url }` payload using a built-in generic
+  per-kind copy map (identifier-free; v1 `en`-only, revisited with the first
+  added locale). The `push_subscriptions` model (`prisma/push_subscriptions.prisma`)
+  is exactly the W3C `PushSubscription.toJSON()` triple plus `address`/`sessionId`/
+  `createdAt` — gated by `test/app-schema-allowlist.test.ts`; the triple is opaque
+  and **never logged**. **Models port** `app/lib/models/push.server.ts` (`PushStore`,
+  Prisma + in-memory) enforces opt-in-only creation, replace-by-session (never
+  accumulate), and a per-address cap (oldest evicted). The session-gated resource
+  route `app/routes/push-subscription.tsx` (outside `:lang?`, the `alerts-*`
+  precedent) POST-upserts / DELETE-removes scoped to the session id; the acting
+  address and session id come only from `requireSession` + the cookie, never a
+  body field. **Config:** `WEB_PUSH_VAPID_PUBLIC_KEY` is client-safe (§7 allowlist);
+  private key/subject stay server-only; the three are all-or-none at boot. New
+  standing gates: `test/push-subscription.test.ts`, the extended allowlist +
+  `session-scope` + `client-config` suites. (The push-token-deletion standing
+  gate and the notifier fan-out land in commit B.)
 - The session layer mints the short-lived scoped service assertions
   `services/api` requires for address-scoped reads (ADR-001 Decision 2);
   `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client
