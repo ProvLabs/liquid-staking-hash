@@ -54,12 +54,13 @@ describe("InMemoryAlertStore contract", () => {
     expect((await store.listOverrides(A)).get("nav_step_posted")).toBe(false);
   });
 
-  it("commitTick inserts skipping duplicates and advances the cursor", async () => {
+  it("commitTick returns the NEWLY-INSERTED candidates, skipping duplicates, and advances the cursor", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     const n1 = await store.commitTick("redemptions", "100", [candidate(A, "r1"), candidate(A, "r2")]);
-    expect(n1).toBe(2);
+    expect(n1).toHaveLength(2); // both new (the push fan-out set, plan §2.3)
     const n2 = await store.commitTick("redemptions", "250", [candidate(A, "r2"), candidate(A, "r3")]);
-    expect(n2).toBe(1); // r2 already present
+    expect(n2).toHaveLength(1); // r2 already present → only r3 returned
+    expect(n2[0]!.dedupeKey).toBe("r3");
     expect(await store.getCheckpoint("redemptions")).toBe("250");
     expect(await store.countUnread(A)).toBe(3);
   });
@@ -122,9 +123,11 @@ interface Call {
 function capturingPrisma(recorded: Call[]) {
   const tx = {
     notification: {
-      createMany: (args: unknown) => {
-        recorded.push({ method: "createMany", args });
-        return Promise.resolve({ count: (args as { data: unknown[] }).data.length });
+      // createManyAndReturn = INSERT … ON CONFLICT DO NOTHING RETURNING; the
+      // fake has no conflicts, so it echoes back all data rows as "inserted".
+      createManyAndReturn: (args: unknown) => {
+        recorded.push({ method: "createManyAndReturn", args });
+        return Promise.resolve((args as { data: Array<Record<string, unknown>> }).data);
       },
     },
     notifierCheckpoint: {
@@ -164,14 +167,14 @@ describe("PrismaAlertStore query shaping (security-critical)", () => {
     expect((wheres[1] as { id: { in: bigint[] } }).id.in).toEqual([1n, 2n]);
   });
 
-  it("commitTick inserts skipDuplicates AND upserts the checkpoint in one $transaction", async () => {
+  it("commitTick inserts skipDuplicates (RETURNING) AND upserts the checkpoint in one $transaction", async () => {
     const recorded: Call[] = [];
     const store = new PrismaAlertStore(capturingPrisma(recorded) as never);
     const n = await store.commitTick("redemptions", "250", [candidate(A, "r1")]);
-    expect(n).toBe(1);
+    expect(n).toHaveLength(1); // the newly-inserted candidate (the push fan-out set)
     const order = recorded.map((c) => c.method);
-    expect(order).toEqual(["$transaction", "createMany", "checkpoint.upsert"]);
-    const createMany = recorded.find((c) => c.method === "createMany")!.args as { skipDuplicates: boolean };
+    expect(order).toEqual(["$transaction", "createManyAndReturn", "checkpoint.upsert"]);
+    const createMany = recorded.find((c) => c.method === "createManyAndReturn")!.args as { skipDuplicates: boolean };
     expect(createMany.skipDuplicates).toBe(true); // ON CONFLICT DO NOTHING = the exactly-once gate
     const cp = recorded.find((c) => c.method === "checkpoint.upsert")!.args as { where: { stream: string }; update: { cursor: string } };
     expect(cp.where.stream).toBe("redemptions");
@@ -182,7 +185,7 @@ describe("PrismaAlertStore query shaping (security-critical)", () => {
     const recorded: Call[] = [];
     const store = new PrismaAlertStore(capturingPrisma(recorded) as never);
     const n = await store.commitTick("nav_step", "12", []);
-    expect(n).toBe(0);
-    expect(recorded.map((c) => c.method)).toEqual(["$transaction", "checkpoint.upsert"]); // no createMany
+    expect(n).toHaveLength(0);
+    expect(recorded.map((c) => c.method)).toEqual(["$transaction", "checkpoint.upsert"]); // no insert call
   });
 });

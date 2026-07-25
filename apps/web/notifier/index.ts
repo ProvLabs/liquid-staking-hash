@@ -35,8 +35,11 @@ import {
   evaluateNavSteps,
   evaluateRedemptions,
   type AlertKind,
+  type Candidate,
 } from "../app/lib/services/alerts.server.ts";
 import { getAlertStore, type AlertStore } from "../app/lib/models/alerts.server.ts";
+import { getPushStore, type PushStore } from "../app/lib/models/push.server.ts";
+import { fanOutPush, webPushSender, type PushSender } from "./push.ts";
 import { z } from "zod";
 
 /** Retention windows (plan §7 Q4 proposal values; the mechanism is the commitment). */
@@ -70,6 +73,17 @@ export interface NotifierDeps {
   factLimit: number;
   now: () => Date;
   log: Logger;
+  // ── Web Push fan-out (Commit B) ──
+  /** Subscription reads + dead-endpoint pruning for the delivery phase. */
+  pushStore: PushStore;
+  /** The push transport, or undefined when Web Push is unconfigured (no VAPID)
+   *  — fan-out then no-ops and in-app delivery stands alone (§10.4). */
+  pushSender?: PushSender;
+}
+
+/** Deliver a stream's newly-inserted notifications to push (never throws). */
+async function deliverPush(deps: NotifierDeps, inserted: readonly Candidate[]): Promise<void> {
+  await fanOutPush({ inserted, pushStore: deps.pushStore, sender: deps.pushSender, log: deps.log });
 }
 
 /** A garbage/absent cursor merely re-scans (dedupe absorbs) — never a throw. */
@@ -130,7 +144,9 @@ export async function runRedemptions(deps: NotifierDeps): Promise<number> {
   // Idle: nothing to insert and the cursor is unmoved — skip the commit
   // entirely (no empty checkpoint transaction per tick).
   if (candidates.length === 0 && newCursor === `${cursor.height}:${cursor.afterId}`) return 0;
-  return deps.store.commitTick("redemptions", newCursor, candidates);
+  const inserted = await deps.store.commitTick("redemptions", newCursor, candidates);
+  await deliverPush(deps, inserted); // outside the DB transaction (two-phase)
+  return inserted.length;
 }
 
 /** `operator_arrears` (default-on): operator present ∧ not opted out. */
@@ -148,7 +164,9 @@ export async function runArrears(deps: NotifierDeps): Promise<number> {
   // Cursor is the latest epoch in arrears (informational; dedupe is correctness).
   const newCursor = facts.reduce((m, f) => Math.max(m, f.epoch_index), cursor);
   if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
-  return deps.store.commitTick("arrears", String(newCursor), candidates);
+  const inserted = await deps.store.commitTick("arrears", String(newCursor), candidates);
+  await deliverPush(deps, inserted);
+  return inserted.length;
 }
 
 /** `vault_status` / `validator_set_incident` (default-off): opt-in fan-out. */
@@ -166,7 +184,9 @@ export async function runIncidents(deps: NotifierDeps): Promise<number> {
   const candidates = evaluateIncidents(facts, optInsForKind);
   const newCursor = facts.reduce((m, f) => Math.max(m, f.id), cursor);
   if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
-  return deps.store.commitTick("incidents", String(newCursor), candidates);
+  const inserted = await deps.store.commitTick("incidents", String(newCursor), candidates);
+  await deliverPush(deps, inserted);
+  return inserted.length;
 }
 
 /** `nav_step_posted` (default-off): opt-in fan-out over newly-settled epochs. */
@@ -183,7 +203,9 @@ export async function runNavSteps(deps: NotifierDeps): Promise<number> {
   const candidates = evaluateNavSteps(newIndexes, optIns);
   const newCursor = rows.reduce((m, r) => Math.max(m, r.epoch_index), cursor);
   if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
-  return deps.store.commitTick("nav_step", String(newCursor), candidates);
+  const inserted = await deps.store.commitTick("nav_step", String(newCursor), candidates);
+  await deliverPush(deps, inserted);
+  return inserted.length;
 }
 
 const STREAM_RUNNERS: ReadonlyArray<{ name: string; run: (d: NotifierDeps) => Promise<number> }> = [
@@ -256,7 +278,20 @@ async function main(): Promise<void> {
   const { loadNotifierConfig } = await import("./config.ts");
   const config = loadNotifierConfig(); // fail-fast on misconfig (loud exit)
   const store = await getAlertStore({ databaseUrl: config.databaseUrl, appEnv: "production" });
+  const pushStore = await getPushStore({ databaseUrl: config.databaseUrl, appEnv: "production" });
   const apiBase = config.apiBaseUrl.replace(/\/+$/, "");
+
+  // Web Push is OPTIONAL: with VAPID configured, fan-out delivers; without it,
+  // the notifier still records every notification in-app (§10.4) and simply
+  // sends no pushes (the honest "not configured" posture end-to-end).
+  const pushSender =
+    config.vapid === undefined
+      ? undefined
+      : webPushSender({
+          subject: config.vapid.subject,
+          publicKey: config.vapid.publicKey,
+          privateKey: config.vapid.privateKey,
+        });
 
   const deps: NotifierDeps = {
     store,
@@ -266,6 +301,8 @@ async function main(): Promise<void> {
     factLimit: config.factLimit,
     now: () => new Date(),
     log: consoleLogger,
+    pushStore,
+    pushSender,
   };
 
   const controller = new AbortController();
@@ -281,7 +318,12 @@ async function main(): Promise<void> {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
-  consoleLogger.info("notifier started", { apiBase, tickSeconds: config.tickSeconds, factLimit: config.factLimit });
+  consoleLogger.info("notifier started", {
+    apiBase,
+    tickSeconds: config.tickSeconds,
+    factLimit: config.factLimit,
+    push: pushSender === undefined ? "not-configured" : "enabled",
+  });
   await runLoop(deps, config.tickSeconds, controller.signal, sleep);
   process.exit(0);
 }

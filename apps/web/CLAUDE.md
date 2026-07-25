@@ -150,8 +150,25 @@ End-user web interface. Production quality.
   body field. **Config:** `WEB_PUSH_VAPID_PUBLIC_KEY` is client-safe (§7 allowlist);
   private key/subject stay server-only; the three are all-or-none at boot. New
   standing gates: `test/push-subscription.test.ts`, the extended allowlist +
-  `session-scope` + `client-config` suites. (The push-token-deletion standing
-  gate and the notifier fan-out land in commit B.)
+  `session-scope` + `client-config` suites. **Notifier fan-out + deletion chain
+  (PR 6.3 commit B):** after a stream's `commitTick` (now returning the
+  NEWLY-INSERTED candidates via `createManyAndReturn` = `INSERT … ON CONFLICT DO
+  NOTHING RETURNING`), the tick's delivery phase — OUTSIDE the DB transaction —
+  fans them out (`notifier/push.ts`) to the recipient's subscriptions via the
+  **`web-push`** package (the milestone's single new dependency, lockfile-pinned,
+  imported ONLY in the notifier so it never bundles; the client is unaffected).
+  The push body is the closed `{ kind, url }` from `toPushPayload(kind)` (derived
+  from the kind alone — no amounts/addresses/ids can leak, invariant 3). Push is
+  never load-bearing: a failed send logs (endpoint SCRUBBED) and drops (no retry
+  queue, at-most-once); a `404`/`410` prunes the row. The **deletion chain** is
+  wired in `app/lib/services/session.server.ts` (`destroySession`): logout and
+  the stale-cookie expiry sweep remove the session's push subscriptions (a
+  two-step delete, not one transaction — 5.1/6.2 use separate Prisma clients;
+  the security property holds because deletion fires reliably on every removal
+  path, backstopped by 404/410 pruning + login-replace). New standing gates:
+  **`test/push-token-deletion.test.ts`** (all four deletion paths) and
+  `test/push-payload.test.ts` (the closed `{ kind, url }` body); the notifier +
+  notifier-config suites gain fan-out/VAPID cases.
 - The session layer mints the short-lived scoped service assertions
   `services/api` requires for address-scoped reads (ADR-001 Decision 2);
   `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client
@@ -271,5 +288,11 @@ Playwright suite in the pinned Playwright image. Security-executable gates
   `test/app-schema-allowlist.test.ts` is the app-schema data-minimization
   gate. `test/wallet-adapter.test.ts` keeps the vendor registry closed.
 
-Later standing gates attach here per plan §4: push-token deletion (PR 6.3),
-aggregate-counter keying (PR 7.6).
+- **Push-token deletion** (standing from PR 6.3, `test/push-token-deletion.test.ts`):
+  the SECURITY.md accepted exception's condition made mechanical — an opt-in,
+  opaque, revocable Web Push token is deleted on ALL of opt-out, logout, session
+  expiry/removal (the deletion chain), and dead-endpoint (404/410) pruning; the
+  push body is the closed `{ kind, url }` (`test/push-payload.test.ts`), never
+  amounts/addresses/ids.
+
+Later standing gates attach here per plan §4: aggregate-counter keying (PR 7.6).

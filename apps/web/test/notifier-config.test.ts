@@ -44,4 +44,25 @@ describe("loadNotifierConfig", () => {
     expect(() => loadNotifierConfig({ ...BASE, DATABASE_URL: "mysql://x" })).toThrow();
     expect(() => loadNotifierConfig({ ...BASE, API_BASE_URL: "ftp://x" })).toThrow();
   });
+
+  it("push is optional: no VAPID → vapid undefined (in-app only, §10.4)", () => {
+    expect(loadNotifierConfig(BASE).vapid).toBeUndefined();
+  });
+
+  it("assembles the VAPID triple when all three are set", () => {
+    const config = loadNotifierConfig({
+      ...BASE,
+      WEB_PUSH_VAPID_PUBLIC_KEY: "pub",
+      WEB_PUSH_VAPID_PRIVATE_KEY: "priv",
+      WEB_PUSH_VAPID_SUBJECT: "mailto:ops@example.com",
+    });
+    expect(config.vapid).toEqual({ publicKey: "pub", privateKey: "priv", subject: "mailto:ops@example.com" });
+  });
+
+  it("a PARTIAL VAPID config is a boot error (all-or-none)", () => {
+    expect(() => loadNotifierConfig({ ...BASE, WEB_PUSH_VAPID_PUBLIC_KEY: "pub" })).toThrow(/all set|all unset/);
+    expect(() =>
+      loadNotifierConfig({ ...BASE, WEB_PUSH_VAPID_PUBLIC_KEY: "pub", WEB_PUSH_VAPID_PRIVATE_KEY: "priv" }),
+    ).toThrow(/all set|all unset/);
+  });
 });

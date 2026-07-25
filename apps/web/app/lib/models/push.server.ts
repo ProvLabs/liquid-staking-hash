@@ -47,6 +47,10 @@ export interface PushStore {
   upsertForSession(address: string, sessionId: string, sub: PushSubscriptionInput): Promise<void>;
   /** Delete every subscription for a session (opt-out + session removal). Count. */
   deleteForSession(sessionId: string): Promise<number>;
+  /** The address's subscriptions — the notifier fan-out target (Commit B). */
+  listForAddress(address: string): Promise<PushSubscriptionRecord[]>;
+  /** Prune one dead endpoint (a 404/410 at send time — Commit B). Count. */
+  deleteForEndpoint(endpoint: string): Promise<number>;
   /** Active subscription count for an address (cap tests / diagnostics). */
   countForAddress(address: string): Promise<number>;
 }
@@ -96,11 +100,22 @@ export class InMemoryPushStore implements PushStore {
     return count;
   }
 
+  async listForAddress(address: string): Promise<PushSubscriptionRecord[]> {
+    return this.listForAddressSync(address);
+  }
+
+  async deleteForEndpoint(endpoint: string): Promise<number> {
+    const idx = this.rows.findIndex((r) => r.endpoint === endpoint);
+    if (idx < 0) return 0;
+    this.rows.splice(idx, 1);
+    return 1;
+  }
+
   async countForAddress(address: string): Promise<number> {
     return this.rows.filter((r) => r.address === address).length;
   }
 
-  /** Test seam: the address's endpoints (Commit B fan-out mirrors this read). */
+  /** Test seam: the address's endpoints (synchronous mirror of listForAddress). */
   listForAddressSync(address: string): PushSubscriptionRecord[] {
     return this.rows
       .filter((r) => r.address === address)
@@ -125,7 +140,7 @@ interface PushPrismaLike {
   pushSubscription: {
     upsert(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<{ count: number }>;
-    findMany(args: unknown): Promise<Array<{ id: bigint }>>;
+    findMany(args: unknown): Promise<Array<{ id?: bigint; endpoint?: string; p256dh?: string; auth?: string }>>;
     count(args: unknown): Promise<number>;
   };
   $transaction<T>(fn: (tx: PushPrismaLike) => Promise<T>): Promise<T>;
@@ -166,6 +181,19 @@ export class PrismaPushStore implements PushStore {
 
   async deleteForSession(sessionId: string): Promise<number> {
     const result = await this.prisma.pushSubscription.deleteMany({ where: { sessionId } });
+    return result.count;
+  }
+
+  async listForAddress(address: string): Promise<PushSubscriptionRecord[]> {
+    const rows = await this.prisma.pushSubscription.findMany({
+      where: { address },
+      select: { endpoint: true, p256dh: true, auth: true },
+    });
+    return rows.map((r) => ({ endpoint: r.endpoint!, p256dh: r.p256dh!, auth: r.auth! }));
+  }
+
+  async deleteForEndpoint(endpoint: string): Promise<number> {
+    const result = await this.prisma.pushSubscription.deleteMany({ where: { endpoint } });
     return result.count;
   }
 

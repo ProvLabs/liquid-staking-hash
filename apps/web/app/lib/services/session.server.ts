@@ -22,6 +22,7 @@ import { z } from "zod";
 import { loginChallenge } from "~/lib/adr36";
 import { verifyAdr36 } from "~/lib/adr36-verify.server";
 import { getSessionStore, type SessionRow, type SessionStore } from "~/lib/models/session.server";
+import { getPushStore, type PushStore } from "~/lib/models/push.server";
 import type { WebConfig } from "~/config/config.server";
 
 export const NONCE_TTL_SECONDS = 5 * 60;
@@ -57,12 +58,25 @@ export interface SessionContext {
 export interface SessionDeps {
   store: SessionStore;
   now?: () => Date;
+  /**
+   * M6.3 push-token deletion chain (plan §2.4): removing a session removes its
+   * push subscriptions. Injected so the deletion gate can assert it
+   * (test/push-token-deletion.test.ts).
+   */
+  pushStore?: PushStore;
 }
 
-async function deps(config: WebConfig, override?: Partial<SessionDeps>): Promise<SessionDeps> {
+interface ResolvedDeps {
+  store: SessionStore;
+  now: () => Date;
+  pushStore: PushStore;
+}
+
+async function deps(config: WebConfig, override?: Partial<SessionDeps>): Promise<ResolvedDeps> {
   return {
     store: override?.store ?? (await getSessionStore(config)),
     now: override?.now ?? (() => new Date()),
+    pushStore: override?.pushStore ?? (await getPushStore(config)),
   };
 }
 
@@ -128,10 +142,28 @@ export async function logout(
   request: Request,
   override?: Partial<SessionDeps>,
 ): Promise<{ setCookie: string }> {
-  const { store } = await deps(config, override);
+  const { store, pushStore } = await deps(config, override);
   const id = sessionIdFromCookieHeader(request.headers.get("Cookie"));
-  if (id !== null) await store.deleteSession(id);
+  if (id !== null) await destroySession(store, pushStore, id);
   return { setCookie: clearSessionCookie(config) };
+}
+
+/**
+ * Remove a session AND its push subscriptions (plan 6.3 §2.4 — the deletion
+ * chain, a standing SECURITY.md-exception gate). Fired from logout and from the
+ * expiry-sweep path below; idempotent (a no-op for an already-gone id).
+ *
+ * NB: this is a two-step delete, not one DB transaction — 5.1/6.2 give the
+ * session and push stores SEPARATE Prisma clients, so cross-store atomicity is
+ * not available without unifying them. The security property (no push token
+ * survives session removal) still holds: `deleteForSession` is called reliably
+ * on every removal path, and a crash between the two steps leaves at most an
+ * orphaned token that dead-endpoint pruning (404/410) or a login-replace
+ * removes. Push is latency-sugar (§10.4), never load-bearing.
+ */
+async function destroySession(store: SessionStore, pushStore: PushStore, id: string): Promise<void> {
+  await store.deleteSession(id);
+  await pushStore.deleteForSession(id);
 }
 
 /**
@@ -144,12 +176,19 @@ export async function getSessionContext(
   request: Request,
   override?: Partial<SessionDeps>,
 ): Promise<SessionContext | null> {
-  const { store, now } = await deps(config, override);
+  const { store, now, pushStore } = await deps(config, override);
   const id = sessionIdFromCookieHeader(request.headers.get("Cookie"));
   if (id === null) return null;
   const at = now!();
   const row = await store.getSession(id, at);
-  if (row === null) return null;
+  if (row === null) {
+    // A well-formed cookie that resolves to no live session is an expired or
+    // already-removed session presented by a stale cookie: sweep its remnant
+    // and, via the deletion chain, its push subscriptions (plan §2.4). A no-op
+    // for a never-existed id, so a forged cookie costs only two empty deletes.
+    await destroySession(store, pushStore, id);
+    return null;
+  }
   if (at.getTime() - row.lastRefreshAt.getTime() >= SESSION_REFRESH_INTERVAL_SECONDS * 1000) {
     await store.refreshSession(id, at);
     await store.touchAddressActivity(row.address, at);
