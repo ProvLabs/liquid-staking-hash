@@ -25,12 +25,26 @@ export const notifierConfigSchema = z.object({
    * Web Push VAPID triple (plan 6.3 §2.3), OPTIONAL and ALL-OR-NONE: with all
    * three set the notifier fans out to push; with none set it records
    * notifications in-app only (the honest "not configured" posture). A PARTIAL
-   * VAPID config is a boot error — the `.superRefine` below (bound at entry,
-   * reject never continue). Push is never load-bearing (§10.4), so absence is a
-   * valid, non-degraded deployment, not a failure.
+   * VAPID config is a boot error — the imperative check in loadNotifierConfig
+   * (bound at entry, reject never continue). Push is never load-bearing
+   * (§10.4), so absence is a valid, non-degraded deployment, not a failure.
+   *
+   * Value shapes mirror the web config's bounds (config.server.ts): a
+   * malformed key/subject must fail HERE at boot, not at every send as a
+   * scrubbed `status: null` drop that masquerades as transport trouble.
    */
   vapid: z
-    .object({ subject: z.string(), publicKey: z.string(), privateKey: z.string() })
+    .object({
+      subject: z
+        .string()
+        .max(256)
+        .refine(
+          (s) => /^mailto:.+@.+/.test(s) || /^https:\/\//.test(s),
+          "expected a mailto: or https:// VAPID subject",
+        ),
+      publicKey: z.string().regex(/^[A-Za-z0-9_-]{80,200}$/, "expected a base64url VAPID public key"),
+      privateKey: z.string().regex(/^[A-Za-z0-9_-]{20,120}$/, "expected a base64url VAPID private key"),
+    })
     .optional(),
 });
 

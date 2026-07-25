@@ -33,7 +33,13 @@ self.addEventListener("push", function (event) {
     data = {};
   }
   var kind = typeof data.kind === "string" ? data.kind : "";
-  var url = typeof data.url === "string" ? data.url : "/";
+  // App-relative deep links only (a single "/" then a non-"/" path) — the
+  // server already enforces this shape (pushPayloadSchema); re-checking at the
+  // SW entry means even a forged payload can never open an external URL.
+  var url =
+    typeof data.url === "string" && data.url.charAt(0) === "/" && data.url.charAt(1) !== "/"
+      ? data.url
+      : "/";
   var copy = Object.prototype.hasOwnProperty.call(KIND_COPY, kind) ? KIND_COPY[kind] : FALLBACK;
   event.waitUntil(
     self.registration.showNotification(copy.title, {

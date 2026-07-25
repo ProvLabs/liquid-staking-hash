@@ -60,7 +60,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   // tokens deleted on opt-out/session removal. `address`/`sessionId` are the
   // existing public/scoping identifiers; the `endpoint`/`p256dh`/`auth` triple
   // IS the accepted-exception token material (opaque, never logged);
-  // `createdAt` is minimal operational metadata (cap eviction ordering).
+  // `createdAt` is minimal operational metadata (the cap evicts oldest by id).
   // Nothing else may join — no user-agent, no device label, no per-row counter.
   PushSubscription: ["id", "address", "sessionId", "endpoint", "p256dh", "auth", "createdAt"],
 };

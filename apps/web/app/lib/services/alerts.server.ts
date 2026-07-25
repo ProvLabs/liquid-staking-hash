@@ -136,7 +136,12 @@ export const PUSH_DEEP_LINK: Record<AlertKind, string> = {
 
 /** The closed push payload shape — the gate rejects any extra key (§2.3). */
 export const pushPayloadSchema = z
-  .object({ kind: alertKindSchema, url: z.string().regex(/^\/[A-Za-z0-9/_-]*$/, "expected an app-relative path") })
+  .object({
+    // App-relative only: one leading "/" and the second char must not be "/",
+    // so a protocol-relative "//host" (even a dot-less one) can never pass.
+    kind: alertKindSchema,
+    url: z.string().regex(/^\/(?:[A-Za-z0-9_-][A-Za-z0-9/_-]*)?$/, "expected an app-relative path"),
+  })
   .strict();
 export type PushPayload = z.infer<typeof pushPayloadSchema>;
 

@@ -45,6 +45,9 @@ describe("the schema rejects anything but { kind, url } (invariant 3)", () => {
     expect(pushPayloadSchema.safeParse({ kind: "not_a_kind", url: "/exit" }).success).toBe(false);
     expect(pushPayloadSchema.safeParse({ kind: "vault_status", url: "https://evil.example" }).success).toBe(false);
     expect(pushPayloadSchema.safeParse({ kind: "vault_status", url: "//evil.example" }).success).toBe(false);
+    // Protocol-relative WITHOUT a dot: must still fail (the leading "//" alone
+    // is disqualifying — the regex can't rely on the host containing a ".").
+    expect(pushPayloadSchema.safeParse({ kind: "vault_status", url: "//evilexample" }).success).toBe(false);
   });
 });
 

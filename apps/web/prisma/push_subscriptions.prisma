@@ -12,7 +12,8 @@
 //   * `address` is the recipient scope (public by nature); `sessionId` is the
 //     creating session — the deletion chain (plan §2.4): removing a session
 //     removes its push rows.
-//   * `createdAt` is minimal operational metadata (cap eviction orders by it).
+//   * `createdAt` is minimal operational metadata; the per-address cap evicts
+//     oldest-first by `id` (insertion order — a deterministic total order).
 //
 // Lifecycle (plan §2.1): created ONLY on explicit opt-in (a user gesture →
 // browser permission → pushManager.subscribe → POST); deleted on opt-out,

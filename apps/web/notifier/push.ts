@@ -25,6 +25,14 @@ interface PushLogger {
   error(message: string, fields?: Record<string, unknown>): void;
 }
 
+/**
+ * Socket timeout per push send. Without it `web-push` never times out, so a
+ * hung push service would stall the tick loop indefinitely — making push
+ * load-bearing in exactly the failure mode it must degrade in (§10.4,
+ * invariant 7). Mirrors NOTIFIER_READ_TIMEOUT_MS on the API-read side.
+ */
+export const PUSH_SEND_TIMEOUT_MS = 10_000;
+
 /** VAPID triple the production sender signs with (server-only material). */
 export interface VapidDetails {
   subject: string;
@@ -54,7 +62,7 @@ export function webPushSender(vapid: VapidDetails): PushSender {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         payload,
-        { vapidDetails: vapid, TTL: 60 },
+        { vapidDetails: vapid, TTL: 60, timeout: PUSH_SEND_TIMEOUT_MS },
       );
     },
   };

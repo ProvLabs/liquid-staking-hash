@@ -49,14 +49,30 @@ describe("loadNotifierConfig", () => {
     expect(loadNotifierConfig(BASE).vapid).toBeUndefined();
   });
 
+  // Well-formed VAPID values (the shapes real `web-push generate-vapid-keys`
+  // output takes: base64url, P-256 point / scalar lengths).
+  const VAPID_OK = {
+    WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86),
+    WEB_PUSH_VAPID_PRIVATE_KEY: "y".repeat(43),
+    WEB_PUSH_VAPID_SUBJECT: "mailto:ops@example.com",
+  };
+
   it("assembles the VAPID triple when all three are set", () => {
-    const config = loadNotifierConfig({
-      ...BASE,
-      WEB_PUSH_VAPID_PUBLIC_KEY: "pub",
-      WEB_PUSH_VAPID_PRIVATE_KEY: "priv",
-      WEB_PUSH_VAPID_SUBJECT: "mailto:ops@example.com",
+    const config = loadNotifierConfig({ ...BASE, ...VAPID_OK });
+    expect(config.vapid).toEqual({
+      publicKey: VAPID_OK.WEB_PUSH_VAPID_PUBLIC_KEY,
+      privateKey: VAPID_OK.WEB_PUSH_VAPID_PRIVATE_KEY,
+      subject: "mailto:ops@example.com",
     });
-    expect(config.vapid).toEqual({ publicKey: "pub", privateKey: "priv", subject: "mailto:ops@example.com" });
+  });
+
+  it("a MALFORMED VAPID value is a boot error, not a per-send failure (fail-fast)", () => {
+    // The web config bounds these shapes at boot (config.server.ts); the
+    // notifier — the process that actually signs — must too, or a bad value
+    // degrades to an every-send scrubbed drop that looks like transport trouble.
+    expect(() => loadNotifierConfig({ ...BASE, ...VAPID_OK, WEB_PUSH_VAPID_PUBLIC_KEY: "not-a-key" })).toThrow();
+    expect(() => loadNotifierConfig({ ...BASE, ...VAPID_OK, WEB_PUSH_VAPID_PRIVATE_KEY: "!" })).toThrow();
+    expect(() => loadNotifierConfig({ ...BASE, ...VAPID_OK, WEB_PUSH_VAPID_SUBJECT: "ops@example.com" })).toThrow();
   });
 
   it("a PARTIAL VAPID config is a boot error (all-or-none)", () => {

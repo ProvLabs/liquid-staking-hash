@@ -687,7 +687,8 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > `PushSubscription.toJSON()` triple (`endpoint`/`p256dh`/`auth` — opaque
 > material the App derives nothing from and never logs) plus the recipient
 > `address` (public), the creating `sessionId` (the deletion-chain key), and
-> `createdAt` (cap-eviction ordering). Nothing identity-, device-, or
+> `createdAt` (minimal operational metadata; the per-address cap evicts
+> oldest-first by insertion order). Nothing identity-, device-, or
 > counter-shaped joins it. It is created ONLY on explicit opt-in and deleted on
 > opt-out, logout, session expiry/removal (the deletion chain), and dead-endpoint
 > (404/410) pruning; `endpoint` is `@unique` so a re-subscription replaces rather

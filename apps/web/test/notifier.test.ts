@@ -394,6 +394,42 @@ describe("notifier: failure isolation + retention", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("push failure logs are SCRUBBED: never the endpoint or key material (invariant 6)", async () => {
+    const store = new InMemoryAlertStore(() => NOW);
+    store.setPresent(OWNER);
+    const pushStore = new InMemoryPushStore();
+    await pushStore.upsertForSession(OWNER, "sess-1", {
+      endpoint: "https://push.example/ep/SECRET-ENDPOINT-PATH",
+      p256dh: "P256DH-MATERIAL-xxxxxxxxxxxxxxxxxxxx",
+      auth: "AUTH-MATERIAL-yyyyyyyyyyyy",
+    });
+    const lines: Array<[string, Record<string, unknown> | undefined]> = [];
+    const log: Logger = {
+      info: (m, f) => lines.push([m, f]),
+      error: (m, f) => lines.push([m, f]),
+    };
+    // A transient failure whose Error MESSAGE carries the endpoint (web-push
+    // errors embed the URL): the log line must still scrub it.
+    const sender: PushSender = {
+      send: () => {
+        const err = new Error(
+          "received 503 from https://push.example/ep/SECRET-ENDPOINT-PATH",
+        ) as Error & { statusCode: number };
+        err.statusCode = 503;
+        return Promise.reject(err);
+      },
+    };
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender, log }),
+    );
+    const serialized = JSON.stringify(lines);
+    expect(serialized).toContain("push send failed"); // the drop IS logged…
+    expect(serialized).toContain("503"); // …with kind + status only
+    expect(serialized).not.toContain("SECRET-ENDPOINT-PATH");
+    expect(serialized).not.toContain("P256DH-MATERIAL");
+    expect(serialized).not.toContain("AUTH-MATERIAL");
+  });
+
   it("the retention sweep on the tick deletes aged notifications", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     // A read notification older than the absolute window (delivered long ago).
