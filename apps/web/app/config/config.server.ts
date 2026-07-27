@@ -97,6 +97,52 @@ export const configSchema = z.object({
    * weaker deployment.
    */
   apiServiceAssertionKey: z.string().min(32).max(512).optional(),
+  /**
+   * Web Push VAPID credentials (app-spec §7, §10.4, §14.7; plan 6.3 §2.2).
+   * The three are ALL-OR-NONE (the `.superRefine` below): a deployment either
+   * configures push fully or renders the honest "not configured for this
+   * environment" state — a partial VAPID config is a boot error, never a
+   * best-effort continue (SECURITY.md: bound at the boundary; reject).
+   *
+   *   * `webPushVapidPublicKey`  — CLIENT-SAFE: a VAPID public key is public by
+   *     construction (it ships in `pushManager.subscribe`); amended into the
+   *     §7 client-safe allowlist in the same change (client.ts).
+   *   * `webPushVapidPrivateKey` / `webPushVapidSubject` — SERVER-ONLY: the
+   *     signing key and the VAPID `sub` contact, never past the client
+   *     projection (classified in scripts/server-only-env.json).
+   *
+   * Devnet default is none (the honest not-configured state).
+   */
+  webPushVapidPublicKey: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{80,200}$/, "expected a base64url VAPID public key")
+    .optional(),
+  webPushVapidPrivateKey: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{20,120}$/, "expected a base64url VAPID private key")
+    .optional(),
+  webPushVapidSubject: z
+    .string()
+    .max(256)
+    .refine(
+      (s) => /^mailto:.+@.+/.test(s) || /^https:\/\//.test(s),
+      "expected a mailto: or https:// VAPID subject",
+    )
+    .optional(),
+}).superRefine((cfg, ctx) => {
+  // All-or-none: a partial VAPID config is a boot error (plan §2.2, §4.4).
+  const present = [cfg.webPushVapidPublicKey, cfg.webPushVapidPrivateKey, cfg.webPushVapidSubject].filter(
+    (v) => v !== undefined,
+  ).length;
+  if (present !== 0 && present !== 3) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "WEB_PUSH_VAPID_* must be all set (public key, private key, subject) or all unset — " +
+        "a partial Web Push config is refused (plan 6.3 §2.2).",
+      path: ["webPushVapidPublicKey"],
+    });
+  }
 });
 
 export type WebConfig = z.infer<typeof configSchema>;
@@ -116,6 +162,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     explorerUrl: env.EXPLORER_URL,
     databaseUrl: env.DATABASE_URL,
     apiServiceAssertionKey: env.API_SERVICE_ASSERTION_KEY,
+    webPushVapidPublicKey: env.WEB_PUSH_VAPID_PUBLIC_KEY,
+    webPushVapidPrivateKey: env.WEB_PUSH_VAPID_PRIVATE_KEY,
+    webPushVapidSubject: env.WEB_PUSH_VAPID_SUBJECT,
   });
   if (!parsed.success) {
     // Fail loudly rather than starting half-configured.
@@ -189,6 +238,9 @@ export function toClientConfig(config: WebConfig): ClientConfig {
     consoleUrl: config.consoleUrl,
     walletConnectProjectId: config.walletConnectProjectId,
     explorerUrl: config.explorerUrl,
+    // A VAPID public key is public by construction (it ships in
+    // pushManager.subscribe); the private key/subject never cross (§7, §2.2).
+    webPushVapidPublicKey: config.webPushVapidPublicKey,
   };
   for (const key of Object.keys(client)) {
     if (!(CLIENT_SAFE_CONFIG_KEYS as readonly string[]).includes(key)) {

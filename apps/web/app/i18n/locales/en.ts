@@ -234,6 +234,23 @@ export default {
   "alerts.kind.operator-arrears": "Commission arrears",
   "alerts.kind.operator-arrears-desc": "When one of your validators still has commission owed at epoch close.",
 
+  // Web Push, per-browser opt-in (M6.3 §2.2). Every honest permission state has
+  // its own copy — no silent no-ops.
+  "alerts.push.title": "Push notifications on this device",
+  "alerts.push.lede":
+    "Get the alerts above pushed to this browser, even when nvHASH isn't open. In-app alerts always appear in the bell; push just delivers them faster.",
+  "alerts.push.per-browser": "Enabling here turns on push for this browser only.",
+  "alerts.push.enable": "Enable push",
+  "alerts.push.disable": "Disable push",
+  "alerts.push.enabled": "Push is on for this browser.",
+  "alerts.push.working": "Working…",
+  "alerts.push.checking": "Checking this browser…",
+  "alerts.push.unsupported": "This browser doesn't support push notifications.",
+  "alerts.push.not-configured": "Push isn't configured for this environment.",
+  "alerts.push.denied":
+    "Push is blocked for this site in your browser. Allow notifications in your browser settings, then try again.",
+  "alerts.push.error": "Something went wrong enabling push. Please try again.",
+
   "portfolio.title": "Portfolio",
   "portfolio.placeholder":
     "Your position and history arrive here in a later milestone, after wallet connection lands. This deployment is a development scaffold.",

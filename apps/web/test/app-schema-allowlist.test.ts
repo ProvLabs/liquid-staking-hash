@@ -55,6 +55,14 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   AlertRule: ["address", "kind", "enabled", "createdAt", "updatedAt"],
   Notification: ["id", "address", "kind", "dedupeKey", "payload", "deliveredAt", "readAt"],
   NotifierCheckpoint: ["stream", "cursor", "updatedAt"],
+  // M6.3 Web Push channel (plan §2.1 design review) — the ONE accepted
+  // SECURITY.md exception (Ira, 2026-07-13): opt-in, opaque, revocable push
+  // tokens deleted on opt-out/session removal. `address`/`sessionId` are the
+  // existing public/scoping identifiers; the `endpoint`/`p256dh`/`auth` triple
+  // IS the accepted-exception token material (opaque, never logged);
+  // `createdAt` is minimal operational metadata (the cap evicts oldest by id).
+  // Nothing else may join — no user-agent, no device label, no per-row counter.
+  PushSubscription: ["id", "address", "sessionId", "endpoint", "p256dh", "auth", "createdAt"],
 };
 
 /**
@@ -78,12 +86,13 @@ const FORBIDDEN_FIELD_SUBSTRINGS = [
 const models = parseModels();
 
 describe("app schema field allowlist (SECURITY.md data minimization)", () => {
-  it("parses exactly the app-schema models (PR 5.1 + M6.2 alert domain)", () => {
+  it("parses exactly the app-schema models (PR 5.1 + M6.2 alert domain + M6.3 push)", () => {
     expect(models.map((m) => m.name).sort()).toEqual([
       "AddressActivity",
       "AlertRule",
       "Notification",
       "NotifierCheckpoint",
+      "PushSubscription",
       "Session",
       "SessionNonce",
     ]);

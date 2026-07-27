@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { InMemoryAlertStore } from "~/lib/models/alerts.server";
+import { InMemoryPushStore } from "~/lib/models/push.server";
 import {
   EPOCHS_PAGE_LIMIT,
   parseRedemptionsCursor,
@@ -18,6 +19,7 @@ import {
   type Logger,
   type NotifierDeps,
 } from "../notifier/index.ts";
+import type { PushSender } from "../notifier/push.ts";
 
 const NOW = new Date("2026-07-24T00:00:00Z");
 const OWNER = "pb1owner";
@@ -66,7 +68,7 @@ function makeFetch(fx: Fixtures): NotifierDeps["fetchJson"] {
   };
 }
 
-function makeDeps(store: InMemoryAlertStore, fx: Fixtures): NotifierDeps {
+function makeDeps(store: InMemoryAlertStore, fx: Fixtures, extra?: Partial<NotifierDeps>): NotifierDeps {
   return {
     store,
     fetchJson: makeFetch(fx),
@@ -75,6 +77,10 @@ function makeDeps(store: InMemoryAlertStore, fx: Fixtures): NotifierDeps {
     factLimit: 200,
     now: () => NOW,
     log: silentLog,
+    // Default: a push store with no sender → fan-out is a no-op (push
+    // unconfigured is a valid, non-degraded deployment, §10.4).
+    pushStore: new InMemoryPushStore(),
+    ...extra,
   };
 }
 
@@ -316,6 +322,128 @@ describe("notifier: failure isolation + retention", () => {
     expect(result.inserted.arrears).toBe(1); // arrears still processed
     expect(await store.getCheckpoint("redemptions")).toBeNull(); // never committed
     expect(await allFor(store, OPERATOR)).toHaveLength(1);
+  });
+
+  it("push fan-out never fails the tick: a throwing sender still records in-app", async () => {
+    const store = new InMemoryAlertStore(() => NOW);
+    store.setPresent(OWNER);
+    const pushStore = new InMemoryPushStore();
+    await pushStore.upsertForSession(OWNER, "sess-1", {
+      endpoint: "https://push.example/ep/1",
+      p256dh: "x".repeat(20),
+      auth: "y".repeat(10),
+    });
+    const sender: PushSender = {
+      send: () => Promise.reject(new Error("push transport exploded")),
+    };
+    const result = await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender }),
+    );
+    // The tick reports the stream as succeeded (push failure is not a stream
+    // failure) and the notification is recorded in-app regardless.
+    expect(result.errors.redemptions).toBeUndefined();
+    expect(result.inserted.redemptions).toBe(1);
+    expect(await allFor(store, OWNER)).toHaveLength(1);
+  });
+
+  it("push fan-out prunes a dead endpoint on a 410 (revocability in reverse)", async () => {
+    const store = new InMemoryAlertStore(() => NOW);
+    store.setPresent(OWNER);
+    const pushStore = new InMemoryPushStore();
+    await pushStore.upsertForSession(OWNER, "sess-1", {
+      endpoint: "https://push.example/ep/dead",
+      p256dh: "x".repeat(20),
+      auth: "y".repeat(10),
+    });
+    // A push service that reports the subscription is gone (410).
+    const sender: PushSender = {
+      send: () => {
+        const err = new Error("gone") as Error & { statusCode: number };
+        err.statusCode = 410;
+        return Promise.reject(err);
+      },
+    };
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender }),
+    );
+    expect(await pushStore.countForAddress(OWNER)).toBe(0); // pruned
+  });
+
+  it("push fan-out delivers exactly the newly-inserted notifications (at-most-once)", async () => {
+    const store = new InMemoryAlertStore(() => NOW);
+    store.setPresent(OWNER);
+    const pushStore = new InMemoryPushStore();
+    await pushStore.upsertForSession(OWNER, "sess-1", {
+      endpoint: "https://push.example/ep/1",
+      p256dh: "x".repeat(20),
+      auth: "y".repeat(10),
+    });
+    const sent: unknown[] = [];
+    const sender: PushSender = {
+      send: (_sub, payload) => {
+        sent.push(JSON.parse(payload));
+        return Promise.resolve();
+      },
+    };
+    const fx = { redemptions: [redemption({ request_id: "r1", owner: OWNER })] };
+    await runTick(makeDeps(store, fx, { pushStore, pushSender: sender }));
+    // One push, carrying the closed { kind, url } body (no request id, no amount).
+    expect(sent).toEqual([{ kind: "redemption_update", url: "/exit" }]);
+    // A second tick with the SAME fact inserts nothing new → sends nothing more.
+    await runTick(makeDeps(store, fx, { pushStore, pushSender: sender }));
+    expect(sent).toHaveLength(1);
+  });
+
+  it("push failure logs are SCRUBBED: never the endpoint or key material (invariant 6)", async () => {
+    const store = new InMemoryAlertStore(() => NOW);
+    store.setPresent(OWNER);
+    const pushStore = new InMemoryPushStore();
+    await pushStore.upsertForSession(OWNER, "sess-1", {
+      endpoint: "https://push.example/ep/SECRET-ENDPOINT-PATH",
+      p256dh: "P256DH-MATERIAL-xxxxxxxxxxxxxxxxxxxx",
+      auth: "AUTH-MATERIAL-yyyyyyyyyyyy",
+    });
+    const lines: Array<[string, Record<string, unknown> | undefined]> = [];
+    const log: Logger = {
+      info: (m, f) => lines.push([m, f]),
+      error: (m, f) => lines.push([m, f]),
+    };
+    // A transient failure whose Error MESSAGE carries the endpoint (web-push
+    // errors embed the URL): the log line must still scrub it.
+    const sender: PushSender = {
+      send: () => {
+        const err = new Error(
+          "received 503 from https://push.example/ep/SECRET-ENDPOINT-PATH",
+        ) as Error & { statusCode: number };
+        err.statusCode = 503;
+        return Promise.reject(err);
+      },
+    };
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender, log }),
+    );
+    const serialized = JSON.stringify(lines);
+    expect(serialized).toContain("push send failed"); // the drop IS logged…
+    expect(serialized).toContain("503"); // …with kind + status only
+    expect(serialized).not.toContain("SECRET-ENDPOINT-PATH");
+    expect(serialized).not.toContain("P256DH-MATERIAL");
+    expect(serialized).not.toContain("AUTH-MATERIAL");
+  });
+
+  it("the tick's invariant sweep removes push tokens whose session is dead", async () => {
+    // Wiring gate for the push-token-deletion backstop: runTick must run the
+    // orphan sweep even with push UNconfigured (no sender) — deletion hygiene
+    // never depends on VAPID being set on the notifier host.
+    const store = new InMemoryAlertStore(() => NOW);
+    const pushStore = new InMemoryPushStore(() => false); // every session dead
+    await pushStore.upsertForSession(OWNER, "sess-dead", {
+      endpoint: "https://push.example/ep/1",
+      p256dh: "x".repeat(20),
+      auth: "y".repeat(10),
+    });
+    const result = await runTick(makeDeps(store, {}, { pushStore })); // no pushSender
+    expect(result.pushSwept).toBe(1);
+    expect(await pushStore.countForAddress(OWNER)).toBe(0);
   });
 
   it("the retention sweep on the tick deletes aged notifications", async () => {

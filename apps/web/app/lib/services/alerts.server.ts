@@ -113,6 +113,47 @@ export function parsePayload(kind: AlertKind, payload: unknown): unknown {
   return PAYLOAD_SCHEMAS[kind].parse(payload);
 }
 
+// ── Web Push payload subsetting (plan 6.3 §2.3, invariant 3) ─────────────────
+//
+// The push body is the CLOSED `{ kind, url }` shape — a strict subset of the
+// already-minimal stored payload: NO amounts, NO addresses, NO request ids, NO
+// identifiers beyond the kind. It is derived from the KIND ALONE (never the
+// stored payload's fields), so it is structurally impossible for a request id,
+// valoper, or epoch index to leak to the third-party push service. Title/body
+// are rendered generically by the service worker from the kind; the deep link
+// is the generic per-kind surface (the bell's §2.6 mapping — kept in lockstep
+// with `linkFor` in components/chrome/alerts-bell.tsx; the client bell can't
+// import this .server module, so the mapping is mirrored, not shared).
+
+/** Generic per-kind deep link — mirrors alerts-bell.tsx `linkFor` (§2.6). */
+export const PUSH_DEEP_LINK: Record<AlertKind, string> = {
+  redemption_update: "/exit",
+  operator_arrears: "/validators",
+  validator_set_incident: "/validators",
+  nav_step_posted: "/portfolio",
+  vault_status: "/portfolio",
+};
+
+/** The closed push payload shape — the gate rejects any extra key (§2.3). */
+export const pushPayloadSchema = z
+  .object({
+    // App-relative only: one leading "/" and the second char must not be "/",
+    // so a protocol-relative "//host" (even a dot-less one) can never pass.
+    kind: alertKindSchema,
+    url: z.string().regex(/^\/(?:[A-Za-z0-9_-][A-Za-z0-9/_-]*)?$/, "expected an app-relative path"),
+  })
+  .strict();
+export type PushPayload = z.infer<typeof pushPayloadSchema>;
+
+/**
+ * The `{ kind, url }` push body for a notification, derived from its KIND alone
+ * — never its stored payload. Taking only `kind` is the mechanism that makes
+ * invariant 3 structural: no amount/address/id field exists to carry over.
+ */
+export function toPushPayload(kind: AlertKind): PushPayload {
+  return pushPayloadSchema.parse({ kind, url: PUSH_DEEP_LINK[kind] });
+}
+
 // ── Incident → alert-kind mapping (closed; ops-facing kinds excluded) ────────
 //
 // (§2.4) vault_status ← {vault_paused, contract_halted};

@@ -68,9 +68,11 @@ export interface AlertStore {
   getCheckpoint(stream: string): Promise<string | null>;
   /**
    * Insert the candidates (skipDuplicates) AND advance the cursor in ONE
-   * transaction. Returns the number actually inserted (duplicates skipped).
+   * transaction. Returns the NEWLY-INSERTED candidates (duplicates skipped) —
+   * the "newly inserted set" the 6.3 push fan-out delivers (plan §2.3); its
+   * length is the count callers previously used.
    */
-  commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<number>;
+  commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]>;
 
   // ── Retention (rides the tick, Commit B) ──
   /**
@@ -174,8 +176,8 @@ export class InMemoryAlertStore implements AlertStore {
     return this.checkpoints.get(stream) ?? null;
   }
 
-  async commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<number> {
-    let inserted = 0;
+  async commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]> {
+    const inserted: Candidate[] = [];
     for (const c of candidates) {
       const id = dedupeId(c.address, c.kind, c.dedupeKey);
       if (this.seen.has(id)) continue; // ON CONFLICT DO NOTHING
@@ -189,7 +191,7 @@ export class InMemoryAlertStore implements AlertStore {
         deliveredAt: this.now(),
         readAt: null,
       });
-      inserted += 1;
+      inserted.push(c);
     }
     this.checkpoints.set(stream, cursor); // same "transaction"
     return inserted;
@@ -228,7 +230,7 @@ interface AlertPrismaLike {
     >;
     count(args: unknown): Promise<number>;
     updateMany(args: unknown): Promise<{ count: number }>;
-    createMany(args: unknown): Promise<{ count: number }>;
+    createManyAndReturn(args: unknown): Promise<Array<{ address: string; kind: string; dedupeKey: string; payload: unknown }>>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
   addressActivity: {
@@ -327,11 +329,15 @@ export class PrismaAlertStore implements AlertStore {
     return row?.cursor ?? null;
   }
 
-  async commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<number> {
+  async commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]> {
     return this.prisma.$transaction(async (tx) => {
-      let inserted = 0;
+      let inserted: Candidate[] = [];
       if (candidates.length > 0) {
-        const result = await tx.notification.createMany({
+        // `createManyAndReturn` with `skipDuplicates` is INSERT … ON CONFLICT
+        // DO NOTHING RETURNING (the exactly-once gate unchanged): it returns
+        // ONLY the rows actually inserted — the "newly inserted set" the push
+        // fan-out delivers (plan §2.3), never the duplicates that were skipped.
+        const created = await tx.notification.createManyAndReturn({
           data: candidates.map((c) => ({
             address: c.address,
             kind: c.kind,
@@ -339,8 +345,14 @@ export class PrismaAlertStore implements AlertStore {
             payload: c.payload,
           })),
           skipDuplicates: true,
+          select: { address: true, kind: true, dedupeKey: true, payload: true },
         });
-        inserted = result.count;
+        inserted = created.map((r) => ({
+          address: r.address,
+          kind: r.kind as AlertKind,
+          dedupeKey: r.dedupeKey,
+          payload: r.payload,
+        }));
       }
       // Same transaction as the insert (plan §2.4): cursor advances iff the
       // batch committed.

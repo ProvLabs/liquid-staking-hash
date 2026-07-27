@@ -26,13 +26,13 @@
   "dependencies": {
     "@noble/curves": "^1.8.0",
     "@noble/hashes": "^1.7.0",
-    "@scure/base": "^1.2.0",
     "@nvhash/api-types": "workspace:*",
     "@nvhash/chain-client": "workspace:*",
     "@prisma/client": "^6.7.0",
     "@radix-ui/react-slot": "^1.1.1",
     "@react-router/node": "^7.18.1",
     "@react-router/serve": "^7.18.1",
+    "@scure/base": "^1.2.0",
     "@walletconnect/sign-client": "^2.17.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -42,6 +42,7 @@
     "react-router": "^7.18.1",
     "tailwind-merge": "^3.0.0",
     "uqr": "^0.1.2",
+    "web-push": "^3.6.7",
     "zod": "^3.24.0"
   },
   "devDependencies": {

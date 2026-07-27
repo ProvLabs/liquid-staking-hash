@@ -281,7 +281,8 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | `UNISWAP_POOL_BASE` (…`_ETH`) | pool addresses | `[VERIFY §14.3]` from the NUVA bridge deployment. |
 | `WALLETCONNECT_PROJECT_ID` | — | WalletConnect v2 pairing. **Client-safe** (PR 5.1 allowlist amendment): a WC project id is public by design — it rides in every pairing URI. |
 | `EXPLORER_URL` | block-explorer base URL | Portfolio transaction verify-links (§8.2). **Client-safe** (PR 6.1 allowlist amendment): an explorer URL is public by construction. Optional; absent, history rows render a plain truncated txhash rather than a broken link. |
-| `WEB_PUSH_VAPID_*` | — | Web Push credentials `[DECIDE §14.7]`. |
+| `WEB_PUSH_VAPID_PUBLIC_KEY` | — | Web Push VAPID public key (§10.4, §14.7). **Client-safe** (PR 6.3 allowlist amendment): public by construction — it ships in every `pushManager.subscribe`. Optional; the three VAPID vars are **all-or-none** (a partial config fails boot), and absent config renders the honest "not configured" push state. |
+| `WEB_PUSH_VAPID_PRIVATE_KEY` / `WEB_PUSH_VAPID_SUBJECT` | — | Web Push VAPID signing key and `sub` contact (`mailto:`/https). **Server-only** — never past the client-safe subset; consumed by the notifier fan-out (PR 6.3). |
 | denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
 | `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
 | `RECONCILE_TOLERANCE` / cadence | tolerance per metric; ~1 min cadence | §12 reconciler thresholds. |
@@ -325,6 +326,23 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 > event recorded here in the same change as the allowlist edit, and it stays
 > subject to the standing bundle-secret gate (`check:bundle` +
 > `test/client-config.test.ts`).
+
+> **Revision 2026-07-24 (PR 6.3 commit A, `WEB_PUSH_VAPID_*`):** the three
+> Web Push VAPID vars become consumed config (`apps/web/app/config/config.server.ts`),
+> replacing the `[DECIDE §14.7]` placeholder. They are **all-or-none**: a
+> deployment sets all three or none, and a partial config fails boot (a
+> `superRefine` at the config boundary — SECURITY.md: bound at entry, reject
+> never continue). `WEB_PUSH_VAPID_PUBLIC_KEY` is **amended into the client-safe
+> allowlist** (`apps/web/app/config/client.ts`): a VAPID public key is public by
+> construction — it ships in every `pushManager.subscribe` call, so it must
+> cross to the browser to subscribe. `WEB_PUSH_VAPID_PRIVATE_KEY` (the signing
+> key) and `WEB_PUSH_VAPID_SUBJECT` (the VAPID `sub` contact) stay **server-only**
+> (`scripts/server-only-env.json`); `check:bundle` classifies all three and the
+> service worker (`apps/web/public/push-sw.js`) holds no keys. Absent config
+> renders the honest "not configured for this environment" push state (devnet
+> default) and exposes no subscribe path. The client-visible addition is
+> recorded here in the same change as the allowlist edit, and stays under the
+> standing bundle-secret gate (`check:bundle` + `test/client-config.test.ts`).
 
 ### 8.0 Site map & global chrome
 
@@ -660,6 +678,22 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > **`notifier_checkpoints`** cursors are efficiency, not correctness (the
 > unique constraint is): a stale/garbage cursor merely re-scans and the
 > duplicates are absorbed.
+
+> **Revision 2026-07-24 (PR 6.3 commit A/B, `push_subscriptions`):** a fourth
+> `app`-schema table lands (allowlist gate extended in the same change):
+> **`push_subscriptions`** (`id, address, sessionId, endpoint, p256dh, auth,
+> createdAt`) — the ONE accepted SECURITY.md exception (opt-in, opaque,
+> revocable Web Push tokens). The row is exactly the W3C
+> `PushSubscription.toJSON()` triple (`endpoint`/`p256dh`/`auth` — opaque
+> material the App derives nothing from and never logs) plus the recipient
+> `address` (public), the creating `sessionId` (the deletion-chain key), and
+> `createdAt` (minimal operational metadata; the per-address cap evicts
+> oldest-first by insertion order). Nothing identity-, device-, or
+> counter-shaped joins it. It is created ONLY on explicit opt-in and deleted on
+> opt-out, logout, session expiry/removal (the deletion chain), and dead-endpoint
+> (404/410) pruning; `endpoint` is `@unique` so a re-subscription replaces rather
+> than accumulates, and a per-address cap bounds it. Confirming §9.1's earlier
+> "with Web Push subscriptions" parenthetical, now delivered.
 
 ### 9.2 Indexer workers
 
@@ -1014,6 +1048,38 @@ Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notificatio
 > try/catch isolates a failing stream (cursor unmoved, retry next tick); a boot
 > misconfig is a loud exit.
 
+> **Revision 2026-07-24 (PR 6.3, Web Push channel delivered):** the second
+> channel ships, per-browser opt-in. **Subscription** is a user gesture in the
+> alert-settings section → browser permission → `pushManager.subscribe` → POST
+> to the session-gated `/push/subscription` route, storing the opaque W3C token
+> (§9.1 `push_subscriptions`). The four browser states render honestly (no
+> silent no-ops): unsupported, not-configured-for-this-environment, denied
+> (points at browser settings), and enabled/subscribed. **Delivery:** after the
+> notifier's evaluation transaction commits, the tick's delivery phase — OUTSIDE
+> any DB transaction — sends each NEWLY-INSERTED notification (the set
+> `commitTick` returns via `INSERT … ON CONFLICT DO NOTHING RETURNING`) to the
+> recipient's subscriptions via the `web-push` package (VAPID + `aes128gcm`).
+> The push body is the CLOSED **`{ kind, url }`** shape derived from the kind
+> alone — no amounts, no addresses, no request ids reach the third-party push
+> service; the service worker (`public/push-sw.js`, static, keyless, fetch-less)
+> renders generic per-kind title/body from it. **Posture:** push is additive
+> latency, never load-bearing — **at-most-once** (no `pushed_at` column, no retry
+> queue: a crash between insert and fan-out loses only the nudge; in-app is the
+> guaranteed channel). A failed send degrades silently (logged with the endpoint
+> SCRUBBED, never the tick); a `404`/`410` **prunes** the dead subscription
+> (revocability in reverse). **Deletion chain:** a token is deleted on opt-out,
+> logout, session expiry/removal, and dead-endpoint pruning — the standing
+> `test/push-token-deletion.test.ts` gate. The chain deletes push rows BEFORE
+> the session row (a failure strands a harmless session remnant, never a
+> token), and the notifier tick runs an **invariant sweep**
+> (`PushStore.sweepOrphans`, one anti-join DELETE mirroring the session
+> liveness rule): any token whose session is missing or expired is removed
+> even if that browser never returns — the sweep runs whether or not VAPID is
+> configured. Subscription upserts run **Serializable** (bounded P2034 retry),
+> so concurrent POSTs cannot defeat replace-by-session or the per-address cap.
+> VAPID config is all-or-none; absent,
+> the notifier records in-app only and the settings block says "not configured".
+
 ---
 
 ## 11. Design Language
@@ -1088,6 +1154,23 @@ This section encodes boundary §5 as build requirements.
 - **API hygiene:** rate limiting on public endpoints, zod-validated inputs at every route boundary (nuva convention), winston structured logging in services, no secrets in the client bundle (server config never serializes past the §7 client-safe subset).
 - **Analytics are first-party and aggregate-only:** no third-party trackers; counters are never keyed by wallet address, session, or device; never amounts or balances — page classes and funnel-stage tallies only `[DECIDE §14.10]`.
 - **Supply chain:** the team's standard dependency policy; the transacting pages must function with third-party scripts blocked (analytics is additive).
+
+  > **Revision 2026-07-24 (PR 6.3, Web Push deletion chain delivered):** the
+  > "deleted on opt-out" clause of the accepted exception is now an enforced,
+  > CI-gated mechanism, not a promise. A push token (`push_subscriptions`, §9.1)
+  > is deleted on **all** of: opt-out (the DELETE route), logout, session
+  > expiry/removal (the session-lifecycle deletion chain), dead-endpoint
+  > (`404`/`410`) pruning at send time, and the notifier tick's **invariant
+  > sweep** — a per-tick anti-join DELETE removing any token whose session is
+  > missing or expired, which covers browsers that never present their stale
+  > cookie and any crash remnant of the two-step chain — all asserted by the
+  > standing `test/push-token-deletion.test.ts` (master plan §4). The token triple
+  > (`endpoint`/`p256dh`/`auth`) is opaque and NEVER logged (endpoint URLs can
+  > fingerprint the browser vendor — treated as secrets-adjacent; the fan-out
+  > scrubs them). The single new dependency is `web-push` (lockfile-pinned,
+  > first-party-maintained), imported only in the notifier worker so it never
+  > reaches the client bundle. This enumeration ("removes the user row, rules,
+  > and push subscriptions") is now backed by the deletion chain end to end.
 
 ---
 

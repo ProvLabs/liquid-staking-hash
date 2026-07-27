@@ -95,8 +95,8 @@ describe("personal-route session scope (standing gate, plan §4)", () => {
   });
 });
 
-describe("alerts routes join the standing gate (M6.2 §2.6)", () => {
-  for (const path of ["/alerts/notifications", "/alerts/rules"]) {
+describe("alerts + push routes join the standing gate (M6.2 §2.6, M6.3 §2.2)", () => {
+  for (const path of ["/alerts/notifications", "/alerts/rules", "/push/subscription"]) {
     it(`requireSession rejects an anonymous ${path} request with a reasonless 401`, async () => {
       const store = new InMemorySessionStore();
       const request = new Request(`http://app.local${path}`);

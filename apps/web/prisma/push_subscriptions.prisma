@@ -1,0 +1,45 @@
+// push_subscriptions (app-spec §9.1, §10.4, §12.3; plan 6.3 §2.1) — the
+// per-browser Web Push channel, the ONE accepted SECURITY.md exception
+// (Ira, 2026-07-13): opt-in **Web Push subscription tokens**, "opaque,
+// revocable, deleted on opt-out". The row is exactly the W3C
+// `PushSubscription.toJSON()` triple plus the scoping/lifecycle keys.
+//
+// The exception is narrow and literal, and every column reflects it:
+//   * `endpoint` / `p256dh` / `auth` are opaque browser- and push-service-
+//     generated material — THE token. The App derives nothing from them and
+//     NEVER logs them (an endpoint URL can fingerprint the browser vendor, so
+//     it is treated as secrets-adjacent; the fan-out logs scrub it, plan §2.3).
+//   * `address` is the recipient scope (public by nature); `sessionId` is the
+//     creating session — the deletion chain (plan §2.4): removing a session
+//     removes its push rows.
+//   * `createdAt` is minimal operational metadata; the per-address cap evicts
+//     oldest-first by `id` (insertion order — a deterministic total order).
+//
+// Lifecycle (plan §2.1): created ONLY on explicit opt-in (a user gesture →
+// browser permission → pushManager.subscribe → POST); deleted on opt-out,
+// logout, session expiry/deletion, and dead-endpoint (404/410) pruning; a new
+// endpoint for the same session REPLACES, never accumulates (`endpoint`
+// @unique + replace-by-session upsert). Nothing else may join the row (no
+// user-agent, no device label, no per-row delivery counter) — the column set
+// is gated by test/app-schema-allowlist.test.ts (the data-minimization review).
+
+model PushSubscription {
+  id        BigInt   @id @default(autoincrement())
+  /** bech32 recipient address (public by nature) — the fan-out scope. */
+  address   String
+  /** The creating session id — the deletion chain keys off this (plan §2.4). */
+  sessionId String
+  /** The push service URL: THE opaque, revocable token. @unique so a
+   *  re-subscription replaces rather than accumulates; never logged. */
+  endpoint  String   @unique
+  /** Subscription encryption material (opaque; aes128gcm, plan §2.3). */
+  p256dh    String
+  /** Subscription auth secret (opaque). */
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([address]) // fan-out target lookup (Commit B)
+  @@index([sessionId]) // the session-removal deletion cascade
+  @@map("push_subscriptions")
+  @@schema("app")
+}
