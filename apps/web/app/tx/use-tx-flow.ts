@@ -15,6 +15,7 @@ import { useWallet } from "~/wallet/provider";
 import {
   buildTxPlan,
   encodeTxRaw,
+  intentSigner,
   type Fee,
   type SignerContext,
   type TxIntent,
@@ -156,7 +157,7 @@ export function useTxFlow(): TxFlow {
 
     let signatureBase64: string;
     try {
-      const signed = await signDirect(plan.intent.owner, {
+      const signed = await signDirect(intentSigner(plan.intent), {
         bodyBytesBase64: Buffer.from(plan.bodyBytes).toString("base64"),
         authInfoBytesBase64: Buffer.from(plan.authInfoBytes).toString("base64"),
         chainId: plan.signer.chainId,

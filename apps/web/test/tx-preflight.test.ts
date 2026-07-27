@@ -14,8 +14,12 @@ import vaultGet from "@nvhash/fixtures/queries/vault/get";
 import { loadConfig } from "~/config/config.server";
 import {
   FEE_PROVISION_NHASH,
+  operatorPreflightReasons,
+  operatorPreflightRequestSchema,
   preflightRequestSchema,
   runPreflight,
+  type OperatorPreflightFacts,
+  type OperatorPreflightRequest,
 } from "~/tx/preflight.server";
 import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
 import { server } from "~/mocks/node";
@@ -198,5 +202,216 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
     const result = await runPreflight(config, ADDRESS, { kind: "swap_in", amount: "1" });
     expect(result.reasons).toEqual([{ code: "chain-unavailable" }]);
     expect(result.signer).toBeNull();
+  });
+});
+
+// ── M6.4: the operator predicate matrix (§2.4) ───────────────────────────
+//
+// Pure over live facts, so every branch is drivable. Two properties matter
+// beyond the individual rules:
+//   * an unavailable read yields `chain-unavailable` and NOTHING else — a
+//     reason derived from a missing fact would be a guess dressed as advice;
+//   * payments carry no operator check, because paying is permissionless
+//     ("anyone, nhash attached") and pretending otherwise would block a
+//     co-op partner from doing something the contract allows.
+
+describe("operator preflight predicates (M6.4 §2.4)", () => {
+  const ADDRESS = "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk";
+  const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
+  const NOW = 1_800_000_000;
+
+  const enrolledEntry = {
+    valoper: VALOPER,
+    operator: ADDRESS,
+    jailed: false,
+    commissionDue: 0n,
+    commissionPaid: 0n,
+  };
+
+  function facts(over: Partial<OperatorPreflightFacts> = {}): OperatorPreflightFacts {
+    return {
+      address: ADDRESS,
+      validators: [enrolledEntry],
+      jailReports: [],
+      chainValidator: { exists: true, jailed: false },
+      halted: false,
+      spendableNhash: 1_000_000_000_000n,
+      nowSeconds: NOW,
+      ...over,
+    };
+  }
+
+  function request(over: Partial<OperatorPreflightRequest> = {}): OperatorPreflightRequest {
+    return {
+      kind: "operator",
+      variant: "pay_commission",
+      valoper: VALOPER,
+      claimantValoper: null,
+      amount: "1000000000",
+      ...over,
+    };
+  }
+
+  const codes = (reasons: ReturnType<typeof operatorPreflightReasons>) =>
+    reasons.map((r) => r.code);
+
+  it("a failed chain read blocks with chain-unavailable ALONE", () => {
+    for (const broken of [{ validators: null }, { chainValidator: null }] as const) {
+      const reasons = operatorPreflightReasons(request(), facts(broken));
+      expect(codes(reasons)).toEqual(["chain-unavailable"]);
+    }
+  });
+
+  it("a clean payment on an enrolled validator has no reasons", () => {
+    expect(codes(operatorPreflightReasons(request(), facts()))).toEqual([]);
+  });
+
+  it("payments are PERMISSIONLESS — a non-operator payer is not blocked", () => {
+    // The contract lets anyone pay; a UI guard saying otherwise would be wrong.
+    const reasons = operatorPreflightReasons(
+      request(),
+      facts({ validators: [{ ...enrolledEntry, operator: "tp1someoneelse" }] }),
+    );
+    expect(codes(reasons)).not.toContain("not-validator-operator");
+    expect(codes(reasons)).toEqual([]);
+  });
+
+  it("a payment on an unenrolled validator, or of zero, is blocked", () => {
+    expect(codes(operatorPreflightReasons(request(), facts({ validators: [] })))).toContain(
+      "not-enrolled",
+    );
+    expect(codes(operatorPreflightReasons(request({ amount: "0" }), facts()))).toContain(
+      "amount-invalid",
+    );
+  });
+
+  it("a payment beyond spendable (including the fee provision) is blocked", () => {
+    const reasons = operatorPreflightReasons(
+      request({ amount: "1000000000" }),
+      facts({ spendableNhash: 1_500_000_000n }), // < amount + 2 HASH provision
+    );
+    expect(codes(reasons)).toContain("insufficient-balance");
+  });
+
+  it("enrolment requires an existing, not-already-enrolled validator", () => {
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "register_participation", amount: "0" }),
+          facts({ chainValidator: { exists: false, jailed: false }, validators: [] }),
+        ),
+      ),
+    ).toContain("validator-not-found");
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "register_participation", amount: "0" }),
+          facts(),
+        ),
+      ),
+    ).toContain("already-enrolled");
+  });
+
+  it("unregistering requires enrolment AND the operator account", () => {
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "unregister_participation", amount: "0" }),
+          facts({ validators: [] }),
+        ),
+      ),
+    ).toEqual(["not-enrolled"]);
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "unregister_participation", amount: "0" }),
+          facts({ validators: [{ ...enrolledEntry, operator: "tp1someoneelse" }] }),
+        ),
+      ),
+    ).toEqual(["not-validator-operator"]);
+  });
+
+  it("reporting requires the validator to be jailed RIGHT NOW", () => {
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "report_jailed_validator", amount: "0" }),
+          facts(),
+        ),
+      ),
+    ).toContain("validator-not-jailed");
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "report_jailed_validator", amount: "0" }),
+          facts({ chainValidator: { exists: true, jailed: true } }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("purging walks the two-phase gate: jailed → reported → cooldown → halt", () => {
+    const purge = request({ variant: "purge_jailed_validator", amount: "0" });
+    const jailed = { exists: true, jailed: true } as const;
+
+    // Not jailed at all.
+    expect(codes(operatorPreflightReasons(purge, facts()))).toContain("validator-not-jailed");
+
+    // Jailed, but never reported — phase 1 has not happened.
+    expect(
+      codes(operatorPreflightReasons(purge, facts({ chainValidator: jailed, jailReports: [] }))),
+    ).toContain("no-jail-report");
+
+    // Reported, cooldown still running — with the instant it ends.
+    const cooling = operatorPreflightReasons(
+      purge,
+      facts({
+        chainValidator: jailed,
+        jailReports: [{ valoper: VALOPER, purgeReadyAtSeconds: NOW + 3_600 }],
+      }),
+    );
+    expect(codes(cooling)).toContain("purge-cooldown");
+    expect(cooling.find((r) => r.code === "purge-cooldown")).toMatchObject({
+      readyAtIso: new Date((NOW + 3_600) * 1_000).toISOString(),
+    });
+
+    // Cooldown elapsed → clear.
+    expect(
+      codes(
+        operatorPreflightReasons(
+          purge,
+          facts({
+            chainValidator: jailed,
+            jailReports: [{ valoper: VALOPER, purgeReadyAtSeconds: NOW - 1 }],
+          }),
+        ),
+      ),
+    ).toEqual([]);
+
+    // …unless the program is halted: phase 2 moves funds and is halt-gated.
+    expect(
+      codes(
+        operatorPreflightReasons(
+          purge,
+          facts({
+            chainValidator: jailed,
+            jailReports: [{ valoper: VALOPER, purgeReadyAtSeconds: NOW - 1 }],
+            halted: true,
+          }),
+        ),
+      ),
+    ).toEqual(["program-halted"]);
+  });
+
+  it("bounds its inputs at the boundary (valoper shape, amount shape)", () => {
+    expect(operatorPreflightRequestSchema.safeParse({ kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "1" }).success).toBe(true);
+    for (const bad of [
+      { kind: "operator", variant: "pay_tip", valoper: ADDRESS, amount: "1" }, // account, not valoper
+      { kind: "operator", variant: "set_halted", valoper: VALOPER, amount: "1" }, // not a variant
+      { kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "1.5" }, // float
+      { kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "-1" }, // negative
+    ]) {
+      expect(operatorPreflightRequestSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
   });
 });

@@ -16,6 +16,8 @@ import {
   buildTxPlan,
   encodeTxBody,
   encodeTxRaw,
+  MSG_EXECUTE_CONTRACT,
+  type OperatorIntent,
   type TxIntent,
 } from "~/tx/build";
 import { ProtoWriter } from "~/tx/proto";
@@ -179,5 +181,361 @@ describe("relay guards (each an enforced mechanism)", () => {
       status: 429,
     });
     expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 61_000)).toEqual({ ok: true });
+  });
+});
+
+// ── M6.4 §2.5: the operator-execute DEEP guard ───────────────────────────
+//
+// `MsgExecuteContract` is in the allowlist, so on the first level this type
+// URL is "allowed". Everything below is an attempt to reach the chain with it
+// anyway — another contract, an admin variant, a smuggled second key, funds on
+// a fundless action, a non-canonical encoding of an allowed variant. Each must
+// be refused. This matrix IS the reason the allowlist entry is safe; the plan
+// (§8) makes the flows conditional on it passing.
+
+/** Build a signed tx carrying ONE MsgExecuteContract with arbitrary bytes,
+ * so the matrix can submit payloads the builder would never produce. */
+function signedExecuteTx(
+  execValue: Uint8Array,
+  overrides?: { pubkey?: Uint8Array; typeUrl?: string },
+): Uint8Array {
+  const anyMsg = new ProtoWriter()
+    .string(1, overrides?.typeUrl ?? MSG_EXECUTE_CONTRACT)
+    .bytes(2, execValue)
+    .finish();
+  const body = new ProtoWriter().message(1, anyMsg, true).finish();
+  const plan = buildTxPlan(
+    {
+      kind: "swap_in",
+      owner: SESSION_ADDRESS,
+      vaultAddress: config.vaultAddress,
+      amount: 1n,
+      denom: "nhash",
+    },
+    { gasLimit: 1n, amount: 1n, denom: "nhash" },
+    {
+      chainId: config.chainId,
+      accountNumber: 1n,
+      sequence: 0n,
+      pubkeyBase64: Buffer.from(overrides?.pubkey ?? PUB).toString("base64"),
+    },
+  );
+  return encodeTxRaw(body, plan.authInfoBytes, [new Uint8Array(64)]);
+}
+
+/** Hand-encode MsgExecuteContract with a RAW inner payload (bypassing the
+ * canonical builder), so malformed/hostile payloads can be submitted. */
+function rawExecute(opts: {
+  sender?: string;
+  contract?: string;
+  msg: string;
+  funds?: { denom: string; amount: string }[];
+}): Uint8Array {
+  const writer = new ProtoWriter()
+    .string(1, opts.sender ?? SESSION_ADDRESS)
+    .string(2, opts.contract ?? config.contractAddress)
+    .bytes(3, new TextEncoder().encode(opts.msg));
+  for (const coin of opts.funds ?? []) {
+    writer.message(
+      5,
+      new ProtoWriter().string(1, coin.denom).string(2, coin.amount).finish(),
+      true,
+    );
+  }
+  return writer.finish();
+}
+
+const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
+const OTHER_VALOPER = "tpvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+
+/** A legitimately-built operator tx (the positive control). */
+function operatorTx(overrides: Partial<OperatorIntent> = {}): Uint8Array {
+  const intent: OperatorIntent = {
+    kind: "operator",
+    variant: "pay_commission",
+    sender: SESSION_ADDRESS,
+    contractAddress: config.contractAddress,
+    valoper: VALOPER,
+    claimantValoper: null,
+    amount: 1_500_000_000n,
+    denom: "nhash",
+    ...overrides,
+  };
+  const plan = buildTxPlan(
+    intent,
+    { gasLimit: 300_000n, amount: 400_000n, denom: "nhash" },
+    {
+      chainId: config.chainId,
+      accountNumber: 1n,
+      sequence: 0n,
+      pubkeyBase64: Buffer.from(PUB).toString("base64"),
+    },
+  );
+  return encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]);
+}
+
+describe("operator execute — the six allowed variants are accepted", () => {
+  it("accepts each funded payment variant", () => {
+    for (const variant of ["pay_commission", "pay_tip"] as const) {
+      expect(guardSignedTx(config, SESSION_ADDRESS, operatorTx({ variant })), variant).toEqual({
+        ok: true,
+      });
+    }
+  });
+
+  it("accepts each fundless variant with no funds attached", () => {
+    for (const variant of [
+      "register_participation",
+      "unregister_participation",
+      "report_jailed_validator",
+      "purge_jailed_validator",
+    ] as const) {
+      expect(
+        guardSignedTx(config, SESSION_ADDRESS, operatorTx({ variant, amount: 0n })),
+        variant,
+      ).toEqual({ ok: true });
+    }
+  });
+
+  it("accepts a purge carrying an optional claimant valoper", () => {
+    expect(
+      guardSignedTx(
+        config,
+        SESSION_ADDRESS,
+        operatorTx({
+          variant: "purge_jailed_validator",
+          amount: 0n,
+          claimantValoper: OTHER_VALOPER,
+        }),
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("still binds the sender to the session address (403, like a swap owner)", () => {
+    const tx = operatorTx({ sender: "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad" });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 403 });
+  });
+});
+
+describe("operator execute — the rejection matrix (§2.5)", () => {
+  // Each case gets its own rate-limit window: these loops submit far more than
+  // RATE_LIMIT_PER_MINUTE attempts, and a 429 would mask the 400 under test.
+  let clock = 1_750_000_000_000;
+  const reject = (tx: Uint8Array, label: string) => {
+    clock += 61_000;
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, clock), label).toMatchObject({
+      ok: false,
+      status: 400,
+    });
+  };
+
+  it("a DIFFERENT contract address → 400 (the relay is not a general caller)", () => {
+    reject(
+      signedExecuteTx(
+        rawExecute({
+          contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          msg: `{"pay_commission":{"valoper":"${VALOPER}"}}`,
+          funds: [{ denom: "nhash", amount: "1" }],
+        }),
+      ),
+      "other contract",
+    );
+  });
+
+  it("every ADMIN / KEEPER variant → 400", () => {
+    // The variants that halt the program, rewrite its config, pause the vault,
+    // or drive the cranks. None is in the set; each must be refused.
+    for (const msg of [
+      `{"set_halted":{"halted":true}}`,
+      `{"update_config":{"aum_fee_bps":9999}}`,
+      `{"pause_vault":{"reason":"x"}}`,
+      `{"unpause_vault":{}}`,
+      `{"clear_pending_delegations":{}}`,
+      `{"run_epoch":{}}`,
+      `{"claim_rewards":{}}`,
+      `{"service_redemptions":{}}`,
+      `{"capture_uptime_signal":{}}`,
+    ]) {
+      reject(signedExecuteTx(rawExecute({ msg })), msg);
+    }
+  });
+
+  it("a multi-key inner payload → 400 (an allowed variant beside a forbidden one)", () => {
+    reject(
+      signedExecuteTx(
+        rawExecute({
+          msg: `{"pay_tip":{"valoper":"${VALOPER}"},"set_halted":{"halted":true}}`,
+        }),
+      ),
+      "two keys",
+    );
+  });
+
+  it("an extra field inside an allowed variant → 400", () => {
+    reject(
+      signedExecuteTx(
+        rawExecute({ msg: `{"register_participation":{"valoper":"${VALOPER}","admin":true}}` }),
+      ),
+      "extra field",
+    );
+  });
+
+  it("a claimant on a variant that has no claimant → 400", () => {
+    reject(
+      signedExecuteTx(
+        rawExecute({
+          msg: `{"report_jailed_validator":{"valoper":"${VALOPER}","claimant_valoper":"${OTHER_VALOPER}"}}`,
+        }),
+      ),
+      "claimant on report",
+    );
+  });
+
+  it("a valoper that is not a valoper → 400", () => {
+    for (const bad of [
+      SESSION_ADDRESS, // an ACCOUNT address where a valoper is required
+      "not-bech32",
+      "tpvaloper1UPPER",
+      "",
+    ]) {
+      reject(
+        signedExecuteTx(rawExecute({ msg: `{"unregister_participation":{"valoper":"${bad}"}}` })),
+        `valoper=${bad}`,
+      );
+    }
+  });
+
+  it("FUNDS on a fundless variant → 400 (funds smuggling)", () => {
+    for (const variant of [
+      "register_participation",
+      "unregister_participation",
+      "report_jailed_validator",
+      "purge_jailed_validator",
+    ]) {
+      reject(
+        signedExecuteTx(
+          rawExecute({
+            msg: `{"${variant}":{"valoper":"${VALOPER}"}}`,
+            funds: [{ denom: "nhash", amount: "1000" }],
+          }),
+        ),
+        variant,
+      );
+    }
+  });
+
+  it("a payment with the wrong denom, zero, or no coin → 400", () => {
+    const cases: { label: string; funds: { denom: string; amount: string }[] }[] = [
+      { label: "wrong denom", funds: [{ denom: "uatom", amount: "1000" }] },
+      { label: "zero amount", funds: [{ denom: "nhash", amount: "0" }] },
+      { label: "no funds", funds: [] },
+      {
+        label: "two coins",
+        funds: [
+          { denom: "nhash", amount: "1" },
+          { denom: "nhash", amount: "2" },
+        ],
+      },
+      { label: "non-canonical amount", funds: [{ denom: "nhash", amount: "01" }] },
+      { label: "fractional amount", funds: [{ denom: "nhash", amount: "1.5" }] },
+      { label: "negative amount", funds: [{ denom: "nhash", amount: "-1" }] },
+    ];
+    for (const { label, funds } of cases) {
+      reject(
+        signedExecuteTx(rawExecute({ msg: `{"pay_commission":{"valoper":"${VALOPER}"}}`, funds })),
+        label,
+      );
+    }
+  });
+
+  it("a NON-CANONICAL encoding of an otherwise-valid variant → 400", () => {
+    // Each of these parses to a payload the structural checks would accept.
+    // Only the canonical-bytes check refuses them — which is what keeps the
+    // guard from being a parser arms race against whatever the chain's
+    // deserializer does with the same bytes.
+    const funds = [{ denom: "nhash", amount: "1" }];
+    for (const msg of [
+      `{ "pay_commission" : { "valoper" : "${VALOPER}" } }`, // whitespace
+      `{"pay_commission":{"valoper":"${VALOPER}"}}\n`, // trailing newline
+      `{"\\u0070ay_commission":{"valoper":"${VALOPER}"}}`, // escaped variant name
+      `{"pay_commission":{"valoper":"${VALOPER}","valoper":"${VALOPER}"}}`, // duplicate key
+    ]) {
+      reject(signedExecuteTx(rawExecute({ msg, funds })), msg);
+    }
+  });
+
+  it("a payload that is not a JSON object → 400", () => {
+    for (const msg of [`"pay_commission"`, `["pay_commission"]`, `null`, `42`, `not json`, ``]) {
+      reject(signedExecuteTx(rawExecute({ msg, funds: [] })), JSON.stringify(msg));
+    }
+  });
+
+  it("an execute with NO inner payload at all → 400", () => {
+    const value = new ProtoWriter()
+      .string(1, SESSION_ADDRESS)
+      .string(2, config.contractAddress)
+      .finish();
+    reject(signedExecuteTx(value), "no msg field");
+  });
+
+  it("a SECOND proto payload field → 400 (no last-wins ambiguity at the wire level)", () => {
+    // Two `msg` fields: a decoder that took the first (or the last) could
+    // validate one payload while the chain executes the other. The decode
+    // refuses the ambiguity outright rather than picking a winner.
+    const value = new ProtoWriter()
+      .string(1, SESSION_ADDRESS)
+      .string(2, config.contractAddress)
+      .bytes(3, new TextEncoder().encode(`{"pay_tip":{"valoper":"${VALOPER}"}}`))
+      .bytes(3, new TextEncoder().encode(`{"set_halted":{"halted":true}}`))
+      .finish();
+    reject(signedExecuteTx(value), "duplicate msg field");
+  });
+
+  it("a payload that is not valid UTF-8 → 400", () => {
+    const value = new ProtoWriter()
+      .string(1, SESSION_ADDRESS)
+      .string(2, config.contractAddress)
+      .bytes(3, Uint8Array.from([0xff, 0xfe, 0x7b, 0x7d]))
+      .finish();
+    reject(signedExecuteTx(value), "invalid utf-8");
+  });
+
+  it("a contract call disguised under an unknown type URL → 400 (first level)", () => {
+    reject(
+      signedExecuteTx(rawExecute({ msg: `{"pay_commission":{"valoper":"${VALOPER}"}}` }), {
+        typeUrl: "/cosmwasm.wasm.v1.MsgMigrateContract",
+      }),
+      "migrate",
+    );
+  });
+
+  it("a valid operator msg BESIDE a forbidden one in the same tx → 400", () => {
+    // Per-message enforcement, not first-message enforcement.
+    const good = new ProtoWriter()
+      .string(1, MSG_EXECUTE_CONTRACT)
+      .bytes(2, rawExecute({ msg: `{"pay_tip":{"valoper":"${VALOPER}"}}`, funds: [{ denom: "nhash", amount: "5" }] }))
+      .finish();
+    const bad = new ProtoWriter()
+      .string(1, MSG_EXECUTE_CONTRACT)
+      .bytes(2, rawExecute({ msg: `{"set_halted":{"halted":true}}` }))
+      .finish();
+    const body = new ProtoWriter().message(1, good, true).message(1, bad, true).finish();
+    const plan = buildTxPlan(
+      {
+        kind: "swap_in",
+        owner: SESSION_ADDRESS,
+        vaultAddress: config.vaultAddress,
+        amount: 1n,
+        denom: "nhash",
+      },
+      { gasLimit: 1n, amount: 1n, denom: "nhash" },
+      {
+        chainId: config.chainId,
+        accountNumber: 1n,
+        sequence: 0n,
+        pubkeyBase64: Buffer.from(PUB).toString("base64"),
+      },
+    );
+    reject(encodeTxRaw(body, plan.authInfoBytes, [new Uint8Array(64)]), "mixed batch");
   });
 });

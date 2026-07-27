@@ -44,6 +44,23 @@ export function reasonText(
       return t(locale, "tx.reason-account-missing");
     case "chain-unavailable":
       return t(locale, "tx.reason-chain-unavailable");
+    // M6.4 operator predicates (§2.4).
+    case "not-validator-operator":
+      return t(locale, "tx.reason-not-validator-operator");
+    case "validator-not-found":
+      return t(locale, "tx.reason-validator-not-found");
+    case "already-enrolled":
+      return t(locale, "tx.reason-already-enrolled");
+    case "not-enrolled":
+      return t(locale, "tx.reason-not-enrolled");
+    case "validator-not-jailed":
+      return t(locale, "tx.reason-validator-not-jailed");
+    case "no-jail-report":
+      return t(locale, "tx.reason-no-jail-report");
+    case "purge-cooldown":
+      return t(locale, "tx.reason-purge-cooldown", { readyAt: reason.readyAtIso });
+    case "program-halted":
+      return t(locale, "tx.reason-program-halted");
   }
 }
 

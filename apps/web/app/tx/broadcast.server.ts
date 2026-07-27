@@ -9,8 +9,11 @@
 //   2. size cap (SIZE_CAP_BYTES)               → 413
 //   3. decodes as TxRaw, one signature         → 400
 //   4. every msg type ∈ the closed allowlist   → 400
-//   5. every msg's vault == configured vault   → 400
-//   6. every msg's owner == session address    → 403
+//  4b. MsgExecuteContract ONLY: the M6.4 §2.5 deep guard — configured
+//      contract, one of six operator variants, per-variant body, funds
+//      discipline, canonical bytes → 400
+//   5. every vault msg's vault == configured vault → 400
+//   6. every msg's owner/sender == session address → 403
 //   7. SOLE signer pubkey derives session addr → 403 (cryptographic
 //      binding: the pubkey that signed IS the session's address)
 //   8. rate limit per session address          → 429
@@ -23,7 +26,12 @@ import { LcdClient, TxClient, type FetchLike } from "@nvhash/chain-client";
 
 import { pubkeyToBech32, bech32Prefix } from "~/lib/adr36-verify.server";
 import type { WebConfig } from "~/config/config.server";
-import { ALLOWED_MSG_TYPE_URLS, decodeTxRaw } from "./build";
+import {
+  ALLOWED_MSG_TYPE_URLS,
+  decodeTxRaw,
+  guardOperatorExecute,
+  MSG_EXECUTE_CONTRACT,
+} from "./build";
 
 export const SIZE_CAP_BYTES = 16 * 1024;
 /** Broadcasts per session address per window (a user action, not a bot API). */
@@ -86,9 +94,21 @@ export function guardSignedTx(
     if (!(ALLOWED_MSG_TYPE_URLS as readonly string[]).includes(msg.typeUrl)) {
       return { ok: false, status: 400, reason: "message type not allowed" };
     }
-    if (msg.vaultAddress !== config.vaultAddress) {
+    if (msg.typeUrl === MSG_EXECUTE_CONTRACT) {
+      // Guard 4b — the M6.4 §2.5 DEEP guard. `MsgExecuteContract` is in the
+      // allowlist only because this runs: on its own the type URL would carry
+      // any call to any contract. It replaces the vault check (field 2 is the
+      // CONTRACT here, not the vault) and is never skipped for it.
+      const verdict = guardOperatorExecute(msg, { contractAddress: config.contractAddress });
+      if (!verdict.ok) {
+        return { ok: false, status: 400, reason: verdict.reason };
+      }
+    } else if (msg.vaultAddress !== config.vaultAddress) {
       return { ok: false, status: 400, reason: "unexpected vault address" };
     }
+    // Guard 6 applies to BOTH shapes: field 1 is the vault msgs' `owner` and
+    // an execute's `sender`, so an operator action is bound to the session
+    // address exactly as a swap is.
     if (msg.owner !== sessionAddress) {
       return { ok: false, status: 403, reason: "owner is not the session address" };
     }

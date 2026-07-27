@@ -21,6 +21,7 @@ import {
 import { z } from "zod";
 
 import type { WebConfig } from "~/config/config.server";
+import { OPERATOR_VARIANTS } from "./build";
 import type { PreflightReason } from "./lifecycle";
 
 /**
@@ -38,6 +39,22 @@ export const preflightRequestSchema = z.object({
   amount: z.string().regex(/^[0-9]{1,39}$/, "expected a base-unit integer string"),
 });
 export type PreflightRequest = z.infer<typeof preflightRequestSchema>;
+
+/** Valoper shape, bounded at the route boundary like every other input. */
+const valoperString = z
+  .string()
+  .max(90)
+  .regex(/^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/);
+
+/** M6.4 operator preflight (§2.4). `amount` is required only for payments. */
+export const operatorPreflightRequestSchema = z.object({
+  kind: z.literal("operator"),
+  variant: z.enum(OPERATOR_VARIANTS),
+  valoper: valoperString,
+  claimantValoper: valoperString.nullable().default(null),
+  amount: z.string().regex(/^[0-9]{1,39}$/, "expected a base-unit integer string").default("0"),
+});
+export type OperatorPreflightRequest = z.infer<typeof operatorPreflightRequestSchema>;
 
 export interface PreflightContext {
   reasons: PreflightReason[];
@@ -160,4 +177,112 @@ export async function runPreflight(
     balance: total(denom).toString(),
     denom,
   };
+}
+
+// ── M6.4 operator preflight (§2.4) ───────────────────────────────────────
+//
+// Every predicate below RESTATES one the contract already enforces. That is
+// the point and the limit: preflight is convenience (§12.1, SECURITY.md "UI
+// guards are convenience, the contract is the enforcement boundary"), so it
+// never gates safety — it explains, in advance, why an action would fail. A
+// failed chain read therefore blocks with `chain-unavailable` instead of
+// optimistically letting the action through OR silently hiding it.
+
+/** The live facts the operator predicates read. Separated from the I/O so the
+ * predicate matrix is a pure function the tests drive directly. */
+export interface OperatorPreflightFacts {
+  /** The acting address, from the SESSION (never client input). */
+  address: string;
+  /** The contract's enrolled set, or null when the read failed. */
+  validators:
+    | readonly {
+        valoper: string;
+        operator: string;
+        jailed: boolean;
+        commissionDue: bigint;
+        commissionPaid: bigint;
+      }[]
+    | null;
+  /** Open jail reports, or null when the read failed. */
+  jailReports: readonly { valoper: string; purgeReadyAtSeconds: number }[] | null;
+  /** Whether the target valoper exists in x/staking, and its jailed flag. */
+  chainValidator: { exists: boolean; jailed: boolean } | null;
+  /** The program's halt state (the purge leg is halt-gated). */
+  halted: boolean | null;
+  /** Spendable nhash for the payment + fee check. */
+  spendableNhash: bigint | null;
+  nowSeconds: number;
+}
+
+/**
+ * The operator predicate matrix — pure over live facts. Ordering is
+ * deliberate: an unavailable read short-circuits everything, because a reason
+ * derived from a missing fact would be a guess.
+ */
+export function operatorPreflightReasons(
+  request: OperatorPreflightRequest,
+  facts: OperatorPreflightFacts,
+): PreflightReason[] {
+  if (facts.validators === null || facts.chainValidator === null) {
+    return [{ code: "chain-unavailable" }];
+  }
+  const reasons: PreflightReason[] = [];
+  const enrolled = facts.validators.find((v) => v.valoper === request.valoper) ?? null;
+  const amount = BigInt(request.amount);
+
+  switch (request.variant) {
+    case "register_participation": {
+      // The contract requires the caller to BE the valoper's operator account
+      // and the validator to exist on chain.
+      if (!facts.chainValidator.exists) reasons.push({ code: "validator-not-found" });
+      if (enrolled !== null) reasons.push({ code: "already-enrolled" });
+      break;
+    }
+    case "unregister_participation": {
+      if (enrolled === null) reasons.push({ code: "not-enrolled" });
+      else if (enrolled.operator !== facts.address) reasons.push({ code: "not-validator-operator" });
+      break;
+    }
+    case "pay_commission":
+    case "pay_tip": {
+      // Payment is permissionless — anyone may pay — so there is deliberately
+      // NO operator check here; only enrollment and the amount bounds.
+      if (enrolled === null) reasons.push({ code: "not-enrolled" });
+      if (amount <= 0n) reasons.push({ code: "amount-invalid" });
+      if (facts.spendableNhash !== null && amount > 0n) {
+        const required = amount + FEE_PROVISION_NHASH;
+        if (facts.spendableNhash < required) {
+          reasons.push({
+            code: "insufficient-balance",
+            balance: facts.spendableNhash.toString(),
+            required: required.toString(),
+          });
+        }
+      }
+      break;
+    }
+    case "report_jailed_validator": {
+      // Permissionless, but pointless unless the validator is actually jailed
+      // — and the contract CLEARS an existing report when it is not.
+      if (!facts.chainValidator.jailed) reasons.push({ code: "validator-not-jailed" });
+      if (enrolled === null) reasons.push({ code: "not-enrolled" });
+      break;
+    }
+    case "purge_jailed_validator": {
+      if (!facts.chainValidator.jailed) reasons.push({ code: "validator-not-jailed" });
+      const report = (facts.jailReports ?? []).find((r) => r.valoper === request.valoper) ?? null;
+      if (facts.jailReports !== null && report === null) {
+        reasons.push({ code: "no-jail-report" });
+      } else if (report !== null && facts.nowSeconds < report.purgeReadyAtSeconds) {
+        reasons.push({
+          code: "purge-cooldown",
+          readyAtIso: new Date(report.purgeReadyAtSeconds * 1_000).toISOString(),
+        });
+      }
+      // Phase 2 moves funds and is halt-gated (contract msg.rs).
+      if (facts.halted === true) reasons.push({ code: "program-halted" });
+      break;
+    }
+  }
+  return reasons;
 }

@@ -364,6 +364,20 @@ export default {
   "tx.reason-amount-invalid": "Enter a valid amount.",
   "tx.reason-account-missing": "This account has no on-chain activity yet. Receive some HASH first.",
   "tx.reason-chain-unavailable": "The chain could not be reached to check this. Try again shortly.",
+  // M6.4 operator predicates. Each restates a rule the CONTRACT enforces —
+  // these explain in advance, they do not decide (§12.1).
+  "tx.reason-not-validator-operator":
+    "Only the validator's own operator account can do this, and this wallet is not it.",
+  "tx.reason-validator-not-found": "No validator with that operator address exists on chain.",
+  "tx.reason-already-enrolled": "This validator is already enrolled in the program.",
+  "tx.reason-not-enrolled": "This validator is not enrolled in the program.",
+  "tx.reason-validator-not-jailed":
+    "This validator is not jailed. Reporting only applies to a validator that is jailed right now, and the contract clears a stale report on its next observation.",
+  "tx.reason-no-jail-report":
+    "No jail report is on file yet. Report the validator first — that starts the cooldown.",
+  "tx.reason-purge-cooldown": "The cooldown has not elapsed. A purge becomes possible at {readyAt}.",
+  "tx.reason-program-halted":
+    "The program's fund-moving cranks are halted, so a purge cannot run right now.",
   "tx.reconnect-to-sign": "Reconnect your wallet to sign — the session is active but the signing connection was lost.",
   "tx.status-signing": "Approve the transaction in your wallet…",
   "tx.view-explorer": "View on explorer",
