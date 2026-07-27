@@ -21,21 +21,35 @@
 import type {
   FreshnessSource,
   IncidentRow,
+  OperatorEpochRow,
+  OperatorPaymentRow,
+  OperatorSummary,
   ProgramMetrics,
   EpochRow,
 } from "@nvhash/api-types";
 import type { z } from "zod";
-import { transactionsCsv } from "./csv.ts";
-import { toTransactionRow } from "./derive.ts";
+import { operatorPaymentsCsv, transactionsCsv } from "./csv.ts";
+import {
+  deriveOperatorSummary,
+  resolveOwnedValoper,
+  toOperatorEpochRow,
+  toOperatorPaymentRow,
+  toTransactionRow,
+} from "./derive.ts";
 import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
 import {
   alertIncidentsQuerySchema,
   alertRedemptionsQuerySchema,
+  operatorEpochsQuerySchema,
+  operatorPaymentsQuerySchema,
+  operatorSummaryQuerySchema,
   paginationSchema,
   portfolioQuerySchema,
   transactionsQuerySchema,
   type AlertIncidentsQuery,
   type AlertRedemptionsQuery,
+  type OperatorEpochsQuery,
+  type OperatorPaymentsQuery,
   type Pagination,
   type TransactionsQuery,
 } from "./query.ts";
@@ -422,6 +436,155 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
   },
 });
 
+// --- operator surface (M6.4, address-scoped) --------------------------------
+//
+// The three reads behind `/validators/mine` (app-spec §8.6). All `auth:
+// "address"`, so they join the standing cross-address gate automatically; on
+// top of that they carry an OWNERSHIP check the other personal routes do not
+// need: the address→valoper mapping is resolved server-side from
+// `validator_registry.operator`, and a valoper the address does not operate is
+// answered honest-empty. Not 403 — a 403 would confirm the valoper exists and
+// belongs to someone else, an oracle on who operates what (plan §3 commit B).
+
+/**
+ * `GET /api/v1/operator/summary?address=` — every validator this address
+ * operates: registry enrollment, the latest sampled epoch's economics, and
+ * lifetime commission/TIP totals. An address that operates none gets
+ * `{ address, validators: [] }` — the honest-empty answer, indistinguishable
+ * from an address that operates none on a dataless process.
+ *
+ * Peer context (`rank_by_tip`, eligible/enrolled counts) is deliberately ABSENT
+ * — plan §7 Q5 was not approved, so no other validator's ordinal position is
+ * computed onto this personal surface (delivery note, commit B).
+ */
+const operatorSummaryRoute = defineEnveloped<z.infer<typeof operatorSummaryQuerySchema>>({
+  method: "GET",
+  path: `${API_BASE}/operator/summary`,
+  auth: "address",
+  enveloped: true,
+  querySchema: operatorSummaryQuerySchema,
+  summary: "Operator-scoped validator standing + lifetime payment totals",
+  handle: async (ctx) => {
+    const [heads, registry] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.operatorValopers(ctx.query.address),
+    ]);
+    const valopers = registry.map((r) => r.valoper);
+    const [latest, totals] = await Promise.all([
+      ctx.reader.latestOperatorEpochs(valopers),
+      ctx.reader.operatorPaymentTotalsFor(valopers),
+    ]);
+    return {
+      data: deriveOperatorSummary(
+        ctx.query.address,
+        registry,
+        new Map(latest.map((row) => [row.valoper, row])),
+        new Map(totals.map((row) => [row.valoper, row])),
+      ) satisfies OperatorSummary,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/operator/epochs?address=&valoper=` — one owned validator's
+ * per-epoch economics, newest first, paginated. This is the history the console
+ * cannot show (§8.6). A valoper the address does not operate serves `[]`.
+ */
+const operatorEpochsRoute = defineEnveloped<OperatorEpochsQuery>({
+  method: "GET",
+  path: `${API_BASE}/operator/epochs`,
+  auth: "address",
+  enveloped: true,
+  querySchema: operatorEpochsQuerySchema,
+  summary: "Operator-scoped per-epoch validator history (paginated)",
+  handle: async (ctx) => {
+    const [heads, owned] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.operatorValopers(ctx.query.address),
+    ]);
+    const valoper = resolveOwnedValoper(owned, ctx.query.valoper);
+    const rows =
+      valoper === null
+        ? []
+        : await ctx.reader.validatorEpochsFor(valoper, {
+            limit: ctx.query.limit,
+            offset: ctx.query.offset,
+          });
+    return {
+      data: rows.map(toOperatorEpochRow) satisfies OperatorEpochRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/operator/payments?address=&valoper=&format=` — one owned
+ * validator's per-payment commission/TIP history. `format=csv` serves the
+ * §14.11 operator export: the COMPLETE history ascending (the 6.1
+ * completeness precedent — `limit`/`offset` bound only the JSON view), with
+ * freshness in the X- headers ([R3]).
+ *
+ * `epoch_index` is derived here by joining the epoch boundaries, because the
+ * indexer cannot know a payment's crediting epoch at ingest (app-spec §9.1).
+ */
+const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
+  method: "GET",
+  path: `${API_BASE}/operator/payments`,
+  auth: "address",
+  enveloped: true,
+  querySchema: operatorPaymentsQuerySchema,
+  summary: "Operator-scoped payment history (paginated; §14.11 CSV export)",
+  handle: async (ctx) => {
+    const [heads, owned] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.operatorValopers(ctx.query.address),
+    ]);
+    const valoper = resolveOwnedValoper(owned, ctx.query.valoper);
+
+    if (ctx.query.format === "csv") {
+      const [facts, boundaries] =
+        valoper === null
+          ? [[], []]
+          : await Promise.all([
+              ctx.reader.operatorPaymentsAscFor(valoper),
+              ctx.reader.epochBoundariesAsc(),
+            ]);
+      const headers = new Headers();
+      headers.set("content-type", "text/csv; charset=utf-8");
+      headers.set("content-disposition", 'attachment; filename="operator-payments.csv"');
+      if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
+      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      headers.set("x-generated-at", ctx.now().toISOString());
+      return new Response(
+        operatorPaymentsCsv(facts.map((f) => toOperatorPaymentRow(f, boundaries))),
+        { status: 200, headers },
+      );
+    }
+
+    const [facts, boundaries] =
+      valoper === null
+        ? [[], []]
+        : await Promise.all([
+            ctx.reader.operatorPaymentsFor(valoper, {
+              limit: ctx.query.limit,
+              offset: ctx.query.offset,
+            }),
+            ctx.reader.epochBoundariesAsc(),
+          ]);
+    return {
+      data: facts.map((f) => toOperatorPaymentRow(f, boundaries)) satisfies OperatorPaymentRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
 // --- internal alert-facts surface (M6.2, `internal:notifier` scope) ---------
 //
 // The notifier's cross-address evaluation reads (ADR-001 Decision 3; app-spec
@@ -540,6 +703,9 @@ export const routes: readonly Route[] = [
   portfolioRoute,
   portfolioMetricsRoute,
   transactionsRoute,
+  operatorSummaryRoute,
+  operatorEpochsRoute,
+  operatorPaymentsRoute,
   alertRedemptionsRoute,
   alertIncidentsRoute,
   alertArrearsRoute,

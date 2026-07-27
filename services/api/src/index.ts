@@ -21,10 +21,16 @@ export { createApiServer, clientKey, scheduleWindowSweep, type ApiServer } from 
 export { createHandler, type HandlerDeps, type RequestMeta } from "./handler.ts";
 export { RateLimiter, type RateLimitResult } from "./rate-limit.ts";
 export { routes, findRoute, API_BASE, type Route } from "./routes.ts";
-export { paginationSchema, bech32AddressSchema, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_PAGE_OFFSET } from "./query.ts";
+export { paginationSchema, bech32AddressSchema, bech32ValoperSchema, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_PAGE_OFFSET } from "./query.ts";
 export { emptyReader, type IndexedReader, type Heads } from "./reader.ts";
 export { verifyAssertion, MAX_ASSERTION_LIFETIME_SECONDS, MAX_CLOCK_SKEW_SECONDS, type VerifiedScope, type VerifyResult } from "./auth.ts";
-export { transactionsCsv, csvField, TRANSACTIONS_CSV_COLUMNS } from "./csv.ts";
+export {
+  transactionsCsv,
+  operatorPaymentsCsv,
+  csvField,
+  TRANSACTIONS_CSV_COLUMNS,
+  OPERATOR_PAYMENTS_CSV_COLUMNS,
+} from "./csv.ts";
 
 export async function main(): Promise<void> {
   const config = loadConfig();

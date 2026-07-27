@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@nvhash/db-indexed";
 import { createPrismaReader, type PrismaReader } from "../../src/reader-prisma.ts";
+import { paymentEpochIndex } from "../../src/derive.ts";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -58,6 +59,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     await writer.epochSnapshot.deleteMany();
     await writer.marketSample.deleteMany();
     await writer.bridgeSupplySample.deleteMany();
+    await writer.operatorPayment.deleteMany();
     await writer.indexerCheckpoint.deleteMany();
 
     await writer.indexerCheckpoint.createMany({
@@ -138,6 +140,18 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         { requestId: "req-1", owner: "pb1alice", shares: "500", status: "enqueued", enqueuedAt: new Date("2026-06-03T00:00:00Z"), lastHeight: 300n, lastTxhash: "CC" },
         { requestId: "req-0", owner: "pb1alice", shares: "100", status: "matured", enqueuedAt: new Date("2026-05-01T00:00:00Z"), maturedAt: new Date("2026-05-20T00:00:00Z"), lastHeight: 50n, lastTxhash: "OLD" },
         ...recentTerminal,
+      ],
+    });
+    // Operator plane (M6.4): payments for alpha spanning the epoch-12 boundary
+    // (endHeight 4100) — one before it, one after — plus one for bravo, so the
+    // per-valoper scoping and the derived epoch are both observable. Amounts at
+    // Uint128 scale so the Decimal(39,0) → bigint sum is a real round trip.
+    await writer.operatorPayment.createMany({
+      data: [
+        { txhash: "PAY1", msgIndex: 0, valoper: "pbvaloper1aaa", payer: "pb1aaa", paymentType: "commission", amount: "170141183460469231731687303715884105727", height: 3000n, occurredAt: new Date("2026-06-15T00:00:00Z") },
+        { txhash: "PAY2", msgIndex: 1, valoper: "pbvaloper1aaa", payer: "pb1someoneelse", paymentType: "tip", amount: "25", height: 3000n, occurredAt: new Date("2026-06-15T00:00:00Z") },
+        { txhash: "PAY3", msgIndex: 0, valoper: "pbvaloper1aaa", payer: "pb1aaa", paymentType: "commission", amount: "3", height: 5000n, occurredAt: new Date("2026-07-20T00:00:00Z") },
+        { txhash: "PAYB", msgIndex: 0, valoper: "pbvaloper1bbb", payer: "pb1bbb", paymentType: "tip", amount: "7", height: 3000n, occurredAt: new Date("2026-06-16T00:00:00Z") },
       ],
     });
     // Market plane (PR 3.2): the sample predates every settled epoch, so the
@@ -362,6 +376,94 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         data: { unregisteredAt: null },
       });
     }
+  });
+
+  // --- M6.4 operator surface (the address→valoper mapping, over real SQL) ---
+
+  it("maps an address to only the validators it operates", async () => {
+    const mine = await reader.operatorValopers("pb1aaa");
+    expect(mine.map((r) => r.valoper)).toEqual(["pbvaloper1aaa"]); // never bravo
+    expect(mine[0]).toMatchObject({
+      operator: "pb1aaa",
+      moniker: "alpha",
+      unregisteredAt: null,
+    });
+    // An address that operates nothing gets an empty set — the honest-empty
+    // answer every operator route then serves, never an error that would say
+    // whether those valopers exist.
+    expect(await reader.operatorValopers("pb1nobody")).toEqual([]);
+  });
+
+  it("reads the LATEST epoch per owned valoper with the full economics", async () => {
+    const latest = await reader.latestOperatorEpochs(["pbvaloper1aaa", "pbvaloper1bbb"]);
+    expect(latest.map((e) => e.valoper)).toEqual(["pbvaloper1aaa"]); // bravo has no sample
+    expect(latest[0]).toMatchObject({
+      epochIndex: 12n, // the latest, not the epoch-11 row
+      uptimeBps: 9990,
+      eligible: true,
+      commissionDue: 5n,
+      commissionAccrued: 0n,
+      commissionPaid: 0n,
+      tip: 0n,
+      programDelegation: 1_000_000_000n,
+      height: 4100n,
+    });
+    expect(await reader.latestOperatorEpochs([])).toEqual([]);
+  });
+
+  it("pages a validator's epoch history newest first", async () => {
+    const page1 = await reader.validatorEpochsFor("pbvaloper1aaa", { limit: 1, offset: 0 });
+    expect(page1.map((e) => e.epochIndex)).toEqual([12n]);
+    const page2 = await reader.validatorEpochsFor("pbvaloper1aaa", { limit: 1, offset: 1 });
+    expect(page2.map((e) => e.epochIndex)).toEqual([11n]);
+    expect(await reader.validatorEpochsFor("pbvaloper1bbb", { limit: 50, offset: 0 })).toEqual([]);
+  });
+
+  it("sums lifetime payment totals per valoper in SQL, at Uint128 scale", async () => {
+    const totals = await reader.operatorPaymentTotalsFor(["pbvaloper1aaa", "pbvaloper1bbb"]);
+    const alpha = totals.find((t) => t.valoper === "pbvaloper1aaa");
+    // A 39-digit commission plus a small one: a sum that went through a double
+    // could not come back exact.
+    expect(alpha).toEqual({
+      valoper: "pbvaloper1aaa",
+      commissionPaidTotal: 170141183460469231731687303715884105727n + 3n,
+      tipPaidTotal: 25n,
+      paymentCount: 3,
+    });
+    expect(totals.find((t) => t.valoper === "pbvaloper1bbb")).toEqual({
+      valoper: "pbvaloper1bbb",
+      commissionPaidTotal: 0n,
+      tipPaidTotal: 7n,
+      paymentCount: 1,
+    });
+    expect(await reader.operatorPaymentTotalsFor([])).toEqual([]);
+  });
+
+  it("reads the COMPLETE payment history ascending, scoped to one valoper", async () => {
+    const facts = await reader.operatorPaymentsAscFor("pbvaloper1aaa");
+    // Ascending by (height, msgIndex); bravo's PAYB is absent.
+    expect(facts.map((f) => f.txhash)).toEqual(["PAY1", "PAY2", "PAY3"]);
+    expect(facts[1]).toMatchObject({
+      txhash: "PAY2",
+      msgIndex: 1,
+      paymentType: "tip",
+      amount: 25n,
+      // The permissionless-payment case: the payer is NOT the operator.
+      payer: "pb1someoneelse",
+      height: 3000n,
+    });
+    // The paginated JSON view is the same rows, newest first.
+    const page = await reader.operatorPaymentsFor("pbvaloper1aaa", { limit: 2, offset: 0 });
+    expect(page.map((f) => f.txhash)).toEqual(["PAY3", "PAY2"]);
+  });
+
+  it("serves epoch boundaries ascending — the payment→epoch derivation input", async () => {
+    // With only epoch 12 (endHeight 4100) indexed: a payment at 3000 credits
+    // epoch 12, and one at 5000 has no closed epoch yet (null, never a guess).
+    const boundaries = await reader.epochBoundariesAsc();
+    expect(boundaries).toEqual([{ epochIndex: 12n, endHeight: 4100n }]);
+    expect(paymentEpochIndex(3000n, boundaries)).toBe(12n);
+    expect(paymentEpochIndex(5000n, boundaries)).toBeNull();
   });
 
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {

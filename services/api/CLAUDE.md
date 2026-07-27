@@ -82,6 +82,29 @@ Query API over the indexer's data store.
   standing gate list — a new internal route is covered automatically. The
   `internal:notifier` assertion golden vector is cross-pinned in
   `test/assertion-vectors.test.ts` ↔ `apps/web/test/assertion.test.ts`.
+- **Operator surface (PR 6.4, M6.4)** — three `auth: "address"` routes under
+  `/api/v1/operator/` (`summary`, `epochs`, `payments`) behind `/validators/mine`
+  (app-spec §8.6/§9.4). They carry a SECOND boundary beyond the scope check:
+  the address→valoper mapping, resolved server-side from
+  `validator_registry.operator` via `IndexedReader.operatorValopers` — the
+  single source — with every other operator read called only on a valoper that
+  came from it (the pure `resolveOwnedValoper` in `derive.ts`). **An unowned
+  valoper is answered honest-empty, never 403**: a 403 would confirm it exists
+  and belongs to someone else. `test/operator-endpoints.test.ts` is that gate
+  and asserts an unowned valoper and a nonexistent one are indistinguishable.
+  `?valoper=` is bounded by `bech32ValoperSchema` (the `valoper` HRP required).
+  `payer` rides the JSON row (permissionless payment — the operator's audit
+  case) but NOT the CSV, whose six columns §14.11 pins; `payment.epoch_index`
+  is derived at read time (`paymentEpochIndex` over `epochBoundariesAsc`, null
+  while the crediting epoch is open) because the indexer cannot know it at
+  ingest. The `format=csv` export is the COMPLETE history ascending (the 6.1
+  precedent). New reader methods sum in SQL (`operatorPaymentTotalsFor`) and
+  chunk (`operatorPaymentsAscFor`); the full `validator_epochs` row is a new
+  `OperatorEpochFacts` type, deliberately NOT a widening of the public
+  projection's `ValidatorEpochFacts`. Query plans (checked 2026-07-27): all
+  index-backed except `validator_registry` (bounded by the contract's validator
+  cap) and `epoch_snapshots` (one row per calendar month) — both structurally
+  tiny, so no index was added.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.
@@ -170,4 +193,14 @@ security-executable gates (SECURITY.md, plan §4), which fail CI on violation:
 The **cross-address-rejection** gate for address-scoped endpoints (ADR-001
 Decision 2) is a standing `services/api` gate **from PR 3.3**, when those
 endpoints and the service-assertion verification land — not part of this
-scaffold.
+scaffold. Since PR 6.4 its `PERSONAL_PATHS` list is **registry-derived** like
+`INTERNAL_PATHS`, so a new `auth: "address"` route joins the matrix
+automatically; a route needing extra required params declares them in the
+suite's `VALOPER_PATHS`/`personalQuery` helper, and the suite asserts that
+coverage so a new required param cannot 400 its way past a 403 assertion.
+
+- **Operator ownership** (standing from PR 6.4,
+  `test/operator-endpoints.test.ts`): the address→valoper mapping is enforced
+  server-side and leak-free — an unowned valoper and a well-formed nonexistent
+  one produce byte-identical answers — and the §14.11 operator CSV's column
+  set, completeness past pagination, and injection guard are pinned.

@@ -912,6 +912,62 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > migration (`@@index([lastHeight])` on `redemption_requests`) rides this
 > branch (no column, schema-allowlist unaffected, rebuildable).
 
+> **Revision 2026-07-27 (PR 6.4 commit B, the operator surface):** three new
+> `GET`, `auth: "address"`, enveloped, zod-bounded routes serve `/validators/mine`
+> (§8.6). All three join the cross-address `PERSONAL_PATHS` gate — which this
+> change makes **registry-derived** rather than hand-kept, so every future
+> address-scoped route is covered automatically:
+> - `/api/v1/operator/summary?address=` → `OperatorSummary`: every validator the
+>   address operates, each with registry enrollment, the latest sampled epoch's
+>   FULL economics (uptime, eligibility, failing reasons, program delegation,
+>   tip, commission accrued/paid/due), and lifetime commission/TIP totals with a
+>   payment count from `operator_payments`. Per-epoch fields null before the
+>   first sample; totals are honest sums (0 over zero rows).
+> - `/api/v1/operator/epochs?address=&valoper=&limit=&offset=` →
+>   `OperatorEpochRow[]`, newest first — the per-epoch history the console
+>   cannot show.
+> - `/api/v1/operator/payments?address=&valoper=&limit=&offset=&format=` →
+>   `OperatorPaymentRow[]`, newest first; `format=csv` serves the §14.11
+>   operator export — the **complete** history ascending (the 6.1
+>   completeness precedent: `limit`/`offset` bound only the JSON view), with
+>   the pinned columns `datetime_utc, block_height, epoch_index, payment_type,
+>   hash_amount, txhash`, the formula-injection guard, and the [R3] freshness
+>   headers.
+>
+> **A second boundary, enforced as a mechanism.** These routes carry an
+> ownership check the other personal routes do not need: the address→valoper
+> mapping is resolved server-side from `validator_registry.operator`
+> (`IndexedReader.operatorValopers`, the single source), and every other
+> operator read is called only with a valoper that came from it (the pure
+> `resolveOwnedValoper`). A valoper the caller does not operate is answered
+> **honest-empty, never 403** — a 403 would confirm the valoper exists and
+> belongs to another operator, an oracle on who operates what. The gate is
+> `test/operator-endpoints.test.ts`, which asserts an unowned valoper and a
+> well-formed nonexistent one produce byte-identical answers. `?valoper=` is
+> bounded by a new `bech32ValoperSchema` (the `valoper` HRP required), so an
+> account address cannot be passed where a valoper is meant.
+>
+> Two recorded shape decisions. **`payer` is served in the JSON row but not in
+> the CSV:** payment is permissionless, so the payer is often not the operator
+> and is needed for the operator's own audit (public tx data), while §14.11
+> pins the six export columns — adding it there is a §14.11 amendment, not an
+> implementation choice. **Peer context is absent:** the plan's proposed
+> `rank_by_tip` / eligible / enrolled counts were not approved (§7 Q5,
+> 2026-07-27), so no other validator's ordinal position is computed onto this
+> personal surface; the public `/validators` page remains where the set is seen.
+>
+> `epoch_index` on a payment is **derived at read time**, not stored: the
+> earliest epoch whose `endHeight >= payment.height` (`paymentEpochIndex` over
+> `IndexedReader.epochBoundariesAsc`), null while the crediting epoch is still
+> open — see the §9.1 `operator_payments` note for why the indexer cannot
+> supply it. `IndexedReader` also gains `latestOperatorEpochs`,
+> `validatorEpochsFor`, `operatorPaymentTotalsFor` (summed in SQL, never by
+> materializing rows), `operatorPaymentsFor`, and `operatorPaymentsAscFor`
+> (chunked). The full `validator_epochs` row is a NEW fact type
+> (`OperatorEpochFacts`); the public projection's narrow `ValidatorEpochFacts`
+> is untouched, so the closed public key set gated by
+> `apps/web/test/validators-data.test.ts` cannot widen by accident.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.

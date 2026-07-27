@@ -30,7 +30,12 @@ import type {
 import {
   REDEMPTION_BAND_CEILING_SECONDS,
   REDEMPTION_BAND_FLOOR_SECONDS,
+  type EpochBoundary,
   type Heads,
+  type OperatorEpochFacts,
+  type OperatorPaymentFacts,
+  type OperatorPaymentTotalFacts,
+  type OperatorRegistryFacts,
   type TransactionFacts,
 } from "./derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
@@ -91,6 +96,32 @@ export interface IndexedReader {
   incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]>;
   /** Validators with commission due in the latest sampled epoch (active only). */
   latestArrears(): Promise<AlertArrearsFact[]>;
+  /**
+   * Operator-surface reads (M6.4). Like the other address-scoped reads these
+   * carry no authorization role — the address arrives already authorized by the
+   * registry's `auth: "address"` declaration. What they DO carry is the
+   * ownership mapping: `operatorValopers` is the only source of the valopers an
+   * address may see, and every other operator read is called with a valoper
+   * that came from it (enforced in the handlers via `resolveOwnedValoper`).
+   */
+  operatorValopers(address: string): Promise<OperatorRegistryFacts[]>;
+  /** Latest sampled epoch per valoper (full economics, not the public subset). */
+  latestOperatorEpochs(valopers: readonly string[]): Promise<OperatorEpochFacts[]>;
+  /** One validator's epoch history, newest first, paginated. */
+  validatorEpochsFor(valoper: string, page: Pagination): Promise<OperatorEpochFacts[]>;
+  /** Lifetime commission/TIP sums + row count per valoper (`operator_payments`). */
+  operatorPaymentTotalsFor(valopers: readonly string[]): Promise<OperatorPaymentTotalFacts[]>;
+  /** One validator's payment history, newest first, paginated (the JSON view). */
+  operatorPaymentsFor(valoper: string, page: Pagination): Promise<OperatorPaymentFacts[]>;
+  /**
+   * One validator's COMPLETE payment history ascending by (height, msgIndex),
+   * chunked internally — the §14.11 CSV export's source. Pagination bounds the
+   * JSON view only; a statement of fact is never a paginated slice (the 6.1
+   * `transactionsAscFor` precedent).
+   */
+  operatorPaymentsAscFor(valoper: string): Promise<OperatorPaymentFacts[]>;
+  /** Epoch closing heights ascending — how a payment's epoch is derived. */
+  epochBoundariesAsc(): Promise<EpochBoundary[]>;
 }
 
 /**
@@ -133,4 +164,14 @@ export const emptyReader: IndexedReader = {
   redemptionsChangedSince: () => Promise.resolve([]),
   incidentsSince: () => Promise.resolve([]),
   latestArrears: () => Promise.resolve([]),
+  // An unwired process knows of no validators, so it operates none: every
+  // operator read is empty. Same honest-empty state a real address that
+  // operates nothing gets — the surface never distinguishes the two.
+  operatorValopers: () => Promise.resolve([]),
+  latestOperatorEpochs: () => Promise.resolve([]),
+  validatorEpochsFor: () => Promise.resolve([]),
+  operatorPaymentTotalsFor: () => Promise.resolve([]),
+  operatorPaymentsFor: () => Promise.resolve([]),
+  operatorPaymentsAscFor: () => Promise.resolve([]),
+  epochBoundariesAsc: () => Promise.resolve([]),
 };

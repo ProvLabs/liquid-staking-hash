@@ -12,7 +12,7 @@
 // formula. Every field this export serves is numeric/enum/hash/ISO-time —
 // the guard is defensive depth, not a load-bearing sanitizer.
 
-import type { TransactionRow } from "@nvhash/api-types";
+import type { OperatorPaymentRow, TransactionRow } from "@nvhash/api-types";
 
 /** The pinned column set (plan §4 gate; §14.11 holder export). */
 export const TRANSACTIONS_CSV_COLUMNS = [
@@ -36,6 +36,48 @@ export function csvField(value: string): string {
     return `"${guarded.replaceAll('"', '""')}"`;
   }
   return guarded;
+}
+
+/**
+ * The pinned OPERATOR column set (§14.11 validator/operator export, §8.6): a
+ * record of commission/TIP payment amounts and times for the operator's own tax
+ * analysis. Exactly the six decided columns, in order.
+ *
+ * `payer` is deliberately NOT here even though the row carries it: §14.11 pins
+ * this set, and payment being permissionless does not change what the decided
+ * export is. The JSON view serves `payer` for the audit case; adding it to the
+ * CSV would be a §14.11 amendment, not an implementation choice.
+ *
+ * `epoch_index` is empty when the crediting epoch has not closed yet — an empty
+ * cell, never a guessed epoch (app-spec §9.1).
+ */
+export const OPERATOR_PAYMENTS_CSV_COLUMNS = [
+  "datetime_utc",
+  "block_height",
+  "epoch_index",
+  "payment_type",
+  "hash_amount",
+  "txhash",
+] as const;
+
+/** Render the operator payment export (§14.11): header + one line per payment. */
+export function operatorPaymentsCsv(rows: readonly OperatorPaymentRow[]): string {
+  const lines = [OPERATOR_PAYMENTS_CSV_COLUMNS.join(",")];
+  for (const row of rows) {
+    lines.push(
+      [
+        row.occurred_at,
+        String(row.height),
+        row.epoch_index === null ? "" : String(row.epoch_index),
+        row.payment_type,
+        row.amount,
+        row.txhash,
+      ]
+        .map(csvField)
+        .join(","),
+    );
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 /** Render the export: header line + one line per row, `\n`-joined. */

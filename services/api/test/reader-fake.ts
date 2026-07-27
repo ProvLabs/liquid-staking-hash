@@ -31,6 +31,10 @@ import {
   type IncidentFacts,
   type MarketSampleFacts,
   type MetricsFacts,
+  type OperatorEpochFacts,
+  type OperatorPaymentFacts,
+  type OperatorPaymentTotalFacts,
+  type OperatorRegistryFacts,
   type RedemptionFacts,
   type TransactionFacts,
   type ValidatorEpochFacts,
@@ -60,6 +64,15 @@ export interface FakeFacts {
    * Prisma reader's join; redemptions reuse the `redemptions` fixtures.
    */
   readonly alertIncidents?: readonly AlertIncidentFacts[] | undefined;
+  /**
+   * M6.4 operator fixtures. `operatorRegistry` carries the address→valoper
+   * mapping (`operator` is required here, unlike the public `registry`);
+   * `operatorEpochs` is the FULL per-epoch economics the operator surface
+   * serves, distinct from the narrow public `validatorEpochs`.
+   */
+  readonly operatorRegistry?: readonly OperatorRegistryFacts[] | undefined;
+  readonly operatorEpochs?: readonly OperatorEpochFacts[] | undefined;
+  readonly operatorPayments?: readonly OperatorPaymentFacts[] | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -254,5 +267,83 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
       }
       return Promise.resolve(out);
     },
+    // --- M6.4 operator surface (mirror reader-prisma.ts semantics) ----------
+    operatorValopers: (address) =>
+      Promise.resolve(
+        [...(facts.operatorRegistry ?? [])]
+          .filter((r) => r.operator === address)
+          .sort((a, b) =>
+            a.moniker === b.moniker
+              ? a.valoper < b.valoper
+                ? -1
+                : 1
+              : a.moniker < b.moniker
+                ? -1
+                : 1,
+          ),
+      ),
+    latestOperatorEpochs: (valopers) => {
+      const wanted = new Set(valopers);
+      const latest = new Map<string, OperatorEpochFacts>();
+      for (const row of [...(facts.operatorEpochs ?? [])]
+        .filter((e) => wanted.has(e.valoper))
+        .sort((a, b) => (a.epochIndex < b.epochIndex ? -1 : 1))) {
+        latest.set(row.valoper, row); // ascending walk: last write = latest
+      }
+      return Promise.resolve([...latest.values()]);
+    },
+    validatorEpochsFor: (valoper, p) =>
+      Promise.resolve(
+        page(
+          [...(facts.operatorEpochs ?? [])]
+            .filter((e) => e.valoper === valoper)
+            .sort((a, b) => (a.epochIndex < b.epochIndex ? 1 : -1)),
+          p,
+        ),
+      ),
+    operatorPaymentTotalsFor: (valopers) => {
+      const wanted = new Set(valopers);
+      const acc = new Map<string, { commission: bigint; tip: bigint; count: number }>();
+      for (const p of facts.operatorPayments ?? []) {
+        if (!wanted.has(p.valoper)) continue;
+        const cur = acc.get(p.valoper) ?? { commission: 0n, tip: 0n, count: 0 };
+        if (p.paymentType === "commission") cur.commission += p.amount;
+        else cur.tip += p.amount;
+        cur.count += 1;
+        acc.set(p.valoper, cur);
+      }
+      const out: OperatorPaymentTotalFacts[] = [...acc.entries()].map(([valoper, v]) => ({
+        valoper,
+        commissionPaidTotal: v.commission,
+        tipPaidTotal: v.tip,
+        paymentCount: v.count,
+      }));
+      return Promise.resolve(out);
+    },
+    operatorPaymentsFor: (valoper, p) =>
+      Promise.resolve(
+        page(
+          [...(facts.operatorPayments ?? [])]
+            .filter((r) => r.valoper === valoper)
+            .sort((a, b) =>
+              a.height === b.height ? b.msgIndex - a.msgIndex : a.height < b.height ? 1 : -1,
+            ),
+          p,
+        ),
+      ),
+    operatorPaymentsAscFor: (valoper) =>
+      Promise.resolve(
+        [...(facts.operatorPayments ?? [])]
+          .filter((r) => r.valoper === valoper)
+          .sort((a, b) =>
+            a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1,
+          ),
+      ),
+    epochBoundariesAsc: () =>
+      Promise.resolve(
+        [...(facts.epochs ?? [])]
+          .map((e) => ({ epochIndex: e.epochIndex, endHeight: e.endHeight ?? e.epochIndex }))
+          .sort((a, b) => (a.endHeight < b.endHeight ? -1 : 1)),
+      ),
   };
 }

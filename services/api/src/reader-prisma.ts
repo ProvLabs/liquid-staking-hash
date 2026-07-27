@@ -36,7 +36,14 @@ import {
 import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Heads, IndexedReader } from "./reader.ts";
 import type { Pagination } from "./query.ts";
-import type { TransactionFacts } from "./derive.ts";
+import type {
+  EpochBoundary,
+  OperatorEpochFacts,
+  OperatorPaymentFacts,
+  OperatorPaymentTotalFacts,
+  OperatorRegistryFacts,
+  TransactionFacts,
+} from "./derive.ts";
 import type {
   AlertArrearsFact,
   AlertIncidentFact,
@@ -46,6 +53,7 @@ import type {
   IncidentRow,
   IncidentSeverity,
   MarketSummary,
+  OperatorPaymentType,
   PayoutStats,
   PortfolioSummary,
   ProgramMetrics,
@@ -83,6 +91,65 @@ function toTxFacts(r: TransactionRowScalars): TransactionFacts {
     navAtHeight: toBigint(r.navAtHeight),
     height: r.height,
     blockTime: r.blockTime,
+  };
+}
+
+interface OperatorEpochScalars {
+  valoper: string;
+  epochIndex: bigint;
+  uptimeBps: number;
+  eligible: boolean;
+  failingReasons: string[];
+  tip: { toFixed(dp: number): string };
+  commissionAccrued: { toFixed(dp: number): string };
+  commissionPaid: { toFixed(dp: number): string };
+  commissionDue: { toFixed(dp: number): string };
+  programDelegation: { toFixed(dp: number): string };
+  height: bigint;
+  observedAt: Date;
+}
+
+/** One `validator_epochs` row → the FULL operator facts (M6.4). The public
+ * projection's narrower `ValidatorEpochFacts` stays untouched: operator
+ * economics never leave the server on the public page. */
+function toOperatorEpochFacts(r: OperatorEpochScalars): OperatorEpochFacts {
+  return {
+    valoper: r.valoper,
+    epochIndex: r.epochIndex,
+    uptimeBps: r.uptimeBps,
+    eligible: r.eligible,
+    failingReasons: r.failingReasons,
+    tip: toBigint(r.tip),
+    commissionAccrued: toBigint(r.commissionAccrued),
+    commissionPaid: toBigint(r.commissionPaid),
+    commissionDue: toBigint(r.commissionDue),
+    programDelegation: toBigint(r.programDelegation),
+    height: r.height,
+    observedAt: r.observedAt,
+  };
+}
+
+interface OperatorPaymentScalars {
+  txhash: string;
+  msgIndex: number;
+  valoper: string;
+  payer: string;
+  paymentType: string;
+  amount: { toFixed(dp: number): string };
+  height: bigint;
+  occurredAt: Date;
+}
+
+function toOperatorPaymentFacts(r: OperatorPaymentScalars): OperatorPaymentFacts {
+  return {
+    txhash: r.txhash,
+    msgIndex: r.msgIndex,
+    valoper: r.valoper,
+    payer: r.payer,
+    paymentType: r.paymentType as OperatorPaymentType,
+    amount: toBigint(r.amount),
+    height: r.height,
+    occurredAt: r.occurredAt,
   };
 }
 
@@ -487,6 +554,122 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         );
       }
       return facts;
+    },
+
+    // --- operator surface (M6.4) --------------------------------------------
+
+    async operatorValopers(address: string): Promise<OperatorRegistryFacts[]> {
+      // THE ownership mapping. Every other operator read is called with a
+      // valoper that came from this list, so the address→valoper enforcement is
+      // one query in one place — not a filter repeated per route.
+      const rows = await prisma.validatorRegistry.findMany({
+        where: { operator: address },
+        orderBy: [{ moniker: "asc" }, { valoper: "asc" }],
+        select: {
+          valoper: true,
+          operator: true,
+          moniker: true,
+          enrolledAt: true,
+          unregisteredAt: true,
+        },
+      });
+      return rows;
+    },
+
+    async latestOperatorEpochs(valopers: readonly string[]): Promise<OperatorEpochFacts[]> {
+      if (valopers.length === 0) return [];
+      // Ordered desc within each valoper; `distinct` keeps the first (= latest)
+      // row per group — the listValidators pattern, bounded by the caller's own
+      // (small) valoper set.
+      const rows = await prisma.validatorEpoch.findMany({
+        where: { valoper: { in: [...valopers] } },
+        orderBy: [{ valoper: "asc" }, { epochIndex: "desc" }],
+        distinct: ["valoper"],
+      });
+      return rows.map(toOperatorEpochFacts);
+    },
+
+    async validatorEpochsFor(valoper: string, page: Pagination): Promise<OperatorEpochFacts[]> {
+      const rows = await prisma.validatorEpoch.findMany({
+        where: { valoper },
+        orderBy: { epochIndex: "desc" },
+        skip: page.offset,
+        take: page.limit,
+      });
+      return rows.map(toOperatorEpochFacts);
+    },
+
+    async operatorPaymentTotalsFor(
+      valopers: readonly string[],
+    ): Promise<OperatorPaymentTotalFacts[]> {
+      if (valopers.length === 0) return [];
+      // Sum in SQL: an operator's lifetime payment history is unbounded, so the
+      // rows must never cross the wire just to be added up.
+      const grouped = await prisma.operatorPayment.groupBy({
+        by: ["valoper", "paymentType"],
+        where: { valoper: { in: [...valopers] } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      });
+      const byValoper = new Map<string, { commission: bigint; tip: bigint; count: number }>();
+      for (const g of grouped) {
+        const acc = byValoper.get(g.valoper) ?? { commission: 0n, tip: 0n, count: 0 };
+        const sum = g._sum.amount === null ? 0n : toBigint(g._sum.amount);
+        if (g.paymentType === "commission") acc.commission += sum;
+        else acc.tip += sum;
+        acc.count += g._count._all;
+        byValoper.set(g.valoper, acc);
+      }
+      return [...byValoper.entries()].map(([valoper, acc]) => ({
+        valoper,
+        commissionPaidTotal: acc.commission,
+        tipPaidTotal: acc.tip,
+        paymentCount: acc.count,
+      }));
+    },
+
+    async operatorPaymentsFor(valoper: string, page: Pagination): Promise<OperatorPaymentFacts[]> {
+      const rows = await prisma.operatorPayment.findMany({
+        where: { valoper },
+        orderBy: [{ height: "desc" }, { msgIndex: "desc" }],
+        skip: page.offset,
+        take: page.limit,
+      });
+      return rows.map(toOperatorPaymentFacts);
+    },
+
+    async operatorPaymentsAscFor(valoper: string): Promise<OperatorPaymentFacts[]> {
+      // Chunk-until-short-page, the transactionsAscFor precedent: the export is
+      // complete, but no single SELECT scans an unbounded history.
+      const CHUNK = 1000;
+      const facts: OperatorPaymentFacts[] = [];
+      for (let skip = 0; ; skip += CHUNK) {
+        const rows = await prisma.operatorPayment.findMany({
+          where: { valoper },
+          orderBy: [{ height: "asc" }, { msgIndex: "asc" }],
+          skip,
+          take: CHUNK,
+        });
+        for (const r of rows) facts.push(toOperatorPaymentFacts(r));
+        if (rows.length < CHUNK) break;
+      }
+      return facts;
+    },
+
+    async epochBoundariesAsc(): Promise<EpochBoundary[]> {
+      const CHUNK = 1000;
+      const boundaries: EpochBoundary[] = [];
+      for (let skip = 0; ; skip += CHUNK) {
+        const rows = await prisma.epochSnapshot.findMany({
+          orderBy: { endHeight: "asc" },
+          skip,
+          take: CHUNK,
+          select: { epochIndex: true, endHeight: true },
+        });
+        for (const r of rows) boundaries.push({ epochIndex: r.epochIndex, endHeight: r.endHeight });
+        if (rows.length < CHUNK) break;
+      }
+      return boundaries;
     },
 
     close: () => prisma.$disconnect(),
