@@ -24,6 +24,7 @@ gate). Capture context (chain id, height, node image, probe result) is in
 | Path | Contents | Source plane |
 | --- | --- | --- |
 | `fixtures/msgs/` | `MsgSwapInRequest` / `MsgSwapOutRequest` txs with their events (swap-in, enqueue) | LCD `GET /cosmos/tx/v1beta1/txs/{hash}`, verbatim |
+| `fixtures/operator/` | `MsgExecuteContract` operator-action txs: enroll, pay commission, pay TIP — with their `wasm` events and the bank `transfer` that carries the attached funds | LCD `GET /cosmos/tx/v1beta1/txs/{hash}`, verbatim |
 | `fixtures/run-epoch/` | RunEpoch crank txs: deploy settlement (payment + `AcceptAsset` legs), return settlement (marker burn leg), expedite | LCD tx endpoint, verbatim |
 | `fixtures/block-events/` | Payout (`EventSwapOutCompleted`) and unfunded-maturity refund (`EventSwapOutRefunded`) | RPC `block_results` — **EndBlocker events; never visible to tx-search** |
 | `fixtures/queries/vault/` | vault get/list/params/pending-swap-outs/estimates/payments | LCD REST under **`/vault/v1`** (not `/provlabs/vault/v1`), verbatim — except `estimate-swap-in.json` (CLI/gRPC proto JSON; see below) |
@@ -44,7 +45,24 @@ Facts consumers must not re-derive wrongly (also pinned in the manifest):
   gRPC/CLI-only**: grpc-gateway rejects `Coin`/`math.Int` query parameters.
   `estimate_swap_out` (string fields) serves over REST.
 - Contract cranks emit plain `wasm` events with `action` attributes; epoch
-  snapshot/APR data comes from smart queries, not events.
+  snapshot/APR data comes from smart queries, not events. Unlike the vault's,
+  contract `wasm` attribute values are **not** JSON-quoted — they arrive bare.
+- `pay_commission` emits the **per-payment** `amount` (plus `outstanding`);
+  `pay_tip` emits only the **epoch-cumulative** `tip_epoch`. A payment's own
+  nhash and its payer therefore come from the bank `transfer` event at the
+  **same `msg_index`** whose recipient is the contract — the msg's attached
+  funds, which `cw_utils::must_pay` bounds to exactly one coin in the
+  underlying denom.
+
+## Partial captures
+
+`manifest.json` may carry a `partial_captures` array: fixtures added on their
+own rather than by a full corpus regeneration, each recording its own chain
+instance, height and node image. They are honest about being from a *different*
+devnet bootstrap than `captured_at`/`head_height` describe (addresses match
+only because the bootstrap is deterministic). A full
+`generate-corpus.sh` + `capture-fixtures.sh` run captures everything from one
+chain and the array disappears.
 
 ## Regenerating
 
@@ -57,8 +75,9 @@ scripts/capture-fixtures.sh --check   # verify an existing corpus only
 
 **Completeness is verified, not assumed:** capture fails unless every
 required terminal state is present — swap in, swap out (enqueue), expedite,
-payout, refund, and both RunEpoch settlement legs. The gate also runs
-standalone via `--check`.
+payout, refund, both RunEpoch settlement legs, and the three operator actions
+(enroll, pay commission, pay TIP) with the funds `transfer` each payment's
+amount is decoded from. The gate also runs standalone via `--check`.
 
 The generator resets the devnet with `SLASH_WINDOW=10000000` so the drill's
 anchor validator stays bonded (see `contracts/drills/p2p-drill.sh` phase 0

@@ -695,6 +695,23 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > than accumulates, and a per-address cap bounds it. Confirming §9.1's earlier
 > "with Web Push subscriptions" parenthetical, now delivered.
 
+> **Revision 2026-07-27 (PR 6.4 commit A, `operator_payments`):** a thirteenth
+> `indexed` table lands (allowlist gate extended in the same change):
+> **`operator_payments`** (`txhash, msgIndex, valoper, payer, paymentType,
+> amount, epochIndex, height, occurredAt`; PK `(txhash, msgIndex)`; index
+> `(valoper, height)`). It exists because the §14.11 operator CSV's rows are
+> per-**payment** while `validator_epochs` holds only per-epoch cumulative
+> totals with no txhash — the facts do not exist anywhere else. Every column is
+> read straight off a public tx; `payer` is the message sender (a bech32
+> account, already public in the tx body), which the permissionless
+> "anyone may pay" design makes materially different from the valoper and worth
+> keeping for the operator's own audit (decided, Ira 2026-07-27). **`epochIndex`
+> is nullable and NOT written at ingest:** the epoch a payment credits closes at
+> a later `run_epoch` crank, so deriving it in the worker would mean reading the
+> epoch-history worker's table and making replay order-sensitive; `services/api`
+> derives the CSV column by joining `epoch_snapshots` at read time (§9.4). The
+> column stays so a later indexer-side derivation has somewhere to land.
+
 ### 9.2 Indexer workers
 
 - **Transport:** dual-source per the §14.5 resolution (RESOLVED 2026-07-20, PR 2.1) — tx-search by height range for DeliverTx events, and `block_results` per height for EndBlocker payout/refund + the NAV marker (which never appear in tx-search, §14.2); paging to exhaustion per block window; RPC websocket subscription is a latency optimization, not a correctness dependency.
@@ -702,6 +719,26 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 - **Ordering & finality:** workers trail the head by a small confirmation depth (~block-time-safe; Provenance ~5 s blocks, instant finality — **depth 0**, RESOLVED §14.5, PR 2.1); the cursor advances only after the full block window commits in one DB transaction.
 - **Event shapes are contract-verified fixtures:** every event the indexer decodes (`RunEpoch` snapshot attributes, vault swap events, expedite events) is captured from devnet drills into MSW/unit fixtures, so a contract event change breaks tests, not production `[VERIFY §14.2]`.
 - **Lag accounting:** each stream exposes `indexed_height` vs `chain_height`; the max lag drives the footer freshness line and the DATA DEGRADED banner threshold.
+
+> **Revision 2026-07-27 (PR 6.4 commit A, operator-payment decode):** the
+> chain-events worker gains a third decode provenance on the tx-search plane —
+> the program **contract's own `wasm` events** for `PayCommission`/`PayTip`,
+> scoped by the `_contract_address` attribute (the `wasm` type is shared by
+> every CosmWasm contract on chain, so that attribute is the only thing that
+> makes an event ours). Two verified facts (`[VERIFY §14.2]` Q1 resolved by
+> devnet drill 2026-07-27, captured in `@nvhash/fixtures/operator/`):
+> **(1)** contract `wasm` attribute values arrive **bare**, not JSON-quoted like
+> the vault module's — `dequote` tolerates both, so the decode path is
+> unchanged; **(2)** `pay_commission` emits the per-payment `amount`, but
+> `pay_tip` emits only the epoch-**cumulative** `tip_epoch`, so a tip payment's
+> own nhash is not in the contract's event at all. A payment's amount and payer
+> are therefore decoded from the **pair**: the wasm event plus the bank
+> `transfer` at the same `msg_index` whose recipient is the contract — the
+> msg's attached funds, which `cw_utils::must_pay` bounds to exactly one coin in
+> the underlying denom. This is the only pair decoder in the worker. Chain input
+> stays untrusted: a missing, duplicated, or multi-coin funds transfer, or a
+> `pay_commission` whose declared `amount` disagrees with the funds moved,
+> raises `DecodeError` rather than storing a guess.
 
 ### 9.3 Backfill
 

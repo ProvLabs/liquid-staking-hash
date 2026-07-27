@@ -1,0 +1,41 @@
+// operator_payments (app-spec §9.1, App M6.4 §2.1): one row per PayCommission /
+// PayTip execute against the program contract. `validator_epochs` carries only
+// per-epoch cumulative totals with no txhash, so the §14.11 operator CSV — whose
+// rows are per-PAYMENT — cannot be served from it. Every column is public chain
+// data read straight off the tx: `payer` is the message sender (already public
+// in the tx body and its `message.sender` attribute), never off-chain identity.
+//
+// Idempotent upsert key is (txhash, msgIndex), the same natural key
+// `transactions` uses — replay from any height converges.
+//
+// `epochIndex` is deliberately NULLABLE and is NOT written at ingest: the epoch a
+// payment credits closes at the NEXT run_epoch crank, which the chain-events
+// worker cannot know at the payment's height without reading another worker's
+// table (a cross-worker dependency that would make replay order-sensitive).
+// services/api derives the column for the CSV by joining `epoch_snapshots` at
+// read time — exact, deterministic, and rebuildable. The column stays so a later
+// indexer-side derivation has somewhere to land.
+
+model OperatorPayment {
+  txhash      String
+  msgIndex    Int
+  valoper     String
+  payer       String                       // bech32 account, public tx data
+  paymentType OperatorPaymentType
+  amount      Decimal  @db.Decimal(39, 0)  // nhash attached to the msg
+  epochIndex  BigInt?
+  height      BigInt
+  occurredAt  DateTime
+
+  @@id([txhash, msgIndex])
+  @@index([valoper, height])
+  @@map("operator_payments")
+  @@schema("indexed")
+}
+
+enum OperatorPaymentType {
+  commission
+  tip
+
+  @@schema("indexed")
+}

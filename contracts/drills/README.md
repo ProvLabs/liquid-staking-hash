@@ -8,7 +8,11 @@ against is stood up from [`infra/devnet/`](../../infra/devnet/).
 - `p2p-drill.sh` — the full money path: enroll → deposit → deploy settlement →
   reward claim + NAV step → redeem/unbond → maturity settle + burn → funded
   expedite → uniform-slot rebalance, asserting the four-way receipt invariant
-  and TVV neutrality against live vault/marker state after each phase.
+  and TVV neutrality against live vault/marker state after each phase. It also
+  drives the three operator actions the App's fixture corpus pins —
+  `register_participation` (phase 1), `pay_tip` (phase 2) and `pay_commission`
+  (phase 8, clearing arrears) — so `packages/fixtures/` needs no separate
+  operator drill.
 - `jail-drill.sh` — jail report/purge and slash write-down against real
   downtime jailing: two never-signing validators, real slashes, NAV marked
   down by exactly the unbacked amount in the detection epoch.

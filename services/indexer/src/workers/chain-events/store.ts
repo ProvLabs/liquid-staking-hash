@@ -10,7 +10,7 @@
 // cursors — lag accounting (PR 2.5) excludes them.
 
 import type { Prisma } from "@prisma/client";
-import type { RedemptionRow, Store, TransactionRow } from "./reduce.ts";
+import type { OperatorPaymentRow, RedemptionRow, Store, TransactionRow } from "./reduce.ts";
 
 const NAV_MARKER_STREAM = "meta:chain-events:nav";
 
@@ -64,6 +64,23 @@ export class PrismaStore implements Store {
       blockTime: row.blockTime,
     };
     await this.tx.transaction.upsert({
+      where: { txhash_msgIndex: { txhash: row.txhash, msgIndex: row.msgIndex } },
+      create: { txhash: row.txhash, msgIndex: row.msgIndex, ...data },
+      update: data,
+    });
+  }
+
+  async upsertOperatorPayment(row: OperatorPaymentRow): Promise<void> {
+    const data = {
+      valoper: row.valoper,
+      payer: row.payer,
+      paymentType: row.paymentType,
+      amount: row.amount.toString(),
+      epochIndex: row.epochIndex,
+      height: row.height,
+      occurredAt: row.occurredAt,
+    };
+    await this.tx.operatorPayment.upsert({
       where: { txhash_msgIndex: { txhash: row.txhash, msgIndex: row.msgIndex } },
       create: { txhash: row.txhash, msgIndex: row.msgIndex, ...data },
       update: data,

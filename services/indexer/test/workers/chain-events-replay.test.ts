@@ -6,12 +6,19 @@
 
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { applyEvents, type RedemptionRow, type Store, type TransactionRow } from "../../src/workers/chain-events/reduce.ts";
+import {
+  applyEvents,
+  type OperatorPaymentRow,
+  type RedemptionRow,
+  type Store,
+  type TransactionRow,
+} from "../../src/workers/chain-events/reduce.ts";
 import type { DomainEvent } from "../../src/workers/chain-events/events.ts";
 
 class MemStore implements Store {
   readonly txs = new Map<string, TransactionRow>();
   readonly reds = new Map<string, RedemptionRow>();
+  readonly pays = new Map<string, OperatorPaymentRow>();
   private nav = 0n;
   async readNav(): Promise<bigint> {
     return this.nav;
@@ -27,6 +34,9 @@ class MemStore implements Store {
   }
   async upsertRedemption(row: RedemptionRow): Promise<void> {
     this.reds.set(row.requestId, row);
+  }
+  async upsertOperatorPayment(row: OperatorPaymentRow): Promise<void> {
+    this.pays.set(`${row.txhash}|${row.msgIndex}`, row);
   }
   get nav_(): bigint {
     return this.nav;
@@ -62,7 +72,19 @@ function snapshot(store: MemStore): unknown {
       lastTxhash: r.lastTxhash,
     }))
     .sort((a, b) => a.requestId.localeCompare(b.requestId));
-  return { txs, reds, nav: store.nav_.toString() };
+  const pays = [...store.pays.values()]
+    .map((p) => ({
+      key: `${p.txhash}|${p.msgIndex}`,
+      valoper: p.valoper,
+      payer: p.payer,
+      paymentType: p.paymentType,
+      amount: p.amount.toString(),
+      epochIndex: p.epochIndex === null ? null : p.epochIndex.toString(),
+      height: p.height.toString(),
+      occurredAt: p.occurredAt.toISOString(),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  return { txs, reds, pays, nav: store.nav_.toString() };
 }
 
 // A high-level plan of program activity, turned into a valid height-ordered
@@ -71,6 +93,7 @@ interface Plan {
   navs: bigint[];
   swapIns: { owner: string; nhash: bigint; shares: bigint }[];
   requests: { id: string; owner: string; shares: bigint; expedite: boolean; terminal: "none" | "matured" | "refunded" }[];
+  payments: { valoper: string; payer: string; paymentType: "commission" | "tip"; amount: bigint }[];
   splitFraction: number;
 }
 
@@ -98,6 +121,19 @@ function build(plan: Plan): DomainEvent[] {
     if (r.terminal === "matured") evs.push({ kind: "swap_out_completed", owner: r.owner, requestId: r.id, assetsNhash: r.shares, ...at() });
     if (r.terminal === "refunded") evs.push({ kind: "swap_out_refunded", owner: r.owner, requestId: r.id, shares: r.shares, reason: "insufficient_funds", ...at() });
   }
+  for (const p of plan.payments) {
+    const ctx = at();
+    evs.push({
+      kind: "operator_payment",
+      paymentType: p.paymentType,
+      valoper: p.valoper,
+      payer: p.payer,
+      amount: p.amount,
+      txhash: `tx${ctx.height}`,
+      msgIndex: 0,
+      ...ctx,
+    });
+  }
   return evs;
 }
 
@@ -117,6 +153,15 @@ const planArb: fc.Arbitrary<Plan> = fc.record({
       terminal: fc.constantFrom("none", "matured", "refunded") as fc.Arbitrary<"none" | "matured" | "refunded">,
     }),
     { selector: (r) => r.id, maxLength: 10 },
+  ),
+  payments: fc.array(
+    fc.record({
+      valoper: fc.constantFrom("tpvaloper1a", "tpvaloper1b"),
+      payer: fc.constantFrom("tp1a", "tp1b", "tp1c"),
+      paymentType: fc.constantFrom("commission", "tip") as fc.Arbitrary<"commission" | "tip">,
+      amount: fc.bigInt({ min: 1n, max: 10n ** 15n }),
+    }),
+    { maxLength: 6 },
   ),
   splitFraction: fc.double({ min: 0, max: 1, noNaN: true }),
 });

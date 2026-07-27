@@ -54,6 +54,15 @@ EV_MARKER_MINT="provenance.marker.v1.EventMarkerMint"             # deploy-settl
 EV_PAYMENT_CREATED="provenance.exchange.v1.EventPaymentCreated"   # settlement payment leg
 EV_PAYMENT_ACCEPTED="provenance.exchange.v1.EventPaymentAccepted" # settlement acceptance
 EV_ASSET_ACCEPTED="provlabs.vault.v1.EventAssetAccepted"          # the AcceptAsset leg itself
+MSG_EXECUTE="/cosmwasm.wasm.v1.MsgExecuteContract"                # operator actions ride this
+# Contract wasm `action` attribute values (App M6.4 §2.1). Unlike vault event
+# values these arrive BARE (no JSON-string layer). pay_commission carries the
+# per-payment `amount`; pay_tip carries only the epoch-cumulative `tip_epoch`,
+# so a tip's own nhash comes from the msg's attached funds — the same-msg_index
+# bank `transfer` to the contract.
+ACT_REGISTER="register_participation"
+ACT_PAY_COMMISSION="pay_commission"
+ACT_PAY_TIP="pay_tip"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 note() { echo "  $*"; }
@@ -153,7 +162,7 @@ capture() {
   [ -n "$contract" ] && [ "$contract" != "null" ] || fail "vault has no asset manager"
   note "chain=$chain_id height=$height vault=$vault contract=$contract"
 
-  mkdir -p "$OUT"/{msgs,run-epoch,block-events,queries/vault,queries/contract,queries/staking}
+  mkdir -p "$OUT"/{msgs,operator,run-epoch,block-events,queries/vault,queries/contract,queries/staking}
 
   echo "== message + tx-event shapes (LCD /cosmos/tx/v1beta1/txs/{hash}, verbatim)"
   local h_swap_in h_swap_out h_expedite h_deploy h_return
@@ -164,6 +173,24 @@ capture() {
   h_swap_out="$(tx_search "message.action='$MSG_SWAP_OUT'")"
   [ -n "$h_swap_out" ] || fail "no $MSG_SWAP_OUT tx on chain"
   capture_lcd_tx "$OUT/msgs/swap-out.json" "$h_swap_out"
+
+  echo "== operator action txs (App M6.4 §2.1: enroll -> pay commission -> pay tip)"
+  # Selected by the contract's own wasm `action` attribute, so a chain carrying
+  # other contracts' executes cannot be mistaken for ours. Each fixture is one
+  # MsgExecuteContract tx captured verbatim; the indexer decodes the pay pair
+  # (wasm + same-msg_index transfer) from exactly these shapes.
+  local h_register h_pay_commission h_pay_tip
+  h_register="$(tx_search "wasm.action='$ACT_REGISTER'")"
+  [ -n "$h_register" ] || fail "no $ACT_REGISTER execute tx on chain — run infra/devnet/actions/register-validator.sh"
+  capture_lcd_tx "$OUT/operator/register-participation.json" "$h_register"
+
+  h_pay_commission="$(tx_search "wasm.action='$ACT_PAY_COMMISSION'")"
+  [ -n "$h_pay_commission" ] || fail "no $ACT_PAY_COMMISSION execute tx on chain — run infra/devnet/actions/pay-commission.sh"
+  capture_lcd_tx "$OUT/operator/pay-commission.json" "$h_pay_commission"
+
+  h_pay_tip="$(tx_search "wasm.action='$ACT_PAY_TIP'")"
+  [ -n "$h_pay_tip" ] || fail "no $ACT_PAY_TIP execute tx on chain — run infra/devnet/actions/pay-tip.sh"
+  capture_lcd_tx "$OUT/operator/pay-tip.json" "$h_pay_tip"
 
   echo "== RunEpoch crank txs (settlement legs + expedite; wasm action attrs)"
   # Each run-epoch fixture pins a DISTINCT crank tx (gate-enforced below):
@@ -230,6 +257,8 @@ capture() {
     --arg tx_deploy "$h_deploy" --arg tx_return "$h_return" \
     --arg tx_expedite "$h_expedite" \
     --arg blk_paid "$b_paid" --arg blk_refund "$b_refund" \
+    --arg tx_register "$h_register" \
+    --arg tx_pay_commission "$h_pay_commission" --arg tx_pay_tip "$h_pay_tip" \
     '{
       status: "PROVISIONAL — captured against a pre-release vault development build identified by feature probe (AcceptAsset present); no upstream version exists to pin. Re-capture and diff against the formal vault release before certifying any App release (app plan PR 8.0).",
       feature_probe: { name: "AcceptAsset", result: "present" },
@@ -242,13 +271,18 @@ capture() {
         "block_search indexes EndBlocker events on this build (kv indexer)",
         "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
         "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
-        "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events"
+        "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events",
+        "contract wasm attribute values are NOT JSON-quoted (unlike vault event values): action/valoper/amount arrive bare — dequote tolerates both, so decoding stays uniform",
+        "pay_commission'"'"'s wasm event carries the per-payment amount plus outstanding; pay_tip'"'"'s carries only the epoch-CUMULATIVE tip_epoch — a tip payment'"'"'s own nhash is NOT in the wasm event",
+        "an operator payment'"'"'s nhash and payer are read from the same-msg_index bank transfer event (recipient = the contract): the msg'"'"'s attached funds, which cw_utils::must_pay bounds to exactly one coin in the underlying denom"
       ],
       sources: {
         swap_in_tx: $tx_swap_in, swap_out_tx: $tx_swap_out,
         deploy_settlement_tx: $tx_deploy, return_settlement_tx: $tx_return,
         expedite_tx: $tx_expedite,
-        payout_block: ($blk_paid|tonumber), refund_block: ($blk_refund|tonumber)
+        payout_block: ($blk_paid|tonumber), refund_block: ($blk_refund|tonumber),
+        register_participation_tx: $tx_register,
+        pay_commission_tx: $tx_pay_commission, pay_tip_tx: $tx_pay_tip
       }
     }' > "$OUT/manifest.json"
   note "manifest.json written"
@@ -302,6 +336,19 @@ check_corpus() {
   require "run-epoch/expedite.json"               "$EV_EXPEDITED"          "expedite"
   require_absent "run-epoch/expedite.json"        "$EV_MARKER_BURN"        "expedite is a standalone (burn-free) crank"
   require_distinct_cranks
+  require "operator/register-participation.json"  "$MSG_EXECUTE"           "enroll (msg)"
+  require "operator/register-participation.json"  "$ACT_REGISTER"          "enroll (wasm action)"
+  require "operator/pay-commission.json"          "$MSG_EXECUTE"           "pay commission (msg)"
+  require "operator/pay-commission.json"          "$ACT_PAY_COMMISSION"    "pay commission (wasm action)"
+  require "operator/pay-commission.json"          "outstanding"            "pay commission (outstanding attr)"
+  require "operator/pay-tip.json"                 "$MSG_EXECUTE"           "pay tip (msg)"
+  require "operator/pay-tip.json"                 "$ACT_PAY_TIP"           "pay tip (wasm action)"
+  require "operator/pay-tip.json"                 "tip_epoch"              "pay tip (tip_epoch attr)"
+  # The funds plane the indexer reads a payment's nhash + payer from. Without a
+  # transfer event at the pay msg's index there is NO per-payment amount for a
+  # tip, so this is a decode prerequisite, not a nicety.
+  require "operator/pay-commission.json"          '"type":"transfer"'      "pay commission (funds transfer event)"
+  require "operator/pay-tip.json"                 '"type":"transfer"'      "pay tip (funds transfer event)"
   require "block-events/swap-out-completed.json"  "$EV_SWAP_OUT_COMPLETED" "payout (EndBlocker)"
   require "block-events/swap-out-refunded.json"   "$EV_SWAP_OUT_REFUNDED"  "refund (EndBlocker)"
   require "manifest.json"                         "PROVISIONAL"            "manifest provisional status"

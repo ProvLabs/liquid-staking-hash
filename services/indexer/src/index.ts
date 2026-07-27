@@ -95,7 +95,11 @@ export async function run(): Promise<void> {
   const workers: Worker[] = [
     createChainEventsWorker({
       rpc,
-      scope: { vaultAddress: config.vaultAddress, receiptDenom: config.receiptDenom },
+      scope: {
+        vaultAddress: config.vaultAddress,
+        receiptDenom: config.receiptDenom,
+        contractAddress: config.contractAddress,
+      },
     }),
     createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
     createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),

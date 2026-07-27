@@ -76,6 +76,22 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   row (no schema change). Tests: `test/workers/chain-events-decode` (fixture
   corpus) and `test/workers/chain-events-replay` (fast-check: replay from 0 ==
   resume from any height; idempotent re-apply).
+  **Operator payments (PR 6.4 commit A)** → `operator_payments`, a third decode
+  provenance on the same tx-search leg: the CONTRACT's own `wasm` events for
+  `pay_commission`/`pay_tip`, scoped by `_contract_address` (`EventScope` gains
+  `contractAddress` — the `wasm` type belongs to every contract on chain, so
+  that attribute is the only thing making an event ours). `decodeTxPayments` is
+  the worker's one **pair** decoder and has to be: verified on devnet
+  2026-07-27, `pay_tip`'s event carries only the epoch-cumulative `tip_epoch`,
+  never the payment's own nhash — so amount and payer come from the bank
+  `transfer` at the same `msg_index` with the contract as recipient (the
+  attached funds, bounded to one coin by `cw_utils::must_pay`). Missing,
+  duplicated, or multi-coin transfers, and a `pay_commission` whose declared
+  `amount` disagrees with the funds moved, throw `DecodeError` — never a stored
+  guess. `epochIndex` is deliberately null at ingest (deriving it needs the
+  epoch-history worker's table, which would make replay order-sensitive);
+  services/api joins `epoch_snapshots` at read time. Rows upsert by
+  `(txhash, msgIndex)`; the replay property covers them.
 
 - **`workers/epoch-history/`** (stream `epoch-history`, PR 2.2) → `epoch_snapshots`.
   The contract keeps only the latest snapshot on chain (spec §13/§9.10), so
@@ -147,8 +163,9 @@ Package scripts (`./dev pnpm --filter @nvhash/indexer run <script>`):
   below; no DB (the DB-backed grant-boundary test is a separate config/script,
   so `pnpm -r run test` stays Postgres-free).
 - `test:grants` — the Postgres-backed integration tests (needs Postgres, see
-  "Full-stack wiring" below): the grant-boundary gate and the PR 2.5 reconciler
-  alarm acceptance gate (`test/integration/`).
+  "Full-stack wiring" below): the grant-boundary gate, the PR 2.5 reconciler
+  alarm acceptance gate, and the PR 6.4 `operator_payments` round-trip
+  (`test/integration/`).
 - `generate` — regenerate the Prisma client from `prisma/`.
 - `start` — `prisma generate` then run the scaffold supervisor (`src/index.ts`):
   it connects to the `indexed` schema as `indexer_writer`, proves the connection
@@ -196,6 +213,14 @@ precedent): the M6.2 notifier's redemption cursor read added
 (`20260724010000_redemption_last_height_index`) via `apps/web`'s PR 6.2 — no
 column, schema-allowlist unaffected, rebuildable. The `indexed` schema stays
 indexer-owned; only DDL runs as `indexer_writer`.
+
+**Allowlist extensions to date** (each a recorded design-review event, per the
+gate's own contract): PR 6.4 commit A added the `OperatorPayment` model —
+nine columns, all read straight off a public tx, reviewed 2026-07-27 against
+the §14.11 operator-CSV requirement that `validator_epochs` provably cannot
+serve (per-epoch cumulative totals, no txhash). `payer` is a bech32 account
+already public in the tx body, kept because payment is permissionless and an
+operator auditing "who paid on my behalf" needs it (decided, Ira 2026-07-27).
 
 - **Grant boundary** (`test/integration/grant-boundary.test.ts`, standing from
   PR 1.5): against a live Postgres bootstrapped by `roles.sql` and this

@@ -10,8 +10,16 @@
 // every height in the window. block_search-based height narrowing is a later
 // optimization (noted in the M2.1 plan); functionally this is complete.
 
-import { decodeBlockEvent, decodeTxEvent } from "./decode.ts";
-import { NAV_EVENT, VAULT_EVENT, type DomainEvent, type EventScope } from "./events.ts";
+import { dequote, type RawEvent } from "../../decode/attributes.ts";
+import { decodeBlockEvent, decodeTxEvent, decodeTxPayments } from "./decode.ts";
+import {
+  NAV_EVENT,
+  PAYMENT_ACTION,
+  VAULT_EVENT,
+  WASM_EVENT,
+  type DomainEvent,
+  type EventScope,
+} from "./events.ts";
 import type { Window } from "../../runtime/checkpoint.ts";
 
 const PER_PAGE = 100;
@@ -33,6 +41,20 @@ const RELEVANT_TX_TYPES = new Set<string>([
   VAULT_EVENT.swapOutRequested,
   VAULT_EVENT.expedited,
 ]);
+
+const PAYMENT_ACTIONS = new Set<string>([PAYMENT_ACTION.commission, PAYMENT_ACTION.tip]);
+
+/** Does this tx carry an operator payment for us? `wasm` is every contract's
+ * event type, so the pre-pass matches on the contract's own `action` values —
+ * scoping to OUR contract is `decodeTxPayments`' job, on the same pass that
+ * pairs the event with its funds transfer. */
+function hasPaymentEvent(events: readonly RawEvent[]): boolean {
+  return events.some(
+    (e) =>
+      e.type === WASM_EVENT &&
+      e.attributes.some((a) => a.key === "action" && PAYMENT_ACTIONS.has(dequote(a.value))),
+  );
+}
 
 /** The subset of RpcClient the collector needs (injectable for tests). */
 export interface EventSource {
@@ -80,11 +102,20 @@ export async function collectWindow(
       // Cheap type pre-pass: skip txs with no candidate event BEFORE fetching
       // the block time, so a height of purely non-vault txs costs no round-trip.
       const candidates = tx.events.filter((e) => RELEVANT_TX_TYPES.has(e.type));
-      if (candidates.length === 0) continue;
+      const payments = hasPaymentEvent(tx.events);
+      if (candidates.length === 0 && !payments) continue;
       const blockTime = await timeOf(tx.height);
+      const ctx = { height: tx.height, blockTime, txhash: tx.hash };
       for (const raw of candidates) {
-        const de = decodeTxEvent(raw, { height: tx.height, blockTime, txhash: tx.hash }, scope);
+        const de = decodeTxEvent(raw, ctx, scope);
         if (de) ranked.push({ ev: de, phase: 0, seq: seq++ });
+      }
+      // Operator payments decode from the WHOLE tx: the amount rides the funds
+      // transfer, not the contract's own event (M6.4 §2.1).
+      if (payments) {
+        for (const de of decodeTxPayments(tx.events, ctx, scope)) {
+          ranked.push({ ev: de, phase: 0, seq: seq++ });
+        }
       }
     }
     if (res.txs.length === 0 || page * PER_PAGE >= res.totalCount) break;
