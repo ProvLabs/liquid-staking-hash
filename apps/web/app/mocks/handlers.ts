@@ -177,6 +177,26 @@ export const handlers = [
   http.get("*/api/v1/transactions", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
+  // M6.4 operator surface (/operator/{summary,epochs,payments}): honest-empty
+  // defaults mirroring what services/api serves for an address that operates
+  // no validator — which is also what the offline e2e (no session) sees. Tests
+  // exercising a real operator override with server.use(). The CSV branch is
+  // deliberately unmocked, like the portfolio export: the proxy has its own
+  // stubbed-fetch unit test.
+  http.get("*/api/v1/operator/summary", ({ request }) =>
+    HttpResponse.json(
+      envelope(
+        { address: new URL(request.url).searchParams.get("address") ?? "", validators: [] },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/operator/epochs", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
+  http.get("*/api/v1/operator/payments", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
   // PR 3.1's /validators shape (ValidatorsPayload), honest-empty exactly as
   // the real route serves with no reader wired.
   http.get("*/api/v1/validators", () =>

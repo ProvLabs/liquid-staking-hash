@@ -615,6 +615,56 @@ The secondary-market context page (register A3): NAV vs market price over time (
 
 - **Operator view ("my validator"):** the participation economics in consumer form — current + historical program delegation, rewards earned on it, commission owed (with the one-epoch grace state made plain), TIP paid vs rank effect, eligibility headroom on each threshold, and net-benefit-after-fees (personas §7's core question). Historical earnings and peer-rank context come from `validator_epochs` — history the console cannot show. **Every operator action is a first-class App transaction flow** (§14.6 decided): pay commission/TIP, enroll/unregister, and jailed-validator purge are built, previewed, signed, and tracked in the App per §10.2 — the Console keeps the same actions as an engineering surface, no longer the required path. The App's job is that Owen never *discovers* an obligation late (arrears alert rule is on by default for operator sessions). A **commission/TIP payment-history CSV** (amounts + times) is exportable here for the operator's own tax analysis (§14.11).
 
+> **Revision 2026-07-27 (PR 6.4 commit C, the read view delivered):**
+> `/validators/mine` ships (`app/routes/validators-mine.tsx` under `:lang?`,
+> registered after `validators`; loader `app/validators/mine.server.ts`; the CSV
+> proxy `/operator/export` outside `:lang?`, the `portfolio/export` precedent).
+> Delivered shape, with three corrections to what this bullet assumed:
+>
+> **(1) Commission standing has THREE states, not two.** Verified against
+> `contracts/src/validators.rs`: `epoch_rollover` resets the per-epoch TIP and
+> advances the grace boundary, but NEVER resets `commission_paid` — program
+> commission is cumulative, so an overpayment carries forward against future
+> accrual indefinitely, while an over-TIP buys priority in the current epoch
+> only and is then gone. The banner therefore renders *in arrears* (serious
+> tier), *current*, or **prepaid by N**. The prepaid credit is read from the
+> LIVE plane as `commission_paid − commission_accrued` and can only be: the
+> `pay_commission` event's `outstanding` attribute is
+> `accrued.saturating_sub(paid)`, so an overpayment reports 0 there, never a
+> negative — anything derived from the payment history would call a prepaid
+> validator merely "current".
+>
+> **(2) Net-benefit's earnings term is an ESTIMATE and is labeled in place**
+> (§7 Q2, DECIDED 2026-07-27), not only in a footnote: the program's own
+> realized per-epoch return is applied to this validator's delegation over each
+> epoch and multiplied by the validator's CURRENT x/staking commission rate.
+> The actual reward stream is not indexed and historical rate changes are not
+> either; a negative program APR (a slash epoch) floors to zero rather than
+> being subtracted, since the program losing value does not make a validator's
+> staking commission negative. The two paid terms are exact. When the estimate
+> cannot be computed the **net is withheld too** — a net built from a missing
+> term is the fabrication an operator would act on.
+>
+> **(3) Peer-rank context is NOT delivered** (§7 Q5 unapproved, 2026-07-27):
+> this bullet's "peer-rank context" is deferred, and the public `/validators`
+> page remains where the set is seen. Everything else in the bullet ships:
+> current + historical program delegation (a step-after `StepChart` with its
+> table view — one series deliberately, since commission is orders of magnitude
+> smaller and a second axis is never the answer), commission/TIP figures,
+> eligibility headroom per threshold, the per-epoch history, the payment
+> history with its §14.11 CSV export, and Console verify links on the standing
+> block.
+>
+> Honesty states, gated by `test/operator-data.test.ts`: anonymous → connect
+> prompt; roles `degraded: true` → an explicit "we could not check" note (never
+> a privileged surface from a failed read); connected non-operator → the plain
+> statement plus the enrollment path; live reads down → the indexed history with
+> **null** standing, never a guessed "current"; indexed reads down → live
+> standing alone. Every figure is "n/a" when null, never 0. A payment whose
+> crediting epoch is still open renders "pending", never the latest epoch. The
+> payment table labels a payer that is not the operator's own account, because
+> payment is permissionless and a co-op partner paying is a normal fact.
+
 ### 8.7 Governance (route `/governance`, public read; member write)
 
 The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 governance split; the App is the primary home — §14.6 decided):

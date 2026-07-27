@@ -468,6 +468,119 @@ export default {
   "validators.status-tombstoned": "Tombstoned",
   "validators.uptime-vs-threshold": "{uptime}% / {threshold}% required",
   "validators.uptime-na": "n/a (no capture yet)",
+  // Operator view (M6.4, app-spec §8.6). Copy restates the CONTRACT's own
+  // mechanics (contracts/src/msg.rs + validators.rs doc comments), not an
+  // invented product story — in particular the commission/TIP asymmetry, which
+  // is the thing an operator most easily gets wrong.
+  "operator.title": "My validator",
+  "operator.na": "n/a",
+  "operator.connect-prompt":
+    "Connect the wallet that operates your validator to see its standing, economics, and payment history.",
+  "operator.roles-degraded":
+    "We could not check whether this address operates a program validator — a chain read failed. Nothing is shown rather than a guess; reload in a moment.",
+  "operator.not-operator": "This address does not operate a program validator.",
+  "operator.enroll-hint":
+    "A validator's own operator account enrolls it in the program. Connect that account to see this view.",
+  "operator.no-validators":
+    "This address is in the program's operator set, but no enrolled validator has been indexed for it yet.",
+  "operator.viewing-address": "Showing the operator view for {address}.",
+  "operator.indexed-unavailable":
+    "Indexed history is unavailable right now, so economics and payment history cannot be shown. Live standing above is unaffected.",
+  "operator.switch-validator": "Switch validator",
+  "operator.unnamed-validator": "Your validator",
+
+  "operator.standing-title": "Standing",
+  "operator.standing-unavailable":
+    "Commission standing is unavailable — the live chain read failed. It is not shown rather than shown stale.",
+  "operator.standing-arrears-label": "Commission in arrears",
+  "operator.standing-arrears-consequence":
+    "The one-epoch grace has passed, which alone makes this validator ineligible until the balance is brought current.",
+  "operator.standing-current-label": "Commission current",
+  "operator.standing-current-consequence": "Nothing is owed at the current grace boundary.",
+  "operator.standing-prepaid-label": "Commission prepaid",
+  "operator.standing-prepaid-consequence":
+    "You have paid more than has accrued. Program commission is cumulative, so the excess carries forward against future accrual for as many epochs as it covers.",
+  "operator.prepaid-credit": "Prepaid credit: {amount} HASH ahead of accrual.",
+  "operator.commission-due-label": "Due now",
+  "operator.commission-paid-label": "Paid (lifetime)",
+  "operator.commission-accrued-label": "Accrued (lifetime)",
+
+  "operator.eligibility-label": "Eligibility",
+  "operator.eligibility-caption": "Assessed live from chain state each epoch",
+  "operator.eligible-yes": "Eligible",
+  "operator.eligible-no": "Ineligible",
+  "operator.failing-reasons": "Failing: {reasons}",
+  "operator.uptime-label": "Uptime",
+  "operator.uptime-caption": "No uptime threshold could be read",
+  "operator.uptime-threshold": "{threshold}% required",
+  "operator.headroom-uptime-label": "Uptime headroom",
+  "operator.headroom-uptime-caption": "Percentage points above the threshold",
+  "operator.headroom-label": "Delegation headroom",
+  "operator.headroom-caption": "New delegation still allowed under the concentration cap",
+  "operator.tip-epoch-label": "TIP this epoch",
+  "operator.tip-epoch-caption": "Resets at every epoch completion — it does not carry forward",
+  "operator.enrolled-label": "Enrolled",
+  "operator.enrolled-caption": "Currently participating",
+  "operator.unregistered-caption": "No longer participating",
+  "operator.jailed-label": "Jailed",
+  "operator.jailed-consequence":
+    "A jailed validator is ineligible, and the program's stake can be moved off it after the cooldown.",
+  "operator.tombstoned-label": "Tombstoned",
+  "operator.tombstoned-consequence": "A tombstoned validator can never return to the program.",
+  "operator.jail-report-label": "Jail report open",
+  "operator.jail-report-consequence":
+    "The program's stake may be moved off this validator from {purgeReadyAt} unless it unjails first.",
+
+  "operator.net-benefit-title": "Net benefit after fees",
+  "operator.earnings-label": "Estimated earnings",
+  "operator.earnings-estimate": "Estimate — not an exact figure",
+  "operator.commission-total-label": "Commission paid",
+  "operator.tip-total-label": "TIP paid",
+  "operator.exact-fact": "Exact, from indexed payments",
+  "operator.net-label": "Net benefit",
+  "operator.net-caption": "Estimated earnings minus what you paid",
+  "operator.earnings-derivation":
+    "Earnings are ESTIMATED: the program's own realized return for each epoch is applied to your delegation over that epoch and multiplied by your current commission rate ({rate}%), across {epochs} epoch steps. Your actual reward stream is not indexed, and rate changes over time are not accounted for.",
+  "operator.earnings-unavailable":
+    "Earnings cannot be estimated yet — your commission rate or the program's per-epoch return was unavailable. The amounts you paid are exact.",
+  "operator.history-truncated":
+    "Only the most recent epochs are shown; earlier history is not included in these figures.",
+
+  "operator.delegation-title": "Program delegation",
+  "operator.delegation-caption":
+    "HASH the program has delegated to this validator, at each epoch settlement. Values change only at settlement.",
+  "operator.delegation-unavailable": "Delegation history is unavailable right now.",
+  "operator.delegation-cold": "Delegation history appears after a second epoch settles.",
+  "operator.delegation-header": "Delegation (HASH)",
+  "operator.show-table": "Show table",
+  "operator.show-chart": "Show chart",
+  "operator.epoch-n": "Epoch {epoch}",
+  "operator.epoch-header": "Epoch",
+
+  "operator.payments-title": "Payment history",
+  "operator.payments-empty": "No commission or TIP payments have been indexed for this validator.",
+  "operator.payments-more": "Only the most recent payments are shown. The CSV export is complete.",
+  "operator.export-csv": "Export CSV",
+  "operator.payment-time-header": "Date",
+  "operator.payment-type-header": "Type",
+  "operator.payment-amount-header": "Amount (HASH)",
+  "operator.payment-payer-header": "Paid by",
+  "operator.payment-tx-header": "Transaction",
+  "operator.payment-commission": "Commission",
+  "operator.payment-tip": "TIP",
+  "operator.paid-by-other": "(not your operator account)",
+  "operator.epoch-pending": "pending",
+
+  "operator.epochs-title": "Per-epoch history",
+  "operator.epochs-caption":
+    "Commission accrued, paid, and due are cumulative lifetime totals at each epoch; TIP is the credit for that epoch alone.",
+  "operator.epochs-empty": "No epochs have been sampled for this validator yet.",
+  "operator.uptime-header": "Uptime",
+  "operator.eligible-header": "Eligible",
+  "operator.tip-header": "TIP (HASH)",
+  "operator.accrued-header": "Accrued (HASH)",
+  "operator.due-header": "Due (HASH)",
+
   "governance.title": "Governance",
   "governance.placeholder":
     "Governance participation arrives here in a later milestone. This deployment is a development scaffold.",

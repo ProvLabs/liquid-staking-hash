@@ -83,6 +83,32 @@ End-user web interface. Production quality.
   `--viz-cat-2` with a naming legend; all new props are optional so existing
   callers compile unchanged, and no new tokens are introduced (`check:palette`
   unaffected). Load the `dataviz` skill before touching the chart.
+- **Operator view** (PR 6.4 commit C, app-spec §8.6): `/validators/mine`
+  (`app/routes/validators-mine.tsx` under `:lang?`, registered AFTER
+  `validators` so the public page keeps the bare path) over
+  `app/validators/mine.server.ts`, with view models in `mine-types.ts` and
+  presentation-only components under `app/components/validators/mine/`. The
+  route gates on THREE states before any figure loads — anonymous (connect
+  prompt), roles `degraded` (an explicit "we could not check"; the App never
+  renders a privileged surface from a failed read), and connected non-operator —
+  then loads for the session address only. `?valoper=` selects among the
+  operator's OWN validators and is shape-bounded at the route; ownership is
+  enforced by `services/api` against the asserted address.
+  **The load-bearing fact** (verified against `contracts/src/validators.rs`,
+  not assumed): program commission is CUMULATIVE and an overpayment carries
+  forward indefinitely, while TIP resets at every epoch rollover — so the
+  commission banner has THREE states (in-arrears / current / **prepaid**), and
+  the prepaid credit comes from the LIVE plane alone (`commission_paid −
+  commission_accrued`) because `pay_commission`'s `outstanding` attribute
+  saturates at 0 and cannot express it. Net-benefit's earnings term is a
+  labeled ESTIMATE (§7 Q2); when it cannot be computed the net is withheld too.
+  Peer-rank context is deliberately absent (§7 Q5 unapproved). The CSV export is
+  `app/routes/operator-export.tsx` outside `:lang?` (the `portfolio-export`
+  precedent). New standing gates: `test/operator-data.test.ts` (degradation +
+  honesty matrix incl. all three standing states), `test/operator-compose.test.ts`
+  (BigInt goldens for the estimate; a missing input yields null, never 0),
+  `test/session-scope.test.ts` (the export joins it), offline
+  `e2e/validators-mine.spec.ts`, and `/validators/mine` in the axe route list.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

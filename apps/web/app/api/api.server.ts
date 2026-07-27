@@ -22,6 +22,11 @@ import type {
   MarketDepthBand,
   MarketSample,
   MarketSummary,
+  OperatorEpochRow,
+  OperatorPaymentRow,
+  OperatorPaymentType,
+  OperatorSummary,
+  OperatorValidatorRow,
   PayoutStats,
   PortfolioMetrics,
   PortfolioSummary,
@@ -263,6 +268,69 @@ export const portfolioMetricsSchema = z.object({
   markers_truncated: z.boolean(),
 }) satisfies z.ZodType<PortfolioMetrics>;
 
+// M6.4 operator surface (address-scoped /operator/{summary,epochs,payments}).
+// Same posture as the M6.1 personal shapes: amounts are base-unit integer
+// strings, closed unions pinned, every field bounded. `epoch_index` on a
+// payment is nullable BY DESIGN — the crediting epoch may still be open
+// (app-spec §9.1/§9.4), and null must survive the boundary as null.
+export const operatorPaymentTypeSchema = z.enum([
+  "commission",
+  "tip",
+]) satisfies z.ZodType<OperatorPaymentType>;
+
+export const operatorValidatorRowSchema = z.object({
+  valoper: z.string().max(90),
+  moniker: z.string().max(128),
+  operator: z.string().max(90),
+  active: z.boolean(),
+  enrolled_at: isoTimestamp,
+  unregistered_at: isoTimestamp.nullable(),
+  epoch_index: z.number().int().nonnegative().nullable(),
+  uptime_bps: z.number().int().min(0).max(1_000_000).nullable(),
+  eligible: z.boolean().nullable(),
+  failing_reasons: z.array(z.string().max(64)).max(32),
+  program_delegation: baseUnitString.nullable(),
+  tip: baseUnitString.nullable(),
+  commission_accrued: baseUnitString.nullable(),
+  commission_paid: baseUnitString.nullable(),
+  commission_due: baseUnitString.nullable(),
+  commission_paid_total: baseUnitString,
+  tip_paid_total: baseUnitString,
+  payment_count: z.number().int().nonnegative(),
+}) satisfies z.ZodType<OperatorValidatorRow>;
+
+export const operatorSummarySchema = z.object({
+  address: z.string().max(90),
+  validators: z.array(operatorValidatorRowSchema).max(500),
+}) satisfies z.ZodType<OperatorSummary>;
+
+export const operatorEpochRowSchema = z.object({
+  valoper: z.string().max(90),
+  epoch_index: z.number().int().nonnegative(),
+  uptime_bps: z.number().int().min(0).max(1_000_000),
+  eligible: z.boolean(),
+  failing_reasons: z.array(z.string().max(64)).max(32),
+  tip: baseUnitString,
+  commission_accrued: baseUnitString,
+  commission_paid: baseUnitString,
+  commission_due: baseUnitString,
+  program_delegation: baseUnitString,
+  height: z.number().int().nonnegative(),
+  observed_at: isoTimestamp,
+}) satisfies z.ZodType<OperatorEpochRow>;
+
+export const operatorPaymentRowSchema = z.object({
+  txhash: z.string().max(64),
+  msg_index: z.number().int().nonnegative(),
+  valoper: z.string().max(90),
+  payer: z.string().max(90),
+  payment_type: operatorPaymentTypeSchema,
+  amount: baseUnitString,
+  epoch_index: z.number().int().nonnegative().nullable(),
+  height: z.number().int().nonnegative(),
+  occurred_at: isoTimestamp,
+}) satisfies z.ZodType<OperatorPaymentRow>;
+
 // M6.2 internal alert-facts (the notifier's `internal:notifier` reads). Bounded
 // at the boundary like every other API input; amounts stay decimal strings.
 // `commission_due` is the one amount that rides (arrears), a decimal string.
@@ -309,6 +377,9 @@ export const statusEnvelopeSchema = envelopeSchema(z.unknown());
 export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
 export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);
 export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));
+export const operatorSummaryEnvelopeSchema = envelopeSchema(operatorSummarySchema);
+export const operatorEpochsEnvelopeSchema = envelopeSchema(z.array(operatorEpochRowSchema).max(200));
+export const operatorPaymentsEnvelopeSchema = envelopeSchema(z.array(operatorPaymentRowSchema).max(200));
 
 /**
  * Bounded-timeout GET returning parsed JSON. Throws on non-OK status,
