@@ -80,9 +80,18 @@ export class PrismaStore implements Store {
       height: row.height,
       occurredAt: row.occurredAt,
     };
+    // Keyed on the FULL natural key: a message that batches several payments
+    // produces siblings sharing (txhash, msgIndex), and keying on that pair
+    // alone made each one overwrite the last (PR #22 review).
     await this.tx.operatorPayment.upsert({
-      where: { txhash_msgIndex: { txhash: row.txhash, msgIndex: row.msgIndex } },
-      create: { txhash: row.txhash, msgIndex: row.msgIndex, ...data },
+      where: {
+        txhash_msgIndex_ordinal: {
+          txhash: row.txhash,
+          msgIndex: row.msgIndex,
+          ordinal: row.ordinal,
+        },
+      },
+      create: { txhash: row.txhash, msgIndex: row.msgIndex, ordinal: row.ordinal, ...data },
       update: data,
     });
   }

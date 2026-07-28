@@ -244,6 +244,7 @@ export function decodeTxPayments(
 
       payments.push({
         kind: "operator_payment",
+        ordinal: k,
         paymentType,
         valoper: attr(event, "valoper"),
         payer: attr(transfer, "sender"),

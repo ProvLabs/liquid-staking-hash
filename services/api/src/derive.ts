@@ -476,6 +476,9 @@ export interface OperatorEpochFacts {
 export interface OperatorPaymentFacts {
   readonly txhash: string;
   readonly msgIndex: number;
+  /** Sibling discriminator within (txhash, msgIndex). Internal: it completes
+   * the row's identity and the export's sort key, and is not served. */
+  readonly ordinal: number;
   readonly valoper: string;
   readonly payer: string;
   readonly paymentType: OperatorPaymentType;

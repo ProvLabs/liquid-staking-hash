@@ -60,12 +60,12 @@ const facts: FakeFacts = {
   ],
   operatorPayments: [
     // Heights 50 and 100 fall in epoch 1 (closes at 100); 150 falls in epoch 2.
-    { txhash: "P1", msgIndex: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "commission", amount: 100n, height: 50n, occurredAt: new Date("2026-03-01T00:00:00Z") },
-    { txhash: "P2", msgIndex: 1, valoper: VALOPER_A, payer: "pb1cooppartner", paymentType: "tip", amount: 20n, height: 100n, occurredAt: new Date("2026-03-02T00:00:00Z") },
-    { txhash: "P3", msgIndex: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "commission", amount: 7n, height: 150n, occurredAt: new Date("2026-04-02T00:00:00Z") },
+    { txhash: "P1", msgIndex: 0, ordinal: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "commission", amount: 100n, height: 50n, occurredAt: new Date("2026-03-01T00:00:00Z") },
+    { txhash: "P2", msgIndex: 1, ordinal: 0, valoper: VALOPER_A, payer: "pb1cooppartner", paymentType: "tip", amount: 20n, height: 100n, occurredAt: new Date("2026-03-02T00:00:00Z") },
+    { txhash: "P3", msgIndex: 0, ordinal: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "commission", amount: 7n, height: 150n, occurredAt: new Date("2026-04-02T00:00:00Z") },
     // Past the last indexed boundary (200): its crediting epoch is still open.
-    { txhash: "P4", msgIndex: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "tip", amount: 3n, height: 900n, occurredAt: new Date("2026-06-02T00:00:00Z") },
-    { txhash: "PB", msgIndex: 0, valoper: VALOPER_B, payer: OPERATOR_B, paymentType: "commission", amount: 900n, height: 60n, occurredAt: new Date("2026-03-03T00:00:00Z") },
+    { txhash: "P4", msgIndex: 0, ordinal: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "tip", amount: 3n, height: 900n, occurredAt: new Date("2026-06-02T00:00:00Z") },
+    { txhash: "PB", msgIndex: 0, ordinal: 0, valoper: VALOPER_B, payer: OPERATOR_B, paymentType: "commission", amount: 900n, height: 60n, occurredAt: new Date("2026-03-03T00:00:00Z") },
   ],
 };
 
@@ -353,6 +353,7 @@ describe("operator CSV export (§14.11 pinned columns; [R3] freshness headers)",
     const many: OperatorPaymentFacts[] = Array.from({ length: ROWS }, (_, i) => ({
       txhash: `TX${i}`,
       msgIndex: 0,
+      ordinal: 0,
       valoper: VALOPER_A,
       payer: OPERATOR_A,
       paymentType: i % 2 === 0 ? ("commission" as const) : ("tip" as const),
@@ -485,7 +486,7 @@ describe("pure ownership + epoch-assignment rules", () => {
   it("toOperatorPaymentRow surfaces a null epoch rather than the latest one", () => {
     const fact: OperatorPaymentFacts = {
       txhash: "X",
-      msgIndex: 0,
+      msgIndex: 0, ordinal: 0,
       valoper: VALOPER_A,
       payer: OPERATOR_A,
       paymentType: "tip",

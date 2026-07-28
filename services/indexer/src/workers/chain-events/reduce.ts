@@ -53,6 +53,8 @@ export interface RedemptionRow {
 export interface OperatorPaymentRow {
   readonly txhash: string;
   readonly msgIndex: number;
+  /** Sibling discriminator within (txhash, msgIndex) — part of the key. */
+  readonly ordinal: number;
   readonly valoper: string;
   readonly payer: string;
   readonly paymentType: OperatorPaymentType;
@@ -152,6 +154,7 @@ export async function applyEvents(store: Store, events: readonly DomainEvent[]):
         await store.upsertOperatorPayment({
           txhash: ev.txhash,
           msgIndex: ev.msgIndex,
+          ordinal: ev.ordinal,
           valoper: ev.valoper,
           payer: ev.payer,
           paymentType: ev.paymentType,

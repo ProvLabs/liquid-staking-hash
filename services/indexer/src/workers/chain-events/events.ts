@@ -101,6 +101,10 @@ export type OperatorPaymentType = "commission" | "tip";
  * cannot supply a tip's per-payment amount. */
 export interface OperatorPaymentEvent extends TxBase {
   readonly kind: "operator_payment";
+  /** Position within this (txhash, msgIndex); 0 unless the message batched
+   * several payments. Part of the row's natural key — without it siblings
+   * overwrite each other (PR #22 review). */
+  readonly ordinal: number;
   readonly paymentType: OperatorPaymentType;
   readonly valoper: string;
   readonly payer: string;

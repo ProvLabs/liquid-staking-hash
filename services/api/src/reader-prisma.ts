@@ -92,20 +92,31 @@ function toBigint(value: { toFixed(dp: number): string }): bigint {
 // `20260728000000_keyset_indexes`; without them the row comparison is correct
 // but unindexed.
 
-/** A cursor on the shared `(height, msgIndex)` export sort key. */
+/**
+ * A cursor on an export's sort key. `ordinal` completes it for
+ * `operator_payments`, where one message can carry several payments — without
+ * it a cursor at `(height, msgIndex)` would step straight over the siblings
+ * (PR #22 review). `transactions` has one row per message, so it passes 0.
+ */
 interface KeysetCursor {
   readonly height: bigint;
   readonly msgIndex: number;
+  readonly ordinal: number;
 }
 
 /** The cursor predicate, or nothing for the first chunk. Casts are explicit so
  * the comparison's parameter types cannot be inferred into something the index
  * condition would reject. */
-function keysetCursor(cursor: KeysetCursor | null): Prisma.Sql {
+function keysetCursor(cursor: KeysetCursor | null, columns: Prisma.Sql): Prisma.Sql {
   return cursor === null
     ? Prisma.empty
-    : Prisma.sql`AND ("height", "msgIndex") > (${cursor.height}::bigint, ${cursor.msgIndex}::int)`;
+    : Prisma.sql`AND ${columns} > (${cursor.height}::bigint, ${cursor.msgIndex}::int, ${cursor.ordinal}::int)`;
 }
+
+/** The payments sort key; `transactions` uses a constant 0 for the ordinal so
+ * both walks share one cursor shape and one helper. */
+const PAYMENT_KEY = Prisma.sql`("height", "msgIndex", "ordinal")`;
+const TX_KEY = Prisma.sql`("height", "msgIndex", 0)`;
 
 /** Rows per chunk. Bounds both the query and the caller's peak memory. */
 const KEYSET_CHUNK = 1000;
@@ -116,7 +127,7 @@ const KEYSET_CHUNK = 1000;
  * regardless of history size. `operator_payments` and `transactions` are both
  * append-only, so a keyset walk cannot skip a row.
  */
-async function* keysetStream<Row extends { height: bigint; msgIndex: number }, Fact>(
+async function* keysetStream<Row extends { height: bigint; msgIndex: number; ordinal?: number }, Fact>(
   page: (cursor: KeysetCursor | null, take: number) => Promise<Row[]>,
   toFact: (row: Row) => Fact,
 ): AsyncIterable<readonly Fact[]> {
@@ -127,7 +138,7 @@ async function* keysetStream<Row extends { height: bigint; msgIndex: number }, F
     yield rows.map(toFact);
     if (rows.length < KEYSET_CHUNK) return;
     const last = rows[rows.length - 1]!;
-    cursor = { height: last.height, msgIndex: last.msgIndex };
+    cursor = { height: last.height, msgIndex: last.msgIndex, ordinal: last.ordinal ?? 0 };
   }
 }
 
@@ -196,6 +207,7 @@ function toOperatorEpochFacts(r: OperatorEpochScalars): OperatorEpochFacts {
 interface OperatorPaymentScalars {
   txhash: string;
   msgIndex: number;
+  ordinal: number;
   valoper: string;
   payer: string;
   paymentType: string;
@@ -208,6 +220,7 @@ function toOperatorPaymentFacts(r: OperatorPaymentScalars): OperatorPaymentFacts
   return {
     txhash: r.txhash,
     msgIndex: r.msgIndex,
+    ordinal: r.ordinal,
     valoper: r.valoper,
     payer: r.payer,
     paymentType: r.paymentType as OperatorPaymentType,
@@ -235,7 +248,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         SELECT "txhash", "msgIndex", "address", "kind"::text AS "kind",
                "shares", "nhash", "navAtHeight", "height", "blockTime"
         FROM "indexed"."transactions"
-        WHERE "address" = ${address} ${keysetCursor(cursor)}
+        WHERE "address" = ${address} ${keysetCursor(cursor, TX_KEY)}
         ORDER BY "height" ASC, "msgIndex" ASC
         LIMIT ${take}`,
       toTxFacts,
@@ -716,7 +729,9 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     async operatorPaymentsFor(valoper: string, page: Pagination): Promise<OperatorPaymentFacts[]> {
       const rows = await prisma.operatorPayment.findMany({
         where: { valoper },
-        orderBy: [{ height: "desc" }, { msgIndex: "desc" }],
+        // The ordinal completes the sort key: without it siblings from one
+        // batched message have no defined order between pages (PR #22 review).
+        orderBy: [{ height: "desc" }, { msgIndex: "desc" }, { ordinal: "desc" }],
         skip: page.offset,
         take: page.limit,
       });
@@ -726,12 +741,12 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     operatorPaymentsAscStream(valoper: string): AsyncIterable<readonly OperatorPaymentFacts[]> {
       return keysetStream(
         (cursor, take) => prisma.$queryRaw<OperatorPaymentScalars[]>`
-          SELECT "txhash", "msgIndex", "valoper", "payer",
+          SELECT "txhash", "msgIndex", "ordinal", "valoper", "payer",
                  "paymentType"::text AS "paymentType",
                  "amount", "height", "occurredAt"
           FROM "indexed"."operator_payments"
-          WHERE "valoper" = ${valoper} ${keysetCursor(cursor)}
-          ORDER BY "height" ASC, "msgIndex" ASC
+          WHERE "valoper" = ${valoper} ${keysetCursor(cursor, PAYMENT_KEY)}
+          ORDER BY "height" ASC, "msgIndex" ASC, "ordinal" ASC
           LIMIT ${take}`,
         toOperatorPaymentFacts,
       );

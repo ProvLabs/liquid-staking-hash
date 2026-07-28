@@ -8,7 +8,8 @@
 //     goes in as a bigint and comes back the same bigint, never rounded
 //     through a JS number by the Decimal(39,0) column;
 //   * idempotency at the STORAGE layer — re-applying the same window upserts
-//     on (txhash, msgIndex) instead of duplicating, so a replay converges in
+//     on (txhash, msgIndex, ordinal) instead of duplicating, so a replay
+//     converges in
 //     the database and not only in the reducer;
 //   * `epochIndex` really is null at ingest (services/api derives it by
 //     joining `epoch_snapshots` — see prisma/operator_payments.prisma).
@@ -41,6 +42,7 @@ const BIG_AMOUNT = 10n ** 38n - 1n;
 const events: DomainEvent[] = [
   {
     kind: "operator_payment",
+    ordinal: 0,
     paymentType: "commission",
     valoper: VALOPER,
     payer: "tp1m64payer",
@@ -52,6 +54,7 @@ const events: DomainEvent[] = [
   },
   {
     kind: "operator_payment",
+    ordinal: 0,
     paymentType: "tip",
     valoper: VALOPER,
     payer: "tp1m64otherpayer",
@@ -127,4 +130,46 @@ describe("operator_payments round-trip (M6.4 §2.1)", () => {
     expect(rows).toHaveLength(2);
     expect(BigInt(rows.find((r) => r.txhash === TX_COMMISSION)!.amount.toFixed(0))).toBe(BIG_AMOUNT);
   });
+
+  it("keeps BATCHED siblings as distinct rows, not one overwriting the other", async () => {
+    // PR #22 review, third P1. A message that batches several payments emits
+    // siblings sharing (txhash, msgIndex); under the old two-part key each one
+    // upserted onto the previous row, so the operator's history, lifetime
+    // totals and §14.11 CSV would show ONE payment where several occurred —
+    // silently, with nothing logged. The ordinal completes the natural key.
+    const TX_BATCH = "M64TESTBATCH";
+    const batched: DomainEvent[] = [0, 1, 2].map((ordinal) => ({
+      kind: "operator_payment",
+      ordinal,
+      paymentType: "tip",
+      valoper: VALOPER,
+      payer: "tp1m64batcher",
+      amount: BigInt(100 + ordinal),
+      height: 5000n,
+      blockTime: new Date("2026-07-28T00:00:00.000Z"),
+      txhash: TX_BATCH,
+      msgIndex: 0,
+    }));
+
+    await prisma.$transaction(async (tx) => {
+      await applyEvents(new PrismaStore(tx), batched);
+    });
+
+    const rows = await prisma.operatorPayment.findMany({
+      where: { txhash: TX_BATCH },
+      orderBy: { ordinal: "asc" },
+    });
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => BigInt(r.amount.toFixed(0)))).toEqual([100n, 101n, 102n]);
+
+    // And re-applying the same batch still converges — idempotency must hold
+    // per SIBLING, not just per message.
+    await prisma.$transaction(async (tx) => {
+      await applyEvents(new PrismaStore(tx), batched);
+    });
+    expect(await prisma.operatorPayment.count({ where: { txhash: TX_BATCH } })).toBe(3);
+
+    await prisma.operatorPayment.deleteMany({ where: { txhash: TX_BATCH } });
+  });
+
 });

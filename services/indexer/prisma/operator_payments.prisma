@@ -19,6 +19,12 @@
 model OperatorPayment {
   txhash      String
   msgIndex    Int
+  // Position of this payment WITHIN its (txhash, msgIndex). Almost always 0 —
+  // it is non-zero only when one message carries several payments, which a
+  // contract batching sub-calls legally produces. Without it the natural key
+  // collides and siblings overwrite each other silently (PR #22 review).
+  // Derived from event order within the tx, so replay converges.
+  ordinal     Int      @default(0)
   valoper     String
   payer       String                       // bech32 account, public tx data
   paymentType OperatorPaymentType
@@ -27,11 +33,11 @@ model OperatorPayment {
   height      BigInt
   occurredAt  DateTime
 
-  @@id([txhash, msgIndex])
+  @@id([txhash, msgIndex, ordinal])
   // (valoper, height, msgIndex) — see transactions.prisma: the tie-break column
   // is what lets the export's `(height, msgIndex) > (?, ?)` keyset predicate
   // become a pure Index Cond instead of a post-scan filter.
-  @@index([valoper, height, msgIndex])
+  @@index([valoper, height, msgIndex, ordinal])
   @@map("operator_payments")
   @@schema("indexed")
 }

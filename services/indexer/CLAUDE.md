@@ -253,7 +253,13 @@ post-scan filter — no column added, allowlist unaffected. The `indexed` schema
 indexer-owned; only DDL runs as `indexer_writer`.
 
 **Allowlist extensions to date** (each a recorded design-review event, per the
-gate's own contract): PR 6.4 commit A added the `OperatorPayment` model —
+gate's own contract): the PR #22 review added `OperatorPayment.ordinal`
+(`20260728010000_operator_payment_ordinal`) — the payment's position within its
+`(txhash, msgIndex)`, derived from event order in the tx. It is part of the
+row's natural key: a message may batch several payments, and the old two-part
+key made every sibling upsert onto the same row, silently keeping only the
+last. An ordinal read off chain data, never user or off-chain input. PR 6.4
+commit A added the `OperatorPayment` model —
 nine columns, all read straight off a public tx, reviewed 2026-07-27 against
 the §14.11 operator-CSV requirement that `validator_epochs` provably cannot
 serve (per-epoch cumulative totals, no txhash). `payer` is a bech32 account

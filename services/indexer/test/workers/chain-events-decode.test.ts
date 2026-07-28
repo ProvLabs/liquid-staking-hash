@@ -278,9 +278,16 @@ describe("operator-payment decode against the fixture corpus", () => {
     const { payments, undecodable } = decodeTxPayments([t1!, w1!, t2!, w2!], txCtx, scope);
     expect(undecodable).toEqual([]);
     expect(payments).toMatchObject([
-      { paymentType: "tip", amount: 111n, msgIndex: 0 },
-      { paymentType: "tip", amount: 222n, msgIndex: 0 },
+      { paymentType: "tip", amount: 111n, msgIndex: 0, ordinal: 0 },
+      { paymentType: "tip", amount: 222n, msgIndex: 0, ordinal: 1 },
     ]);
+    // THE KEY PROPERTY (PR #22 review, third P1): siblings share
+    // (txhash, msgIndex), so the ordinal is the only thing that keeps them
+    // distinct rows. Without it every sibling upserts onto the same primary
+    // key and all but the last are silently discarded — which is worse than
+    // the quarantine it replaced, because that at least logged.
+    const keys = payments.map((p) => `${p.txhash}:${p.msgIndex}:${p.ordinal}`);
+    expect(new Set(keys).size).toBe(payments.length);
   });
 
   it("a batched commission cross-checks its own pairing and rejects a mismatch", () => {

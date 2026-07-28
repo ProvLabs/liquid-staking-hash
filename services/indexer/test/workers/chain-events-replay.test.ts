@@ -125,6 +125,7 @@ function build(plan: Plan): DomainEvent[] {
     const ctx = at();
     evs.push({
       kind: "operator_payment",
+      ordinal: 0,
       paymentType: p.paymentType,
       valoper: p.valoper,
       payer: p.payer,

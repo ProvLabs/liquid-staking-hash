@@ -82,6 +82,9 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   OperatorPayment: [
     "txhash",
     "msgIndex",
+    // Sibling discriminator within one (txhash, msgIndex) — an ordinal derived
+    // from event order, not user or off-chain data (PR #22 review).
+    "ordinal",
     "valoper",
     "payer",
     "paymentType",

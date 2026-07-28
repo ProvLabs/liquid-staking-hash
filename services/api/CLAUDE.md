@@ -122,8 +122,9 @@ Query API over the indexer's data store.
     push it into an index condition and demotes it to a post-scan `Filter`
     (`Rows Removed by Filter: 250 118` — still quadratic, and it *looks* fast
     if you only sample the last chunk); the SQL row comparison
-    `("height","msgIndex") > (?,?)` against the composite index = **1.6 s**,
-    `Index Cond: … ROW(height, "msgIndex") > ROW(…)`, 46 buffers / 0.37 ms per
+    `("height","msgIndex","ordinal") > (?,?,?)` against the composite index =
+    **1.6 s**,
+    `Index Cond: … ROW(height, "msgIndex", ordinal) > ROW(…)`, ~56 buffers / 0.3 ms per
     chunk at ANY depth, heap flat at 24 MB, first byte immediate. Prisma's
     query builder cannot express row comparison, which is why
     `operatorPaymentsAscStream` / `transactionsAscStream` are `$queryRaw`.
