@@ -359,12 +359,30 @@ test("preflight restates the contract's own enrolment rule against live state", 
 
 // ── Operator-gated legs: only with the validator's own operator key ────────
 
+// The round trip below RESETS the validator's economics, BY DESIGN. `unregister`
+// does `VALIDATORS.remove` (contracts/src/validators.rs), so re-enrolling
+// creates a fresh record: `commission_paid`, `commission_accrued`, `tip_epoch`
+// and `enrolled_at` all start at zero. A validator that leaves the program and
+// returns does not pick up where it left off — and since paid commission is
+// non-refundable, there is nothing owed back to carry over. This test asserts
+// the round trip works; it does not assert continuity, because the contract
+// offers none.
+//
+// The practical consequence for whoever runs this: a devnet carrying drill
+// history (accumulated tip/commission from `p2p-drill.sh`) comes out of it
+// zeroed. Re-establish whatever later steps depend on with
+// infra/devnet/actions/pay-commission.sh and pay-tip.sh — that is re-seeding a
+// fixture, not restoring an entitlement.
+//
+// Run 2026-07-27 did exactly that: tip_epoch 2751000000 / commission_paid
+// 1501000000 re-seeded after the round trip.
 test.describe("enroll / unregister (needs the validator's operator key)", () => {
   test.skip(
     OPERATOR_KEY === undefined,
     "E2E_LIVE_OPERATOR_KEY not set — enrolment is gated on the valoper's own " +
       "operator account (contract `is_operator`), which a throwaway funded key " +
-      "is not. Set it to the validator operator's 32-hex private key to cover these.",
+      "is not. Set it to the validator operator's 32-hex private key to cover " +
+      "these — and read the DESTRUCTIVE warning above first.",
   );
 
   test("unregister then re-enroll the operator's own validator", async ({ request }) => {

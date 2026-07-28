@@ -628,6 +628,8 @@ export default {
     "The program's stake on this validator is UNBONDED at the next epoch and redeployed to others.",
   "operator.confirm-unregister-2":
     "Re-enrolling later is possible, but the stake does not return automatically — it is redeployed by the normal epoch planning.",
+  "operator.confirm-unregister-3":
+    "Withdrawing is a CLEAN BREAK: re-enrolling starts a fresh record, so this validator's commission and TIP history does not carry over. Commission already paid is non-refundable, including any amount prepaid beyond what has accrued.",
   "operator.confirm-report-1":
     "Reporting does NOT move any stake. It records the first observation that this validator is jailed and starts the cooldown before a purge becomes possible.",
   "operator.confirm-report-2":

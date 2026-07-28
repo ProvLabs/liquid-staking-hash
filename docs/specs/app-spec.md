@@ -1181,7 +1181,11 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 > matter to an operator are the counter-intuitive ones: a commission payment is
 > non-refundable and an overpayment **carries forward** against future accrual,
 > while a TIP credits the **current epoch only** and resets at completion;
-> unregistering **unbonds** the program's stake at the next epoch; and the purge
+> unregistering **unbonds** the program's stake at the next epoch AND is a clean
+> break — `unregister` removes the record, so re-enrolling starts fresh and no
+> commission/TIP history (including commission prepaid beyond accrual) carries
+> over, which is the contract's intent, not an omission (confirmed Ira,
+> 2026-07-27); and the purge
 > is genuinely two-phase — reporting moves no stake, it starts a cooldown, and a
 > validator that unjails in the interim clears its own report. Preflight
 > restates every predicate the contract enforces as a machine-readable reason

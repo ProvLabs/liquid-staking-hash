@@ -67,7 +67,15 @@ const FLOWS: FlowSpec[] = [
   {
     variant: "unregister_participation",
     labelKey: "operator.flow-unregister",
-    summaryKeys: ["operator.confirm-unregister-1", "operator.confirm-unregister-2"],
+    summaryKeys: [
+      "operator.confirm-unregister-1",
+      "operator.confirm-unregister-2",
+      // Withdrawal is a clean break: `unregister` REMOVES the record, so
+      // re-enrolling starts fresh and any prepaid commission is gone. That is
+      // the contract's intent (confirmed 2026-07-27), which is exactly why an
+      // operator must read it before signing rather than discover it after.
+      "operator.confirm-unregister-3",
+    ],
     // Destructive: the program's stake leaves this validator.
     tier: "danger",
     funded: false,
