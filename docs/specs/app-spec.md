@@ -747,9 +747,17 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 
 > **Revision 2026-07-27 (PR 6.4 commit A, `operator_payments`):** a thirteenth
 > `indexed` table lands (allowlist gate extended in the same change):
-> **`operator_payments`** (`txhash, msgIndex, valoper, payer, paymentType,
-> amount, epochIndex, height, occurredAt`; PK `(txhash, msgIndex)`; index
-> `(valoper, height)`). It exists because the §14.11 operator CSV's rows are
+> **`operator_payments`** (`txhash, msgIndex, ordinal, valoper, payer,
+> paymentType, amount, epochIndex, height, occurredAt`; PK
+> `(txhash, msgIndex, ordinal)`; index `(valoper, height, msgIndex, ordinal)`).
+> `ordinal` is the payment's position within its `(txhash, msgIndex)` — 0 for
+> the ordinary one-payment message, non-zero only when a caller batches several
+> payments into one message, which is lawful because paying is permissionless.
+> It is part of the natural key: without it batched siblings upsert onto the
+> same row and all but the last are silently lost. It is also the export's
+> sort-key tie-break, so it rides the index (the §14.11 CSV walks the history by
+> keyset, and a range bound only enters the index condition when every sort
+> column is present). It exists because the §14.11 operator CSV's rows are
 > per-**payment** while `validator_epochs` holds only per-epoch cumulative
 > totals with no txhash — the facts do not exist anywhere else. Every column is
 > read straight off a public tx; `payer` is the message sender (a bech32

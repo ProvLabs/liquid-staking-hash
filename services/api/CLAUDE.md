@@ -144,8 +144,17 @@ Query API over the indexer's data store.
     `/validators/mine` load. A covering `(valoper, paymentType, amount)` index
     was built and measured: **no effect** — with one valoper holding most of the
     table the seq scan is genuinely the cheaper plan, so an index cannot fix
-    this. Bounding it needs precomputed totals (a schema change, i.e. a
-    design-review event); until then it is a known, accepted cost.
+    this. Bounding it would need precomputed totals (a schema change).
+    **ACCEPTED as-is (Ira, 2026-07-28)**: do not "fix" this with an index — that
+    was tried and measured — and do not denormalise until real volumes justify
+    it. Re-open only if a validator's payment count makes the summary read a
+    visible cost.
+  - Deep `OFFSET` on `/operator/payments` is linear in the offset by
+    construction. The composite index removed the sort (67 ms → 32 ms, pure
+    `Index Scan Backward`), and `MAX_PAGE_OFFSET` deliberately stays the SHARED
+    codebase bound rather than a per-route one — a lower bound here would be the
+    kind of per-route divergence the consistency lens flags. **ACCEPTED as-is
+    (Ira, 2026-07-28).** The CSV export is keyset and unaffected.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.

@@ -524,19 +524,27 @@ export function resolveOwnedValoper(
  * the indexer has not reached it. Null is the honest answer — never the latest
  * epoch, which would misattribute every recent payment.
  *
- * **Known boundary ambiguity (2026-07-28 review), decided rather than
- * accidental.** When `height == endHeight` — a payment in the SAME BLOCK as the
- * crank that closed the epoch — intra-block ordering decides the truth: a
- * payment executed before the crank is swept by it, one executed after belongs
- * to the next epoch. `operator_payments` stores no intra-block ordinal (the tx
- * position within the block is not indexed), so that ordering is not
- * recoverable from stored data and no amount of arithmetic here can settle it.
- * The `>=` boundary deliberately resolves the tie to the epoch closing AT that
- * height — the more common case, since the crank is typically the block's
- * reason for existing and payments cluster before it rather than after.
- * Exactness would require indexing a tx ordinal, which is a schema decision,
- * not a fix to this function. Pinned by the boundary cases in
- * `test/derive.test.ts` so the choice cannot drift silently.
+ * **Same-block boundary: ACCEPTED as-is (Ira, 2026-07-28), not merely
+ * tolerated.** When `height == endHeight` — a payment in the SAME BLOCK as the
+ * crank that closed the epoch — intra-block ordering decides which epoch truly
+ * swept it, and `operator_payments` stores no intra-block ordinal, so that
+ * ordering is not recoverable from stored data. `>=` resolves the tie to the
+ * epoch closing AT that height.
+ *
+ * The reason this needs no further precision is ECONOMIC, not statistical:
+ * program commission ROLLS OVER (`contracts/src/validators.rs`; the same
+ * cumulative-overpayment fact the `prepaid` banner state rests on). So both
+ * directions of a misattribution are harmless — if the payment is credited to
+ * the earlier epoch and commission WAS due, it settles a real obligation; if
+ * nothing was due, it becomes a prepaid credit that carries forward to the next
+ * bill. Either way the operator is credited exactly once for exactly what they
+ * paid. The boundary can only shift which row of the §14.11 CSV a payment
+ * appears against, never whether it counts.
+ *
+ * That is why a tx-ordinal column was considered and NOT added: it would buy
+ * presentational precision on a figure that is already economically exact.
+ * Pinned by the boundary cases in `test/operator-endpoints.test.ts` so the
+ * choice cannot drift silently.
  *
  * `boundariesAsc` MUST be ascending by height; the walk relies on it.
  */
