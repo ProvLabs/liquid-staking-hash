@@ -518,6 +518,38 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
     expect(data.owned.find((v) => v.valoper === NEW_VALOPER)?.active).toBe(false);
   });
 
+  const OTHER_VALOPER = NEW_VALOPER;
+
+  it("does not offer program actions on an unregistered validator", async () => {
+    // PR #22 review. Keeping an unregistered validator in the list (so its
+    // history stays reachable) is only safe if the ACTION panel is scoped to
+    // enrolled ones: commission, TIP, unregister, report and purge would all be
+    // rejected by the contract for a validator no longer in the set, so
+    // offering them invites a transaction guaranteed to fail. `selectedActive`
+    // is the loader-side rule the route gates on — decided here, not in JSX, so
+    // it is testable.
+    server.use(
+      summary([summaryRow({ valoper: OTHER_VALOPER, moniker: "gone", active: true })]),
+      liveValidators([liveValidator()]),
+    );
+    const data = await loadOperatorViewData(withKey(), SESSION, { valoper: OTHER_VALOPER });
+    expect(data.selectedValoper).toBe(OTHER_VALOPER); // history stays reachable
+    expect(data.selectedActive).toBe(false); // but it is not manageable
+  });
+
+  it("defaults to an ENROLLED validator, never an unregistered one", async () => {
+    // "gone" sorts before "testing", so without the active-first preference the
+    // page would open on the one validator the operator cannot act on.
+    server.use(
+      summary([summaryRow(), summaryRow({ valoper: OTHER_VALOPER, moniker: "gone", active: true })]),
+      liveValidators([liveValidator()]),
+    );
+    const data = await loadOperatorViewData(withKey(), SESSION);
+    expect(data.owned.map((v) => v.moniker)).toEqual(["gone", "testing"]); // order unchanged
+    expect(data.selectedValoper).toBe(VALOPER); // but selection skips the inactive one
+    expect(data.selectedActive).toBe(true);
+  });
+
   it("falls back to the indexed set only when the LIVE read fails", async () => {
     // A stale list beats an empty page — but this is the only case the indexed
     // plane decides membership.
@@ -549,7 +581,11 @@ describe("validator selection", () => {
     const data = await loadOperatorViewData(withKey(), SESSION);
     expect(data.owned).toHaveLength(2);
     expect(data.owned.map((v) => v.moniker)).toEqual(["beta", "testing"]);
-    expect(data.selectedValoper).toBe(OTHER_VALOPER);
+    // "beta" sorts first but is indexed-only (not in the live set), so it is
+    // unregistered — selection skips it for the enrolled one. Order and
+    // selection are separate rules and this pins both.
+    expect(data.selectedValoper).toBe(VALOPER);
+    expect(data.selectedActive).toBe(true);
   });
 
   it("honors a requested valoper the operator owns", async () => {

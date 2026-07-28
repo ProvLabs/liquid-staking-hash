@@ -154,6 +154,10 @@ export interface OperatorViewData {
   address: string;
   /** Every validator this address operates (empty = operates none). */
   owned: OperatorValidatorVM[];
+  /** Whether `selectedValoper` is STILL ENROLLED. Program actions apply only
+   * to an enrolled validator, so this gates the action panel; history renders
+   * either way. */
+  selectedActive: boolean;
   /** The valoper the detail sections describe, or null when none is owned. */
   selectedValoper: string | null;
   standing: OperatorStandingVM | null;

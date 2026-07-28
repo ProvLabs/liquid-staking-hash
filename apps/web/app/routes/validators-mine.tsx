@@ -94,6 +94,7 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
   }
 
   const { data, contractAddress } = loaderData;
+  const activeValopers = data.owned.filter((v) => v.active).map((v) => v.valoper);
 
   return (
     <Shell title={t(locale, "operator.title")}>
@@ -124,6 +125,13 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
                   }
                 >
                   {v.moniker ?? v.valoper.slice(0, 16)}
+                  {/* An unregistered validator is kept for its history, so the
+                      switcher must not present it as an enrolled one (§12.1). */}
+                  {v.active ? null : (
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                      ({t(locale, "operator.unregistered-badge")})
+                    </span>
+                  )}
                 </a>
               ))}
             </nav>
@@ -137,14 +145,36 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
           ) : null}
 
           {/* Actions render independently of the INDEXED plane: an operator
-              must be able to clear arrears even when history is unavailable. */}
+              must be able to clear arrears even when history is unavailable.
+              But they are scoped to a validator that is STILL ENROLLED (PR #22
+              review): an unregistered validator is kept in the list so its
+              history stays reachable, and every program action except
+              re-enrolling would be rejected by the contract for it. Offering
+              them would be a UI that invites a transaction guaranteed to fail.
+              `ownedValopers` seeds the purge claimant, which must itself be an
+              enrolled validator, so it carries ACTIVE valopers only. */}
           {data.selectedValoper !== null ? (
-            <OperatorFlows
-              locale={locale}
-              valoper={data.selectedValoper}
-              contractAddress={contractAddress}
-              ownedValopers={data.owned.map((v) => v.valoper)}
-            />
+            data.selectedActive ? (
+              <OperatorFlows
+                locale={locale}
+                valoper={data.selectedValoper}
+                contractAddress={contractAddress}
+                ownedValopers={activeValopers}
+              />
+            ) : (
+              <>
+                <p role="status" className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                  {t(locale, "operator.inactive-validator")}
+                </p>
+                <OperatorFlows
+                  locale={locale}
+                  valoper={data.selectedValoper}
+                  contractAddress={contractAddress}
+                  ownedValopers={activeValopers}
+                  only={["register_participation"]}
+                />
+              </>
+            )
           ) : null}
 
           {data.personalReadsAvailable ? (

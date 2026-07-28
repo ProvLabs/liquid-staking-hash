@@ -119,7 +119,18 @@ End-user web interface. Production quality.
   it decides membership ONLY when the live read failed (a stale list beats an
   empty page). A validator with no indexed row yet reports NULL totals, never
   `0` — "not sampled yet" is not "nothing paid". Gated by the three
-  live-is-canonical cases in `test/operator-data.test.ts`. `?valoper=` selects among the
+  live-is-canonical cases in `test/operator-data.test.ts`.
+  **An unregistered validator is kept but NOT manageable**: it stays in the
+  list so its history is reachable, is badged `unregistered` in the switcher,
+  and the action panel is replaced by an enrol-only affordance — every other
+  program action would be rejected by the contract for a validator no longer
+  in the set, so offering it invites a transaction guaranteed to fail. The
+  rule is `selectedActive`, decided in the LOADER rather than in JSX so it is
+  unit-testable, and the default selection prefers an enrolled validator (an
+  explicit `?valoper=` still reaches an unregistered one). `ownedValopers` —
+  which seeds the purge claimant, itself required to be enrolled — carries
+  ACTIVE valopers only.
+  `?valoper=` selects among the
   operator's OWN validators and is shape-bounded at the route; ownership is
   enforced by `services/api` against the asserted address.
   **The load-bearing fact** (verified against `contracts/src/validators.rs`,

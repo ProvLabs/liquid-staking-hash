@@ -502,6 +502,9 @@ export default {
   "operator.viewing-address": "Showing the operator view for {address}.",
   "operator.indexed-unavailable":
     "Indexed history is unavailable right now, so economics and payment history cannot be shown. Live standing above is unaffected.",
+  "operator.inactive-validator":
+    "This validator is no longer enrolled in the program. Its history stays here, but program actions do not apply to it — re-enrol it to manage it again.",
+  "operator.unregistered-badge": "unregistered",
   "operator.switch-validator": "Switch validator",
   "operator.unnamed-validator": "Your validator",
 

@@ -296,10 +296,17 @@ export async function loadOperatorViewData(
   });
 
   const requested = options.valoper ?? null;
+  // An explicit `?valoper=` is honoured even for an unregistered validator —
+  // that is how its history is reached. But the DEFAULT prefers an enrolled
+  // one: landing on an unregistered validator would open the page on the one
+  // subject the operator cannot act on (PR #22 review).
   const selectedValoper =
     requested !== null && owned.some((v) => v.valoper === requested)
       ? requested
-      : (owned[0]?.valoper ?? null);
+      : (owned.find((v) => v.active)?.valoper ?? owned[0]?.valoper ?? null);
+  /** Is the selected validator still enrolled? Decided here, not in JSX, so the
+   * rule that gates the action panel is unit-testable. */
+  const selectedActive = owned.some((v) => v.valoper === selectedValoper && v.active);
 
   const liveStatus: ValidatorStatus | null =
     selectedValoper === null
@@ -422,6 +429,7 @@ export async function loadOperatorViewData(
     address: session.address,
     owned,
     selectedValoper,
+    selectedActive,
     standing,
     netBenefit,
     delegationHistory,
