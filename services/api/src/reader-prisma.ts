@@ -67,6 +67,70 @@ function toBigint(value: { toFixed(dp: number): string }): bigint {
   return BigInt(value.toFixed(0));
 }
 
+// ── Keyset export walks (2026-07-28 review) ─────────────────────────────────
+//
+// Both §14.11 exports serve a COMPLETE history ascending by `(height,
+// msgIndex)`. They must not use `OFFSET` (each chunk re-scans and discards
+// every prior row — quadratic), and they must not use Prisma's two-arm
+// `OR` cursor either, which is the subtler trap and the reason these are raw:
+//
+//   `OR: [{height: {gt: h}}, {height: h, msgIndex: {gt: m}}]` is CORRECT but
+//   Postgres cannot push it into an index condition. Measured at 300 000 rows,
+//   it degraded to `Index Cond: (valoper = ...)` + `Filter: (height > ... OR
+//   ...)` with `Rows Removed by Filter: 250 118` — i.e. every chunk rescans the
+//   group from its start, so the walk stays quadratic. It only looks fast when
+//   sampled at the very END of a walk, where few rows remain.
+//
+//   The SQL row comparison `("height", "msgIndex") > (h, m)` is what Postgres
+//   turns into a real range bound: `Index Cond: (valoper = ... AND ROW(height,
+//   "msgIndex") > ROW(...))`, ~42 buffers / 0.2 ms per chunk, FLAT at every
+//   depth. Prisma's query builder cannot express it, hence `$queryRaw`.
+//
+// Tagged templates throughout — every value is a bound parameter, no string
+// interpolation reaches the query (SECURITY.md input handling), the
+// `programMetrics` precedent. The matching composite indexes ship in
+// `20260728000000_keyset_indexes`; without them the row comparison is correct
+// but unindexed.
+
+/** A cursor on the shared `(height, msgIndex)` export sort key. */
+interface KeysetCursor {
+  readonly height: bigint;
+  readonly msgIndex: number;
+}
+
+/** The cursor predicate, or nothing for the first chunk. Casts are explicit so
+ * the comparison's parameter types cannot be inferred into something the index
+ * condition would reject. */
+function keysetCursor(cursor: KeysetCursor | null): Prisma.Sql {
+  return cursor === null
+    ? Prisma.empty
+    : Prisma.sql`AND ("height", "msgIndex") > (${cursor.height}::bigint, ${cursor.msgIndex}::int)`;
+}
+
+/** Rows per chunk. Bounds both the query and the caller's peak memory. */
+const KEYSET_CHUNK = 1000;
+
+/**
+ * Walk a history by keyset, yielding mapped chunks. Nothing accumulates: the
+ * consumer renders each chunk and drops it, so peak memory is one chunk
+ * regardless of history size. `operator_payments` and `transactions` are both
+ * append-only, so a keyset walk cannot skip a row.
+ */
+async function* keysetStream<Row extends { height: bigint; msgIndex: number }, Fact>(
+  page: (cursor: KeysetCursor | null, take: number) => Promise<Row[]>,
+  toFact: (row: Row) => Fact,
+): AsyncIterable<readonly Fact[]> {
+  let cursor: KeysetCursor | null = null;
+  for (;;) {
+    const rows = await page(cursor, KEYSET_CHUNK);
+    if (rows.length === 0) return;
+    yield rows.map(toFact);
+    if (rows.length < KEYSET_CHUNK) return;
+    const last = rows[rows.length - 1]!;
+    cursor = { height: last.height, msgIndex: last.msgIndex };
+  }
+}
+
 interface TransactionRowScalars {
   txhash: string;
   msgIndex: number;
@@ -163,6 +227,21 @@ export interface PrismaReader extends IndexedReader {
 export function createPrismaReader(databaseUrl: string): PrismaReader {
   const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
 
+  /** The address history keyset walk — shared by the CSV stream and the
+   * array-returning `transactionsAscFor` the metrics fold needs. */
+  function txAscStream(address: string): AsyncIterable<readonly TransactionFacts[]> {
+    return keysetStream(
+      (cursor, take) => prisma.$queryRaw<TransactionRowScalars[]>`
+        SELECT "txhash", "msgIndex", "address", "kind"::text AS "kind",
+               "shares", "nhash", "navAtHeight", "height", "blockTime"
+        FROM "indexed"."transactions"
+        WHERE "address" = ${address} ${keysetCursor(cursor)}
+        ORDER BY "height" ASC, "msgIndex" ASC
+        LIMIT ${take}`,
+      toTxFacts,
+    );
+  }
+
   async function maxWorkerCheckpoint(): Promise<bigint | null> {
     const rows = await prisma.indexerCheckpoint.findMany({
       select: { stream: true, cursorHeight: true },
@@ -252,22 +331,27 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         orderBy: [{ moniker: "asc" }, { valoper: "asc" }],
         select: { valoper: true, moniker: true, unregisteredAt: true },
       });
-      // Latest sampled epoch per validator: ordered desc within each valoper,
-      // `distinct` keeps the first (= latest) row per group. The set is
-      // bounded by the contract's validator cap, so this stays small.
-      const latest = await prisma.validatorEpoch.findMany({
-        orderBy: [{ valoper: "asc" }, { epochIndex: "desc" }],
-        distinct: ["valoper"],
-        select: {
-          valoper: true,
-          epochIndex: true,
-          uptimeBps: true,
-          eligible: true,
-          failingReasons: true,
-          programDelegation: true,
-          commissionDue: true,
-        },
-      });
+      // Latest sampled epoch per validator, via `DISTINCT ON` (2026-07-28
+      // review). This is the PUBLIC endpoint and had the same non-pushed-down
+      // `distinct` as `latestOperatorEpochs`: the validator SET is capped at
+      // 100, but the rows scanned were `100 × epochs_ever`, all transferred to
+      // return 100. The cap bounds the result, never the scan.
+      const latest = await prisma.$queryRaw<
+        Array<{
+          valoper: string;
+          epochIndex: bigint;
+          uptimeBps: number;
+          eligible: boolean;
+          failingReasons: string[];
+          programDelegation: { toFixed(dp: number): string };
+          commissionDue: { toFixed(dp: number): string };
+        }>
+      >`
+        SELECT DISTINCT ON ("valoper")
+               "valoper", "epochIndex", "uptimeBps", "eligible", "failingReasons",
+               "programDelegation", "commissionDue"
+        FROM "indexed"."validator_epochs"
+        ORDER BY "valoper" ASC, "epochIndex" DESC`;
       const byValoper = new Map<string, ValidatorEpochFacts>(
         latest.map((row) => [
           row.valoper,
@@ -405,21 +489,15 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return rows.map((r) => toTransactionRow(toTxFacts(r)));
     },
 
+    transactionsAscStream: txAscStream,
+
     async transactionsAscFor(address: string): Promise<TransactionFacts[]> {
-      // Fixed chunk, loop until a short page: the full history is bounded per
-      // query, so no single SELECT scans an address's entire (unbounded) log.
-      const CHUNK = 1000;
+      // `derivePortfolioMetrics` is a fold over the WHOLE history, so this one
+      // genuinely needs the array — but it is built by draining the keyset
+      // stream, so the quadratic OFFSET walk is gone here too. The CSV export
+      // uses the stream directly and never materializes.
       const facts: TransactionFacts[] = [];
-      for (let skip = 0; ; skip += CHUNK) {
-        const rows = await prisma.transaction.findMany({
-          where: { address },
-          orderBy: [{ height: "asc" }, { msgIndex: "asc" }],
-          skip,
-          take: CHUNK,
-        });
-        for (const r of rows) facts.push(toTxFacts(r));
-        if (rows.length < CHUNK) break;
-      }
+      for await (const chunk of txAscStream(address)) facts.push(...chunk);
       return facts;
     },
 
@@ -578,14 +656,21 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
 
     async latestOperatorEpochs(valopers: readonly string[]): Promise<OperatorEpochFacts[]> {
       if (valopers.length === 0) return [];
-      // Ordered desc within each valoper; `distinct` keeps the first (= latest)
-      // row per group — the listValidators pattern, bounded by the caller's own
-      // (small) valoper set.
-      const rows = await prisma.validatorEpoch.findMany({
-        where: { valoper: { in: [...valopers] } },
-        orderBy: [{ valoper: "asc" }, { epochIndex: "desc" }],
-        distinct: ["valoper"],
-      });
+      // `DISTINCT ON`, not Prisma's `distinct` (2026-07-28 review). Prisma does
+      // NOT push `distinct` down — the emitted SQL carried no `DISTINCT ON` and
+      // no `LIMIT`, so it fetched every epoch row for every valoper across the
+      // wire and discarded all but the newest in the query engine: 1 080 rows
+      // transferred to return 10, growing as `validators × epochs_ever` with no
+      // ceiling in time. `DISTINCT ON` does it in the database, returning
+      // exactly one row per valoper.
+      const rows = await prisma.$queryRaw<OperatorEpochScalars[]>`
+        SELECT DISTINCT ON ("valoper")
+               "valoper", "epochIndex", "uptimeBps", "eligible", "failingReasons",
+               "tip", "commissionAccrued", "commissionPaid", "commissionDue",
+               "programDelegation", "height", "observedAt"
+        FROM "indexed"."validator_epochs"
+        WHERE "valoper" IN (${Prisma.join([...valopers])})
+        ORDER BY "valoper" ASC, "epochIndex" DESC`;
       return rows.map(toOperatorEpochFacts);
     },
 
@@ -638,47 +723,18 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return rows.map(toOperatorPaymentFacts);
     },
 
-    async *operatorPaymentsAscStream(
-      valoper: string,
-    ): AsyncIterable<readonly OperatorPaymentFacts[]> {
-      // KEYSET walk on the export's own sort key, yielded chunk by chunk. The
-      // predicate is the compound-cursor shape `redemptionsChangedSince` above
-      // already uses — `(height, msgIndex) > (h, m)` written as the two-arm OR
-      // Prisma can emit — so the two arms become a BitmapOr over
-      // `operator_payments_valoper_height_idx` with the height bound INSIDE the
-      // index condition (EXPLAIN, 2026-07-28: 40 buffers / 0.5 ms at the 300
-      // 000th row, against 10 845 buffers / 68 ms for the OFFSET form it
-      // replaces — and flat wherever the walk has reached, not linear in it).
-      //
-      // Yielding instead of accumulating is the other half: the caller renders
-      // each chunk and drops it, so peak memory is one chunk rather than the
-      // whole history (measured 323 MB RSS for a 300 000-row export before).
-      const CHUNK = 1000;
-      let cursor: { height: bigint; msgIndex: number } | null = null;
-      for (;;) {
-        // Typed separately so the generator's return type does not become
-        // self-referential through the cursor (TS7022).
-        const where: Prisma.OperatorPaymentWhereInput =
-          cursor === null
-            ? { valoper }
-            : {
-                valoper,
-                OR: [
-                  { height: { gt: cursor.height } },
-                  { height: cursor.height, msgIndex: { gt: cursor.msgIndex } },
-                ],
-              };
-        const rows: OperatorPaymentScalars[] = await prisma.operatorPayment.findMany({
-          where,
-          orderBy: [{ height: "asc" }, { msgIndex: "asc" }],
-          take: CHUNK,
-        });
-        if (rows.length === 0) return;
-        yield rows.map(toOperatorPaymentFacts);
-        if (rows.length < CHUNK) return;
-        const last = rows[rows.length - 1]!;
-        cursor = { height: last.height, msgIndex: last.msgIndex };
-      }
+    operatorPaymentsAscStream(valoper: string): AsyncIterable<readonly OperatorPaymentFacts[]> {
+      return keysetStream(
+        (cursor, take) => prisma.$queryRaw<OperatorPaymentScalars[]>`
+          SELECT "txhash", "msgIndex", "valoper", "payer",
+                 "paymentType"::text AS "paymentType",
+                 "amount", "height", "occurredAt"
+          FROM "indexed"."operator_payments"
+          WHERE "valoper" = ${valoper} ${keysetCursor(cursor)}
+          ORDER BY "height" ASC, "msgIndex" ASC
+          LIMIT ${take}`,
+        toOperatorPaymentFacts,
+      );
     },
 
     async epochBoundariesAsc(): Promise<EpochBoundary[]> {

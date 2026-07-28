@@ -233,7 +233,13 @@ Index-only migrations may ride another lane's branch (one-PR-per-milestone
 precedent): the M6.2 notifier's redemption cursor read added
 `@@index([lastHeight])` on `redemption_requests`
 (`20260724010000_redemption_last_height_index`) via `apps/web`'s PR 6.2 — no
-column, schema-allowlist unaffected, rebuildable. The `indexed` schema stays
+column, schema-allowlist unaffected, rebuildable. The 2026-07-28 review added
+`20260728000000_keyset_indexes` the same way: `operator_payments` and
+`transactions` each gain the `msgIndex` tie-break column on their existing
+index (`(valoper, height, msgIndex)`, `(address, height, msgIndex)`), replacing
+the narrower one. That column is what lets the §14.11 exports' keyset predicate
+`(height, msgIndex) > (?, ?)` become a real index range bound instead of a
+post-scan filter — no column added, allowlist unaffected. The `indexed` schema stays
 indexer-owned; only DDL runs as `indexer_writer`.
 
 **Allowlist extensions to date** (each a recorded design-review event, per the

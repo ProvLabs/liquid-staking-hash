@@ -15,7 +15,11 @@ model Transaction {
   blockTime   DateTime
 
   @@id([txhash, msgIndex])
-  @@index([address])
+  // (address, height, msgIndex): the CSV export walks this by keyset, and the
+  // tie-break column must be in the index or the range bound cannot enter the
+  // index condition (2026-07-28 review). Supersedes the bare [address] index —
+  // same leading column, so every address-filtered query is still served.
+  @@index([address, height, msgIndex])
   @@index([height])
   @@map("transactions")
   @@schema("indexed")

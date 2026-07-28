@@ -28,7 +28,10 @@ model OperatorPayment {
   occurredAt  DateTime
 
   @@id([txhash, msgIndex])
-  @@index([valoper, height])
+  // (valoper, height, msgIndex) — see transactions.prisma: the tie-break column
+  // is what lets the export's `(height, msgIndex) > (?, ?)` keyset predicate
+  // become a pure Index Cond instead of a post-scan filter.
+  @@index([valoper, height, msgIndex])
   @@map("operator_payments")
   @@schema("indexed")
 }

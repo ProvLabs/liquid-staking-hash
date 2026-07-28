@@ -479,6 +479,7 @@ function buildNetBenefit(input: {
 
 // ── CSV export proxy ────────────────────────────────────────────────────────
 
+/** Upstream headers forwarded verbatim (content + [R3] freshness). */
 const FORWARDED_EXPORT_HEADERS = [
   "content-type",
   "content-disposition",
@@ -486,6 +487,22 @@ const FORWARDED_EXPORT_HEADERS = [
   "x-indexed-height",
   "x-generated-at",
 ] as const;
+
+/**
+ * Defensive headers SET on the proxied response (2026-07-28 review). services/api
+ * applies these to every response it serves, including the CSV
+ * (`handler.ts` merges them onto the raw Response) — but this proxy rebuilds the
+ * header set from an allowlist, which silently dropped all three. The body is a
+ * personal statement of fact, so it must not be stored by a shared cache or
+ * content-type sniffed. SET rather than forwarded: the guarantee should not
+ * depend on the upstream remembering.
+ */
+function withDefensiveHeaders(headers: Headers): Headers {
+  headers.set("cache-control", "no-store");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  return headers;
+}
 
 export interface OperatorExportDeps {
   fetchImpl?: typeof fetch;
@@ -526,5 +543,8 @@ export async function exportOperatorPaymentsCsv(
     const value = upstream.headers.get(name);
     if (value !== null) forwarded.set(name, value);
   }
-  return new Response(upstream.body, { status: upstream.status, headers: forwarded });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: withDefensiveHeaders(forwarded),
+  });
 }

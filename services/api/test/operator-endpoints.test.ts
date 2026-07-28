@@ -466,6 +466,22 @@ describe("pure ownership + epoch-assignment rules", () => {
     expect(paymentEpochIndex(1n, [])).toBeNull();
   });
 
+  it("resolves the same-block boundary to the epoch closing AT that height", () => {
+    // The one case that is genuinely ambiguous (2026-07-28 review): a payment
+    // in the SAME BLOCK as the crank. Whether it was swept depends on intra-
+    // block tx order, which `operator_payments` does not record, so this is a
+    // DECIDED tie-break, not a derivation — pinned here so it cannot drift into
+    // the other direction silently. Making it exact needs a tx ordinal in the
+    // schema; until then `>=` is the choice and the CSV reflects it.
+    const boundaries = [
+      { epochIndex: 7n, endHeight: 1000n },
+      { epochIndex: 8n, endHeight: 2000n },
+    ];
+    expect(paymentEpochIndex(999n, boundaries)).toBe(7n); // clearly before
+    expect(paymentEpochIndex(1000n, boundaries)).toBe(7n); // the tie → closing epoch
+    expect(paymentEpochIndex(1001n, boundaries)).toBe(8n); // clearly after
+  });
+
   it("toOperatorPaymentRow surfaces a null epoch rather than the latest one", () => {
     const fact: OperatorPaymentFacts = {
       txhash: "X",

@@ -28,7 +28,12 @@ import type {
   EpochRow,
 } from "@nvhash/api-types";
 import type { z } from "zod";
-import { operatorPaymentsCsvHeader, operatorPaymentsCsvRows, transactionsCsv } from "./csv.ts";
+import {
+  operatorPaymentsCsvHeader,
+  operatorPaymentsCsvRows,
+  transactionsCsvHeader,
+  transactionsCsvRows,
+} from "./csv.ts";
 import {
   deriveOperatorSummary,
   resolveOwnedValoper,
@@ -408,10 +413,7 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       // paginated slice. `limit`/`offset` are deliberately ignored here (they
       // bound only the JSON view); the full stream comes from the chunked
       // `transactionsAscFor`, mapped through the same per-row fact mapping.
-      const [heads, facts] = await Promise.all([
-        ctx.reader.heads(),
-        ctx.reader.transactionsAscFor(ctx.query.address),
-      ]);
+      const heads = await ctx.reader.heads();
       const headers = new Headers();
       headers.set("content-type", "text/csv; charset=utf-8");
       headers.set("content-disposition", 'attachment; filename="transactions.csv"');
@@ -420,7 +422,12 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
       if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
-      return new Response(transactionsCsv(facts.map(toTransactionRow)), { status: 200, headers });
+      return new Response(
+        csvStream(ctx.reader.transactionsAscStream(ctx.query.address), transactionsCsvHeader(), (facts) =>
+          transactionsCsvRows(facts.map(toTransactionRow)),
+        ),
+        { status: 200, headers },
+      );
     }
     const [heads, rows] = await Promise.all([
       ctx.reader.heads(),
@@ -444,9 +451,10 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
 async function* emptyPaymentStream(): AsyncIterable<readonly OperatorPaymentFacts[]> {}
 
 /**
- * Render the §14.11 operator export as a stream: the header, then one rendered
- * block per chunk the reader yields. Nothing accumulates, so peak memory is one
- * chunk regardless of history size.
+ * Render a §14.11 export as a stream: the header, then one rendered block per
+ * chunk the reader yields. Nothing accumulates, so peak memory is one chunk
+ * regardless of history size. BOTH exports (holder and operator) use this —
+ * they had drifted apart, with only the operator one streaming.
  *
  * A read that fails mid-export errors the stream after a 200 has already been
  * sent, so the client sees a truncated download rather than an error status.
@@ -454,9 +462,10 @@ async function* emptyPaymentStream(): AsyncIterable<readonly OperatorPaymentFact
  * direction: a short file is visibly short, whereas the alternative was an
  * export that could not complete at all above a few hundred thousand rows.
  */
-function operatorPaymentsCsvStream(
-  source: AsyncIterable<readonly OperatorPaymentFacts[]>,
-  boundaries: readonly EpochBoundary[],
+function csvStream<Fact>(
+  source: AsyncIterable<readonly Fact[]>,
+  header: string,
+  renderChunk: (facts: readonly Fact[]) => string,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const iterator = source[Symbol.asyncIterator]();
@@ -465,7 +474,7 @@ function operatorPaymentsCsvStream(
     async pull(controller) {
       if (!sentHeader) {
         sentHeader = true;
-        controller.enqueue(encoder.encode(operatorPaymentsCsvHeader()));
+        controller.enqueue(encoder.encode(header));
         return;
       }
       const next = await iterator.next();
@@ -473,8 +482,7 @@ function operatorPaymentsCsvStream(
         controller.close();
         return;
       }
-      const rows = next.value.map((f) => toOperatorPaymentRow(f, boundaries));
-      controller.enqueue(encoder.encode(operatorPaymentsCsvRows(rows)));
+      controller.enqueue(encoder.encode(renderChunk(next.value)));
     },
     async cancel(reason) {
       // A client that disconnects mid-download must not leave the reader's
@@ -616,7 +624,12 @@ const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
       if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
-      return new Response(operatorPaymentsCsvStream(source, boundaries), { status: 200, headers });
+      return new Response(
+        csvStream(source, operatorPaymentsCsvHeader(), (facts) =>
+          operatorPaymentsCsvRows(facts.map((f) => toOperatorPaymentRow(f, boundaries))),
+        ),
+        { status: 200, headers },
+      );
     }
 
     const [facts, boundaries] =

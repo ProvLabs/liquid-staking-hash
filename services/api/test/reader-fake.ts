@@ -80,6 +80,12 @@ function page<T>(rows: readonly T[], p: Pagination): T[] {
 }
 
 export function fakeReader(facts: FakeFacts): IndexedReader {
+  /** One address's history ascending by (height, msgIndex) — production order. */
+  const ascTransactions = (address: string): TransactionFacts[] =>
+    [...(facts.transactions ?? [])]
+      .filter((t) => t.address === address)
+      .sort((a, b) => (a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1));
+
   return {
     heads: () =>
       Promise.resolve(
@@ -189,11 +195,13 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         ).map(toTransactionRow),
       ),
     transactionsAscFor: (address) =>
-      Promise.resolve(
-        [...(facts.transactions ?? [])]
-          .filter((t) => t.address === address)
-          .sort((a, b) => (a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1)),
-      ),
+      Promise.resolve(ascTransactions(address)),
+    // Chunked like the Prisma reader so a consumer that only handles a
+    // single-chunk stream cannot pass here and fail in production.
+    async *transactionsAscStream(address) {
+      const rows = ascTransactions(address);
+      for (let i = 0; i < rows.length; i += 1000) yield rows.slice(i, i + 1000);
+    },
     listEpochsAsc: () =>
       Promise.resolve(
         [...(facts.epochs ?? [])]

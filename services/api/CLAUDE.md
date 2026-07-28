@@ -115,26 +115,36 @@ Query API over the indexer's data store.
   validator cap. Two consequences, both measured on the dev DB at 300 000
   payments on one valoper (2026-07-28 review, superseding the 2026-07-27
   plan-check):
-  - The §14.11 CSV export **streams and walks by keyset**. The original
-    `OFFSET`-chunked, fully-materialized version took 14.8 s and +323 MB RSS
-    per concurrent request (last chunk alone: 10 845 buffers / 68 ms to return
-    1 000 rows); streaming keyset is 6.2 s, +72 MB peak, heap flat at 19.8 MB,
-    and first byte is immediate. Gated by the chunk-boundary/same-height-burst
-    case in `test/integration/reader.test.ts` — completeness is the property, so
-    a cursor that skips a row is a wrong statement of fact.
+  - **Both §14.11 CSV exports stream and walk by SQL row comparison.** Three
+    forms were measured at 300 000 rows; only the third is flat:
+    `OFFSET` chunking = 14.8 s total and +323 MB RSS (each chunk re-scans every
+    prior row); Prisma's two-arm `OR` cursor = 6.2 s, because Postgres cannot
+    push it into an index condition and demotes it to a post-scan `Filter`
+    (`Rows Removed by Filter: 250 118` — still quadratic, and it *looks* fast
+    if you only sample the last chunk); the SQL row comparison
+    `("height","msgIndex") > (?,?)` against the composite index = **1.6 s**,
+    `Index Cond: … ROW(height, "msgIndex") > ROW(…)`, 46 buffers / 0.37 ms per
+    chunk at ANY depth, heap flat at 24 MB, first byte immediate. Prisma's
+    query builder cannot express row comparison, which is why
+    `operatorPaymentsAscStream` / `transactionsAscStream` are `$queryRaw`.
+    Gated by the chunk-boundary/same-height-burst case in
+    `test/integration/reader.test.ts` — completeness is the property, so a
+    cursor that skips a row is a wrong statement of fact.
+  - `latestOperatorEpochs` and the public `listValidators` use **`DISTINCT ON`**,
+    not Prisma's `distinct`, which is NOT pushed down (the emitted SQL carried
+    no `DISTINCT ON` and no `LIMIT` — verified from the Postgres statement log)
+    and fetched `validators × epochs_ever` rows to return one per valoper.
   - Query plans: index-backed **except** `validator_registry` (bounded by the
     validator cap) and `epoch_snapshots` (one row per calendar month) — both
     structurally tiny, so no index was added — **and `operatorPaymentTotalsFor`,
     which the planner flips to a full parallel seq scan (8 663 buffers, 58 ms)
     once one valoper holds a large share of `operator_payments`.** It is
-    index-backed at even distribution (3 buffers) and it runs on every
-    `/validators/mine` load; the skew case is a known, unfixed cost, not a
-    claim of index coverage.
-  - `latestOperatorEpochs` uses Prisma `distinct`, which is **not** pushed down
-    (no `DISTINCT ON`, no `LIMIT` in the emitted SQL — verified from the
-    Postgres statement log): it fetches `validators_operated × epochs_ever` rows
-    to return one per valoper. Small today, unbounded in time. The public
-    `listValidators` has the same shape.
+    index-backed at even distribution (3 buffers) and runs on every
+    `/validators/mine` load. A covering `(valoper, paymentType, amount)` index
+    was built and measured: **no effect** — with one valoper holding most of the
+    table the seq scan is genuinely the cheaper plan, so an index cannot fix
+    this. Bounding it needs precomputed totals (a schema change, i.e. a
+    design-review event); until then it is a known, accepted cost.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.

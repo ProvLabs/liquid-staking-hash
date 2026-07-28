@@ -26,6 +26,8 @@ export { emptyReader, type IndexedReader, type Heads } from "./reader.ts";
 export { verifyAssertion, MAX_ASSERTION_LIFETIME_SECONDS, MAX_CLOCK_SKEW_SECONDS, type VerifiedScope, type VerifyResult } from "./auth.ts";
 export {
   transactionsCsv,
+  transactionsCsvHeader,
+  transactionsCsvRows,
   operatorPaymentsCsv,
   operatorPaymentsCsvHeader,
   operatorPaymentsCsvRows,

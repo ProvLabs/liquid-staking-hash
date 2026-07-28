@@ -521,6 +521,20 @@ export function resolveOwnedValoper(
  * the indexer has not reached it. Null is the honest answer — never the latest
  * epoch, which would misattribute every recent payment.
  *
+ * **Known boundary ambiguity (2026-07-28 review), decided rather than
+ * accidental.** When `height == endHeight` — a payment in the SAME BLOCK as the
+ * crank that closed the epoch — intra-block ordering decides the truth: a
+ * payment executed before the crank is swept by it, one executed after belongs
+ * to the next epoch. `operator_payments` stores no intra-block ordinal (the tx
+ * position within the block is not indexed), so that ordering is not
+ * recoverable from stored data and no amount of arithmetic here can settle it.
+ * The `>=` boundary deliberately resolves the tie to the epoch closing AT that
+ * height — the more common case, since the crank is typically the block's
+ * reason for existing and payments cluster before it rather than after.
+ * Exactness would require indexing a tx ordinal, which is a schema decision,
+ * not a fix to this function. Pinned by the boundary cases in
+ * `test/derive.test.ts` so the choice cannot drift silently.
+ *
  * `boundariesAsc` MUST be ascending by height; the walk relies on it.
  */
 export function paymentEpochIndex(

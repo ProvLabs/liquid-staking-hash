@@ -104,24 +104,34 @@ export function operatorPaymentsCsv(rows: readonly OperatorPaymentRow[]): string
   return operatorPaymentsCsvHeader() + operatorPaymentsCsvRows(rows);
 }
 
+/** The holder export's header line (terminated). Split from the row renderer
+ * for the same reason as the operator export: the route streams chunk by chunk
+ * rather than joining an unbounded history into one string. */
+export function transactionsCsvHeader(): string {
+  return `${TRANSACTIONS_CSV_COLUMNS.join(",")}\n`;
+}
+
+/** Render transaction rows only (no header), each line `\n`-terminated. */
+export function transactionsCsvRows(rows: readonly TransactionRow[]): string {
+  let out = "";
+  for (const row of rows) {
+    out += `${[
+      row.block_time,
+      String(row.height),
+      row.txhash,
+      String(row.msg_index),
+      row.kind,
+      row.shares,
+      row.nhash,
+      row.nav_at_height,
+    ]
+      .map(csvField)
+      .join(",")}\n`;
+  }
+  return out;
+}
+
 /** Render the export: header line + one line per row, `\n`-joined. */
 export function transactionsCsv(rows: readonly TransactionRow[]): string {
-  const lines = [TRANSACTIONS_CSV_COLUMNS.join(",")];
-  for (const row of rows) {
-    lines.push(
-      [
-        row.block_time,
-        String(row.height),
-        row.txhash,
-        String(row.msg_index),
-        row.kind,
-        row.shares,
-        row.nhash,
-        row.nav_at_height,
-      ]
-        .map(csvField)
-        .join(","),
-    );
-  }
-  return `${lines.join("\n")}\n`;
+  return transactionsCsvHeader() + transactionsCsvRows(rows);
 }

@@ -77,11 +77,14 @@ export interface IndexedReader {
   /** Per-event history for the address, newest first, paginated. */
   transactionsFor(address: string, page: Pagination): Promise<TransactionRow[]>;
   /**
-   * The address's FULL event history ascending (height asc, msgIndex asc) as
-   * fold facts (M6.1). Chunked internally so no single query is unbounded; the
-   * derived-metrics fold and the CSV export both replay the complete history.
+   * The address's COMPLETE history ascending by `(height, msgIndex)` as an
+   * array — `derivePortfolioMetrics` folds over the whole thing, so this one
+   * caller genuinely needs it materialized. Backed by the keyset stream below.
    */
   transactionsAscFor(address: string): Promise<TransactionFacts[]>;
+  /** The same history as a keyset-paged stream — the §14.11 holder CSV's
+   * source, so the export never materializes an unbounded history. */
+  transactionsAscStream(address: string): AsyncIterable<readonly TransactionFacts[]>;
   /** All epoch snapshots ascending by epochIndex, as the fold's step facts. */
   listEpochsAsc(): Promise<EpochStepFact[]>;
   /**
@@ -119,12 +122,15 @@ export interface IndexedReader {
    * bounds the JSON view only; a statement of fact is never a paginated slice
    * (the 6.1 completeness precedent).
    *
-   * It is a STREAM, not an array, and it walks by KEYSET, for two measured
-   * reasons (2026-07-28 review, at 300 000 payments on one valoper):
+   * It is a STREAM, not an array, and it walks by keyset with a SQL ROW
+   * COMPARISON, for two measured reasons (2026-07-28 review, at 300 000
+   * payments on one valoper):
    *   - an `OFFSET`-chunked walk re-scans and discards every prior row, so the
-   *     export cost is quadratic — the last chunk alone sorted 300 000 rows to
-   *     return 1 000 (10 845 buffers, 68 ms); the whole export took 14.8 s.
-   *     Keyset makes each chunk constant-cost (40 buffers, 0.5 ms).
+   *     export cost is quadratic — the whole export took 14.8 s. So does
+   *     Prisma's two-arm `OR` cursor, which Postgres cannot push into an index
+   *     condition (it becomes a post-scan Filter). Only the row comparison
+   *     `("height","msgIndex") > (?,?)`, against the composite index, is flat:
+   *     ~42 buffers / 0.2 ms per chunk at ANY depth. See reader-prisma.ts.
    *   - materializing the history cost 323 MB RSS per concurrent request, on a
    *     table fed by a PERMISSIONLESS write path (anyone may PayTip for any
    *     validator), so its row count is bounded by nobody.
@@ -171,6 +177,8 @@ export const emptyReader: IndexedReader = {
     }),
   transactionsFor: () => Promise.resolve([]),
   transactionsAscFor: () => Promise.resolve([]),
+  // An unwired process has no rows, so the stream yields nothing at all.
+  async *transactionsAscStream() {},
   listEpochsAsc: () => Promise.resolve([]),
   redemptionsChangedSince: () => Promise.resolve([]),
   incidentsSince: () => Promise.resolve([]),
