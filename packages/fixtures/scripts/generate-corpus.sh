@@ -5,6 +5,9 @@
 #   1. contracts/drills/p2p-drill.sh — the proven money path: deposit,
 #      deploy settlement (AcceptAsset), reward NAV step, redeem enqueue,
 #      matured payout, return settlement + burn, expedite, arrears, rebalance.
+#      It also produces the operator action shapes the corpus pins (App M6.4
+#      §2.1): enroll (phase 1), pay_tip (phase 2), pay_commission (phase 8's
+#      arrears clearing) — so no separate operator drill is needed here.
 #   2. Unfunded-maturity refund — a swap-out larger than the principal
 #      marker's liquid balance, left unserviced past the withdrawal delay:
 #      the vault EndBlocker refunds the escrowed shares (contract §8's

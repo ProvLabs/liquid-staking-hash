@@ -8,6 +8,11 @@
 //     EventSetNetAssetValue (NAV) — no tx, so rows keyed by a synthetic id.
 // Attribute VALUES are JSON-string-quoted; decoding goes through
 // src/decode/attributes.ts (the one place that fact lives).
+//
+// M6.4 adds a third provenance on the tx-search plane: the program CONTRACT's
+// own `wasm` events for PayCommission/PayTip. Those attribute values arrive
+// BARE (the contract is not the vault module) — `dequote` tolerates both, so
+// the decode path is unchanged.
 
 /** Vault module event type URLs (provlabs.vault.v1). */
 export const VAULT_EVENT = {
@@ -21,10 +26,27 @@ export const VAULT_EVENT = {
 /** Marker NAV event (provenance.marker.v1). */
 export const NAV_EVENT = "provenance.marker.v1.EventSetNetAssetValue";
 
-/** What scopes an event to THIS program (ignore other vaults/denoms on chain). */
+/** CosmWasm's contract-emitted event type, and the bank event carrying a
+ * message's attached funds. Operator payments are decoded from the PAIR
+ * (M6.4 §2.1): `pay_tip`'s wasm event reports the epoch-cumulative
+ * `tip_epoch`, never the payment's own nhash. */
+export const WASM_EVENT = "wasm";
+export const TRANSFER_EVENT = "transfer";
+
+/** The contract `action` attribute values that mark an operator payment. */
+export const PAYMENT_ACTION = {
+  commission: "pay_commission",
+  tip: "pay_tip",
+} as const;
+
+/** What scopes an event to THIS program (ignore other vaults/contracts/denoms
+ * on chain). `contractAddress` scopes contract `wasm` events — the type is
+ * shared by every CosmWasm contract, so the `_contract_address` attribute is
+ * the only thing that makes one ours. */
 export interface EventScope {
   readonly vaultAddress: string;
   readonly receiptDenom: string;
+  readonly contractAddress: string;
 }
 
 interface Base {
@@ -71,10 +93,29 @@ export interface NavEvent extends Base {
   readonly priceNhash: bigint;
 }
 
+export type OperatorPaymentType = "commission" | "tip";
+
+/** A PayCommission/PayTip execute against the program contract (M6.4 §2.1).
+ * `amount` is the msg's attached funds and `payer` its sender — both read from
+ * the same-msg_index bank transfer to the contract, since the wasm event alone
+ * cannot supply a tip's per-payment amount. */
+export interface OperatorPaymentEvent extends TxBase {
+  readonly kind: "operator_payment";
+  /** Position within this (txhash, msgIndex); 0 unless the message batched
+   * several payments. Part of the row's natural key — without it siblings
+   * overwrite each other (PR #22 review). */
+  readonly ordinal: number;
+  readonly paymentType: OperatorPaymentType;
+  readonly valoper: string;
+  readonly payer: string;
+  readonly amount: bigint;
+}
+
 export type DomainEvent =
   | SwapInEvent
   | SwapOutRequestedEvent
   | ExpeditedEvent
   | SwapOutCompletedEvent
   | SwapOutRefundedEvent
-  | NavEvent;
+  | NavEvent
+  | OperatorPaymentEvent;

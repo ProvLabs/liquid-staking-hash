@@ -218,9 +218,14 @@ item blocks the PR and reopens §14.1 rather than shipping a degraded flow.
   (§5.1 plane): vault paused (`swapInEnabled`/`swapOutEnabled`), amount
   within vault min/max, balance sufficient incl. fee, vesting-lock check
   for deposits (account-type query — a small `chain-client` addition).
-- `simulate.server.ts` — LCD `POST /cosmos/tx/v1beta1/simulate`; fee =
+- `simulate.server.ts` — LCD `POST /cosmos/tx/v1beta1/simulate`; ~~fee =
   gas × gas price × adjustment (reuses the console §14.3 result, §10.2
-  step 3).
+  step 3)~~. **Superseded 2026-07-27:** that formula was wrong and shipped
+  wrong (1905nhash × 1.3). Under Provenance flat fees the simulate result IS
+  the deterministic per-message fee, used **verbatim** at a 1nhash price with
+  no adjustment and `gas_limit == amount`; the old model is rejected by the
+  protocol. See app-spec §10.2 step 3 `[RESOLVED 2026-07-27, Ira]`, and
+  `apps/web/test/tx-fee.test.ts` which now gates it.
 - `confirm.tsx` — consumer-worded consequence summary, warning/danger
   tiers per §10.2 step 4, fee, and the **exact message JSON behind a
   disclosure** — the disclosure renders a serialization of the very object

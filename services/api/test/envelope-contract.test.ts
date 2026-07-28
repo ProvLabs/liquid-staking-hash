@@ -15,18 +15,32 @@ const WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"] as const;
 // A bech32-charset-valid fixture address for exercising address-scoped
 // routes through the generic registry loops.
 const EXAMPLE_ADDRESS = "pb1walletaqq";
+const EXAMPLE_VALOPER = "pbvaloper1walletaqq";
+
+/**
+ * A fixture value for every query param an address-scoped route may REQUIRE
+ * (M6.4's operator routes need `valoper` alongside `address`). All of them ride
+ * on every address-scoped request: zod objects strip unknown keys, so a route
+ * that does not want one simply ignores it, while a route that requires one is
+ * never accidentally sent a 400-shaped request that would mask the contract
+ * this harness is checking.
+ */
+const ADDRESS_ROUTE_QUERY = new URLSearchParams({
+  address: EXAMPLE_ADDRESS,
+  valoper: EXAMPLE_VALOPER,
+}).toString();
 
 /**
  * Build a contract-valid GET for any registered route: public routes need
- * nothing; address-scoped routes get a matching assertion + `?address=`.
- * Registry-driven like the harness itself — a future route with a new auth
- * kind fails here loudly instead of being silently skipped.
+ * nothing; address-scoped routes get a matching assertion + the required
+ * params. Registry-driven like the harness itself — a future route with a new
+ * auth kind fails here loudly instead of being silently skipped.
  */
 function validRequest(route: Route, baseUrl: string): { url: string; init: RequestInit } {
   if (route.auth === "public") return { url: `${baseUrl}${route.path}`, init: {} };
   if (route.auth === "address") {
     return {
-      url: `${baseUrl}${route.path}?address=${EXAMPLE_ADDRESS}`,
+      url: `${baseUrl}${route.path}?${ADDRESS_ROUTE_QUERY}`,
       init: { headers: { authorization: mintAssertion(`address:${EXAMPLE_ADDRESS}`) } },
     };
   }

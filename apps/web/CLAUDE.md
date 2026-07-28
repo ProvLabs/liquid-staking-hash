@@ -45,8 +45,24 @@ End-user web interface. Production quality.
   session-gated; the browser never talks to the LCD or the API). Broadcast
   is the §12.3 **guarded signed-tx relay** — closed msg allowlist, sole
   signer must derive the session address, size + rate caps
-  (`test/broadcast-guard.test.ts`). Fee basis mirrors the console
-  (1905 nhash × 1.3, `[VERIFY §14.3]`).
+  (`test/broadcast-guard.test.ts`). **Fee basis — read this before touching
+  `simulate.server.ts`.** Under Provenance flat fees the required fee is a
+  deterministic PER-MESSAGE cost, unrelated to gas consumed, and `Simulate`
+  returns **that fee amount** in the gas-wanted field — hence the chain's
+  1nhash guidance (provenance `internal/antewrapper/utils.go` `GetGasWanted`;
+  the antewrapper substitutes a real gas limit for execution). So the simulate
+  result is used **verbatim**: price 1nhash (**not a tunable** — the protocol
+  rejects a tx priced off the old `price × gas estimate` model, on purpose),
+  **no adjustment buffer** (padding a deterministic cost buys no out-of-gas
+  headroom, because the number is not gas), and `gasLimit == amount`, matching
+  captured devnet txs (`fee: 2nhash`, `gas_limit: "2"`, ~201k gas consumed).
+  `FEE_PROVISION_NHASH` is only preflight's pre-simulation reserve and stays
+  small, since an inflated reserve reports `insufficient-balance` for
+  affordable transactions. Pinned by `test/tx-fee.test.ts` — this shipped wrong
+  (1905nhash × 1.3, inherited from the pre-flat-fee console) precisely because
+  no test held it. `[RESOLVED 2026-07-27, Ira]`, retiring `[VERIFY §14.3]`.
+  `apps/console` was corrected in the same change (its `VITE_GAS_PRICE` knob is
+  gone — see its `CLAUDE.md` and console-spec §7/§10.2).
 - **Transacting pages** (PR 5.3, app-spec §8.3; PR 5.4, §8.4): pages drive
   the lifecycle through **`useTxFlow`** (`app/tx/use-tx-flow.ts`) —
   preflight → simulate → confirm → sign → broadcast → track — never calling
@@ -83,6 +99,91 @@ End-user web interface. Production quality.
   `--viz-cat-2` with a naming legend; all new props are optional so existing
   callers compile unchanged, and no new tokens are introduced (`check:palette`
   unaffected). Load the `dataviz` skill before touching the chart.
+- **Operator view** (PR 6.4 commit C, app-spec §8.6): `/validators/mine`
+  (`app/routes/validators-mine.tsx` under `:lang?`, registered AFTER
+  `validators` so the public page keeps the bare path) over
+  `app/validators/mine.server.ts`, with view models in `mine-types.ts` and
+  presentation-only components under `app/components/validators/mine/`. The
+  route gates on THREE states before any figure loads — anonymous (connect
+  prompt), roles `degraded` (an explicit "we could not check"; the App never
+  renders a privileged surface from a failed read), and connected non-operator —
+  then loads for the session address only.
+  **MEMBERSHIP comes from the LIVE contract set, never the indexed registry**
+  (PR #22 review): `validator_registry` is written by the validator-sampler,
+  which is anchored to epoch cranks, and epochs are calendar-monthly — so the
+  indexed set can lag by up to a month. It previously decided ownership, which
+  made a just-enrolled validator absent from the operator's own page and a
+  just-unregistered one still active with its action buttons, contradicting the
+  action the operator had just taken on this very page. Live decides membership
+  and `active`; the indexed plane only enriches (lifetime totals, moniker), and
+  it decides membership ONLY when the live read failed (a stale list beats an
+  empty page). A validator with no indexed row yet reports NULL totals, never
+  `0` — "not sampled yet" is not "nothing paid". Gated by the three
+  live-is-canonical cases in `test/operator-data.test.ts`.
+  **An unregistered validator is kept but NOT manageable**: it stays in the
+  list so its history is reachable, is badged `unregistered` in the switcher,
+  and the action panel is replaced by an enrol-only affordance — every other
+  program action would be rejected by the contract for a validator no longer
+  in the set, so offering it invites a transaction guaranteed to fail. The
+  rule is `selectedActive`, decided in the LOADER rather than in JSX so it is
+  unit-testable, and the default selection prefers an enrolled validator (an
+  explicit `?valoper=` still reaches an unregistered one). `ownedValopers` —
+  which seeds the purge claimant, itself required to be enrolled — carries
+  ACTIVE valopers only.
+  `?valoper=` selects among the
+  operator's OWN validators and is shape-bounded at the route; ownership is
+  enforced by `services/api` against the asserted address.
+  **The load-bearing fact** (verified against `contracts/src/validators.rs`,
+  not assumed): program commission is CUMULATIVE and an overpayment carries
+  forward indefinitely, while TIP resets at every epoch rollover — so the
+  commission banner has THREE states (in-arrears / current / **prepaid**), and
+  the prepaid credit comes from the LIVE plane alone (`commission_paid −
+  commission_accrued`) because `pay_commission`'s `outstanding` attribute
+  saturates at 0 and cannot express it. Net-benefit's earnings term is a
+  labeled ESTIMATE (§7 Q2); when it cannot be computed the net is withheld too.
+  Peer-rank context is deliberately absent (§7 Q5 unapproved). The CSV export is
+  `app/routes/operator-export.tsx` outside `:lang?` (the `portfolio-export`
+  precedent). New standing gates: `test/operator-data.test.ts` (degradation +
+  honesty matrix incl. all three standing states), `test/operator-compose.test.ts`
+  (BigInt goldens for the estimate; a missing input yields null, never 0),
+  `test/session-scope.test.ts` (the export joins it), offline
+  `e2e/validators-mine.spec.ts`, and `/validators/mine` in the axe route list.
+- **Operator flows + the two-level broadcast allowlist** (PR 6.4 commit D,
+  app-spec §10.3/§12.3/§14.6): the five operator actions run through the
+  **unmodified** 5.2 lifecycle (`useTxFlow`) as `MsgExecuteContract` intents;
+  `app/components/validators/mine/operator-flows.tsx` is the only UI, and the
+  enroll flow is also offered on the non-operator state (an operator becomes
+  one by enrolling). **THE convention to know: `ALLOWED_MSG_TYPE_URLS` is
+  TWO-LEVEL.** `MsgExecuteContract` is in it only because
+  `guardOperatorExecute` (in `app/tx/build.ts`, wired in
+  `broadcast.server.ts`) runs for that type URL alone — on its own the entry
+  would carry any call to any contract. The guard checks the configured
+  contract, a single top-level key from the closed six-variant operator set
+  (no admin/keeper variant), the per-variant body, funds discipline, and
+  finally **canonical byte equality** with `operatorInnerJson`, which is what
+  keeps it out of a parser arms race. **Extending either level — a new type
+  URL or a new variant — is a design-review event, never an edit.** Gates:
+  `test/broadcast-guard.test.ts` (the rejection matrix, incl. every admin
+  variant, mixed batches, duplicate proto fields, and non-canonical
+  encodings), `test/tx-operator-build.test.ts` (byte-goldens against three
+  captured devnet txs — the proof the canonical form is the accepted form),
+  `test/tx-confirm.test.ts` (the disclosure equals the signed bytes for every
+  variant), `test/tx-preflight.test.ts` (the predicate matrix; note payments
+  carry NO operator check — paying is permissionless).
+  **The preflight fact rule:** every fact in `OperatorPreflightFacts` is
+  nullable (a failed live read), and a variant MUST short-circuit to
+  `chain-unavailable` on every fact IT consumes — `validators`/`chainValidator`
+  up front for all variants, `spendableNhash` in the payment branch,
+  `jailReports` + `halted` in the purge branch. Skipping a check on a null
+  instead returns an empty (green) reason list for an action the contract then
+  rejects, which is the "silently hiding it" the module forbids; a variant is
+  equally forbidden from blocking on a fact it does NOT consume. Both
+  directions are gated in `test/tx-preflight.test.ts`. The
+  `register_participation` operator check needs no chain read: the contract's
+  `is_operator` compares the decoded bech32 payloads of caller and valoper, so
+  `sameBech32Payload` (in `lib/adr36-verify.server.ts`, which holds the app's
+  bech32 primitives) restates it locally. `MAX_PROGRAM_VALIDATORS` mirrors the
+  contract's `MAX_VALIDATORS` and moves with it in the same change.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).
@@ -229,6 +330,20 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
   lives only in the test process (`e2e-live/signer.ts`); `check:bundle`
   scans for its sentinel so it can never ship. Runs on the stack schedule,
   not in the offline CI lane.
+  **`E2E_LIVE_OPERATOR_KEY` (optional, M6.4)** — the VALIDATOR's own operator
+  key, which unlocks `operator.spec.ts`'s enroll/unregister leg. The funded
+  throwaway key cannot cover it: the contract's `is_operator` compares the
+  bech32 payloads of caller and valoper, so enrolment is authorization-gated,
+  not funding-gated. Absent, that leg skips loudly and the permissionless
+  payment legs still run — which is the honest test of preflight applying no
+  operator check to payments.
+  **Re-run trap, learned the hard way:** the compose `web` service builds at
+  container START, so a long-running stack serves a stale bundle. A live run
+  against it can pass for the wrong reason — the M6.4 guard assertions "passed"
+  against a build where `MsgExecuteContract` was not in the allowlist at all,
+  a first-level rejection indistinguishable from the deep guard's. Restart the
+  service (`docker compose --profile app --profile db restart web` from
+  `infra/dev/`) before trusting a green live run.
 - `test:e2e` — production build + Playwright against `react-router-serve`
   with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
   fully offline). Includes the axe accessibility scans on both themes (route

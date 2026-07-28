@@ -35,11 +35,26 @@ function startAuthServer(): Promise<RunningServer> {
   return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(facts));
 }
 
-const PERSONAL_PATHS = [
-  `${API_BASE}/portfolio`,
-  `${API_BASE}/portfolio/metrics`,
-  `${API_BASE}/transactions`,
-] as const;
+// Registry-derived, like INTERNAL_PATHS below: every current AND future
+// `auth: "address"` route joins the cross-address matrix automatically. It was
+// a hand-kept list through M6.2; M6.4 added three routes at once, and a
+// hand-kept list is exactly the thing that silently misses the fourth.
+const PERSONAL_PATHS = routes.filter((r) => r.auth === "address").map((r) => r.path);
+
+// Routes whose zod schema requires a `valoper` alongside `address`; the
+// cross-address matrix must send one or a 400 would mask the 403 it is testing.
+const VALOPER_PATHS = new Set<string>([
+  `${API_BASE}/operator/epochs`,
+  `${API_BASE}/operator/payments`,
+]);
+const VALOPER_A = "pbvaloper1walletaqq";
+
+/** The query string a personal route needs to reach its scope check. */
+function personalQuery(path: string, address: string): string {
+  return VALOPER_PATHS.has(path)
+    ? `address=${address}&valoper=${VALOPER_A}`
+    : `address=${address}`;
+}
 
 // Registry-derived, like the public-route loop below: every current AND future
 // `internal:notifier` route joins this matrix automatically — a new internal
@@ -52,8 +67,15 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
   it("rejects an assertion for A requesting B with 403 on every personal route", async () => {
     const server = await startAuthServer();
     try {
+      // The registry-derived list is the gate's coverage: assert it is real and
+      // that every `valoper`-taking route is in VALOPER_PATHS, so a future
+      // route with a new required param cannot silently 400 its way past the
+      // 403 assertions below.
+      expect(PERSONAL_PATHS.length).toBeGreaterThanOrEqual(6);
+      for (const path of VALOPER_PATHS) expect(PERSONAL_PATHS).toContain(path);
+
       for (const path of PERSONAL_PATHS) {
-        const res = await fetch(`${server.baseUrl}${path}?address=${ADDR_B}`, {
+        const res = await fetch(`${server.baseUrl}${path}?${personalQuery(path, ADDR_B)}`, {
           headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
         });
         expect(res.status, path).toBe(403);
@@ -76,7 +98,7 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
       ];
       for (const headers of cases) {
         for (const path of PERSONAL_PATHS) {
-          const res = await fetch(`${server.baseUrl}${path}?address=${ADDR_A}`, { headers });
+          const res = await fetch(`${server.baseUrl}${path}?${personalQuery(path, ADDR_A)}`, { headers });
           expect(res.status, `${path} ${JSON.stringify(headers)}`).toBe(401);
         }
       }
@@ -109,7 +131,7 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
     const server = await startAuthServer();
     try {
       for (const path of PERSONAL_PATHS) {
-        const res = await fetch(`${server.baseUrl}${path}?address=${ADDR_A}`, {
+        const res = await fetch(`${server.baseUrl}${path}?${personalQuery(path, ADDR_A)}`, {
           headers: { authorization: mintAssertion("internal:notifier") },
         });
         expect(res.status, path).toBe(403);

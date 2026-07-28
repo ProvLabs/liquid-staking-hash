@@ -31,6 +31,27 @@ export function bech32Prefix(address: string): string {
   return sep > 0 ? address.slice(0, sep) : "";
 }
 
+/**
+ * True when two bech32 strings carry the SAME data payload, differing only in
+ * their HRP. This is the exact predicate `contracts/src/validators.rs`
+ * `is_operator` applies: a validator's operator account and its valoper
+ * address share one key payload, so comparing decoded payloads proves the
+ * caller controls the validator with no extra state and no chain read.
+ * Malformed input, or an empty payload, is false — never an accidental match.
+ */
+export function sameBech32Payload(a: string, b: string): boolean {
+  try {
+    const left = bech32.decode(a as `${string}1${string}`);
+    const right = bech32.decode(b as `${string}1${string}`);
+    if (left.words.length === 0) return false;
+    return (
+      left.words.length === right.words.length && left.words.every((w, i) => w === right.words[i])
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface Adr36Verification {
   /** bech32 address the session would be scoped to. */
   address: string;

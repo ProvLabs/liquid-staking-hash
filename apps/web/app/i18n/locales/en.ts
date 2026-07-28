@@ -364,6 +364,22 @@ export default {
   "tx.reason-amount-invalid": "Enter a valid amount.",
   "tx.reason-account-missing": "This account has no on-chain activity yet. Receive some HASH first.",
   "tx.reason-chain-unavailable": "The chain could not be reached to check this. Try again shortly.",
+  // M6.4 operator predicates. Each restates a rule the CONTRACT enforces —
+  // these explain in advance, they do not decide (§12.1).
+  "tx.reason-not-validator-operator":
+    "Only the validator's own operator account can do this, and this wallet is not it.",
+  "tx.reason-validator-not-found": "No validator with that operator address exists on chain.",
+  "tx.reason-already-enrolled": "This validator is already enrolled in the program.",
+  "tx.reason-not-enrolled": "This validator is not enrolled in the program.",
+  "tx.reason-validator-not-jailed":
+    "This validator is not jailed. Reporting only applies to a validator that is jailed right now, and the contract clears a stale report on its next observation.",
+  "tx.reason-no-jail-report":
+    "No jail report is on file yet. Report the validator first — that starts the cooldown.",
+  "tx.reason-purge-cooldown": "The cooldown has not elapsed. A purge becomes possible at {readyAt}.",
+  "tx.reason-program-halted":
+    "The program's fund-moving cranks are halted, so a purge cannot run right now.",
+  "tx.reason-too-many-validators":
+    "The program is at its limit of {max} enrolled validators, so no new one can enroll right now.",
   "tx.reconnect-to-sign": "Reconnect your wallet to sign — the session is active but the signing connection was lost.",
   "tx.status-signing": "Approve the transaction in your wallet…",
   "tx.view-explorer": "View on explorer",
@@ -468,6 +484,175 @@ export default {
   "validators.status-tombstoned": "Tombstoned",
   "validators.uptime-vs-threshold": "{uptime}% / {threshold}% required",
   "validators.uptime-na": "n/a (no capture yet)",
+  // Operator view (M6.4, app-spec §8.6). Copy restates the CONTRACT's own
+  // mechanics (contracts/src/msg.rs + validators.rs doc comments), not an
+  // invented product story — in particular the commission/TIP asymmetry, which
+  // is the thing an operator most easily gets wrong.
+  "operator.title": "My validator",
+  "operator.na": "n/a",
+  "operator.connect-prompt":
+    "Connect the wallet that operates your validator to see its standing, economics, and payment history.",
+  "operator.roles-degraded":
+    "We could not check whether this address operates a program validator — a chain read failed. Nothing is shown rather than a guess; reload in a moment.",
+  "operator.not-operator": "This address does not operate a program validator.",
+  "operator.enroll-hint":
+    "A validator's own operator account enrolls it in the program. Connect that account to see this view.",
+  "operator.no-validators":
+    "This address is in the program's operator set, but no enrolled validator has been indexed for it yet.",
+  "operator.viewing-address": "Showing the operator view for {address}.",
+  "operator.indexed-unavailable":
+    "Indexed history is unavailable right now, so economics and payment history cannot be shown. Live standing above is unaffected.",
+  "operator.inactive-validator":
+    "This validator is no longer enrolled in the program. Its history stays here, but program actions do not apply to it — re-enrol it to manage it again.",
+  "operator.unregistered-badge": "unregistered",
+  "operator.switch-validator": "Switch validator",
+  "operator.unnamed-validator": "Your validator",
+
+  "operator.standing-title": "Standing",
+  "operator.standing-unavailable":
+    "Commission standing is unavailable — the live chain read failed. It is not shown rather than shown stale.",
+  "operator.standing-arrears-label": "Commission in arrears",
+  "operator.standing-arrears-consequence":
+    "The one-epoch grace has passed, which alone makes this validator ineligible until the balance is brought current.",
+  "operator.standing-current-label": "Commission current",
+  "operator.standing-current-consequence": "Nothing is owed at the current grace boundary.",
+  "operator.standing-prepaid-label": "Commission prepaid",
+  "operator.standing-prepaid-consequence":
+    "You have paid more than has accrued. Program commission is cumulative, so the excess carries forward against future accrual for as many epochs as it covers.",
+  "operator.prepaid-credit": "Prepaid credit: {amount} HASH ahead of accrual.",
+  "operator.commission-due-label": "Due now",
+  "operator.commission-paid-label": "Paid (lifetime)",
+  "operator.commission-accrued-label": "Accrued (lifetime)",
+
+  "operator.eligibility-label": "Eligibility",
+  "operator.eligibility-caption": "Assessed live from chain state each epoch",
+  "operator.eligible-yes": "Eligible",
+  "operator.eligible-no": "Ineligible",
+  "operator.failing-reasons": "Failing: {reasons}",
+  "operator.uptime-label": "Uptime",
+  "operator.uptime-caption": "No uptime threshold could be read",
+  "operator.uptime-threshold": "{threshold}% required",
+  "operator.headroom-uptime-label": "Uptime headroom",
+  "operator.headroom-uptime-caption": "Percentage points above the threshold",
+  "operator.headroom-label": "Delegation headroom",
+  "operator.headroom-caption": "New delegation still allowed under the concentration cap",
+  "operator.tip-epoch-label": "TIP this epoch",
+  "operator.tip-epoch-caption": "Resets at every epoch completion — it does not carry forward",
+  "operator.enrolled-label": "Enrolled",
+  "operator.enrolled-caption": "Currently participating",
+  "operator.unregistered-caption": "No longer participating",
+  "operator.jailed-label": "Jailed",
+  "operator.jailed-consequence":
+    "A jailed validator is ineligible, and the program's stake can be moved off it after the cooldown.",
+  "operator.tombstoned-label": "Tombstoned",
+  "operator.tombstoned-consequence": "A tombstoned validator can never return to the program.",
+  "operator.jail-report-label": "Jail report open",
+  "operator.jail-report-consequence":
+    "The program's stake may be moved off this validator from {purgeReadyAt} unless it unjails first.",
+
+  "operator.net-benefit-title": "Net benefit after fees",
+  "operator.earnings-label": "Estimated earnings",
+  "operator.earnings-estimate": "Estimate — not an exact figure",
+  "operator.commission-total-label": "Commission paid",
+  "operator.tip-total-label": "TIP paid",
+  "operator.exact-fact": "Exact, from indexed payments",
+  "operator.net-label": "Net benefit",
+  "operator.net-caption": "Estimated earnings minus what you paid",
+  "operator.earnings-derivation":
+    "Earnings are ESTIMATED: the program's own realized return for each epoch is applied to your delegation over that epoch and multiplied by your current commission rate ({rate}%), across {epochs} epoch steps. Your actual reward stream is not indexed, and rate changes over time are not accounted for.",
+  "operator.earnings-unavailable":
+    "Earnings cannot be estimated yet — your commission rate or the program's per-epoch return was unavailable. The amounts you paid are exact.",
+  "operator.history-truncated":
+    "Only the most recent epochs are shown; earlier history is not included in these figures.",
+
+  "operator.delegation-title": "Program delegation",
+  "operator.delegation-caption":
+    "HASH the program has delegated to this validator, at each epoch settlement. Values change only at settlement.",
+  "operator.delegation-unavailable": "Delegation history is unavailable right now.",
+  "operator.delegation-cold": "Delegation history appears after a second epoch settles.",
+  "operator.delegation-header": "Delegation (HASH)",
+  "operator.show-table": "Show table",
+  "operator.show-chart": "Show chart",
+  "operator.epoch-n": "Epoch {epoch}",
+  "operator.epoch-header": "Epoch",
+
+  "operator.payments-title": "Payment history",
+  "operator.payments-empty": "No commission or TIP payments have been indexed for this validator.",
+  "operator.payments-more": "Only the most recent payments are shown. The CSV export is complete.",
+  "operator.export-csv": "Export CSV",
+  "operator.payment-time-header": "Date",
+  "operator.payment-type-header": "Type",
+  "operator.payment-amount-header": "Amount (HASH)",
+  "operator.payment-payer-header": "Paid by",
+  "operator.payment-tx-header": "Transaction",
+  "operator.payment-commission": "Commission",
+  "operator.payment-tip": "TIP",
+  "operator.paid-by-other": "(not your operator account)",
+  "operator.epoch-pending": "pending",
+
+  // Operator ACTIONS (§14.6 flows). Confirm copy restates the CONTRACT's
+  // mechanics from its msg.rs doc comments — the counter-intuitive facts
+  // (commission carries, TIP does not, purge is two-phase) are the ones an
+  // operator most needs before signing.
+  "operator.actions-title": "Actions",
+  "operator.actions-caption":
+    "Each action is built, previewed and signed by your wallet. The exact message is shown before you sign; the contract, not this page, decides whether it succeeds.",
+  "operator.actions-connect": "Connect your wallet to take an action on this validator.",
+  "operator.flow-pay-commission": "Pay commission",
+  "operator.flow-pay-tip": "Pay TIP",
+  "operator.flow-enroll": "Enroll validator",
+  "operator.flow-unregister": "Withdraw from program",
+  "operator.flow-report-jailed": "Report jailed",
+  "operator.flow-purge-jailed": "Purge jailed",
+  "operator.amount-label": "Amount (HASH)",
+  "operator.amount-invalid": "Enter an amount as a plain decimal, e.g. 12.5",
+  "operator.claimant-label": "Claimant validator (optional)",
+  "operator.claimant-placeholder": "leave empty to unbond the full delegation",
+  "operator.claimant-caption":
+    "With a claimant you operate, the program redelegates up to that validator's headroom instead of unbonding everything. It appears in the exact message below before you sign.",
+  "operator.review-action": "Review action",
+  "operator.enroll-valoper-label": "Validator operator address to enroll",
+
+  "operator.confirm-pay-commission-1":
+    "This payment is NON-REFUNDABLE. Once signed, it cannot be returned.",
+  "operator.confirm-pay-commission-2":
+    "Paying more than is currently accrued is not wasted: program commission is cumulative, so the excess prepays future accrual and carries forward.",
+  "operator.confirm-pay-commission-3":
+    "The funds are held by the contract and swept into vault principal at the next epoch, raising NAV for every holder.",
+  "operator.confirm-pay-tip-1":
+    "A TIP credits the CURRENT epoch only and resets when that epoch completes — unlike commission, it does not carry forward.",
+  "operator.confirm-pay-tip-2":
+    "It is NON-REFUNDABLE, and sweeps into vault principal at the next epoch.",
+  "operator.confirm-enroll-1":
+    "Enrolling makes this validator eligible for program delegation from the next epoch, assessed live against the uptime and commission rules.",
+  "operator.confirm-enroll-2":
+    "Only the validator's own operator account can enroll it, and the contract checks that on execution.",
+  "operator.confirm-unregister-1":
+    "The program's stake on this validator is UNBONDED at the next epoch and redeployed to others.",
+  "operator.confirm-unregister-2":
+    "Re-enrolling later is possible, but the stake does not return automatically — it is redeployed by the normal epoch planning.",
+  "operator.confirm-unregister-3":
+    "Withdrawing is a CLEAN BREAK: re-enrolling starts a fresh record, so this validator's commission and TIP history does not carry over. Commission already paid is non-refundable, including any amount prepaid beyond what has accrued.",
+  "operator.confirm-report-1":
+    "Reporting does NOT move any stake. It records the first observation that this validator is jailed and starts the cooldown before a purge becomes possible.",
+  "operator.confirm-report-2":
+    "If the validator unjails before the cooldown ends, the contract clears the report on its next observation and no purge happens.",
+  "operator.confirm-purge-1":
+    "This MOVES the program's stake off the validator: redelegated up to a claimant's headroom if you named one, otherwise unbonded in full.",
+  "operator.confirm-purge-2":
+    "It only succeeds if the validator is still jailed and the cooldown from the report has elapsed.",
+  "operator.confirm-purge-3": "Stake that is unbonded is unavailable until the unbonding period ends.",
+
+  "operator.epochs-title": "Per-epoch history",
+  "operator.epochs-caption":
+    "Commission accrued, paid, and due are cumulative lifetime totals at each epoch; TIP is the credit for that epoch alone.",
+  "operator.epochs-empty": "No epochs have been sampled for this validator yet.",
+  "operator.uptime-header": "Uptime",
+  "operator.eligible-header": "Eligible",
+  "operator.tip-header": "TIP (HASH)",
+  "operator.accrued-header": "Accrued (HASH)",
+  "operator.due-header": "Due (HASH)",
+
   "governance.title": "Governance",
   "governance.placeholder":
     "Governance participation arrives here in a later milestone. This deployment is a development scaffold.",

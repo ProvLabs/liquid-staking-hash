@@ -615,6 +615,56 @@ The secondary-market context page (register A3): NAV vs market price over time (
 
 - **Operator view ("my validator"):** the participation economics in consumer form — current + historical program delegation, rewards earned on it, commission owed (with the one-epoch grace state made plain), TIP paid vs rank effect, eligibility headroom on each threshold, and net-benefit-after-fees (personas §7's core question). Historical earnings and peer-rank context come from `validator_epochs` — history the console cannot show. **Every operator action is a first-class App transaction flow** (§14.6 decided): pay commission/TIP, enroll/unregister, and jailed-validator purge are built, previewed, signed, and tracked in the App per §10.2 — the Console keeps the same actions as an engineering surface, no longer the required path. The App's job is that Owen never *discovers* an obligation late (arrears alert rule is on by default for operator sessions). A **commission/TIP payment-history CSV** (amounts + times) is exportable here for the operator's own tax analysis (§14.11).
 
+> **Revision 2026-07-27 (PR 6.4 commit C, the read view delivered):**
+> `/validators/mine` ships (`app/routes/validators-mine.tsx` under `:lang?`,
+> registered after `validators`; loader `app/validators/mine.server.ts`; the CSV
+> proxy `/operator/export` outside `:lang?`, the `portfolio/export` precedent).
+> Delivered shape, with three corrections to what this bullet assumed:
+>
+> **(1) Commission standing has THREE states, not two.** Verified against
+> `contracts/src/validators.rs`: `epoch_rollover` resets the per-epoch TIP and
+> advances the grace boundary, but NEVER resets `commission_paid` — program
+> commission is cumulative, so an overpayment carries forward against future
+> accrual indefinitely, while an over-TIP buys priority in the current epoch
+> only and is then gone. The banner therefore renders *in arrears* (serious
+> tier), *current*, or **prepaid by N**. The prepaid credit is read from the
+> LIVE plane as `commission_paid − commission_accrued` and can only be: the
+> `pay_commission` event's `outstanding` attribute is
+> `accrued.saturating_sub(paid)`, so an overpayment reports 0 there, never a
+> negative — anything derived from the payment history would call a prepaid
+> validator merely "current".
+>
+> **(2) Net-benefit's earnings term is an ESTIMATE and is labeled in place**
+> (§7 Q2, DECIDED 2026-07-27), not only in a footnote: the program's own
+> realized per-epoch return is applied to this validator's delegation over each
+> epoch and multiplied by the validator's CURRENT x/staking commission rate.
+> The actual reward stream is not indexed and historical rate changes are not
+> either; a negative program APR (a slash epoch) floors to zero rather than
+> being subtracted, since the program losing value does not make a validator's
+> staking commission negative. The two paid terms are exact. When the estimate
+> cannot be computed the **net is withheld too** — a net built from a missing
+> term is the fabrication an operator would act on.
+>
+> **(3) Peer-rank context is NOT delivered** (§7 Q5 unapproved, 2026-07-27):
+> this bullet's "peer-rank context" is deferred, and the public `/validators`
+> page remains where the set is seen. Everything else in the bullet ships:
+> current + historical program delegation (a step-after `StepChart` with its
+> table view — one series deliberately, since commission is orders of magnitude
+> smaller and a second axis is never the answer), commission/TIP figures,
+> eligibility headroom per threshold, the per-epoch history, the payment
+> history with its §14.11 CSV export, and Console verify links on the standing
+> block.
+>
+> Honesty states, gated by `test/operator-data.test.ts`: anonymous → connect
+> prompt; roles `degraded: true` → an explicit "we could not check" note (never
+> a privileged surface from a failed read); connected non-operator → the plain
+> statement plus the enrollment path; live reads down → the indexed history with
+> **null** standing, never a guessed "current"; indexed reads down → live
+> standing alone. Every figure is "n/a" when null, never 0. A payment whose
+> crediting epoch is still open renders "pending", never the latest epoch. The
+> payment table labels a payer that is not the operator's own account, because
+> payment is permissionless and a co-op partner paying is a normal fact.
+
 ### 8.7 Governance (route `/governance`, public read; member write)
 
 The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 governance split; the App is the primary home — §14.6 decided):
@@ -695,6 +745,23 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > than accumulates, and a per-address cap bounds it. Confirming §9.1's earlier
 > "with Web Push subscriptions" parenthetical, now delivered.
 
+> **Revision 2026-07-27 (PR 6.4 commit A, `operator_payments`):** a thirteenth
+> `indexed` table lands (allowlist gate extended in the same change):
+> **`operator_payments`** (`txhash, msgIndex, valoper, payer, paymentType,
+> amount, epochIndex, height, occurredAt`; PK `(txhash, msgIndex)`; index
+> `(valoper, height)`). It exists because the §14.11 operator CSV's rows are
+> per-**payment** while `validator_epochs` holds only per-epoch cumulative
+> totals with no txhash — the facts do not exist anywhere else. Every column is
+> read straight off a public tx; `payer` is the message sender (a bech32
+> account, already public in the tx body), which the permissionless
+> "anyone may pay" design makes materially different from the valoper and worth
+> keeping for the operator's own audit (decided, Ira 2026-07-27). **`epochIndex`
+> is nullable and NOT written at ingest:** the epoch a payment credits closes at
+> a later `run_epoch` crank, so deriving it in the worker would mean reading the
+> epoch-history worker's table and making replay order-sensitive; `services/api`
+> derives the CSV column by joining `epoch_snapshots` at read time (§9.4). The
+> column stays so a later indexer-side derivation has somewhere to land.
+
 ### 9.2 Indexer workers
 
 - **Transport:** dual-source per the §14.5 resolution (RESOLVED 2026-07-20, PR 2.1) — tx-search by height range for DeliverTx events, and `block_results` per height for EndBlocker payout/refund + the NAV marker (which never appear in tx-search, §14.2); paging to exhaustion per block window; RPC websocket subscription is a latency optimization, not a correctness dependency.
@@ -702,6 +769,26 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 - **Ordering & finality:** workers trail the head by a small confirmation depth (~block-time-safe; Provenance ~5 s blocks, instant finality — **depth 0**, RESOLVED §14.5, PR 2.1); the cursor advances only after the full block window commits in one DB transaction.
 - **Event shapes are contract-verified fixtures:** every event the indexer decodes (`RunEpoch` snapshot attributes, vault swap events, expedite events) is captured from devnet drills into MSW/unit fixtures, so a contract event change breaks tests, not production `[VERIFY §14.2]`.
 - **Lag accounting:** each stream exposes `indexed_height` vs `chain_height`; the max lag drives the footer freshness line and the DATA DEGRADED banner threshold.
+
+> **Revision 2026-07-27 (PR 6.4 commit A, operator-payment decode):** the
+> chain-events worker gains a third decode provenance on the tx-search plane —
+> the program **contract's own `wasm` events** for `PayCommission`/`PayTip`,
+> scoped by the `_contract_address` attribute (the `wasm` type is shared by
+> every CosmWasm contract on chain, so that attribute is the only thing that
+> makes an event ours). Two verified facts (`[VERIFY §14.2]` Q1 resolved by
+> devnet drill 2026-07-27, captured in `@nvhash/fixtures/operator/`):
+> **(1)** contract `wasm` attribute values arrive **bare**, not JSON-quoted like
+> the vault module's — `dequote` tolerates both, so the decode path is
+> unchanged; **(2)** `pay_commission` emits the per-payment `amount`, but
+> `pay_tip` emits only the epoch-**cumulative** `tip_epoch`, so a tip payment's
+> own nhash is not in the contract's event at all. A payment's amount and payer
+> are therefore decoded from the **pair**: the wasm event plus the bank
+> `transfer` at the same `msg_index` whose recipient is the contract — the
+> msg's attached funds, which `cw_utils::must_pay` bounds to exactly one coin in
+> the underlying denom. This is the only pair decoder in the worker. Chain input
+> stays untrusted: a missing, duplicated, or multi-coin funds transfer, or a
+> `pay_commission` whose declared `amount` disagrees with the funds moved,
+> raises `DecodeError` rather than storing a guess.
 
 ### 9.3 Backfill
 
@@ -875,6 +962,63 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > migration (`@@index([lastHeight])` on `redemption_requests`) rides this
 > branch (no column, schema-allowlist unaffected, rebuildable).
 
+> **Revision 2026-07-27 (PR 6.4 commit B, the operator surface):** three new
+> `GET`, `auth: "address"`, enveloped, zod-bounded routes serve `/validators/mine`
+> (§8.6). All three join the cross-address `PERSONAL_PATHS` gate — which this
+> change makes **registry-derived** rather than hand-kept, so every future
+> address-scoped route is covered automatically:
+> - `/api/v1/operator/summary?address=` → `OperatorSummary`: every validator the
+>   address operates, each with registry enrollment, the latest sampled epoch's
+>   FULL economics (uptime, eligibility, failing reasons, program delegation,
+>   tip, commission accrued/paid/due), and lifetime commission/TIP totals with a
+>   payment count from `operator_payments`. Per-epoch fields null before the
+>   first sample; totals are honest sums (0 over zero rows).
+> - `/api/v1/operator/epochs?address=&valoper=&limit=&offset=` →
+>   `OperatorEpochRow[]`, newest first — the per-epoch history the console
+>   cannot show.
+> - `/api/v1/operator/payments?address=&valoper=&limit=&offset=&format=` →
+>   `OperatorPaymentRow[]`, newest first; `format=csv` serves the §14.11
+>   operator export — the **complete** history ascending (the 6.1
+>   completeness precedent: `limit`/`offset` bound only the JSON view), with
+>   the pinned columns `datetime_utc, block_height, epoch_index, payment_type,
+>   nhash_amount, txhash` (the [R4] §14.11 deviation: the served amount is
+>   nhash base units, so the column is named for base units), the
+>   formula-injection guard, and the [R3] freshness headers.
+>
+> **A second boundary, enforced as a mechanism.** These routes carry an
+> ownership check the other personal routes do not need: the address→valoper
+> mapping is resolved server-side from `validator_registry.operator`
+> (`IndexedReader.operatorValopers`, the single source), and every other
+> operator read is called only with a valoper that came from it (the pure
+> `resolveOwnedValoper`). A valoper the caller does not operate is answered
+> **honest-empty, never 403** — a 403 would confirm the valoper exists and
+> belongs to another operator, an oracle on who operates what. The gate is
+> `test/operator-endpoints.test.ts`, which asserts an unowned valoper and a
+> well-formed nonexistent one produce byte-identical answers. `?valoper=` is
+> bounded by a new `bech32ValoperSchema` (the `valoper` HRP required), so an
+> account address cannot be passed where a valoper is meant.
+>
+> Two recorded shape decisions. **`payer` is served in the JSON row but not in
+> the CSV:** payment is permissionless, so the payer is often not the operator
+> and is needed for the operator's own audit (public tx data), while §14.11
+> pins the six export columns — adding it there is a §14.11 amendment, not an
+> implementation choice. **Peer context is absent:** the plan's proposed
+> `rank_by_tip` / eligible / enrolled counts were not approved (§7 Q5,
+> 2026-07-27), so no other validator's ordinal position is computed onto this
+> personal surface; the public `/validators` page remains where the set is seen.
+>
+> `epoch_index` on a payment is **derived at read time**, not stored: the
+> earliest epoch whose `endHeight >= payment.height` (`paymentEpochIndex` over
+> `IndexedReader.epochBoundariesAsc`), null while the crediting epoch is still
+> open — see the §9.1 `operator_payments` note for why the indexer cannot
+> supply it. `IndexedReader` also gains `latestOperatorEpochs`,
+> `validatorEpochsFor`, `operatorPaymentTotalsFor` (summed in SQL, never by
+> materializing rows), `operatorPaymentsFor`, and `operatorPaymentsAscFor`
+> (chunked). The full `validator_epochs` row is a NEW fact type
+> (`OperatorEpochFacts`); the public projection's narrow `ValidatorEpochFacts`
+> is untouched, so the closed public key set gated by
+> `apps/web/test/validators-data.test.ts` cannot widen by accident.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.
@@ -978,7 +1122,7 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 
 1. **Build** client-side: typed Provenance messages (vault `MsgSwapIn` / `MsgSwapOut` `[VERIFY §14.2: exact msg names/fields on the deployed vault module]`; group `MsgSubmitProposal` / `MsgVote` / `MsgExec`).
 2. **Preflight** from server-supplied context: vault not paused, amount within min/max, balance sufficient (incl. fee), vesting-lock check for deposits; disabled controls always carry the reason (the console's R1 rule adopted verbatim).
-3. **Simulate** for gas; fee = gas × gas price with adjustment `[VERIFY: reuse console §14.3 result]`.
+3. **Simulate**, and use the returned fee **verbatim** — `[RESOLVED 2026-07-27, Ira]`, replacing the earlier `[VERIFY §14.3]` "reuse the console's result" marker. Under Provenance's flat-fee model the required fee is a deterministic **per-message** cost (`x/flatfees` `CalculateMsgCost`), unrelated to gas consumed, and `Simulate` returns **that fee amount** in the gas-wanted field — which is why the chain's guidance is a gas price of exactly **1nhash** (provenance [`internal/antewrapper/utils.go`](https://github.com/provenance-io/provenance/blob/5e8f6b621e0d04dcd5531f56337d554cfb01aac1/internal/antewrapper/utils.go#L126) `GetGasWanted`; the antewrapper then substitutes a real gas limit for execution). Therefore: the price is 1nhash and is **not a tunable** — a tx priced off the old `price × gas estimate` model is **rejected** by the protocol, deliberately, so no client re-imports that assumption; there is **no adjustment buffer**, since padding a deterministic cost buys no out-of-gas headroom (the number is not gas); and `gas_limit` equals the fee amount, as captured devnet txs show (`fee: 2nhash`, `gas_limit: "2"`, ~201k gas actually consumed). Gated by `apps/web/test/tx-fee.test.ts`.
 4. **Confirm:** consumer-worded consequence summary + the exact message JSON behind a disclosure + fee. Warning tier for redemptions ("shares escrow now; guaranteed release date D; typically sooner") and governance execution; **danger-tier confirmation for the program-ops now originated in the App** (halt/resume, pause/unpause, config change, bridge config, jailed-validator purge — §14.6 decided), with the decoded action and its consequence stated before signing.
 5. **Sign & broadcast** via the wallet; **track** inclusion; toast lifecycle (sonner) with explorer link; on success the affected live reads refresh and an indexer fast-poll reconciles the user's history within seconds (an optimistic pending row bridges the gap, clearly marked pending).
 
@@ -999,8 +1143,12 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 > disclosure equals the decoded sign-doc bytes). Preflight runs
 > server-side from live reads with machine-readable reasons
 > (`test/tx-preflight.test.ts` drives the reject-never-clamp boundary
-> matrix); simulation prices fee = gas × 1905 nhash × 1.3 in integer math
-> (the console's basis, still `[VERIFY §14.3]`). **Broadcast is the §12.3
+> matrix); simulation uses the chain's returned fee **verbatim** at a
+> **1 nhash** price, with **no adjustment buffer** and `gas_limit` equal to the
+> fee amount — the deterministic flat-fee basis, `[RESOLVED 2026-07-27, Ira]`
+> and pinned by `test/tx-fee.test.ts`. A price other than 1 nhash, or any
+> padding of the returned figure, is a defect: the protocol rejects the former
+> and the latter inflates a deterministic cost for nothing. **Broadcast is the §12.3
 > guarded relay** (amendment below); tracking polls inclusion through the
 > web tier, then fast-polls `/api/v1/transactions` under a Decision-2
 > assertion until the indexed row lands and the pending row drops (bounded
@@ -1013,6 +1161,45 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 - **SwapOut:** confirmation restates the three timing facts in fixed order — guaranteed ceiling, typical-experience statistic (when sample-sufficient), and the refund-not-loss failure mode. Post-submit, the tracker owns expectations; the matured/expedited alert is opt-out, not opt-in.
 - **Governance:** votes and executions show the decoded action and current tally at signing time; execution additionally simulates and surfaces would-fail states before the user signs.
 - **Privileged writes are complete App flows (§14.6 decided):** validator chain-ops (commission/TIP, enroll/unregister, purge) and admin program-ops (halt/resume, pause/unpause, config, bridge config — originated as §8.7 governance templates) are **fully** built/preview/sign/tracked in the App per §10.2, never half-implemented and never a Console-only step in a normal workflow. The Console keeps these actions plus free-form composition as an engineering surface. All remain wallet-signed message-building; the App holds no keys and the contract stays the enforcement boundary (SECURITY.md).
+
+> **Revision 2026-07-27 (PR 6.4 commit D, the operator flows delivered):** the
+> validator chain-ops half of the bullet above ships. Five flows through the
+> UNMODIFIED §10.2 lifecycle (`useTxFlow`: preflight → simulate → confirm →
+> sign → broadcast → track), each a `MsgExecuteContract` on the program
+> contract, all wallet-signed with no key material in the App:
+>
+> | Flow | Variant(s) | Funds | Tier |
+> | --- | --- | --- | --- |
+> | Pay commission | `pay_commission` | nhash | warning |
+> | Pay TIP | `pay_tip` | nhash | warning |
+> | Enroll | `register_participation` | none | warning |
+> | Withdraw from program | `unregister_participation` | none | **serious** |
+> | Purge jailed (two-phase) | `report_jailed_validator`, then `purge_jailed_validator` | none | **serious** |
+>
+> Confirm copy RESTATES the contract's own mechanics from the `msg.rs` doc
+> comments rather than inventing product language, because the facts that
+> matter to an operator are the counter-intuitive ones: a commission payment is
+> non-refundable and an overpayment **carries forward** against future accrual,
+> while a TIP credits the **current epoch only** and resets at completion;
+> unregistering **unbonds** the program's stake at the next epoch AND is a clean
+> break — `unregister` removes the record, so re-enrolling starts fresh and no
+> commission/TIP history (including commission prepaid beyond accrual) carries
+> over, which is the contract's intent, not an omission (confirmed Ira,
+> 2026-07-27); and the purge
+> is genuinely two-phase — reporting moves no stake, it starts a cooldown, and a
+> validator that unjails in the interim clears its own report. Preflight
+> restates every predicate the contract enforces as a machine-readable reason
+> (`not-validator-operator`, `validator-not-found`, `already-enrolled`,
+> `not-enrolled`, `validator-not-jailed`, `no-jail-report`, `purge-cooldown`
+> with the ready instant, `program-halted`) and remains **convenience only**
+> (§12.1) — notably, the payment flows carry NO operator check, because paying
+> is permissionless and a UI rule saying otherwise would be invented. The
+> enroll flow is also offered on the **non-operator** state: an operator becomes
+> one by enrolling, so that state is a starting point, not a dead end.
+>
+> `claimant_valoper` on the purge defaults to another validator the caller
+> operates when one exists, is always editable, and always appears in the
+> exact-JSON disclosure — it can never be applied invisibly.
 
 ### 10.4 Notifications
 
@@ -1149,6 +1336,39 @@ This section encodes boundary §5 as build requirements.
   > contradicts §7 ("the browser never needs LCD CORS"); wallet-side
   > broadcast is non-standard beyond `cosmos_signDirect` and would fail the
   > §14.1 dual-vendor conformance gate.
+  >
+  > **Amendment 2026-07-27 (PR 6.4 commit D): the allowlist is now TWO-LEVEL
+  > for `MsgExecuteContract`.** The operator actions (§14.6) ride that type
+  > URL, and adding it as a plain allowlist entry would have opened the relay
+  > to **arbitrary calls on any contract on chain** — the opposite of a closed
+  > allowlist. It is therefore admitted only together with a second-level
+  > **deep guard** that runs for that type URL and no other, replacing the
+  > vault check for it (field 2 is the contract there) while the session
+  > binding on field 1 still applies. Five conditions, each independently
+  > sufficient to reject: **(1)** the target is the configured program
+  > contract; **(2)** the inner payload is an object with exactly ONE
+  > top-level key, drawn from the closed six-variant operator set — every
+  > admin/keeper variant (`set_halted`, `update_config`, `pause_vault`,
+  > `unpause_vault`, `clear_pending_delegations`, `run_epoch`,
+  > `claim_rewards`, `service_redemptions`, `capture_uptime_signal`) is
+  > absent and provably rejected; **(3)** the variant body carries only its
+  > allowed keys, each a well-formed valoper (the `valoper` HRP is required,
+  > so an account address cannot pass); **(4)** funds discipline — the two
+  > payment variants carry exactly one coin of the program's underlying denom
+  > with a bounded positive amount, every other variant carries none;
+  > **(5)** the payload is **byte-identical** to the canonical
+  > `operatorInnerJson` output for what was just validated.
+  >
+  > Condition (5) is what takes the guard out of a parser arms race: whatever
+  > the guard believes it validated, the bytes reaching the chain are the bytes
+  > the App's own builder would have produced, so duplicate JSON keys, key
+  > reordering, padding whitespace, and escaped variant names all fail even
+  > though they parse to something the structural checks would accept. That
+  > canonical form is not asserted — it is proven equal to bytes the chain
+  > accepted, by byte-goldens over three captured devnet transactions
+  > (`test/tx-operator-build.test.ts`). **Extending either level is a
+  > design-review event**, and the rejection matrix in
+  > `test/broadcast-guard.test.ts` is the standing gate.
 - **Personal data minimization (`SECURITY.md` is normative):** wallet address (public by nature), first/last-seen timestamps (minimal operational metadata, retained deliberately for transparent and minimally intrusive usage measurement), locale/theme, alert rules, and — when opted in — an opaque Web Push subscription token (revocable, deleted on opt-out). No email or other off-chain identity, no KYC, and no IP-or-device linkage to addresses in persisted logs (scrub or aggregate). Data deletion on request removes the user row, rules, and push subscriptions; indexed *chain* history is public information and remains.
 - **Sessions:** nonce-signature login, `HttpOnly`/`SameSite` cookies, address-scoped authorization on every personal endpoint; admin endpoints re-verify group membership on-chain per session refresh, not per cached role.
 - **API hygiene:** rate limiting on public endpoints, zod-validated inputs at every route boundary (nuva convention), winston structured logging in services, no secrets in the client bundle (server config never serializes past the §7 client-safe subset).
@@ -1206,6 +1426,7 @@ Protocol and platform facts this design must respect (chain constraints identica
    - **Admin program-ops** (halt/resume, pause/unpause, config, bridge config) are originated in the App via the §8.7 governance templates — these program-ops *are* group-policy proposals, so "admin actions in the App" and "template-scoped governance" are the same mechanism.
    - **Boundary amendment:** this supersedes the prior "§10.3 everything-else-is-a-link" rule and §8.6's "every action lands in the Console." The App now **fully** implements these privileged writes (no half-implementation) — all still wallet-signed, message-building only, **no key material** (SECURITY.md apps rules unchanged; the contract remains the enforcement boundary and UI preflight stays convenience only). The Console retains free-form compose, the devnet key mode, and raw engineering ops as an engineering surface, not a user dependency (console §14.6 keeps the composer).
    - **Register B2 (validator-elected admins):** unchanged — this decision takes no position; if B2 resolves toward validator voting, that surface is the §8.7 page.
+   - **[IMPLEMENTED 2026-07-27, PR 6.4 commit D] Validator chain-ops delivered.** All five operator flows ship as first-class App transaction flows through the unmodified §10.2 lifecycle: pay commission, pay TIP, enroll, unregister, and the two-phase jailed purge (report → cooldown → purge) — see the §10.3 revision for tiers and copy, and the §12.3 amendment for the two-level relay allowlist that makes carrying them safe. **Admin program-ops remain outstanding** (halt/resume, pause/unpause, config, bridge config, originating as §8.7 governance templates); they are NOT in the relay's variant set and are provably rejected by its rejection matrix, so delivering them later is a deliberate design-review event rather than a config change.
 7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Email remains excluded and is not an option.
    **[DECIDED 2026-07-24, Ira] Default-on alert kinds = the R2 minimal set (PR 6.2 commit B).** Holders: `redemption_update` (matured | expedited | refunded — one settings row, §8.2/§8.4) is **on by default, opt-out** (§10.3). Operators: `operator_arrears` is **on by default** for sessions the live role read reports as operator (§8.6). Everything else — `nav_step_posted`, `vault_status`, `validator_set_incident` — is **opt-in** (off by default). The mechanism is **absence-means-default** (§9.1): no `alert_rules` row means the kind's default, so a user who never touches settings has zero rows and the default-on set costs no stored subscription (data minimization by construction). The market-spread kind is **deferred with §14.4** (no market data in v1) — enabling it later is an enum migration + allowlist review + a `thresholdBps` column, a spec-recorded amendment, not a config toggle.
 8. **[DECIDED 2026-07-14, ADR-001 Decision 4]** Design-system packaging (boundary §7.4): design tokens are **web-local** (`apps/web`) for v1, not a shared package — the two surfaces deliberately wear different registers and the console is mid-migration. Family coherence is enforced where it matters: both surfaces run the same dataviz palette validation (`validate_palette.js`) in CI on every token change, both themes. Shared TypeScript code (fixtures, chain client, API types, read-only indexed DB client) lives in a root pnpm workspace under `packages/` (`@nvhash/*`); the console may join the workspace with its own migration. Revisit shared token packaging post-v1 if drift is observed. **Brand pass delivered (PR 1.4, 2026-07-17):** program-specific accent and status tokens set web-local in `apps/web/app/theme/tokens.css` over the nuva base — NUVA mint-green primary CTA / focus ring (dark green-black label, WCAG AA both themes) and the fixed good/warning/serious/critical status set (icon + label; `warning`/`serious` are sub-3:1 on the light surface only under that relief rule). Both theme token sets pass the shared validation method in CI: the categorical chart palette via `check:palette`, the accent/status contrast via `test/brand-tokens.test.ts` (both computed by `validate_palette.js`, never eyeballed). §14.8 is now fully resolved.
@@ -1214,6 +1435,7 @@ Protocol and platform facts this design must respect (chain constraints identica
 11. **[DECIDED 2026-07-15, Ira] CSV export & cost-basis method.** The export is a **statement of fact, not a computed tax position**, and splits into two role-scoped exports:
     - **Holder export (§8.2):** raw per-event rows — one per `SwapIn`/`SwapOut` — carrying the **share price in HASH (NAV) at the event**, so the holder (or their accountant) does their own cost-basis math. Proposed columns: `datetime_utc`, `block_height`, `event_type` (swap_in | swap_out | refund | transfer_in | transfer_out), `nvhash_amount`, `hash_amount`, `nav_hash_per_nvhash` (share price in HASH at event), `txhash`. No FIFO/average lot-matching is computed in the export.
     - **Validator/operator export (§8.6 `/validators/mine`):** a record of **commission/TIP payment amounts and times** so a participating validator has a complete fact set for their own tax analysis. Proposed columns: `datetime_utc`, `block_height`, `epoch_index`, `payment_type` (commission | tip), `hash_amount`, `txhash`.
+      **[DELIVERED 2026-07-27, PR 6.4 commit B/C]** exactly those six columns, in that order, over the COMPLETE payment history ascending (pagination bounds the JSON view only), with the formula-injection guard and the [R3] freshness headers, proxied to the browser by the session-gated `/operator/export?valoper=`. Three recorded facts: `epoch_index` is **empty** when the crediting epoch has not closed yet (never a guessed epoch — see the §9.1 `operator_payments` note); the row's `payer` is served in the JSON view but deliberately **not** in the CSV, since payment is permissionless and the payer is often not the operator — adding that column is a §14.11 amendment, not an implementation choice; and **[R4] the amount column ships as `nhash_amount`, not the `hash_amount` proposed above.** The value served is the payment's nhash **base units**, so a column named for whole HASH would read 10⁹× too large in the spreadsheet this export exists for — and it would contradict `/validators/mine`, which formats the same fact to whole HASH. The holder export above carries the same correction (it serves `nhash`/`shares` for the proposed `hash_amount`/`nvhash_amount`), so base-unit content under a base-unit column name is the settled convention for both exports. Gated by the operator CSV assertions in `services/api/test/operator-endpoints.test.ts`.
     - **Displayed** cost basis / accrued gain (§8.2, §9.5.1) uses **average-cost** (not FIFO): average deposit cost per share × remaining shares; accrued gain = current shares × current NAV − remaining average-cost basis, plus realized gains on completed redemptions. The on-screen figure is labeled as an aid; the raw-event export is the authoritative record.
 12. **[DECIDED 2026-07-15, Ira] Time-to-payout display threshold & epoch-metric cold-start.**
     - **Typical time-to-payout (§9.5.3):** show the median/p90 only once the cohort has **≥ 10 terminal (matured/expedited) redemption requests**; below that, the flow shows the **60-day guarantee alone** as the default/fallback. The statistic is physically bounded — a request cannot resolve faster than the ~21-day unbonding period nor slower than the 60-day ceiling — so the displayed "typical" settles into a **21–60-day band**; copy never implies precision or a range outside what the mechanism can deliver.

@@ -34,6 +34,15 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   `prisma.$transaction`; the cursor advances only after the window commits
   (spec §9.2). Workers never write their checkpoint directly. `trailingTarget`
   applies the confirmation depth (default 0 — Provenance instant finality).
+  The window transaction sets an EXPLICIT `WINDOW_TX_TIMEOUT_MS` (120 s):
+  Prisma's 5 s default is a latency default, but a window is a throughput unit —
+  workers upsert row-by-row across up to `INDEX_WINDOW_SPAN` (500) heights, so a
+  busy window or a genesis backfill crossed it, and an aborted window
+  re-collects forever (2026-07-28 review). M6.4's permissionless
+  `operator_payments` made that materially more reachable. The per-row
+  round-trip count is unchanged and remains the underlying cost; batching it
+  needs `INSERT … ON CONFLICT DO UPDATE`, since `createMany({skipDuplicates})`
+  would break replay-corrects-stale-rows.
 - **`runtime/worker.ts`** — the loop shell (`runWorker`) and the
   `registerWorker` seam. A worker is **two-phase** so chain I/O never happens
   inside a DB transaction: `collect(window)` reads+decodes from chain (no DB),
@@ -76,6 +85,45 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   row (no schema change). Tests: `test/workers/chain-events-decode` (fixture
   corpus) and `test/workers/chain-events-replay` (fast-check: replay from 0 ==
   resume from any height; idempotent re-apply).
+  **Operator payments (PR 6.4 commit A)** → `operator_payments`, a third decode
+  provenance on the same tx-search leg: the CONTRACT's own `wasm` events for
+  `pay_commission`/`pay_tip`, scoped by `_contract_address` (`EventScope` gains
+  `contractAddress` — the `wasm` type belongs to every contract on chain, so
+  that attribute is the only thing making an event ours). `decodeTxPayments` is
+  the worker's one **pair** decoder and has to be: verified on devnet
+  2026-07-27, `pay_tip`'s event carries only the epoch-cumulative `tip_epoch`,
+  never the payment's own nhash — so amount and payer come from the bank
+  `transfer` at the same `msg_index` with the contract as recipient (the
+  attached funds, bounded to one coin by `cw_utils::must_pay`).
+  **Batched payments DECODE** (PR #22 review): payments and transfers are
+  bucketed by `msg_index` and paired k-th to k-th, because events are appended
+  in EXECUTION order and a sub-message's funds transfer is emitted immediately
+  before that sub-call's own wasm event. A contract batching two `pay_tip`
+  sub-calls in one message is legal, and dropping it would lose real payments
+  from history, totals and the CSV. `pay_commission` publishes its own amount,
+  which cross-checks the pairing whenever a commission is in the batch; a
+  pure-tip batch has no equivalent check, and the batched shape is NOT yet in
+  the devnet corpus — worth a §7 Q1-style exercise before a batching caller
+  exists in the wild.
+  **Two classes of bad input, deliberately handled differently** (2026-07-28
+  review): our own event's shape (missing attribute, unparseable coin string —
+  only an upgrade or a decoder bug makes that) still throws `DecodeError`;
+  but an UNPAIRABLE bucket — a transfer count that does not match the payment
+  count, or a `pay_commission` whose declared `amount` disagrees with the funds
+  moved — returns an `undecodable` entry instead. That payment is skipped
+  (never a stored guess) and logged; the rest of the window still commits.
+  Why: how many transfers land at a `msg_index` is a property of how the
+  TRANSACTION was composed, and paying is permissionless — a contract batching
+  two `pay_tip` sub-calls in one message legally produces two. Throwing there
+  aborted `collectWindow`, and since the runner re-collects an aborted window on
+  restart, one such tx stalled the ENTIRE chain-events stream (`transactions`
+  and `redemption_requests` included) permanently. The skip is recoverable
+  because ingest is idempotent and rebuildable — a later decoder picks the row
+  up on replay — which a wedged worker never is.
+  `epochIndex` is deliberately null at ingest (deriving it needs the
+  epoch-history worker's table, which would make replay order-sensitive);
+  services/api joins `epoch_snapshots` at read time. Rows upsert by
+  `(txhash, msgIndex)`; the replay property covers them.
 
 - **`workers/epoch-history/`** (stream `epoch-history`, PR 2.2) → `epoch_snapshots`.
   The contract keeps only the latest snapshot on chain (spec §13/§9.10), so
@@ -147,8 +195,9 @@ Package scripts (`./dev pnpm --filter @nvhash/indexer run <script>`):
   below; no DB (the DB-backed grant-boundary test is a separate config/script,
   so `pnpm -r run test` stays Postgres-free).
 - `test:grants` — the Postgres-backed integration tests (needs Postgres, see
-  "Full-stack wiring" below): the grant-boundary gate and the PR 2.5 reconciler
-  alarm acceptance gate (`test/integration/`).
+  "Full-stack wiring" below): the grant-boundary gate, the PR 2.5 reconciler
+  alarm acceptance gate, and the PR 6.4 `operator_payments` round-trip
+  (`test/integration/`).
 - `generate` — regenerate the Prisma client from `prisma/`.
 - `start` — `prisma generate` then run the scaffold supervisor (`src/index.ts`):
   it connects to the `indexed` schema as `indexer_writer`, proves the connection
@@ -194,8 +243,28 @@ Index-only migrations may ride another lane's branch (one-PR-per-milestone
 precedent): the M6.2 notifier's redemption cursor read added
 `@@index([lastHeight])` on `redemption_requests`
 (`20260724010000_redemption_last_height_index`) via `apps/web`'s PR 6.2 — no
-column, schema-allowlist unaffected, rebuildable. The `indexed` schema stays
+column, schema-allowlist unaffected, rebuildable. The 2026-07-28 review added
+`20260728000000_keyset_indexes` the same way: `operator_payments` and
+`transactions` each gain the `msgIndex` tie-break column on their existing
+index (`(valoper, height, msgIndex)`, `(address, height, msgIndex)`), replacing
+the narrower one. That column is what lets the §14.11 exports' keyset predicate
+`(height, msgIndex) > (?, ?)` become a real index range bound instead of a
+post-scan filter — no column added, allowlist unaffected. The `indexed` schema stays
 indexer-owned; only DDL runs as `indexer_writer`.
+
+**Allowlist extensions to date** (each a recorded design-review event, per the
+gate's own contract): the PR #22 review added `OperatorPayment.ordinal`
+(`20260728010000_operator_payment_ordinal`) — the payment's position within its
+`(txhash, msgIndex)`, derived from event order in the tx. It is part of the
+row's natural key: a message may batch several payments, and the old two-part
+key made every sibling upsert onto the same row, silently keeping only the
+last. An ordinal read off chain data, never user or off-chain input. PR 6.4
+commit A added the `OperatorPayment` model —
+nine columns, all read straight off a public tx, reviewed 2026-07-27 against
+the §14.11 operator-CSV requirement that `validator_epochs` provably cannot
+serve (per-epoch cumulative totals, no txhash). `payer` is a bech32 account
+already public in the tx body, kept because payment is permissionless and an
+operator auditing "who paid on my behalf" needs it (decided, Ira 2026-07-27).
 
 - **Grant boundary** (`test/integration/grant-boundary.test.ts`, standing from
   PR 1.5): against a live Postgres bootstrapped by `roles.sql` and this

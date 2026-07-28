@@ -10,7 +10,7 @@
 // cursors — lag accounting (PR 2.5) excludes them.
 
 import type { Prisma } from "@prisma/client";
-import type { RedemptionRow, Store, TransactionRow } from "./reduce.ts";
+import type { OperatorPaymentRow, RedemptionRow, Store, TransactionRow } from "./reduce.ts";
 
 const NAV_MARKER_STREAM = "meta:chain-events:nav";
 
@@ -66,6 +66,32 @@ export class PrismaStore implements Store {
     await this.tx.transaction.upsert({
       where: { txhash_msgIndex: { txhash: row.txhash, msgIndex: row.msgIndex } },
       create: { txhash: row.txhash, msgIndex: row.msgIndex, ...data },
+      update: data,
+    });
+  }
+
+  async upsertOperatorPayment(row: OperatorPaymentRow): Promise<void> {
+    const data = {
+      valoper: row.valoper,
+      payer: row.payer,
+      paymentType: row.paymentType,
+      amount: row.amount.toString(),
+      epochIndex: row.epochIndex,
+      height: row.height,
+      occurredAt: row.occurredAt,
+    };
+    // Keyed on the FULL natural key: a message that batches several payments
+    // produces siblings sharing (txhash, msgIndex), and keying on that pair
+    // alone made each one overwrite the last (PR #22 review).
+    await this.tx.operatorPayment.upsert({
+      where: {
+        txhash_msgIndex_ordinal: {
+          txhash: row.txhash,
+          msgIndex: row.msgIndex,
+          ordinal: row.ordinal,
+        },
+      },
+      create: { txhash: row.txhash, msgIndex: row.msgIndex, ordinal: row.ordinal, ...data },
       update: data,
     });
   }

@@ -17,7 +17,10 @@
     "block_search indexes EndBlocker events on this build (kv indexer)",
     "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
     "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
-    "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events"
+    "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events",
+    "contract wasm attribute values are NOT JSON-quoted (unlike vault event values): action/valoper/amount arrive bare — dequote tolerates both, so decoding stays uniform",
+    "pay_commission's wasm event carries the per-payment amount plus outstanding; pay_tip's carries only the epoch-CUMULATIVE tip_epoch — a tip payment's own nhash is NOT in the wasm event",
+    "an operator payment's nhash and payer are read from the same-msg_index bank transfer event (recipient = the contract): the msg's attached funds, which cw_utils::must_pay bounds to exactly one coin in the underlying denom"
   ],
   "sources": {
     "swap_in_tx": "6FA31385639A253B1F5FB999A6B9D4E9E7AA792D1DAF749381F6F98AE5DBFF0F",
@@ -26,6 +29,24 @@
     "return_settlement_tx": "B315EB020BFBAD4F595A65BD98517B6FC4F8DAFB3222CE80C0422F74F2E0F5DE",
     "expedite_tx": "29AA9EF271ACEE0A1C0292F2C734B03A0358CBCA795C05D28A811DE2A9CC8219",
     "payout_block": 7810,
-    "refund_block": 392
-  }
+    "refund_block": 392,
+    "register_participation_tx": "FF94903AA1F21B72118017A677C81610DC3E7AD740619EA064103CEA36524E7E",
+    "pay_commission_tx": "9A7F438B54196332CB59F1A940A170BCDD1DF56AA4D6CC664527C7D362DDE38E",
+    "pay_tip_tx": "2D2F591E0820634497F18EF617296AE5D68CE3464D877D680D423E416EF83B69"
+  },
+  "partial_captures": [
+    {
+      "files": [
+        "operator/register-participation.json",
+        "operator/pay-commission.json",
+        "operator/pay-tip.json"
+      ],
+      "reason": "App M6.4 commit A (§7 Q1): the operator-payment event shapes were captured on their own rather than by a full corpus regeneration, which would have required resetting the devnet the milestone was being driven against.",
+      "captured_at": "2026-07-27T16:13:25Z",
+      "head_height": 389043,
+      "chain_id": "chain-dev",
+      "node_image": "sha256:d7e307a66501fb6b1054cfeee55f8cee89377ab6614504053378c09554214d66",
+      "chain_instance": "a LATER devnet bootstrap than the 2026-07-14 corpus capture, on a NEWER dev-node image; vault and contract addresses are identical because the bootstrap is deterministic. The next full run of scripts/generate-corpus.sh + capture-fixtures.sh captures all of these in one chain and this block goes away."
+    }
+  ]
 }

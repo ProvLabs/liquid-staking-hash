@@ -39,6 +39,22 @@ export const bech32AddressSchema = z
   .max(90)
   .regex(/^[a-z]{1,10}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/, "must be a bech32 account address");
 
+/**
+ * Bech32 VALIDATOR-operator address (`…valoper1…`), bounded at the boundary
+ * like `bech32AddressSchema` but requiring the `valoper` HRP suffix, so an
+ * account address can never be passed where a valoper is meant. Same posture:
+ * shape only, no checksum — a well-formed valoper the address does not operate
+ * simply resolves to nothing (honest-empty), while malformed input is rejected
+ * with 400 before any read runs.
+ */
+export const bech32ValoperSchema = z
+  .string()
+  .max(90)
+  .regex(
+    /^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/,
+    "must be a bech32 valoper address",
+  );
+
 /** `GET /portfolio` query: the target address only. */
 export const portfolioQuerySchema = z.object({
   address: bech32AddressSchema,
@@ -53,6 +69,39 @@ export const transactionsQuerySchema = z.object({
 });
 
 export type TransactionsQuery = z.infer<typeof transactionsQuerySchema>;
+
+/**
+ * Operator-surface queries (M6.4). `address` is the assertion target the
+ * handler's scope check compares against — it is what makes these `auth:
+ * "address"` routes enforceable. `valoper` is then checked for OWNERSHIP by the
+ * handler against `validator_registry.operator`; the schema only bounds its
+ * shape.
+ */
+export const operatorSummaryQuerySchema = z.object({
+  address: bech32AddressSchema,
+});
+
+export const operatorEpochsQuerySchema = z.object({
+  address: bech32AddressSchema,
+  valoper: bech32ValoperSchema,
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  offset: z.coerce.number().int().min(0).max(MAX_PAGE_OFFSET).default(0),
+});
+
+export type OperatorEpochsQuery = z.infer<typeof operatorEpochsQuerySchema>;
+
+/** As above plus `format`: `csv` serves the COMPLETE payment history (the 6.1
+ * precedent — a statement of fact is never a paginated slice), so `limit`/
+ * `offset` bound only the JSON view. */
+export const operatorPaymentsQuerySchema = z.object({
+  address: bech32AddressSchema,
+  valoper: bech32ValoperSchema,
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  offset: z.coerce.number().int().min(0).max(MAX_PAGE_OFFSET).default(0),
+  format: z.enum(["json", "csv"]).default("json"),
+});
+
+export type OperatorPaymentsQuery = z.infer<typeof operatorPaymentsQuerySchema>;
 
 /**
  * Hard ceiling on an internal alert-facts page (M6.2). Higher than the public

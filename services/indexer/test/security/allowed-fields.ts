@@ -73,6 +73,26 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   ],
   // Validator enrollment; moniker is the operator's public on-chain label.
   ValidatorRegistry: ["valoper", "operator", "moniker", "enrolledAt", "unregisteredAt"],
+  // Per-payment PayCommission/PayTip facts (M6.4 §2.1) — reviewed 2026-07-27.
+  // Every column is read straight off a public tx: `payer` is the message
+  // sender (a bech32 account, already public in the tx body and its
+  // `message.sender` attribute), NOT off-chain identity. `validator_epochs`
+  // carries only per-epoch cumulative totals with no txhash, so the §14.11
+  // operator CSV's per-payment rows cannot be served without these columns.
+  OperatorPayment: [
+    "txhash",
+    "msgIndex",
+    // Sibling discriminator within one (txhash, msgIndex) — an ordinal derived
+    // from event order, not user or off-chain data (PR #22 review).
+    "ordinal",
+    "valoper",
+    "payer",
+    "paymentType",
+    "amount",
+    "epochIndex",
+    "height",
+    "occurredAt",
+  ],
   // Per-validator, per-epoch economics.
   ValidatorEpoch: [
     "valoper",
@@ -164,6 +184,7 @@ export const AMOUNT_FIELDS: Record<string, readonly string[]> = {
     "netDeposits",
   ],
   ValidatorEpoch: ["tip", "commissionAccrued", "commissionPaid", "commissionDue", "programDelegation"],
+  OperatorPayment: ["amount"],
   MarketSample: ["price"],
   BridgeSupplySample: ["remoteSupply"],
 };

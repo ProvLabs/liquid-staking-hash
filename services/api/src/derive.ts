@@ -25,6 +25,11 @@ import {
   type IncidentSeverity,
   type MarketDepthBand,
   type MarketSample,
+  type OperatorEpochRow,
+  type OperatorPaymentRow,
+  type OperatorPaymentType,
+  type OperatorSummary,
+  type OperatorValidatorRow,
   type PayoutStats,
   type PortfolioSummary,
   type ProgramMetrics,
@@ -422,6 +427,214 @@ export function toAlertArrearsFact(f: AlertArrearsFacts): AlertArrearsFact {
     operator: f.operator,
     epoch_index: toSafeInt(f.epochIndex, "epoch_index"),
     commission_due: f.commissionDue.toString(),
+  };
+}
+
+// --- operator surface (M6.4, address-scoped) --------------------------------
+//
+// The personal counterpart of the public `/validators` projection. Two rules
+// shape everything here:
+//   1. The address→valoper mapping is resolved from `validator_registry` and
+//      enforced server-side; a valoper the address does not operate resolves to
+//      nothing, and the route answers honest-empty rather than 403 — a 403
+//      would be an oracle telling the caller that valoper exists and belongs to
+//      someone else (plan §3 commit B: "never 403-leaks about who operates
+//      what").
+//   2. `epoch_index` on a payment is DERIVED here, not stored: the indexer
+//      cannot know a payment's crediting epoch at ingest (app-spec §9.1).
+
+export interface OperatorRegistryFacts {
+  readonly valoper: string;
+  readonly operator: string;
+  readonly moniker: string;
+  readonly enrolledAt: Date;
+  readonly unregisteredAt: Date | null;
+}
+
+/**
+ * The FULL `validator_epochs` row. Distinct from `ValidatorEpochFacts`, which
+ * the public projection deliberately keeps narrow (operator economics never
+ * leave the server on the public page — `apps/web/test/validators-data.test.ts`
+ * gates that closed key set). Widening the public fact type instead of adding
+ * this one would have quietly opened that boundary.
+ */
+export interface OperatorEpochFacts {
+  readonly valoper: string;
+  readonly epochIndex: bigint;
+  readonly uptimeBps: number;
+  readonly eligible: boolean;
+  readonly failingReasons: readonly string[];
+  readonly tip: bigint;
+  readonly commissionAccrued: bigint;
+  readonly commissionPaid: bigint;
+  readonly commissionDue: bigint;
+  readonly programDelegation: bigint;
+  readonly height: bigint;
+  readonly observedAt: Date;
+}
+
+export interface OperatorPaymentFacts {
+  readonly txhash: string;
+  readonly msgIndex: number;
+  /** Sibling discriminator within (txhash, msgIndex). Internal: it completes
+   * the row's identity and the export's sort key, and is not served. */
+  readonly ordinal: number;
+  readonly valoper: string;
+  readonly payer: string;
+  readonly paymentType: OperatorPaymentType;
+  readonly amount: bigint;
+  readonly height: bigint;
+  readonly occurredAt: Date;
+}
+
+/** Lifetime payment sums for one validator, by type (`operator_payments`). */
+export interface OperatorPaymentTotalFacts {
+  readonly valoper: string;
+  readonly commissionPaidTotal: bigint;
+  readonly tipPaidTotal: bigint;
+  readonly paymentCount: number;
+}
+
+/** An epoch's closing height — the boundary payment epochs are assigned by. */
+export interface EpochBoundary {
+  readonly epochIndex: bigint;
+  readonly endHeight: bigint;
+}
+
+/**
+ * The valoper a request may be served, or null. The ONE place the ownership
+ * rule lives: a valoper not in the operator's own set resolves to null, and
+ * every operator route answers honest-empty for null. Pure, so the rule is
+ * unit-tested rather than reviewed.
+ */
+export function resolveOwnedValoper(
+  owned: readonly OperatorRegistryFacts[],
+  requested: string,
+): string | null {
+  return owned.some((r) => r.valoper === requested) ? requested : null;
+}
+
+/**
+ * The epoch a payment at `height` credited: the EARLIEST epoch that closed at
+ * or after the payment's height. A payment lands inside an open epoch, and that
+ * epoch closes at the next `run_epoch` crank — so the first snapshot whose
+ * `endHeight >= height` is the one that swept it (app-spec §9.1/§9.2).
+ *
+ * Null when no such snapshot exists: the crediting epoch has not closed yet, or
+ * the indexer has not reached it. Null is the honest answer — never the latest
+ * epoch, which would misattribute every recent payment.
+ *
+ * **Known boundary ambiguity (2026-07-28 review), decided rather than
+ * accidental.** When `height == endHeight` — a payment in the SAME BLOCK as the
+ * crank that closed the epoch — intra-block ordering decides the truth: a
+ * payment executed before the crank is swept by it, one executed after belongs
+ * to the next epoch. `operator_payments` stores no intra-block ordinal (the tx
+ * position within the block is not indexed), so that ordering is not
+ * recoverable from stored data and no amount of arithmetic here can settle it.
+ * The `>=` boundary deliberately resolves the tie to the epoch closing AT that
+ * height — the more common case, since the crank is typically the block's
+ * reason for existing and payments cluster before it rather than after.
+ * Exactness would require indexing a tx ordinal, which is a schema decision,
+ * not a fix to this function. Pinned by the boundary cases in
+ * `test/derive.test.ts` so the choice cannot drift silently.
+ *
+ * `boundariesAsc` MUST be ascending by height; the walk relies on it.
+ */
+export function paymentEpochIndex(
+  height: bigint,
+  boundariesAsc: readonly EpochBoundary[],
+): bigint | null {
+  // Binary search for the first boundary with endHeight >= height.
+  let lo = 0;
+  let hi = boundariesAsc.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (boundariesAsc[mid]!.endHeight < height) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo < boundariesAsc.length ? boundariesAsc[lo]!.epochIndex : null;
+}
+
+export function toOperatorEpochRow(f: OperatorEpochFacts): OperatorEpochRow {
+  return {
+    valoper: f.valoper,
+    epoch_index: toSafeInt(f.epochIndex, "epoch_index"),
+    uptime_bps: f.uptimeBps,
+    eligible: f.eligible,
+    failing_reasons: [...f.failingReasons],
+    tip: f.tip.toString(),
+    commission_accrued: f.commissionAccrued.toString(),
+    commission_paid: f.commissionPaid.toString(),
+    commission_due: f.commissionDue.toString(),
+    program_delegation: f.programDelegation.toString(),
+    height: toSafeInt(f.height, "height"),
+    observed_at: f.observedAt.toISOString(),
+  };
+}
+
+export function toOperatorPaymentRow(
+  f: OperatorPaymentFacts,
+  boundariesAsc: readonly EpochBoundary[],
+): OperatorPaymentRow {
+  const epoch = paymentEpochIndex(f.height, boundariesAsc);
+  return {
+    txhash: f.txhash,
+    msg_index: f.msgIndex,
+    valoper: f.valoper,
+    payer: f.payer,
+    payment_type: f.paymentType,
+    amount: f.amount.toString(),
+    epoch_index: epoch === null ? null : toSafeInt(epoch, "epoch_index"),
+    height: toSafeInt(f.height, "height"),
+    occurred_at: f.occurredAt.toISOString(),
+  };
+}
+
+/** One `/operator/summary` row: registry + latest sampled epoch + lifetime
+ * totals. Latest-epoch fields are null before the first sample; totals are a
+ * sum over indexed rows, so "0" there is honest, not a cold-start artifact. */
+export function toOperatorValidatorRow(
+  reg: OperatorRegistryFacts,
+  latest: OperatorEpochFacts | null,
+  totals: OperatorPaymentTotalFacts | null,
+): OperatorValidatorRow {
+  return {
+    valoper: reg.valoper,
+    moniker: reg.moniker,
+    operator: reg.operator,
+    active: reg.unregisteredAt === null,
+    enrolled_at: reg.enrolledAt.toISOString(),
+    unregistered_at: reg.unregisteredAt === null ? null : reg.unregisteredAt.toISOString(),
+    epoch_index: latest === null ? null : toSafeInt(latest.epochIndex, "epoch_index"),
+    uptime_bps: latest === null ? null : latest.uptimeBps,
+    eligible: latest === null ? null : latest.eligible,
+    failing_reasons: latest === null ? [] : [...latest.failingReasons],
+    program_delegation: latest === null ? null : latest.programDelegation.toString(),
+    tip: latest === null ? null : latest.tip.toString(),
+    commission_accrued: latest === null ? null : latest.commissionAccrued.toString(),
+    commission_paid: latest === null ? null : latest.commissionPaid.toString(),
+    commission_due: latest === null ? null : latest.commissionDue.toString(),
+    commission_paid_total: (totals?.commissionPaidTotal ?? 0n).toString(),
+    tip_paid_total: (totals?.tipPaidTotal ?? 0n).toString(),
+    payment_count: totals?.paymentCount ?? 0,
+  };
+}
+
+export function deriveOperatorSummary(
+  address: string,
+  registry: readonly OperatorRegistryFacts[],
+  latestByValoper: ReadonlyMap<string, OperatorEpochFacts>,
+  totalsByValoper: ReadonlyMap<string, OperatorPaymentTotalFacts>,
+): OperatorSummary {
+  return {
+    address,
+    validators: registry.map((reg) =>
+      toOperatorValidatorRow(
+        reg,
+        latestByValoper.get(reg.valoper) ?? null,
+        totalsByValoper.get(reg.valoper) ?? null,
+      ),
+    ),
   };
 }
 

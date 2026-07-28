@@ -21,21 +21,42 @@
 import type {
   FreshnessSource,
   IncidentRow,
+  OperatorEpochRow,
+  OperatorPaymentRow,
+  OperatorSummary,
   ProgramMetrics,
   EpochRow,
 } from "@nvhash/api-types";
 import type { z } from "zod";
-import { transactionsCsv } from "./csv.ts";
-import { toTransactionRow } from "./derive.ts";
+import {
+  operatorPaymentsCsvHeader,
+  operatorPaymentsCsvRows,
+  transactionsCsvHeader,
+  transactionsCsvRows,
+} from "./csv.ts";
+import {
+  deriveOperatorSummary,
+  resolveOwnedValoper,
+  toOperatorEpochRow,
+  toOperatorPaymentRow,
+  toTransactionRow,
+  type EpochBoundary,
+  type OperatorPaymentFacts,
+} from "./derive.ts";
 import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
 import {
   alertIncidentsQuerySchema,
   alertRedemptionsQuerySchema,
+  operatorEpochsQuerySchema,
+  operatorPaymentsQuerySchema,
+  operatorSummaryQuerySchema,
   paginationSchema,
   portfolioQuerySchema,
   transactionsQuerySchema,
   type AlertIncidentsQuery,
   type AlertRedemptionsQuery,
+  type OperatorEpochsQuery,
+  type OperatorPaymentsQuery,
   type Pagination,
   type TransactionsQuery,
 } from "./query.ts";
@@ -392,10 +413,7 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       // paginated slice. `limit`/`offset` are deliberately ignored here (they
       // bound only the JSON view); the full stream comes from the chunked
       // `transactionsAscFor`, mapped through the same per-row fact mapping.
-      const [heads, facts] = await Promise.all([
-        ctx.reader.heads(),
-        ctx.reader.transactionsAscFor(ctx.query.address),
-      ]);
+      const heads = await ctx.reader.heads();
       const headers = new Headers();
       headers.set("content-type", "text/csv; charset=utf-8");
       headers.set("content-disposition", 'attachment; filename="transactions.csv"');
@@ -404,7 +422,12 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
       if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
-      return new Response(transactionsCsv(facts.map(toTransactionRow)), { status: 200, headers });
+      return new Response(
+        csvStream(ctx.reader.transactionsAscStream(ctx.query.address), transactionsCsvHeader(), (facts) =>
+          transactionsCsvRows(facts.map(toTransactionRow)),
+        ),
+        { status: 200, headers },
+      );
     }
     const [heads, rows] = await Promise.all([
       ctx.reader.heads(),
@@ -415,6 +438,212 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
     ]);
     return {
       data: rows,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/** An unowned/absent valoper streams a header-only CSV — the honest-empty
+ * answer, byte-identical to an operator with no payments yet. Yields nothing;
+ * the header comes from the stream wrapper, not from a chunk. */
+async function* emptyPaymentStream(): AsyncIterable<readonly OperatorPaymentFacts[]> {}
+
+/**
+ * Render a §14.11 export as a stream: the header, then one rendered block per
+ * chunk the reader yields. Nothing accumulates, so peak memory is one chunk
+ * regardless of history size. BOTH exports (holder and operator) use this —
+ * they had drifted apart, with only the operator one streaming.
+ *
+ * A read that fails mid-export errors the stream after a 200 has already been
+ * sent, so the client sees a truncated download rather than an error status.
+ * That is the accepted cost of streaming an unbounded body, and it is the safe
+ * direction: a short file is visibly short, whereas the alternative was an
+ * export that could not complete at all above a few hundred thousand rows.
+ */
+function csvStream<Fact>(
+  source: AsyncIterable<readonly Fact[]>,
+  header: string,
+  renderChunk: (facts: readonly Fact[]) => string,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const iterator = source[Symbol.asyncIterator]();
+  let sentHeader = false;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!sentHeader) {
+        sentHeader = true;
+        controller.enqueue(encoder.encode(header));
+        return;
+      }
+      const next = await iterator.next();
+      if (next.done === true) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(encoder.encode(renderChunk(next.value)));
+    },
+    async cancel(reason) {
+      // A client that disconnects mid-download must not leave the reader's
+      // keyset walk running against Postgres.
+      await iterator.return?.(reason);
+    },
+  });
+}
+
+// --- operator surface (M6.4, address-scoped) --------------------------------
+//
+// The three reads behind `/validators/mine` (app-spec §8.6). All `auth:
+// "address"`, so they join the standing cross-address gate automatically; on
+// top of that they carry an OWNERSHIP check the other personal routes do not
+// need: the address→valoper mapping is resolved server-side from
+// `validator_registry.operator`, and a valoper the address does not operate is
+// answered honest-empty. Not 403 — a 403 would confirm the valoper exists and
+// belongs to someone else, an oracle on who operates what (plan §3 commit B).
+
+/**
+ * `GET /api/v1/operator/summary?address=` — every validator this address
+ * operates: registry enrollment, the latest sampled epoch's economics, and
+ * lifetime commission/TIP totals. An address that operates none gets
+ * `{ address, validators: [] }` — the honest-empty answer, indistinguishable
+ * from an address that operates none on a dataless process.
+ *
+ * Peer context (`rank_by_tip`, eligible/enrolled counts) is deliberately ABSENT
+ * — plan §7 Q5 was not approved, so no other validator's ordinal position is
+ * computed onto this personal surface (delivery note, commit B).
+ */
+const operatorSummaryRoute = defineEnveloped<z.infer<typeof operatorSummaryQuerySchema>>({
+  method: "GET",
+  path: `${API_BASE}/operator/summary`,
+  auth: "address",
+  enveloped: true,
+  querySchema: operatorSummaryQuerySchema,
+  summary: "Operator-scoped validator standing + lifetime payment totals",
+  handle: async (ctx) => {
+    const [heads, registry] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.operatorValopers(ctx.query.address),
+    ]);
+    const valopers = registry.map((r) => r.valoper);
+    const [latest, totals] = await Promise.all([
+      ctx.reader.latestOperatorEpochs(valopers),
+      ctx.reader.operatorPaymentTotalsFor(valopers),
+    ]);
+    return {
+      data: deriveOperatorSummary(
+        ctx.query.address,
+        registry,
+        new Map(latest.map((row) => [row.valoper, row])),
+        new Map(totals.map((row) => [row.valoper, row])),
+      ) satisfies OperatorSummary,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/operator/epochs?address=&valoper=` — one owned validator's
+ * per-epoch economics, newest first, paginated. This is the history the console
+ * cannot show (§8.6). A valoper the address does not operate serves `[]`.
+ */
+const operatorEpochsRoute = defineEnveloped<OperatorEpochsQuery>({
+  method: "GET",
+  path: `${API_BASE}/operator/epochs`,
+  auth: "address",
+  enveloped: true,
+  querySchema: operatorEpochsQuerySchema,
+  summary: "Operator-scoped per-epoch validator history (paginated)",
+  handle: async (ctx) => {
+    const [heads, owned] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.operatorValopers(ctx.query.address),
+    ]);
+    const valoper = resolveOwnedValoper(owned, ctx.query.valoper);
+    const rows =
+      valoper === null
+        ? []
+        : await ctx.reader.validatorEpochsFor(valoper, {
+            limit: ctx.query.limit,
+            offset: ctx.query.offset,
+          });
+    return {
+      data: rows.map(toOperatorEpochRow) satisfies OperatorEpochRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/operator/payments?address=&valoper=&format=` — one owned
+ * validator's per-payment commission/TIP history. `format=csv` serves the
+ * §14.11 operator export: the COMPLETE history ascending (the 6.1
+ * completeness precedent — `limit`/`offset` bound only the JSON view), with
+ * freshness in the X- headers ([R3]).
+ *
+ * `epoch_index` is derived here by joining the epoch boundaries, because the
+ * indexer cannot know a payment's crediting epoch at ingest (app-spec §9.1).
+ */
+const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
+  method: "GET",
+  path: `${API_BASE}/operator/payments`,
+  auth: "address",
+  enveloped: true,
+  querySchema: operatorPaymentsQuerySchema,
+  summary: "Operator-scoped payment history (paginated; §14.11 CSV export)",
+  handle: async (ctx) => {
+    const [heads, owned] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.operatorValopers(ctx.query.address),
+    ]);
+    const valoper = resolveOwnedValoper(owned, ctx.query.valoper);
+
+    if (ctx.query.format === "csv") {
+      // STREAMED, not materialized: the reader yields keyset-paged chunks and
+      // each is rendered and released, so peak memory is one chunk rather than
+      // the operator's whole history. That matters because `operator_payments`
+      // is fed by a PERMISSIONLESS write path — anyone may PayTip for any
+      // validator — so nothing bounds its row count, and the pre-stream
+      // version measured 14.8 s and +323 MB RSS per concurrent request at 300
+      // 000 rows (2026-07-28 review).
+      //
+      // The epoch boundaries are read ONCE and closed over: they are ~one row
+      // per calendar month, and every chunk derives its `epoch_index` from the
+      // same snapshot, so a mid-export epoch close cannot make the file
+      // internally inconsistent.
+      const boundaries = valoper === null ? [] : await ctx.reader.epochBoundariesAsc();
+      const source =
+        valoper === null ? emptyPaymentStream() : ctx.reader.operatorPaymentsAscStream(valoper);
+      const headers = new Headers();
+      headers.set("content-type", "text/csv; charset=utf-8");
+      headers.set("content-disposition", 'attachment; filename="operator-payments.csv"');
+      if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
+      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      headers.set("x-generated-at", ctx.now().toISOString());
+      return new Response(
+        csvStream(source, operatorPaymentsCsvHeader(), (facts) =>
+          operatorPaymentsCsvRows(facts.map((f) => toOperatorPaymentRow(f, boundaries))),
+        ),
+        { status: 200, headers },
+      );
+    }
+
+    const [facts, boundaries] =
+      valoper === null
+        ? [[], []]
+        : await Promise.all([
+            ctx.reader.operatorPaymentsFor(valoper, {
+              limit: ctx.query.limit,
+              offset: ctx.query.offset,
+            }),
+            ctx.reader.epochBoundariesAsc(),
+          ]);
+    return {
+      data: facts.map((f) => toOperatorPaymentRow(f, boundaries)) satisfies OperatorPaymentRow[],
       source: "indexed" as const,
       chainHeight: heads.chainHeight,
       indexedHeight: heads.indexedHeight,
@@ -540,6 +769,9 @@ export const routes: readonly Route[] = [
   portfolioRoute,
   portfolioMetricsRoute,
   transactionsRoute,
+  operatorSummaryRoute,
+  operatorEpochsRoute,
+  operatorPaymentsRoute,
   alertRedemptionsRoute,
   alertIncidentsRoute,
   alertArrearsRoute,

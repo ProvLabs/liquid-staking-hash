@@ -339,7 +339,7 @@ export function explorerHref(config: WebConfig, txhash: string): string | null {
 
 // ── CSV export proxy ─────────────────────────────────────────────────────────
 
-/** Upstream freshness headers forwarded verbatim (nothing else crosses). */
+/** Upstream headers forwarded verbatim (content + [R3] freshness). */
 const FORWARDED_EXPORT_HEADERS = [
   "content-type",
   "content-disposition",
@@ -347,6 +347,22 @@ const FORWARDED_EXPORT_HEADERS = [
   "x-indexed-height",
   "x-generated-at",
 ] as const;
+
+/**
+ * Defensive headers SET on the proxied response (2026-07-28 review). services/api
+ * applies these to every response it serves, including the CSV
+ * (`handler.ts` merges them onto the raw Response) — but this proxy rebuilds the
+ * header set from an allowlist, which silently dropped all three. The body is a
+ * personal statement of fact, so it must not be stored by a shared cache or
+ * content-type sniffed. SET rather than forwarded: the guarantee should not
+ * depend on the upstream remembering.
+ */
+function withDefensiveHeaders(headers: Headers): Headers {
+  headers.set("cache-control", "no-store");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  return headers;
+}
 
 export interface ExportDeps {
   /** Native fetch (the proxy forwards the streamed body + freshness headers). */
@@ -380,5 +396,8 @@ export async function exportTransactionsCsv(
     const value = upstream.headers.get(name);
     if (value !== null) forwarded.set(name, value);
   }
-  return new Response(upstream.body, { status: upstream.status, headers: forwarded });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: withDefensiveHeaders(forwarded),
+  });
 }

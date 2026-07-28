@@ -15,7 +15,6 @@ interface ImportMetaEnv {
   readonly VITE_POLL_MED_SECS?: string;
   readonly VITE_POLL_SLOW_SECS?: string;
   readonly VITE_STALE_AFTER_MISSES?: string;
-  readonly VITE_GAS_PRICE?: string;
   readonly VITE_REDEMPTION_MARGIN_BPS?: string;
   readonly VITE_DEVNET_KEY_MODE?: string;
   readonly VITE_EXPLORER_TX_BASE?: string;

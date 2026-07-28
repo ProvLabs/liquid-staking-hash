@@ -82,6 +82,70 @@ Query API over the indexer's data store.
   standing gate list — a new internal route is covered automatically. The
   `internal:notifier` assertion golden vector is cross-pinned in
   `test/assertion-vectors.test.ts` ↔ `apps/web/test/assertion.test.ts`.
+- **Operator surface (PR 6.4, M6.4)** — three `auth: "address"` routes under
+  `/api/v1/operator/` (`summary`, `epochs`, `payments`) behind `/validators/mine`
+  (app-spec §8.6/§9.4). They carry a SECOND boundary beyond the scope check:
+  the address→valoper mapping, resolved server-side from
+  `validator_registry.operator` via `IndexedReader.operatorValopers` — the
+  single source — with every other operator read called only on a valoper that
+  came from it (the pure `resolveOwnedValoper` in `derive.ts`). **An unowned
+  valoper is answered honest-empty, never 403**: a 403 would confirm it exists
+  and belongs to someone else. `test/operator-endpoints.test.ts` is that gate
+  and asserts an unowned valoper and a nonexistent one are indistinguishable.
+  `?valoper=` is bounded by `bech32ValoperSchema` (the `valoper` HRP required).
+  `payer` rides the JSON row (permissionless payment — the operator's audit
+  case) but NOT the CSV, whose six columns §14.11 pins — with the **[R4]
+  deviation** that the amount column is `nhash_amount`, not §14.11's proposed
+  `hash_amount`: the served value is nhash BASE UNITS, so a whole-HASH column
+  name would read 10⁹× high and contradict `/validators/mine`, which formats
+  the same fact to whole HASH. Base-unit content under a base-unit column name
+  is the convention for both exports (the holder CSV serves `nhash`/`shares`
+  for the same reason). A CSV column that renames a unit renames it in the
+  spec's §14.11 delivery note in the same change; `payment.epoch_index`
+  is derived at read time (`paymentEpochIndex` over `epochBoundariesAsc`, null
+  while the crediting epoch is open) because the indexer cannot know it at
+  ingest. The `format=csv` export is the COMPLETE history ascending (the 6.1
+  precedent). New reader methods sum in SQL (`operatorPaymentTotalsFor`) and
+  STREAM by keyset (`operatorPaymentsAscStream`); the full `validator_epochs`
+  row is a new `OperatorEpochFacts` type, deliberately NOT a widening of the
+  public projection's `ValidatorEpochFacts`.
+  **`operator_payments` is the one indexed table fed by a PERMISSIONLESS write
+  path** — anyone may `PayTip` for any validator — so its row count is bounded
+  by nobody, and anything reading it must be sized for that, not for the
+  validator cap. Two consequences, both measured on the dev DB at 300 000
+  payments on one valoper (2026-07-28 review, superseding the 2026-07-27
+  plan-check):
+  - **Both §14.11 CSV exports stream and walk by SQL row comparison.** Three
+    forms were measured at 300 000 rows; only the third is flat:
+    `OFFSET` chunking = 14.8 s total and +323 MB RSS (each chunk re-scans every
+    prior row); Prisma's two-arm `OR` cursor = 6.2 s, because Postgres cannot
+    push it into an index condition and demotes it to a post-scan `Filter`
+    (`Rows Removed by Filter: 250 118` — still quadratic, and it *looks* fast
+    if you only sample the last chunk); the SQL row comparison
+    `("height","msgIndex","ordinal") > (?,?,?)` against the composite index =
+    **1.6 s**,
+    `Index Cond: … ROW(height, "msgIndex", ordinal) > ROW(…)`, ~56 buffers / 0.3 ms per
+    chunk at ANY depth, heap flat at 24 MB, first byte immediate. Prisma's
+    query builder cannot express row comparison, which is why
+    `operatorPaymentsAscStream` / `transactionsAscStream` are `$queryRaw`.
+    Gated by the chunk-boundary/same-height-burst case in
+    `test/integration/reader.test.ts` — completeness is the property, so a
+    cursor that skips a row is a wrong statement of fact.
+  - `latestOperatorEpochs` and the public `listValidators` use **`DISTINCT ON`**,
+    not Prisma's `distinct`, which is NOT pushed down (the emitted SQL carried
+    no `DISTINCT ON` and no `LIMIT` — verified from the Postgres statement log)
+    and fetched `validators × epochs_ever` rows to return one per valoper.
+  - Query plans: index-backed **except** `validator_registry` (bounded by the
+    validator cap) and `epoch_snapshots` (one row per calendar month) — both
+    structurally tiny, so no index was added — **and `operatorPaymentTotalsFor`,
+    which the planner flips to a full parallel seq scan (8 663 buffers, 58 ms)
+    once one valoper holds a large share of `operator_payments`.** It is
+    index-backed at even distribution (3 buffers) and runs on every
+    `/validators/mine` load. A covering `(valoper, paymentType, amount)` index
+    was built and measured: **no effect** — with one valoper holding most of the
+    table the seq scan is genuinely the cheaper plan, so an index cannot fix
+    this. Bounding it needs precomputed totals (a schema change, i.e. a
+    design-review event); until then it is a known, accepted cost.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.
@@ -170,4 +234,14 @@ security-executable gates (SECURITY.md, plan §4), which fail CI on violation:
 The **cross-address-rejection** gate for address-scoped endpoints (ADR-001
 Decision 2) is a standing `services/api` gate **from PR 3.3**, when those
 endpoints and the service-assertion verification land — not part of this
-scaffold.
+scaffold. Since PR 6.4 its `PERSONAL_PATHS` list is **registry-derived** like
+`INTERNAL_PATHS`, so a new `auth: "address"` route joins the matrix
+automatically; a route needing extra required params declares them in the
+suite's `VALOPER_PATHS`/`personalQuery` helper, and the suite asserts that
+coverage so a new required param cannot 400 its way past a 403 assertion.
+
+- **Operator ownership** (standing from PR 6.4,
+  `test/operator-endpoints.test.ts`): the address→valoper mapping is enforced
+  server-side and leak-free — an unowned valoper and a well-formed nonexistent
+  one produce byte-identical answers — and the §14.11 operator CSV's column
+  set, completeness past pagination, and injection guard are pinned.

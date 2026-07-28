@@ -10,8 +10,17 @@
 // every height in the window. block_search-based height narrowing is a later
 // optimization (noted in the M2.1 plan); functionally this is complete.
 
-import { decodeBlockEvent, decodeTxEvent } from "./decode.ts";
-import { NAV_EVENT, VAULT_EVENT, type DomainEvent, type EventScope } from "./events.ts";
+import { dequote, type RawEvent } from "../../decode/attributes.ts";
+import { logger } from "../../logger.ts";
+import { decodeBlockEvent, decodeTxEvent, decodeTxPayments } from "./decode.ts";
+import {
+  NAV_EVENT,
+  PAYMENT_ACTION,
+  VAULT_EVENT,
+  WASM_EVENT,
+  type DomainEvent,
+  type EventScope,
+} from "./events.ts";
 import type { Window } from "../../runtime/checkpoint.ts";
 
 const PER_PAGE = 100;
@@ -33,6 +42,20 @@ const RELEVANT_TX_TYPES = new Set<string>([
   VAULT_EVENT.swapOutRequested,
   VAULT_EVENT.expedited,
 ]);
+
+const PAYMENT_ACTIONS = new Set<string>([PAYMENT_ACTION.commission, PAYMENT_ACTION.tip]);
+
+/** Does this tx carry an operator payment for us? `wasm` is every contract's
+ * event type, so the pre-pass matches on the contract's own `action` values —
+ * scoping to OUR contract is `decodeTxPayments`' job, on the same pass that
+ * pairs the event with its funds transfer. */
+function hasPaymentEvent(events: readonly RawEvent[]): boolean {
+  return events.some(
+    (e) =>
+      e.type === WASM_EVENT &&
+      e.attributes.some((a) => a.key === "action" && PAYMENT_ACTIONS.has(dequote(a.value))),
+  );
+}
 
 /** The subset of RpcClient the collector needs (injectable for tests). */
 export interface EventSource {
@@ -80,11 +103,37 @@ export async function collectWindow(
       // Cheap type pre-pass: skip txs with no candidate event BEFORE fetching
       // the block time, so a height of purely non-vault txs costs no round-trip.
       const candidates = tx.events.filter((e) => RELEVANT_TX_TYPES.has(e.type));
-      if (candidates.length === 0) continue;
+      const payments = hasPaymentEvent(tx.events);
+      if (candidates.length === 0 && !payments) continue;
       const blockTime = await timeOf(tx.height);
+      const ctx = { height: tx.height, blockTime, txhash: tx.hash };
       for (const raw of candidates) {
-        const de = decodeTxEvent(raw, { height: tx.height, blockTime, txhash: tx.hash }, scope);
+        const de = decodeTxEvent(raw, ctx, scope);
         if (de) ranked.push({ ev: de, phase: 0, seq: seq++ });
+      }
+      // Operator payments decode from the WHOLE tx: the amount rides the funds
+      // transfer, not the contract's own event (M6.4 §2.1).
+      if (payments) {
+        const decoded = decodeTxPayments(tx.events, ctx, scope);
+        for (const de of decoded.payments) {
+          ranked.push({ ev: de, phase: 0, seq: seq++ });
+        }
+        // A payment whose funds could not be paired unambiguously is SKIPPED,
+        // not stored as a guess and not allowed to abort the window (2026-07-28
+        // review: an aborted window re-collects forever and stalls the whole
+        // stream). Skipping is only acceptable because it is observable, so it
+        // is logged per occurrence — public chain identifiers only, all
+        // `SAFE_FIELDS`. Idempotent re-ingest means a later decoder recovers
+        // the row on replay.
+        for (const skipped of decoded.undecodable) {
+          logger.warn("operator payment skipped: ambiguous funds transfer", {
+            stream: "chain-events",
+            txhash: tx.hash,
+            msgIndex: skipped.msgIndex,
+            height: tx.height,
+            error: skipped.reason,
+          });
+        }
       }
     }
     if (res.txs.length === 0 || page * PER_PAGE >= res.totalCount) break;

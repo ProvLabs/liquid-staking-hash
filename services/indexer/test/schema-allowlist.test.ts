@@ -11,9 +11,9 @@ import { ALLOWED_FIELDS, AMOUNT_FIELDS, FORBIDDEN_FIELD_SUBSTRINGS } from "./sec
 const models = parseModels();
 
 describe("indexed schema field allowlist (SECURITY.md data minimization)", () => {
-  it("parses at least the twelve indexed models", () => {
+  it("parses at least the thirteen indexed models", () => {
     // Guards against a parser regression silently passing an empty schema.
-    expect(models.length).toBeGreaterThanOrEqual(12);
+    expect(models.length).toBeGreaterThanOrEqual(13);
   });
 
   it("every model is covered by the allowlist", () => {

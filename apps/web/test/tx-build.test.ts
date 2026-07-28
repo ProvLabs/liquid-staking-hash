@@ -121,9 +121,12 @@ describe("builder ↔ decoder round trip (the relay guard reads what we write)",
     const plan = buildTxPlan(intent, fee, signer);
     const txRaw = encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]);
     const decoded = decodeTxRaw(txRaw);
-    expect(decoded.messages).toEqual([
+    expect(decoded.messages).toMatchObject([
       { typeUrl: MSG_SWAP_OUT, owner: intent.owner, vaultAddress: intent.vaultAddress },
     ]);
+    // A vault msg carries no execute payload; the guard's execute branch never
+    // runs for it, and its field-5 funds list is empty.
+    expect(decoded.messages[0]!.execFunds).toEqual([]);
     expect(decoded.signatureCount).toBe(1);
     expect(decoded.signerPubkeys).toHaveLength(1);
     expect(Buffer.from(decoded.signerPubkeys[0]!).toString("base64")).toBe(signer.pubkeyBase64);
@@ -134,8 +137,15 @@ describe("builder ↔ decoder round trip (the relay guard reads what we write)",
     expect(() => decodeTxRaw(new Uint8Array([]))).toThrow(); // no body/auth
   });
 
-  it("the allowlist is exactly the two vault messages", () => {
-    expect([...ALLOWED_MSG_TYPE_URLS].sort()).toEqual([MSG_SWAP_IN, MSG_SWAP_OUT].sort());
+  it("the allowlist holds the two vault messages (M6.4 adds ONE guarded entry)", () => {
+    // `MsgExecuteContract` joined in M6.4 and is safe only because the relay
+    // runs a second-level guard for it; the closed-set assertions for that
+    // entry live in test/tx-operator-build.test.ts and its rejection matrix in
+    // test/broadcast-guard.test.ts. Here we only pin that the VAULT pair is
+    // unchanged and nothing else crept in.
+    expect(ALLOWED_MSG_TYPE_URLS).toContain(MSG_SWAP_IN);
+    expect(ALLOWED_MSG_TYPE_URLS).toContain(MSG_SWAP_OUT);
+    expect(ALLOWED_MSG_TYPE_URLS).toHaveLength(3);
   });
 });
 

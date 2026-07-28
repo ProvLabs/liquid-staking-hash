@@ -15,6 +15,7 @@ import { pubkeyToBech32 } from "~/lib/adr36-verify.server";
 import { InMemorySessionStore } from "~/lib/models/session.server";
 import { login, mintNonce, requireSession } from "~/lib/services/session.server";
 import { exportTransactionsCsv } from "~/portfolio/portfolio.server";
+import { exportOperatorPaymentsCsv } from "~/validators/mine.server";
 
 const config = loadConfig({
   APP_ENV: "development",
@@ -150,5 +151,68 @@ describe("portfolio/export joins the standing gate", () => {
     expect(requestedUrl).toContain(`address=${encodeURIComponent(ADDRESS)}`);
     expect(requestedUrl).not.toContain(OTHER);
     expect(requestedUrl).toContain("format=csv");
+  });
+});
+
+describe("operator/export joins the standing gate (M6.4 §2.3)", () => {
+  const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
+
+  it("rejects an anonymous request with a reasonless 401", async () => {
+    const store = new InMemorySessionStore();
+    const request = new Request(`http://app.local/operator/export?valoper=${VALOPER}`);
+    await expect(
+      exportOperatorPaymentsCsv(configWithKey, request, { sessionOverride: { store } }),
+    ).rejects.toSatisfy((thrown) => thrown instanceof Response && thrown.status === 401);
+  });
+
+  it("proxies for the SESSION address — a ?address= query param has no effect", async () => {
+    const store = new InMemorySessionStore();
+    const cookie = await sessionCookie(store);
+    let requestedUrl: string | null = null;
+    const fetchImpl = ((url: string) => {
+      requestedUrl = url;
+      return Promise.resolve(
+        new Response("txhash\n", { status: 200, headers: { "content-type": "text/csv" } }),
+      );
+    }) as unknown as typeof fetch;
+
+    const request = new Request(
+      `http://app.local/operator/export?valoper=${VALOPER}&address=${OTHER}`,
+      { headers: { Cookie: cookie } },
+    );
+    const response = await exportOperatorPaymentsCsv(configWithKey, request, {
+      fetchImpl,
+      sessionOverride: { store },
+    });
+    expect(response.status).toBe(200);
+    expect(requestedUrl).toContain(`address=${encodeURIComponent(ADDRESS)}`);
+    expect(requestedUrl).not.toContain(OTHER);
+    expect(requestedUrl).toContain(`valoper=${encodeURIComponent(VALOPER)}`);
+    expect(requestedUrl).toContain("format=csv");
+  });
+
+  it("rejects a malformed valoper at the boundary rather than forwarding it", async () => {
+    // The API enforces ownership regardless, but a malformed value has no
+    // business reaching it (SECURITY.md: bound inputs at entry).
+    const store = new InMemorySessionStore();
+    const cookie = await sessionCookie(store);
+    let called = false;
+    const fetchImpl = (() => {
+      called = true;
+      return Promise.resolve(new Response("", { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    for (const bad of ["", "not-bech32", ADDRESS, "tpvaloper1UPPER"]) {
+      const request = new Request(
+        `http://app.local/operator/export?valoper=${encodeURIComponent(bad)}`,
+        { headers: { Cookie: cookie } },
+      );
+      const response = await exportOperatorPaymentsCsv(configWithKey, request, {
+        fetchImpl,
+        sessionOverride: { store },
+      });
+      expect(response.status, bad).toBe(400);
+    }
+    expect(called).toBe(false);
   });
 });

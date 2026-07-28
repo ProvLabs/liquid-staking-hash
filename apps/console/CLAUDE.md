@@ -41,6 +41,19 @@ Internal testing/operations web console.
   unused — they carried a critical `elliptic` advisory chain. When the
   extension-wallet adapter lands (spec §14.1), re-add only the needed cosmjs
   packages at a current, audited version.
+- **Fees: never compute `gas × price`.** Under Provenance flat fees a tx's cost
+  is a deterministic **per-message** amount (`x/flatfees` `CalculateMsgCost`),
+  and `Simulate` returns **that fee amount** in the gas-wanted field — hence
+  the chain's 1nhash guidance (provenance `internal/antewrapper/utils.go`
+  `GetGasWanted`, which then substitutes a real gas limit). Use the simulate
+  result **verbatim**: no configurable price, no adjustment factor, `gas_limit`
+  == the fee amount. A tx priced off the old model is **rejected** by the
+  protocol, not merely overpriced. This console carried
+  `VITE_GAS_PRICE=1905nhash` with a ×1.3 until 2026-07-27 — including a confirm
+  sheet that stated a fee it had never computed, a §17 honesty break — and both
+  the knob and the claim are gone. `apps/web/app/tx/simulate.server.ts` is the
+  reference implementation, gated by `apps/web/test/tx-fee.test.ts`; mirror it
+  when wiring §14.1 rather than reinventing the math here.
 - The index.html CSP pins `connect-src` to the known profile LCD hosts; a
   deployment on a different LCD updates that list — never widen it to a
   blanket `https:`.

@@ -459,6 +459,138 @@ export interface AlertArrearsFact {
   commission_due: string;
 }
 
+// --- operator surface (M6.4, address-scoped) --------------------------------
+//
+// The `/validators/mine` view's three reads (app-spec §8.6, §9.4). They are the
+// PERSONAL counterpart of the public `/validators` projection, which
+// deliberately excludes operator economics: these carry the commission/TIP
+// figures and the per-payment history a validator's operator needs for its own
+// standing and tax analysis. The address→valoper mapping is resolved
+// server-side from `validator_registry.operator`, so an operator only ever sees
+// the validators it operates; an address that operates none gets honest-empty
+// answers, never an error that would reveal who operates what.
+//
+// A field change here is an app-spec §9.4 revision, never a silent edit.
+
+/** Commission or TIP — mirrors the indexer's `OperatorPaymentType` enum. */
+export type OperatorPaymentType = "commission" | "tip";
+
+/**
+ * One owned validator in `GET /api/v1/operator/summary`: registry enrollment,
+ * the latest sampled epoch's economics, and lifetime payment totals.
+ *
+ * Per-epoch fields are null before the first sample — the honest "no sample
+ * yet" state, never a fabricated zero (the `/validators` precedent). Lifetime
+ * totals come from `operator_payments` and are always present ("0" is an
+ * honest sum over zero rows, not a cold-start artifact).
+ *
+ * NOTE (§12.1): every figure here is INDEXED. The commission standing an
+ * operator acts on — including a prepaid credit, which the chain reports as
+ * `commission_paid − commission_accrued` and the payment events cannot show at
+ * all (`outstanding` saturates at 0) — is a LIVE read owned by the web tier.
+ * This payload is history; it is not the current obligation.
+ */
+export interface OperatorValidatorRow {
+  valoper: string;
+  /** Self-declared on-chain moniker (public), not off-chain identity. */
+  moniker: string;
+  /** Operator account this row was resolved through (echo of the query). */
+  operator: string;
+  /** Enrolled and not unregistered. */
+  active: boolean;
+  /** ISO-8601 enrollment time. */
+  enrolled_at: string;
+  /** ISO-8601 unregistration time, or null while enrolled. */
+  unregistered_at: string | null;
+  /** Epoch index the per-epoch fields reflect, or null before any sample. */
+  epoch_index: number | null;
+  /** Uptime in bps at that epoch, or null before any sample. */
+  uptime_bps: number | null;
+  /** Eligibility at that epoch, or null before any sample. */
+  eligible: boolean | null;
+  /** Reasons the validator failed eligibility checks (empty when eligible). */
+  failing_reasons: string[];
+  /** Program delegation in nhash, decimal string, or null before any sample. */
+  program_delegation: string | null;
+  /** TIP credited in that epoch, nhash decimal string, or null. */
+  tip: string | null;
+  /** Cumulative commission accrued, nhash decimal string, or null. */
+  commission_accrued: string | null;
+  /** Cumulative commission paid, nhash decimal string, or null. */
+  commission_paid: string | null;
+  /** Commission due at the grace boundary, nhash decimal string, or null. */
+  commission_due: string | null;
+  /** Lifetime commission paid via PayCommission, nhash decimal string. */
+  commission_paid_total: string;
+  /** Lifetime TIP paid via PayTip, nhash decimal string. */
+  tip_paid_total: string;
+  /** Indexed payment rows for this validator (both types). */
+  payment_count: number;
+}
+
+/** `GET /api/v1/operator/summary` payload. */
+export interface OperatorSummary {
+  /** The authorized address the rows belong to (echo of the query). */
+  address: string;
+  /** Validators this address operates; empty when it operates none. */
+  validators: OperatorValidatorRow[];
+}
+
+/**
+ * One row of `GET /api/v1/operator/epochs` (newest first): a validator's
+ * per-epoch economics from `validator_epochs` — the history the console cannot
+ * show (app-spec §8.6). Unlike the summary's latest-epoch fields these are
+ * never null: a row exists only because the sampler recorded it.
+ */
+export interface OperatorEpochRow {
+  valoper: string;
+  epoch_index: number;
+  uptime_bps: number;
+  eligible: boolean;
+  failing_reasons: string[];
+  /** All amounts nhash base units, decimal strings. */
+  tip: string;
+  commission_accrued: string;
+  commission_paid: string;
+  commission_due: string;
+  program_delegation: string;
+  height: number;
+  /** ISO-8601 time the sampler observed this epoch. */
+  observed_at: string;
+}
+
+/**
+ * One row of `GET /api/v1/operator/payments` (newest first; the CSV export
+ * serves the complete history ascending). A per-payment fact from
+ * `operator_payments` — the §14.11 operator export's grain.
+ *
+ * `payer` is the paying account: payment is permissionless ("anyone, nhash
+ * attached"), so the payer is frequently NOT the operator, and an operator
+ * auditing who paid on its behalf needs it (public tx data; decided
+ * 2026-07-27). It is deliberately absent from the CSV, whose column set §14.11
+ * pins.
+ *
+ * `epoch_index` is DERIVED at read time, not stored: the crediting epoch closes
+ * at the next `run_epoch` crank, which the indexer cannot know at the payment's
+ * height (app-spec §9.1). Null means the crediting epoch has not closed yet, or
+ * no epoch snapshot covers the height — never a guess.
+ */
+export interface OperatorPaymentRow {
+  txhash: string;
+  msg_index: number;
+  valoper: string;
+  /** Paying bech32 account (public tx data) — often not the operator. */
+  payer: string;
+  payment_type: OperatorPaymentType;
+  /** nhash attached to the payment, base units, decimal string. */
+  amount: string;
+  /** Epoch the payment credited, or null while that epoch is still open. */
+  epoch_index: number | null;
+  height: number;
+  /** ISO-8601 block time of the payment. */
+  occurred_at: string;
+}
+
 /**
  * One row of `GET /api/v1/epochs` (newest first): the per-epoch series behind
  * the Learn NAV step chart and the §8.5 history views. NAV and TVV are

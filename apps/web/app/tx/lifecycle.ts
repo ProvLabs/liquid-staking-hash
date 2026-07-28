@@ -30,7 +30,19 @@ export type PreflightReason =
   | { code: "vesting-locked"; spendable: string }
   | { code: "amount-invalid" }
   | { code: "account-missing" }
-  | { code: "chain-unavailable" };
+  | { code: "chain-unavailable" }
+  // ── M6.4 operator flows (§2.4). Every one of these restates a predicate the
+  // CONTRACT enforces; preflight is convenience only (§12.1), so a reason
+  // here is a courtesy and never the thing keeping the action safe.
+  | { code: "not-validator-operator" }
+  | { code: "validator-not-found" }
+  | { code: "already-enrolled" }
+  | { code: "not-enrolled" }
+  | { code: "validator-not-jailed" }
+  | { code: "no-jail-report" }
+  | { code: "purge-cooldown"; readyAtIso: string }
+  | { code: "program-halted" }
+  | { code: "too-many-validators"; max: number };
 
 export type FailureStage = "simulate" | "sign" | "broadcast" | "execute";
 

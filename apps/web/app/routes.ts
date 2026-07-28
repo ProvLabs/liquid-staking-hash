@@ -30,6 +30,9 @@ export default [
   // Web Push subscription management (M6.3 §2.2): session-gated per-browser
   // opt-in/opt-out, outside `:lang?` like the alerts routes above.
   route("push/subscription", "routes/push-subscription.tsx"),
+  // Operator payment CSV export (M6.4 §2.3, §14.11): session-gated, outside
+  // `:lang?` like the portfolio export it follows.
+  route("operator/export", "routes/operator-export.tsx"),
   route(":lang?", "routes/locale.tsx", [
     index("routes/home.tsx"),
     // §8.0 nav targets (plan 4.1): stubs until their real pages land in
@@ -40,6 +43,9 @@ export default [
     route("portfolio", "routes/portfolio.tsx"),
     route("market", "routes/market.tsx"),
     route("validators", "routes/validators.tsx"),
+    // Operator view (M6.4 §2.3, app-spec §8.6) — registered AFTER `validators`
+    // so the public page keeps the bare path.
+    route("validators/mine", "routes/validators-mine.tsx"),
     route("governance", "routes/governance.tsx"),
   ]),
 ] satisfies RouteConfig;

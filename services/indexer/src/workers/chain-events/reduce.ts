@@ -13,7 +13,7 @@
 //      (`Store.readNav`) — so a resumed run derives the same value a full
 //      replay would, even across a window boundary.
 
-import type { DomainEvent } from "./events.ts";
+import type { DomainEvent, OperatorPaymentType } from "./events.ts";
 
 export type TxKind =
   | "swap_in"
@@ -50,10 +50,28 @@ export interface RedemptionRow {
   readonly lastTxhash: string;
 }
 
+export interface OperatorPaymentRow {
+  readonly txhash: string;
+  readonly msgIndex: number;
+  /** Sibling discriminator within (txhash, msgIndex) — part of the key. */
+  readonly ordinal: number;
+  readonly valoper: string;
+  readonly payer: string;
+  readonly paymentType: OperatorPaymentType;
+  readonly amount: bigint;
+  /** Always null at ingest — see prisma/operator_payments.prisma: the crediting
+   * epoch closes at a LATER crank, and reading another worker's table here
+   * would make replay order-sensitive. services/api joins `epoch_snapshots` at
+   * read time for the §14.11 CSV column. */
+  readonly epochIndex: bigint | null;
+  readonly height: bigint;
+  readonly occurredAt: Date;
+}
+
 /**
  * The write surface `applyEvents` needs. `readNav`/`writeNav` persist the
  * running marker NAV across windows (durable, so resume matches full replay);
- * the two upserts are keyed on chain identity so re-application is idempotent.
+ * the upserts are keyed on chain identity so re-application is idempotent.
  */
 export interface Store {
   readNav(): Promise<bigint>;
@@ -61,6 +79,7 @@ export interface Store {
   getRedemption(requestId: string): Promise<RedemptionRow | null>;
   upsertTransaction(row: TransactionRow): Promise<void>;
   upsertRedemption(row: RedemptionRow): Promise<void>;
+  upsertOperatorPayment(row: OperatorPaymentRow): Promise<void>;
 }
 
 // Monotonic status lattice: a terminal state (matured/refunded) never regresses
@@ -127,6 +146,23 @@ export async function applyEvents(store: Store, events: readonly DomainEvent[]):
 
       case "expedited":
         await advance(store, ev.requestId, "expedited", ev.height, ev.txhash, { expeditedAt: ev.blockTime });
+        break;
+
+      case "operator_payment":
+        // A payment is a standalone fact — no lattice, no running state — so
+        // re-application on replay is a byte-identical upsert.
+        await store.upsertOperatorPayment({
+          txhash: ev.txhash,
+          msgIndex: ev.msgIndex,
+          ordinal: ev.ordinal,
+          valoper: ev.valoper,
+          payer: ev.payer,
+          paymentType: ev.paymentType,
+          amount: ev.amount,
+          epochIndex: null,
+          height: ev.height,
+          occurredAt: ev.blockTime,
+        });
         break;
 
       case "swap_out_completed": {

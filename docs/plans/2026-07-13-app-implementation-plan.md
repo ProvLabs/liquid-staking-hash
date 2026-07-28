@@ -149,7 +149,22 @@ waiting for implementations.
 | 6.1 [P] | **Portfolio page + derived-metrics service** (§8.2, §9.5): position summary, effective-yield panel, accrual step chart with markers, transaction history + CSV export (consumes §14.11 cost-basis decision). Property tests per spec R3 (see §4). | 5.1, 3.3; **§14.11 cost-basis decision (blocking)** |
 | 6.2 [P] | **Alert rules + in-app notifications + notifier worker:** rule CRUD, evaluation on indexer ticks, `notifications` log, bell UI. Default-on rules per spec R2 (redemption matured/expedited; operator arrears). | 5.1, 2.5; **§14.12 sample-threshold decision (blocking, for payout-timing alert copy)** |
 | 6.3 | **Web Push channel** (§10.4, decision §14.7 recorded): per-browser opt-in, opaque revocable endpoint tokens, minimal payloads, deletion on opt-out/session delete. | 6.2 |
-| 6.4 [P] | **Operator view** (`/validators/mine`, §8.6): participation economics, arrears loudness, Console deep-links on every obligation. | 5.1, 2.3, 3.1 |
+| 6.4 | **Operator view + operator transaction flows** (`/validators/mine`, §8.6, §14.6): participation economics and commission-standing loudness (three states — in arrears / current / **prepaid**), the per-epoch and per-payment history the Console cannot show with its §14.11 CSV export, **and all five operator actions as first-class App transaction flows** — pay commission, pay TIP, enroll, unregister, and the two-phase jailed purge — through the §10.2 lifecycle, carried by a **two-level** broadcast allowlist (§12.3 amendment). Console links remain on material figures as §12.2 *verify* links: verification, no longer the action path. | 5.1, 2.3, 3.1, 5.2; 6.2/6.3 by ordering |
+
+> **Row 6.4 amended 2026-07-27 (scope decision, Ira 2026-07-24).** The original
+> row — "participation economics, arrears loudness, Console deep-links on every
+> obligation" — was written before §14.6 was decided on 2026-07-15, and was
+> stale against it: §14.6 graduates the operator actions to first-class App
+> transaction flows, "no half-implementation", superseding "every action lands
+> in the Console". The row above is the delivered §14.6 scope; the decision and
+> its reasoning are recorded in
+> [`2026-07-24-app-m6.4-operator-view.md`](2026-07-24-app-m6.4-operator-view.md)
+> §1. Two scope facts worth carrying forward: **peer-rank context is NOT
+> delivered** (that plan's §7 Q5 was not approved — the public `/validators`
+> page remains where the set is seen), and **admin program-ops remain
+> outstanding** (halt/resume, pause/unpause, config) — they are absent from the
+> relay's variant set and provably rejected by its matrix, so delivering them is
+> a design-review event, not a config change.
 
 ### M7 — Governance & admin (two parallel sub-lanes)
 
@@ -182,7 +197,7 @@ M0 ─ M1 ─┬─ services lane:  2.1 ∥ 2.2 ∥ 2.3 ∥ 2.4 → 2.5 → 3.1 
           ├─ web lane:       1.4 → 4.1 → 4.2 ∥ 4.3 ∥ 4.4     (MSW until 3.x lands)
           └─ wallet lane:    5.1 → 5.2 ────────────→ 5.3 ∥ 5.4
                                           (5.4 also needs 3.3)
-M6: 6.1 ∥ 6.2 ∥ 6.4 → 6.3
+M6: 6.1 → 6.2 → 6.3 → 6.4          (planned 6.1 ∥ 6.2 ∥ 6.4 → 6.3; ran serialized)
 M7: (7.1 → 7.2 → 7.3 → 7.4)  ∥  (7.5 ∥ 7.6)      — can start once M2 harness + 5.1 exist
 M8: (8.0 external gate) ∥ 8.1 ∥ 8.2 ∥ 8.3 → 8.4 → 8.5   (8.4/8.5 also gated on 8.0)
 ```
@@ -191,6 +206,15 @@ Practical staffing note: the web lane never blocks on the services lane —
 API endpoint contracts are defined (and mocked) at the top of M3, and every
 page is required to build offline against MSW. The wallet lane's 5.1 is
 independent of both.
+
+**M6 delivery ran serialized (recorded 2026-07-27).** The map planned
+`6.1 ∥ 6.2 ∥ 6.4 → 6.3`; delivery was `6.1 → 6.2 → 6.3 → 6.4`, each merged
+before the next began. Two reasons, both worth keeping in mind for M7's
+sub-lanes: 6.4's arrears surface is what the 6.2 alert and its 6.3 push channel
+point AT, so building it against merged alert behavior beat building it against
+a parallel branch's assumptions; and 6.4 grew from a read view into a read view
+plus five privileged write flows (§14.6), which made it the largest M6 PR rather
+than a parallelizable leaf. The `[P]` marker on row 6.4 is dropped accordingly.
 
 ## 4. Automated testing plan
 
@@ -205,7 +229,7 @@ Each layer is introduced in the milestone that creates its subject and then
 | API contract | Vitest supertest-style harness | M3 | Envelope shape (`meta.source`, heights) on every endpoint; zod bounds on every query param; rate-limit behavior; CSV column set |
 | e2e (offline) | Playwright + MSW | M4 | Every page renders from mocks: content, banners, freshness labels, verify-link hrefs, **cold-start/below-threshold states**, chart honesty (step-after NAV present, no interpolation, "n/a" under minimum window) |
 | e2e (live) | Playwright against the 1.5 stack + `contracts/drills/` | M5 | Fund-moving flows signed on devnet through full drill cycles; every redemption terminal state (expedite, matured, refund) rendered from real chain history |
-| Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device; personal endpoints reject cross-address access; push-token deletion on opt-out |
+| Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device; personal endpoints reject cross-address access (the `PERSONAL_PATHS` matrix is registry-derived since 6.4, so a new address-scoped route joins automatically); push-token deletion on opt-out; **the broadcast relay stays closed** — the 6.4 two-level allowlist's rejection matrix proves no `MsgExecuteContract` outside the six operator variants, on the configured contract, in canonical form, can be relayed; **operator ownership** — an unowned valoper answers honest-empty, indistinguishable from a nonexistent one, never a 403 that would reveal who operates what |
 | Accessibility | axe in Playwright + manual walk | M4, M8 | WCAG AA both themes, keyboard operability, reduced-motion |
 | Visual/design | palette validator in CI | M1 | Both theme token sets pass the dataviz validation on every change |
 | Degradation drills | Playwright scenarios (8.1) | M8 | The honesty machinery works under failure: reconciler alarm, indexer outage, LCD outage each produce the specified labeled degradation, never silence |
