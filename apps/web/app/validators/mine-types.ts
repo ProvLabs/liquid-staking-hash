@@ -136,11 +136,18 @@ export interface OperatorPaymentRowVM {
 export interface OperatorValidatorVM {
   valoper: string;
   moniker: string | null;
+  /** Currently enrolled. From the LIVE contract set whenever that read
+   * succeeded — membership is a canonical-plane fact (app-spec §12.1). */
   active: boolean;
-  /** Lifetime totals from the indexed payment history. */
-  commissionPaidTotalHash: string;
-  tipPaidTotalHash: string;
-  paymentCount: number;
+  /**
+   * Lifetime totals from the indexed payment history — NULL when the indexed
+   * plane has no row for this validator yet (it is written only at epoch
+   * cranks, so a just-enrolled validator has none for up to a month). Null
+   * means "not known yet", which is not the same claim as "0".
+   */
+  commissionPaidTotalHash: string | null;
+  tipPaidTotalHash: string | null;
+  paymentCount: number | null;
 }
 
 export interface OperatorViewData {

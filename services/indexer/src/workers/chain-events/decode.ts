@@ -138,11 +138,27 @@ export interface TxPaymentsDecode {
  *     `transactions` and `redemption_requests`, stalled permanently on a block
  *     that is not going to change.
  *
- * So an ambiguous pairing yields an `undecodable` entry instead: the payment is
- * skipped (never a fabricated amount), everything else in the window still
- * commits, and `sources.ts` logs it. The omission is recoverable — indexing is
- * idempotent and rebuildable from chain, so a later decoder that understands
- * the shape picks the row up on replay, which a wedged worker never does.
+ * **A batch is DECODED, not dropped** (PR #22 review). Grouping by `msg_index`
+ * and pairing the k-th payment event with the k-th funds transfer is well
+ * founded: events are appended in EXECUTION order, and a (sub-)message's
+ * attached-funds transfer is emitted when that sub-message runs, immediately
+ * before the contract's own event for it — so the two sequences advance
+ * together. Dropping the batch instead would have lost a real payment from the
+ * operator's history, totals and §14.11 CSV, which is a wrong statement of
+ * fact, not merely a missing one.
+ *
+ * Caveat, stated rather than hidden: the batched shape has NOT been observed on
+ * devnet (the fixture corpus carries single-payment txs only), so the pairing
+ * rests on the ordering argument above. `pay_commission` publishes its own
+ * amount, which cross-checks the pairing whenever a commission is in the batch;
+ * a pure-tip batch has no equivalent check. Worth a devnet exercise before a
+ * batching caller exists in the wild (§7 Q1 precedent).
+ *
+ * A bucket that still cannot be paired — a transfer count that does not match
+ * the payment count — yields `undecodable` entries: those payments are skipped
+ * (never a fabricated amount), everything else in the window still commits, and
+ * `sources.ts` logs it. That omission is recoverable, since ingest is
+ * idempotent and rebuildable from chain; a wedged worker never is.
  */
 export function decodeTxPayments(
   events: readonly RawEvent[],
@@ -152,88 +168,95 @@ export function decodeTxPayments(
   const payments: OperatorPaymentEvent[] = [];
   const undecodable: UndecodablePayment[] = [];
 
-  for (const event of events) {
-    if (event.type !== WASM_EVENT) continue;
-    if (optionalAttr(event, "_contract_address") !== scope.contractAddress) continue;
-    const paymentType = PAYMENT_TYPE_BY_ACTION.get(optionalAttr(event, "action") ?? "");
-    if (paymentType === undefined) continue;
+  // Bucket by `msg_index`, PRESERVING EMISSION ORDER within each bucket — that
+  // order is what makes a batch decodable (see `pairFunds`).
+  const byMsgIndex = new Map<number, { payments: RawEvent[]; transfers: RawEvent[] }>();
+  const bucketFor = (msgIndex: number) => {
+    let bucket = byMsgIndex.get(msgIndex);
+    if (bucket === undefined) {
+      bucket = { payments: [], transfers: [] };
+      byMsgIndex.set(msgIndex, bucket);
+    }
+    return bucket;
+  };
 
-    const msgIndex = msgIndexOf(event);
-    const funds = fundsForMsg(events, msgIndex, scope, paymentType);
-    if (!funds.ok) {
-      undecodable.push({ msgIndex, reason: funds.reason });
+  for (const event of events) {
+    if (event.type === WASM_EVENT) {
+      if (optionalAttr(event, "_contract_address") !== scope.contractAddress) continue;
+      if (PAYMENT_TYPE_BY_ACTION.get(optionalAttr(event, "action") ?? "") === undefined) continue;
+      bucketFor(msgIndexOf(event)).payments.push(event);
+    } else if (event.type === TRANSFER_EVENT) {
+      // A transfer with no `msg_index` is not a message's attached funds (the
+      // tx-level fee transfer is the case that matters), so it never pairs.
+      if (optionalAttr(event, "msg_index") === undefined) continue;
+      if (optionalAttr(event, "recipient") !== scope.contractAddress) continue;
+      bucketFor(msgIndexOf(event)).transfers.push(event);
+    }
+  }
+
+  for (const [msgIndex, bucket] of byMsgIndex) {
+    if (bucket.payments.length === 0) continue;
+
+    // One transfer per payment, or the bucket is genuinely unpairable.
+    if (bucket.transfers.length !== bucket.payments.length) {
+      for (const _ of bucket.payments) {
+        undecodable.push({
+          msgIndex,
+          reason:
+            `expected one funds transfer into the contract per payment, found ` +
+            `${bucket.transfers.length} for ${bucket.payments.length} payment(s)`,
+        });
+      }
       continue;
     }
 
-    if (paymentType === "commission") {
-      // The contract publishes the per-payment amount here too; a disagreement
-      // means the two planes cannot both be describing this payment. Refuse to
-      // pick a winner — but skip rather than stop the stream, since which
-      // transfer we paired is a function of the tx's composition.
-      const declared = attr(event, "amount");
-      if (declared !== funds.amount.toString()) {
+    for (const [k, event] of bucket.payments.entries()) {
+      const paymentType = PAYMENT_TYPE_BY_ACTION.get(optionalAttr(event, "action") ?? "")!;
+      const transfer = bucket.transfers[k]!;
+      const path = `${TRANSFER_EVENT}[${PAYMENT_ACTION[paymentType]}#${msgIndex}#${k}]`;
+      const coin = parseCoinString(attr(transfer, "amount"), `${path}.amount`);
+      if (coin.amount <= 0n) {
+        // `must_pay` cannot produce this; a non-positive attached amount means
+        // the transfer paired here is not this payment's funds at all.
         undecodable.push({
           msgIndex,
-          reason: `attribute amount ${declared} disagrees with the attached funds ${funds.amount.toString()}`,
+          reason: `expected a positive attached amount, got ${coin.amount.toString()}`,
         });
         continue;
       }
-    }
 
-    payments.push({
-      kind: "operator_payment",
-      paymentType,
-      valoper: attr(event, "valoper"),
-      payer: funds.payer,
-      amount: funds.amount,
-      height: ctx.height,
-      blockTime: ctx.blockTime,
-      txhash: ctx.txhash,
-      msgIndex,
-    });
+      if (paymentType === "commission") {
+        // The contract publishes the per-payment amount on its own event, so a
+        // commission is a SELF-CHECK ON THE PAIRING: if the k-th transfer were
+        // not this payment's funds, the two would disagree and we refuse rather
+        // than store a guess. (A tip carries only the epoch-cumulative
+        // `tip_epoch`, so a pure-tip batch has no equivalent check — the
+        // ordering argument alone carries it.)
+        const declared = attr(event, "amount");
+        if (declared !== coin.amount.toString()) {
+          undecodable.push({
+            msgIndex,
+            reason: `attribute amount ${declared} disagrees with the attached funds ${coin.amount.toString()}`,
+          });
+          continue;
+        }
+      }
+
+      payments.push({
+        kind: "operator_payment",
+        paymentType,
+        valoper: attr(event, "valoper"),
+        payer: attr(transfer, "sender"),
+        amount: coin.amount,
+        height: ctx.height,
+        blockTime: ctx.blockTime,
+        txhash: ctx.txhash,
+        msgIndex,
+      });
+    }
   }
 
   return { payments, undecodable };
-}
-
-type FundsResult =
-  | { readonly ok: true; readonly amount: bigint; readonly payer: string }
-  | { readonly ok: false; readonly reason: string };
-
-/**
- * The single bank transfer of a payment msg's attached funds into the contract:
- * exactly one, exactly one coin. A count other than one is AMBIGUITY about the
- * enclosing tx (returned, not thrown — see `decodeTxPayments`); a coin string
- * that will not parse is our own shape drift and still throws.
- */
-function fundsForMsg(
-  events: readonly RawEvent[],
-  msgIndex: number,
-  scope: EventScope,
-  paymentType: OperatorPaymentType,
-): FundsResult {
-  const path = `${TRANSFER_EVENT}[${PAYMENT_ACTION[paymentType]}#${msgIndex}]`;
-  const matches = events.filter(
-    (e) =>
-      e.type === TRANSFER_EVENT &&
-      optionalAttr(e, "msg_index") !== undefined &&
-      msgIndexOf(e) === msgIndex &&
-      optionalAttr(e, "recipient") === scope.contractAddress,
-  );
-  if (matches.length !== 1) {
-    return {
-      ok: false,
-      reason: `expected exactly one funds transfer into the contract, found ${matches.length}`,
-    };
-  }
-  const transfer = matches[0]!;
-  const coin = parseCoinString(attr(transfer, "amount"), `${path}.amount`);
-  if (coin.amount <= 0n) {
-    // `must_pay` cannot produce this; a non-positive attached amount means the
-    // transfer we paired is not the payment's funds at all.
-    return { ok: false, reason: `expected a positive attached amount, got ${coin.amount.toString()}` };
-  }
-  return { ok: true, amount: coin.amount, payer: attr(transfer, "sender") };
 }
 
 /** Decode an EndBlocker event, or null if it is not an in-scope event. */

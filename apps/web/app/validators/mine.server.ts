@@ -44,6 +44,7 @@ import { isValoperAddress } from "~/lib/bech32";
 import { personalApiHeaders } from "~/lib/services/assertion.server";
 import { requireSession, type SessionDeps } from "~/lib/services/session.server";
 import { verifyHref } from "~/components/verify-link";
+import type { OperatorValidatorRow } from "@nvhash/api-types";
 import type {
   CommissionStanding,
   DelegationHistoryVM,
@@ -216,29 +217,57 @@ export async function loadOperatorViewData(
           .catch(() => null),
   ]);
 
-  // Ownership comes from the INDEXED registry (the API enforces it server-side)
-  // with the live set as a fallback, so an operator whose indexed plane is down
-  // still sees their own standing rather than an empty page.
-  const ownedFromIndex = summaryEnv?.data.validators ?? null;
-  const ownedFromLive = (liveValidators ?? []).filter((v) => v.operator === session.address);
+  // MEMBERSHIP comes from the LIVE contract set; the indexed registry only
+  // ENRICHES it (PR #22 review, greptile P1).
+  //
+  // The two planes are not interchangeable here. `validator_registry` is
+  // written by the validator-sampler, which is anchored to EPOCH CRANKS — and
+  // epochs are calendar-monthly (liquid-staking-spec §9) — so the indexed set
+  // can lag reality by up to a month. Letting it decide membership meant a
+  // validator the operator had just enrolled was absent from their own page,
+  // and one they had just unregistered still appeared active with its action
+  // affordances, until the next crank. Enrolling and unregistering are exactly
+  // the two things this page lets them do, so the stale plane contradicted the
+  // action the operator had just taken.
+  //
+  // Live is canonical (app-spec §12.1) and reflects the change in the same
+  // block. Indexed rows the live set no longer carries are kept as INACTIVE, so
+  // an unregistered validator's history stays reachable rather than vanishing.
+  // When the live read fails the indexed set is the honest fallback — a stale
+  // list beats an empty page — and that is the only case it decides membership.
+  const indexedByValoper = new Map(
+    (summaryEnv?.data.validators ?? []).map((v) => [v.valoper, v] as const),
+  );
+  const toVM = (
+    valoper: string,
+    indexed: OperatorValidatorRow | null,
+    active: boolean,
+  ): OperatorValidatorVM => ({
+    valoper,
+    moniker: indexed === null || indexed.moniker === "" ? null : indexed.moniker,
+    active,
+    // Null, not "0.0000": an unsampled validator has no known history, and
+    // claiming zero paid would be a fabricated fact (§12.1).
+    commissionPaidTotalHash:
+      indexed === null ? null : formatBaseAmount(BigInt(indexed.commission_paid_total), HASH_EXPONENT, 4),
+    tipPaidTotalHash:
+      indexed === null ? null : formatBaseAmount(BigInt(indexed.tip_paid_total), HASH_EXPONENT, 4),
+    paymentCount: indexed?.payment_count ?? null,
+  });
+
+  const liveOwned = liveValidators === null
+    ? null
+    : liveValidators.filter((v) => v.operator === session.address);
   const owned: OperatorValidatorVM[] =
-    ownedFromIndex !== null
-      ? ownedFromIndex.map((v) => ({
-          valoper: v.valoper,
-          moniker: v.moniker === "" ? null : v.moniker,
-          active: v.active,
-          commissionPaidTotalHash: formatBaseAmount(BigInt(v.commission_paid_total), HASH_EXPONENT, 4),
-          tipPaidTotalHash: formatBaseAmount(BigInt(v.tip_paid_total), HASH_EXPONENT, 4),
-          paymentCount: v.payment_count,
-        }))
-      : ownedFromLive.map((v) => ({
-          valoper: v.valoper,
-          moniker: null,
-          active: true,
-          commissionPaidTotalHash: "0.0000",
-          tipPaidTotalHash: "0.0000",
-          paymentCount: 0,
-        }));
+    liveOwned === null
+      ? [...indexedByValoper.values()].map((v) => toVM(v.valoper, v, v.active))
+      : [
+          ...liveOwned.map((v) => toVM(v.valoper, indexedByValoper.get(v.valoper) ?? null, true)),
+          // Indexed-only rows = enrolled once, not in the live set now.
+          ...[...indexedByValoper.values()]
+            .filter((v) => !liveOwned.some((l) => l.valoper === v.valoper))
+            .map((v) => toVM(v.valoper, v, false)),
+        ];
 
   const requested = options.valoper ?? null;
   const selectedValoper =

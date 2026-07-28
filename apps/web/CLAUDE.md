@@ -107,7 +107,19 @@ End-user web interface. Production quality.
   route gates on THREE states before any figure loads — anonymous (connect
   prompt), roles `degraded` (an explicit "we could not check"; the App never
   renders a privileged surface from a failed read), and connected non-operator —
-  then loads for the session address only. `?valoper=` selects among the
+  then loads for the session address only.
+  **MEMBERSHIP comes from the LIVE contract set, never the indexed registry**
+  (PR #22 review): `validator_registry` is written by the validator-sampler,
+  which is anchored to epoch cranks, and epochs are calendar-monthly — so the
+  indexed set can lag by up to a month. It previously decided ownership, which
+  made a just-enrolled validator absent from the operator's own page and a
+  just-unregistered one still active with its action buttons, contradicting the
+  action the operator had just taken on this very page. Live decides membership
+  and `active`; the indexed plane only enriches (lifetime totals, moniker), and
+  it decides membership ONLY when the live read failed (a stale list beats an
+  empty page). A validator with no indexed row yet reports NULL totals, never
+  `0` — "not sampled yet" is not "nothing paid". Gated by the three
+  live-is-canonical cases in `test/operator-data.test.ts`. `?valoper=` selects among the
   operator's OWN validators and is shape-bounded at the route; ownership is
   enforced by `services/api` against the asserted address.
   **The load-bearing fact** (verified against `contracts/src/validators.rs`,

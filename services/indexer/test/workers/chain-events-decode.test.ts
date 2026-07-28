@@ -253,15 +253,45 @@ describe("operator-payment decode against the fixture corpus", () => {
     const events = payEvents("pay_tip", "500").filter((e) => e.type !== TRANSFER_EVENT);
     const { payments, undecodable } = decodeTxPayments(events, txCtx, scope);
     expect(payments).toEqual([]);
-    expect(undecodable).toMatchObject([{ msgIndex: 0, reason: /exactly one funds transfer/ }]);
+    expect(undecodable).toMatchObject([{ msgIndex: 0, reason: /found 0 for 1 payment/ }]);
   });
 
-  it("skips and reports when two transfers into the contract share a msg_index", () => {
-    // The batching case: one message, two payments' worth of funds.
+  it("skips and reports when the transfer count does not match the payment count", () => {
+    // Two transfers but only one payment event: nothing says which is the
+    // payment's funds, so neither is guessed.
     const [transfer, wasm] = payEvents("pay_tip", "500");
     const { payments, undecodable } = decodeTxPayments([transfer!, transfer!, wasm!], txCtx, scope);
     expect(payments).toEqual([]);
-    expect(undecodable).toMatchObject([{ reason: /found 2/ }]);
+    expect(undecodable).toMatchObject([{ reason: /found 2 for 1 payment/ }]);
+  });
+
+  // ── Batched payments under ONE msg_index (PR #22 review) ──────────────────
+  // A contract that sub-executes two payments in a single message legally
+  // produces two wasm events and two transfers at the same msg_index. These
+  // must DECODE — dropping them loses real payments from the operator's
+  // history, totals and §14.11 CSV. Pairing is by emission order, which is
+  // execution order.
+  it("decodes two batched tips at one msg_index, pairing in emission order", () => {
+    const [t1, w1] = payEvents("pay_tip", "111", "0");
+    const [t2, w2] = payEvents("pay_tip", "222", "0");
+    // Interleaved exactly as sequential sub-message execution emits them.
+    const { payments, undecodable } = decodeTxPayments([t1!, w1!, t2!, w2!], txCtx, scope);
+    expect(undecodable).toEqual([]);
+    expect(payments).toMatchObject([
+      { paymentType: "tip", amount: 111n, msgIndex: 0 },
+      { paymentType: "tip", amount: 222n, msgIndex: 0 },
+    ]);
+  });
+
+  it("a batched commission cross-checks its own pairing and rejects a mismatch", () => {
+    // pay_commission publishes its amount, so a mispairing is detectable. Build
+    // a batch whose transfers are in the WRONG order relative to the events.
+    const [t1, w1] = payEvents("pay_commission", "111", "0");
+    const [t2, w2] = payEvents("pay_commission", "222", "0");
+    const { payments, undecodable } = decodeTxPayments([t2!, w1!, t1!, w2!], txCtx, scope);
+    expect(payments).toEqual([]);
+    expect(undecodable).toHaveLength(2);
+    expect(undecodable[0]!.reason).toMatch(/disagrees with the attached funds/);
   });
 
   it("skips and reports when a commission's declared amount disagrees with the funds moved", () => {

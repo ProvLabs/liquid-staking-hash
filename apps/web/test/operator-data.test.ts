@@ -479,6 +479,60 @@ describe("history composition", () => {
   });
 });
 
+// ── Which plane decides MEMBERSHIP (PR #22 review, greptile P1) ────────────
+// `validator_registry` is written only at epoch cranks, and epochs are
+// calendar-monthly, so the indexed set can lag reality by up to a month. It
+// must never override the live contract set on the two things this page lets
+// the operator do — enroll and unregister — or the page contradicts the action
+// they just took.
+describe("live ownership is canonical; the indexed registry only enriches", () => {
+  const NEW_VALOPER = "tpvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+
+  it("shows a validator enrolled live but not yet sampled into the registry", async () => {
+    // The just-enrolled case: live knows it, the indexed summary does not.
+    server.use(summary([summaryRow()]), liveValidators([liveValidator(), liveValidator({ valoper: NEW_VALOPER })]));
+    const data = await loadOperatorViewData(withKey(), SESSION);
+
+    expect(data.owned.map((v) => v.valoper).sort()).toEqual([NEW_VALOPER, VALOPER].sort());
+    const fresh = data.owned.find((v) => v.valoper === NEW_VALOPER)!;
+    expect(fresh.active).toBe(true);
+    // No indexed row yet → totals are UNKNOWN, not zero. Claiming "0 paid"
+    // for an unsampled validator would be a fabricated fact (§12.1).
+    expect(fresh.commissionPaidTotalHash).toBeNull();
+    expect(fresh.tipPaidTotalHash).toBeNull();
+    expect(fresh.paymentCount).toBeNull();
+  });
+
+  it("marks a validator the live set no longer carries as INACTIVE", async () => {
+    // The just-unregistered case: the stale registry still says active: true.
+    // Live is canonical, so it must render inactive — no action affordances for
+    // a validator the operator no longer operates — while its history stays
+    // reachable rather than vanishing.
+    server.use(
+      summary([summaryRow(), summaryRow({ valoper: NEW_VALOPER, moniker: "gone", active: true })]),
+      liveValidators([liveValidator()]),
+    );
+    const data = await loadOperatorViewData(withKey(), SESSION);
+
+    expect(data.owned.find((v) => v.valoper === VALOPER)?.active).toBe(true);
+    expect(data.owned.find((v) => v.valoper === NEW_VALOPER)?.active).toBe(false);
+  });
+
+  it("falls back to the indexed set only when the LIVE read fails", async () => {
+    // A stale list beats an empty page — but this is the only case the indexed
+    // plane decides membership.
+    server.use(
+      summary([summaryRow()]),
+      http.get("*/cosmwasm/wasm/v1/contract/:address/smart/:query", () =>
+        HttpResponse.json({ message: "down" }, { status: 503 }),
+      ),
+    );
+    const data = await loadOperatorViewData(withKey(), SESSION);
+    expect(data.owned.map((v) => v.valoper)).toEqual([VALOPER]);
+    expect(data.liveAvailable).toBe(false);
+  });
+});
+
 describe("validator selection", () => {
   const OTHER_VALOPER = "tpvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 

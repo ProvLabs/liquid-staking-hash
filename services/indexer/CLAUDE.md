@@ -95,12 +95,22 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   never the payment's own nhash — so amount and payer come from the bank
   `transfer` at the same `msg_index` with the contract as recipient (the
   attached funds, bounded to one coin by `cw_utils::must_pay`).
+  **Batched payments DECODE** (PR #22 review): payments and transfers are
+  bucketed by `msg_index` and paired k-th to k-th, because events are appended
+  in EXECUTION order and a sub-message's funds transfer is emitted immediately
+  before that sub-call's own wasm event. A contract batching two `pay_tip`
+  sub-calls in one message is legal, and dropping it would lose real payments
+  from history, totals and the CSV. `pay_commission` publishes its own amount,
+  which cross-checks the pairing whenever a commission is in the batch; a
+  pure-tip batch has no equivalent check, and the batched shape is NOT yet in
+  the devnet corpus — worth a §7 Q1-style exercise before a batching caller
+  exists in the wild.
   **Two classes of bad input, deliberately handled differently** (2026-07-28
   review): our own event's shape (missing attribute, unparseable coin string —
   only an upgrade or a decoder bug makes that) still throws `DecodeError`;
-  but AMBIGUOUS FUNDS PAIRING — a transfer count other than one at the
-  `msg_index`, or a `pay_commission` whose declared `amount` disagrees with the
-  funds moved — returns an `undecodable` entry instead. That payment is skipped
+  but an UNPAIRABLE bucket — a transfer count that does not match the payment
+  count, or a `pay_commission` whose declared `amount` disagrees with the funds
+  moved — returns an `undecodable` entry instead. That payment is skipped
   (never a stored guess) and logged; the rest of the window still commits.
   Why: how many transfers land at a `msg_index` is a property of how the
   TRANSACTION was composed, and paying is permissionless — a contract batching
