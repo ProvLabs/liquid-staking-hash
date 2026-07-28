@@ -536,14 +536,20 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
 describe("validator selection", () => {
   const OTHER_VALOPER = "tpvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 
-  it("defaults to the first owned validator", async () => {
+  it("orders by DISPLAYED name and defaults to the first", async () => {
+    // Ordering follows the name actually shown, and the shown name comes from
+    // x/staking (the validator's own live label), not the registry's sampled
+    // copy: VALOPER's live moniker is "testing" while the indexed row still
+    // says "alpha". So "beta" sorts first — deterministically, which is the
+    // property that matters; the live contract set has no order of its own.
     server.use(
       summary([summaryRow(), summaryRow({ valoper: OTHER_VALOPER, moniker: "beta" })]),
       liveValidators([liveValidator()]),
     );
     const data = await loadOperatorViewData(withKey(), SESSION);
     expect(data.owned).toHaveLength(2);
-    expect(data.selectedValoper).toBe(VALOPER);
+    expect(data.owned.map((v) => v.moniker)).toEqual(["beta", "testing"]);
+    expect(data.selectedValoper).toBe(OTHER_VALOPER);
   });
 
   it("honors a requested valoper the operator owns", async () => {

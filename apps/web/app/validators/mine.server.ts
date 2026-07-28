@@ -217,6 +217,13 @@ export async function loadOperatorViewData(
           .catch(() => null),
   ]);
 
+  const monikerByValoper = new Map(
+    (stakingSet?.validators ?? []).map((v) => [v.operatorAddress, v.moniker] as const),
+  );
+  const rateByValoper = new Map(
+    (stakingSet?.validators ?? []).map((v) => [v.operatorAddress, v.commissionRate] as const),
+  );
+
   // MEMBERSHIP comes from the LIVE contract set; the indexed registry only
   // ENRICHES it (PR #22 review, greptile P1).
   //
@@ -238,13 +245,20 @@ export async function loadOperatorViewData(
   const indexedByValoper = new Map(
     (summaryEnv?.data.validators ?? []).map((v) => [v.valoper, v] as const),
   );
+  // Moniker authority is x/staking — it is the validator's own live label, and
+  // `validator_registry.moniker` is a copy sampled at the last crank. Taking the
+  // live one first means a validator enrolled since that crank still shows a
+  // name instead of a truncated address (a regression this fix would otherwise
+  // have introduced, since such a validator now appears at all).
   const toVM = (
     valoper: string,
     indexed: OperatorValidatorRow | null,
     active: boolean,
   ): OperatorValidatorVM => ({
     valoper,
-    moniker: indexed === null || indexed.moniker === "" ? null : indexed.moniker,
+    moniker:
+      monikerByValoper.get(valoper) ??
+      (indexed === null || indexed.moniker === "" ? null : indexed.moniker),
     active,
     // Null, not "0.0000": an unsampled validator has no known history, and
     // claiming zero paid would be a fabricated fact (§12.1).
@@ -268,6 +282,18 @@ export async function loadOperatorViewData(
             .filter((v) => !liveOwned.some((l) => l.valoper === v.valoper))
             .map((v) => toVM(v.valoper, v, false)),
         ];
+  // Stable, and the SAME order services/api uses (`operatorValopers` orders by
+  // moniker then valoper). The live contract set has no meaningful order of its
+  // own, so without this the default-selected validator — and the switcher —
+  // would reshuffle on contract-storage order.
+  // An unknown moniker sorts as "", exactly as `ORDER BY moniker ASC` treats
+  // the empty string in `operatorValopers` — comparing one validator's moniker
+  // against another's raw address instead would order across two namespaces.
+  owned.sort((a, b) => {
+    const an = a.moniker ?? "";
+    const bn = b.moniker ?? "";
+    return an === bn ? (a.valoper < b.valoper ? -1 : 1) : an < bn ? -1 : 1;
+  });
 
   const requested = options.valoper ?? null;
   const selectedValoper =
@@ -279,13 +305,6 @@ export async function loadOperatorViewData(
     selectedValoper === null
       ? null
       : ((liveValidators ?? []).find((v) => v.valoper === selectedValoper) ?? null);
-
-  const monikerByValoper = new Map(
-    (stakingSet?.validators ?? []).map((v) => [v.operatorAddress, v.moniker] as const),
-  );
-  const rateByValoper = new Map(
-    (stakingSet?.validators ?? []).map((v) => [v.operatorAddress, v.commissionRate] as const),
-  );
 
   const [epochsEnv, paymentsEnv, programEpochsEnv] =
     selectedValoper === null
