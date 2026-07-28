@@ -27,6 +27,8 @@ export { verifyAssertion, MAX_ASSERTION_LIFETIME_SECONDS, MAX_CLOCK_SKEW_SECONDS
 export {
   transactionsCsv,
   operatorPaymentsCsv,
+  operatorPaymentsCsvHeader,
+  operatorPaymentsCsvRows,
   csvField,
   TRANSACTIONS_CSV_COLUMNS,
   OPERATOR_PAYMENTS_CSV_COLUMNS,

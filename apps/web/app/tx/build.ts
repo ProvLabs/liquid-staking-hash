@@ -19,6 +19,7 @@
 
 import { sha256 } from "@noble/hashes/sha256";
 
+import { VALOPER_RE } from "~/lib/bech32";
 import {
   bytesField,
   bytesFields,
@@ -78,12 +79,17 @@ export const FUNDED_VARIANTS: ReadonlySet<string> = new Set<OperatorVariant>([
  */
 export const PROGRAM_UNDERLYING_DENOM = "nhash";
 
-/** Bech32 valoper shape (the `valoper` HRP is required, so an ACCOUNT address
- * can never be passed where a validator operator address is meant). */
-const VALOPER_RE = /^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/;
 /** Canonical unsigned integer, bounded to Uint128 (the contract's amount type). */
 const UINT_RE = /^(0|[1-9][0-9]*)$/;
-const MAX_UINT128 = (1n << 128n) - 1n;
+/**
+ * Uint128 ceiling. Kept local rather than imported from `@nvhash/chain-client`'s
+ * `U128_MAX` on purpose — this module's import surface is deliberately narrow
+ * (`./proto` and one hash), and the relay decodes untrusted bytes through it,
+ * so it does not pull in the chain client. Same call the indexer's
+ * `decode/attributes.ts` makes. The NAME matches that convention so the three
+ * copies are greppable as one thing.
+ */
+const U128_MAX = (1n << 128n) - 1n;
 
 export const PUBKEY_TYPE_URL = "/cosmos.crypto.secp256k1.PubKey";
 const SIGN_MODE_DIRECT = 1n;
@@ -179,6 +185,23 @@ export function operatorInnerJson(
 
 /** Encode `MsgExecuteContract` (sender=1, contract=2, msg=3, funds=5). */
 function encodeExecuteContract(intent: OperatorIntent): Uint8Array {
+  // THE INVARIANT: this encoder never produces a message `guardOperatorExecute`
+  // would refuse. The two must agree on funds discipline in BOTH directions,
+  // because the relay is the last stop before the chain and a disagreement is
+  // only discovered AFTER the user has signed — the worst place to find one
+  // (2026-07-28 review: a `pay_tip` at amount 0 used to encode with no funds
+  // and was then rejected at the relay as "a payment must attach exactly one
+  // coin"). Preflight blocks a zero payment earlier and the route schema
+  // rejects it at the boundary; this throw is the backstop that keeps the
+  // invariant true no matter how the intent was constructed.
+  const funded = FUNDED_VARIANTS.has(intent.variant);
+  if (funded && (intent.amount <= 0n || intent.amount > U128_MAX)) {
+    throw new Error(`${intent.variant} requires a positive Uint128 amount`);
+  }
+  if (!funded && intent.amount !== 0n) {
+    throw new Error(`${intent.variant} must not carry funds`);
+  }
+
   const writer = new ProtoWriter()
     .string(1, intent.sender)
     .string(2, intent.contractAddress)
@@ -190,7 +213,7 @@ function encodeExecuteContract(intent: OperatorIntent): Uint8Array {
     );
   // Funds ride ONLY on the two payment variants; the fundless ones emit no
   // field 5 at all, which the guard then requires.
-  if (FUNDED_VARIANTS.has(intent.variant) && intent.amount > 0n) {
+  if (funded) {
     writer.message(5, encodeCoin(intent.denom, intent.amount), true);
   }
   return writer.finish();
@@ -503,8 +526,13 @@ export function guardOperatorExecute(
   let claimantValoper: string | null = null;
   if ("claimant_valoper" in body) {
     const claimant = body["claimant_valoper"];
-    // Explicit null is accepted and normalizes to "omitted"; anything else
-    // must be a well-formed valoper.
+    // A present claimant must be a well-formed valoper. An explicit
+    // `"claimant_valoper": null` reaches condition 5 with claimantValoper still
+    // null, and condition 5 then REJECTS it — the canonical form omits the key
+    // entirely, so the submitted bytes cannot match. That is intended (there is
+    // exactly one accepted encoding), and it is why this branch does not need
+    // to reject explicit null itself. Pinned by the canonical-form case in
+    // test/broadcast-guard.test.ts.
     if (claimant !== null) {
       if (typeof claimant !== "string" || !VALOPER_RE.test(claimant)) {
         return { ok: false, reason: "claimant_valoper is not a validator operator address" };
@@ -526,7 +554,7 @@ export function guardOperatorExecute(
       return { ok: false, reason: "payment amount is not a canonical integer" };
     }
     const amount = BigInt(coin.amount);
-    if (amount <= 0n || amount > MAX_UINT128) {
+    if (amount <= 0n || amount > U128_MAX) {
       return { ok: false, reason: "payment amount out of range" };
     }
   } else if (msg.execFunds.length !== 0) {

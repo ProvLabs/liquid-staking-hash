@@ -34,6 +34,15 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   `prisma.$transaction`; the cursor advances only after the window commits
   (spec §9.2). Workers never write their checkpoint directly. `trailingTarget`
   applies the confirmation depth (default 0 — Provenance instant finality).
+  The window transaction sets an EXPLICIT `WINDOW_TX_TIMEOUT_MS` (120 s):
+  Prisma's 5 s default is a latency default, but a window is a throughput unit —
+  workers upsert row-by-row across up to `INDEX_WINDOW_SPAN` (500) heights, so a
+  busy window or a genesis backfill crossed it, and an aborted window
+  re-collects forever (2026-07-28 review). M6.4's permissionless
+  `operator_payments` made that materially more reachable. The per-row
+  round-trip count is unchanged and remains the underlying cost; batching it
+  needs `INSERT … ON CONFLICT DO UPDATE`, since `createMany({skipDuplicates})`
+  would break replay-corrects-stale-rows.
 - **`runtime/worker.ts`** — the loop shell (`runWorker`) and the
   `registerWorker` seam. A worker is **two-phase** so chain I/O never happens
   inside a DB transaction: `collect(window)` reads+decodes from chain (no DB),
@@ -85,10 +94,23 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   2026-07-27, `pay_tip`'s event carries only the epoch-cumulative `tip_epoch`,
   never the payment's own nhash — so amount and payer come from the bank
   `transfer` at the same `msg_index` with the contract as recipient (the
-  attached funds, bounded to one coin by `cw_utils::must_pay`). Missing,
-  duplicated, or multi-coin transfers, and a `pay_commission` whose declared
-  `amount` disagrees with the funds moved, throw `DecodeError` — never a stored
-  guess. `epochIndex` is deliberately null at ingest (deriving it needs the
+  attached funds, bounded to one coin by `cw_utils::must_pay`).
+  **Two classes of bad input, deliberately handled differently** (2026-07-28
+  review): our own event's shape (missing attribute, unparseable coin string —
+  only an upgrade or a decoder bug makes that) still throws `DecodeError`;
+  but AMBIGUOUS FUNDS PAIRING — a transfer count other than one at the
+  `msg_index`, or a `pay_commission` whose declared `amount` disagrees with the
+  funds moved — returns an `undecodable` entry instead. That payment is skipped
+  (never a stored guess) and logged; the rest of the window still commits.
+  Why: how many transfers land at a `msg_index` is a property of how the
+  TRANSACTION was composed, and paying is permissionless — a contract batching
+  two `pay_tip` sub-calls in one message legally produces two. Throwing there
+  aborted `collectWindow`, and since the runner re-collects an aborted window on
+  restart, one such tx stalled the ENTIRE chain-events stream (`transactions`
+  and `redemption_requests` included) permanently. The skip is recoverable
+  because ingest is idempotent and rebuildable — a later decoder picks the row
+  up on replay — which a wedged worker never is.
+  `epochIndex` is deliberately null at ingest (deriving it needs the
   epoch-history worker's table, which would make replay order-sensitive);
   services/api joins `epoch_snapshots` at read time. Rows upsert by
   `(txhash, msgIndex)`; the replay property covers them.

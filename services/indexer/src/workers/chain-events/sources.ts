@@ -11,6 +11,7 @@
 // optimization (noted in the M2.1 plan); functionally this is complete.
 
 import { dequote, type RawEvent } from "../../decode/attributes.ts";
+import { logger } from "../../logger.ts";
 import { decodeBlockEvent, decodeTxEvent, decodeTxPayments } from "./decode.ts";
 import {
   NAV_EVENT,
@@ -113,8 +114,25 @@ export async function collectWindow(
       // Operator payments decode from the WHOLE tx: the amount rides the funds
       // transfer, not the contract's own event (M6.4 §2.1).
       if (payments) {
-        for (const de of decodeTxPayments(tx.events, ctx, scope)) {
+        const decoded = decodeTxPayments(tx.events, ctx, scope);
+        for (const de of decoded.payments) {
           ranked.push({ ev: de, phase: 0, seq: seq++ });
+        }
+        // A payment whose funds could not be paired unambiguously is SKIPPED,
+        // not stored as a guess and not allowed to abort the window (2026-07-28
+        // review: an aborted window re-collects forever and stalls the whole
+        // stream). Skipping is only acceptable because it is observable, so it
+        // is logged per occurrence — public chain identifiers only, all
+        // `SAFE_FIELDS`. Idempotent re-ingest means a later decoder recovers
+        // the row on replay.
+        for (const skipped of decoded.undecodable) {
+          logger.warn("operator payment skipped: ambiguous funds transfer", {
+            stream: "chain-events",
+            txhash: tx.hash,
+            msgIndex: skipped.msgIndex,
+            height: tx.height,
+            error: skipped.reason,
+          });
         }
       }
     }

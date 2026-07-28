@@ -106,12 +106,35 @@ Query API over the indexer's data store.
   while the crediting epoch is open) because the indexer cannot know it at
   ingest. The `format=csv` export is the COMPLETE history ascending (the 6.1
   precedent). New reader methods sum in SQL (`operatorPaymentTotalsFor`) and
-  chunk (`operatorPaymentsAscFor`); the full `validator_epochs` row is a new
-  `OperatorEpochFacts` type, deliberately NOT a widening of the public
-  projection's `ValidatorEpochFacts`. Query plans (checked 2026-07-27): all
-  index-backed except `validator_registry` (bounded by the contract's validator
-  cap) and `epoch_snapshots` (one row per calendar month) — both structurally
-  tiny, so no index was added.
+  STREAM by keyset (`operatorPaymentsAscStream`); the full `validator_epochs`
+  row is a new `OperatorEpochFacts` type, deliberately NOT a widening of the
+  public projection's `ValidatorEpochFacts`.
+  **`operator_payments` is the one indexed table fed by a PERMISSIONLESS write
+  path** — anyone may `PayTip` for any validator — so its row count is bounded
+  by nobody, and anything reading it must be sized for that, not for the
+  validator cap. Two consequences, both measured on the dev DB at 300 000
+  payments on one valoper (2026-07-28 review, superseding the 2026-07-27
+  plan-check):
+  - The §14.11 CSV export **streams and walks by keyset**. The original
+    `OFFSET`-chunked, fully-materialized version took 14.8 s and +323 MB RSS
+    per concurrent request (last chunk alone: 10 845 buffers / 68 ms to return
+    1 000 rows); streaming keyset is 6.2 s, +72 MB peak, heap flat at 19.8 MB,
+    and first byte is immediate. Gated by the chunk-boundary/same-height-burst
+    case in `test/integration/reader.test.ts` — completeness is the property, so
+    a cursor that skips a row is a wrong statement of fact.
+  - Query plans: index-backed **except** `validator_registry` (bounded by the
+    validator cap) and `epoch_snapshots` (one row per calendar month) — both
+    structurally tiny, so no index was added — **and `operatorPaymentTotalsFor`,
+    which the planner flips to a full parallel seq scan (8 663 buffers, 58 ms)
+    once one valoper holds a large share of `operator_payments`.** It is
+    index-backed at even distribution (3 buffers) and it runs on every
+    `/validators/mine` load; the skew case is a known, unfixed cost, not a
+    claim of index coverage.
+  - `latestOperatorEpochs` uses Prisma `distinct`, which is **not** pushed down
+    (no `DISTINCT ON`, no `LIMIT` in the emitted SQL — verified from the
+    Postgres statement log): it fetches `validators_operated × epochs_ever` rows
+    to return one per valoper. Small today, unbounded in time. The public
+    `listValidators` has the same shape.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.

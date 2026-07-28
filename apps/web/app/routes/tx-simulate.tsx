@@ -6,18 +6,21 @@
 import { z } from "zod";
 
 import { getBootedConfig } from "~/config/config.server";
+import { VALOPER_RE } from "~/lib/bech32";
 import { requireSession } from "~/lib/services/session.server";
 import { AuthClient, LcdClient } from "@nvhash/chain-client";
-import { OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM, type TxIntent } from "~/tx/build";
+import {
+  FUNDED_VARIANTS,
+  OPERATOR_VARIANTS,
+  PROGRAM_UNDERLYING_DENOM,
+  type TxIntent,
+} from "~/tx/build";
 import { simulateIntent } from "~/tx/simulate.server";
 import type { Route } from "./+types/tx-simulate";
 
 /** base64 33-byte compressed secp256k1 from the connected wallet. */
 const pubkeySchema = z.string().length(44).regex(/^[A-Za-z0-9+/]+={0,2}$/);
-const valoperSchema = z
-  .string()
-  .max(90)
-  .regex(/^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/);
+const valoperSchema = z.string().max(90).regex(VALOPER_RE);
 
 const bodySchema = z.object({
   kind: z.enum(["swap_in", "swap_out"]),
@@ -31,15 +34,25 @@ const bodySchema = z.object({
  * client chooses the variant, its validator and the amount; the SENDER and the
  * CONTRACT are filled server-side, so it cannot name another signer or a
  * different contract. */
-const operatorBodySchema = z.object({
-  kind: z.literal("operator"),
-  variant: z.enum(OPERATOR_VARIANTS),
-  valoper: valoperSchema,
-  claimantValoper: valoperSchema.nullable().default(null),
-  amount: z.string().regex(/^[0-9]{1,39}$/).default("0"),
-  denom: z.string().min(1).max(64).default(PROGRAM_UNDERLYING_DENOM),
-  pubkey: pubkeySchema,
-});
+const operatorBodySchema = z
+  .object({
+    kind: z.literal("operator"),
+    variant: z.enum(OPERATOR_VARIANTS),
+    valoper: valoperSchema,
+    claimantValoper: valoperSchema.nullable().default(null),
+    amount: z.string().regex(/^[0-9]{1,39}$/).default("0"),
+    denom: z.string().min(1).max(64).default(PROGRAM_UNDERLYING_DENOM),
+    pubkey: pubkeySchema,
+  })
+  // Funds discipline, bounded at the BOUNDARY in both directions — the same
+  // rule `guardOperatorExecute` applies at the relay and the encoder now
+  // asserts. Rejecting here (400) is what keeps the encoder's throw a backstop
+  // rather than a 500: a zero-amount payment, or funds on a fundless action,
+  // never reaches the builder (2026-07-28 review).
+  .refine(
+    (b) => FUNDED_VARIANTS.has(b.variant) === (BigInt(b.amount) > 0n),
+    "a payment requires a positive amount; every other action must carry none",
+  );
 
 export async function action({ request }: Route.ActionArgs) {
   if (request.method !== "POST") {

@@ -14,7 +14,6 @@
 import {
   attr,
   coinAttr,
-  DecodeError,
   optionalAttr,
   parseCoinString,
   type RawEvent,
@@ -101,6 +100,18 @@ const PAYMENT_TYPE_BY_ACTION: ReadonlyMap<string, OperatorPaymentType> = new Map
   [PAYMENT_ACTION.tip, "tip"],
 ]);
 
+/** A payment event whose funds could not be paired unambiguously: recorded and
+ * skipped, never guessed — and never fatal to the window (see below). */
+export interface UndecodablePayment {
+  readonly msgIndex: number;
+  readonly reason: string;
+}
+
+export interface TxPaymentsDecode {
+  readonly payments: OperatorPaymentEvent[];
+  readonly undecodable: readonly UndecodablePayment[];
+}
+
 /**
  * Decode this program's operator payments out of ONE tx's full event list
  * (M6.4 §2.1). Unlike the single-event decoders above this is a PAIR decode,
@@ -110,18 +121,36 @@ const PAYMENT_TYPE_BY_ACTION: ReadonlyMap<string, OperatorPaymentType> = new Map
  * `msg_index` with the contract as recipient — the msg's attached funds, which
  * `cw_utils::must_pay` bounds to exactly one coin in the underlying denom.
  *
- * Chain input is untrusted (SECURITY.md): a wasm payment event whose funds
- * transfer is absent, duplicated, or multi-coin, or a `pay_commission` whose
- * own `amount` attribute disagrees with the transferred funds, throws
- * `DecodeError` rather than storing a guess. Loud shape drift, never a
- * fabricated amount.
+ * Chain input is untrusted (SECURITY.md), and this decoder splits untrusted
+ * input into TWO categories, which the 2026-07-28 review separated:
+ *
+ *   - **Our own event's shape** — a missing `valoper`/`amount` attribute on the
+ *     contract's own wasm event, or an unparseable coin string. Only a contract
+ *     upgrade or a decoder bug produces that, so it still throws `DecodeError`:
+ *     loud, and the right thing to stop on.
+ *   - **How the surrounding TRANSACTION was composed** — how many funds
+ *     transfers landed at this `msg_index`. That is not ours to control: paying
+ *     is permissionless, and a contract that batches two `pay_tip` sub-calls in
+ *     one message legally produces two transfers into the contract at one
+ *     `msg_index`. Throwing there let one unusual-but-legal transaction abort
+ *     `collectWindow` forever — the runner re-collects the same window on
+ *     restart (`runtime/worker.ts`), so the chain-events stream, and with it
+ *     `transactions` and `redemption_requests`, stalled permanently on a block
+ *     that is not going to change.
+ *
+ * So an ambiguous pairing yields an `undecodable` entry instead: the payment is
+ * skipped (never a fabricated amount), everything else in the window still
+ * commits, and `sources.ts` logs it. The omission is recoverable — indexing is
+ * idempotent and rebuildable from chain, so a later decoder that understands
+ * the shape picks the row up on replay, which a wedged worker never does.
  */
 export function decodeTxPayments(
   events: readonly RawEvent[],
   ctx: TxContext,
   scope: EventScope,
-): OperatorPaymentEvent[] {
+): TxPaymentsDecode {
   const payments: OperatorPaymentEvent[] = [];
+  const undecodable: UndecodablePayment[] = [];
 
   for (const event of events) {
     if (event.type !== WASM_EVENT) continue;
@@ -131,16 +160,23 @@ export function decodeTxPayments(
 
     const msgIndex = msgIndexOf(event);
     const funds = fundsForMsg(events, msgIndex, scope, paymentType);
+    if (!funds.ok) {
+      undecodable.push({ msgIndex, reason: funds.reason });
+      continue;
+    }
 
     if (paymentType === "commission") {
       // The contract publishes the per-payment amount here too; a disagreement
-      // means one of the two planes changed shape. Refuse to pick a winner.
+      // means the two planes cannot both be describing this payment. Refuse to
+      // pick a winner — but skip rather than stop the stream, since which
+      // transfer we paired is a function of the tx's composition.
       const declared = attr(event, "amount");
       if (declared !== funds.amount.toString()) {
-        throw new DecodeError(
-          `${WASM_EVENT}.${PAYMENT_ACTION.commission}`,
-          `attribute amount ${declared} disagrees with the attached funds ${funds.amount.toString()}`,
-        );
+        undecodable.push({
+          msgIndex,
+          reason: `attribute amount ${declared} disagrees with the attached funds ${funds.amount.toString()}`,
+        });
+        continue;
       }
     }
 
@@ -157,17 +193,25 @@ export function decodeTxPayments(
     });
   }
 
-  return payments;
+  return { payments, undecodable };
 }
 
-/** The single bank transfer of a payment msg's attached funds into the
- * contract: exactly one, exactly one coin. Anything else is shape drift. */
+type FundsResult =
+  | { readonly ok: true; readonly amount: bigint; readonly payer: string }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * The single bank transfer of a payment msg's attached funds into the contract:
+ * exactly one, exactly one coin. A count other than one is AMBIGUITY about the
+ * enclosing tx (returned, not thrown — see `decodeTxPayments`); a coin string
+ * that will not parse is our own shape drift and still throws.
+ */
 function fundsForMsg(
   events: readonly RawEvent[],
   msgIndex: number,
   scope: EventScope,
   paymentType: OperatorPaymentType,
-): { readonly amount: bigint; readonly payer: string } {
+): FundsResult {
   const path = `${TRANSFER_EVENT}[${PAYMENT_ACTION[paymentType]}#${msgIndex}]`;
   const matches = events.filter(
     (e) =>
@@ -177,17 +221,19 @@ function fundsForMsg(
       optionalAttr(e, "recipient") === scope.contractAddress,
   );
   if (matches.length !== 1) {
-    throw new DecodeError(
-      path,
-      `expected exactly one funds transfer into the contract, found ${matches.length}`,
-    );
+    return {
+      ok: false,
+      reason: `expected exactly one funds transfer into the contract, found ${matches.length}`,
+    };
   }
   const transfer = matches[0]!;
   const coin = parseCoinString(attr(transfer, "amount"), `${path}.amount`);
   if (coin.amount <= 0n) {
-    throw new DecodeError(path, "expected a positive attached amount", coin.amount.toString());
+    // `must_pay` cannot produce this; a non-positive attached amount means the
+    // transfer we paired is not the payment's funds at all.
+    return { ok: false, reason: `expected a positive attached amount, got ${coin.amount.toString()}` };
   }
-  return { amount: coin.amount, payer: attr(transfer, "sender") };
+  return { ok: true, amount: coin.amount, payer: attr(transfer, "sender") };
 }
 
 /** Decode an EndBlocker event, or null if it is not an in-scope event. */

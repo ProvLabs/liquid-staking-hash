@@ -638,22 +638,47 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return rows.map(toOperatorPaymentFacts);
     },
 
-    async operatorPaymentsAscFor(valoper: string): Promise<OperatorPaymentFacts[]> {
-      // Chunk-until-short-page, the transactionsAscFor precedent: the export is
-      // complete, but no single SELECT scans an unbounded history.
+    async *operatorPaymentsAscStream(
+      valoper: string,
+    ): AsyncIterable<readonly OperatorPaymentFacts[]> {
+      // KEYSET walk on the export's own sort key, yielded chunk by chunk. The
+      // predicate is the compound-cursor shape `redemptionsChangedSince` above
+      // already uses — `(height, msgIndex) > (h, m)` written as the two-arm OR
+      // Prisma can emit — so the two arms become a BitmapOr over
+      // `operator_payments_valoper_height_idx` with the height bound INSIDE the
+      // index condition (EXPLAIN, 2026-07-28: 40 buffers / 0.5 ms at the 300
+      // 000th row, against 10 845 buffers / 68 ms for the OFFSET form it
+      // replaces — and flat wherever the walk has reached, not linear in it).
+      //
+      // Yielding instead of accumulating is the other half: the caller renders
+      // each chunk and drops it, so peak memory is one chunk rather than the
+      // whole history (measured 323 MB RSS for a 300 000-row export before).
       const CHUNK = 1000;
-      const facts: OperatorPaymentFacts[] = [];
-      for (let skip = 0; ; skip += CHUNK) {
-        const rows = await prisma.operatorPayment.findMany({
-          where: { valoper },
+      let cursor: { height: bigint; msgIndex: number } | null = null;
+      for (;;) {
+        // Typed separately so the generator's return type does not become
+        // self-referential through the cursor (TS7022).
+        const where: Prisma.OperatorPaymentWhereInput =
+          cursor === null
+            ? { valoper }
+            : {
+                valoper,
+                OR: [
+                  { height: { gt: cursor.height } },
+                  { height: cursor.height, msgIndex: { gt: cursor.msgIndex } },
+                ],
+              };
+        const rows: OperatorPaymentScalars[] = await prisma.operatorPayment.findMany({
+          where,
           orderBy: [{ height: "asc" }, { msgIndex: "asc" }],
-          skip,
           take: CHUNK,
         });
-        for (const r of rows) facts.push(toOperatorPaymentFacts(r));
-        if (rows.length < CHUNK) break;
+        if (rows.length === 0) return;
+        yield rows.map(toOperatorPaymentFacts);
+        if (rows.length < CHUNK) return;
+        const last = rows[rows.length - 1]!;
+        cursor = { height: last.height, msgIndex: last.msgIndex };
       }
-      return facts;
     },
 
     async epochBoundariesAsc(): Promise<EpochBoundary[]> {

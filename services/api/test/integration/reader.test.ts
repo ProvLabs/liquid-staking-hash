@@ -439,8 +439,15 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     expect(await reader.operatorPaymentTotalsFor([])).toEqual([]);
   });
 
+  /** Drain the export stream the way the CSV route does. */
+  async function drain(valoper: string) {
+    const out = [];
+    for await (const chunk of reader.operatorPaymentsAscStream(valoper)) out.push(...chunk);
+    return out;
+  }
+
   it("reads the COMPLETE payment history ascending, scoped to one valoper", async () => {
-    const facts = await reader.operatorPaymentsAscFor("pbvaloper1aaa");
+    const facts = await drain("pbvaloper1aaa");
     // Ascending by (height, msgIndex); bravo's PAYB is absent.
     expect(facts.map((f) => f.txhash)).toEqual(["PAY1", "PAY2", "PAY3"]);
     expect(facts[1]).toMatchObject({
@@ -455,6 +462,60 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     // The paginated JSON view is the same rows, newest first.
     const page = await reader.operatorPaymentsFor("pbvaloper1aaa", { limit: 2, offset: 0 });
     expect(page.map((f) => f.txhash)).toEqual(["PAY3", "PAY2"]);
+  });
+
+  it("keyset export stays complete across chunk boundaries and same-height bursts", async () => {
+    // THE gate on the 2026-07-28 keyset conversion. The export walks by
+    // `(height, msgIndex) > cursor` in 1000-row chunks, so the two ways a
+    // cursor can silently lose rows are seeded deliberately:
+    //   - a burst at ONE height LARGER than a chunk (1200 rows). A
+    //     height-only cursor either loops forever here or skips the
+    //     remainder; only the compound tie-break pages through it.
+    //   - rows straddling the chunk boundary in both directions.
+    // Completeness of the §14.11 export is the property under test — it is a
+    // statement of fact, so a missing row is a wrong statement.
+    const BURST = 1200;
+    await writer.operatorPayment.createMany({
+      data: Array.from({ length: BURST }, (_, i) => ({
+        txhash: `BURST${String(i).padStart(6, "0")}`,
+        msgIndex: i,
+        valoper: "pbvaloper1keyset",
+        payer: "pb1payer",
+        paymentType: (i % 2 === 0 ? "commission" : "tip") as "commission" | "tip",
+        amount: "1",
+        height: 9000n, // every row at the SAME height
+        occurredAt: new Date("2026-07-01T00:00:00Z"),
+      })).concat([
+        {
+          txhash: "BEFORE0", msgIndex: 0, valoper: "pbvaloper1keyset", payer: "pb1payer",
+          paymentType: "commission" as const, amount: "1", height: 8999n,
+          occurredAt: new Date("2026-06-30T00:00:00Z"),
+        },
+        {
+          txhash: "AFTER00", msgIndex: 0, valoper: "pbvaloper1keyset", payer: "pb1payer",
+          paymentType: "tip" as const, amount: "1", height: 9001n,
+          occurredAt: new Date("2026-07-02T00:00:00Z"),
+        },
+      ]),
+    });
+
+    const facts = await drain("pbvaloper1keyset");
+
+    expect(facts).toHaveLength(BURST + 2);
+    // No row seen twice — a cursor that re-includes its boundary duplicates.
+    expect(new Set(facts.map((f) => `${f.txhash}:${f.msgIndex}`)).size).toBe(BURST + 2);
+    // Strictly ascending by (height, msgIndex) across every chunk seam.
+    for (let i = 1; i < facts.length; i++) {
+      const prev = facts[i - 1]!;
+      const cur = facts[i]!;
+      expect(
+        cur.height > prev.height || (cur.height === prev.height && cur.msgIndex > prev.msgIndex),
+      ).toBe(true);
+    }
+    expect(facts[0]!.txhash).toBe("BEFORE0");
+    expect(facts.at(-1)!.txhash).toBe("AFTER00");
+
+    await writer.operatorPayment.deleteMany({ where: { valoper: "pbvaloper1keyset" } });
   });
 
   it("serves epoch boundaries ascending — the payment→epoch derivation input", async () => {

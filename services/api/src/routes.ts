@@ -28,13 +28,15 @@ import type {
   EpochRow,
 } from "@nvhash/api-types";
 import type { z } from "zod";
-import { operatorPaymentsCsv, transactionsCsv } from "./csv.ts";
+import { operatorPaymentsCsvHeader, operatorPaymentsCsvRows, transactionsCsv } from "./csv.ts";
 import {
   deriveOperatorSummary,
   resolveOwnedValoper,
   toOperatorEpochRow,
   toOperatorPaymentRow,
   toTransactionRow,
+  type EpochBoundary,
+  type OperatorPaymentFacts,
 } from "./derive.ts";
 import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
 import {
@@ -436,6 +438,52 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
   },
 });
 
+/** An unowned/absent valoper streams a header-only CSV — the honest-empty
+ * answer, byte-identical to an operator with no payments yet. Yields nothing;
+ * the header comes from the stream wrapper, not from a chunk. */
+async function* emptyPaymentStream(): AsyncIterable<readonly OperatorPaymentFacts[]> {}
+
+/**
+ * Render the §14.11 operator export as a stream: the header, then one rendered
+ * block per chunk the reader yields. Nothing accumulates, so peak memory is one
+ * chunk regardless of history size.
+ *
+ * A read that fails mid-export errors the stream after a 200 has already been
+ * sent, so the client sees a truncated download rather than an error status.
+ * That is the accepted cost of streaming an unbounded body, and it is the safe
+ * direction: a short file is visibly short, whereas the alternative was an
+ * export that could not complete at all above a few hundred thousand rows.
+ */
+function operatorPaymentsCsvStream(
+  source: AsyncIterable<readonly OperatorPaymentFacts[]>,
+  boundaries: readonly EpochBoundary[],
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const iterator = source[Symbol.asyncIterator]();
+  let sentHeader = false;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!sentHeader) {
+        sentHeader = true;
+        controller.enqueue(encoder.encode(operatorPaymentsCsvHeader()));
+        return;
+      }
+      const next = await iterator.next();
+      if (next.done === true) {
+        controller.close();
+        return;
+      }
+      const rows = next.value.map((f) => toOperatorPaymentRow(f, boundaries));
+      controller.enqueue(encoder.encode(operatorPaymentsCsvRows(rows)));
+    },
+    async cancel(reason) {
+      // A client that disconnects mid-download must not leave the reader's
+      // keyset walk running against Postgres.
+      await iterator.return?.(reason);
+    },
+  });
+}
+
 // --- operator surface (M6.4, address-scoped) --------------------------------
 //
 // The three reads behind `/validators/mine` (app-spec §8.6). All `auth:
@@ -547,23 +595,28 @@ const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
     const valoper = resolveOwnedValoper(owned, ctx.query.valoper);
 
     if (ctx.query.format === "csv") {
-      const [facts, boundaries] =
-        valoper === null
-          ? [[], []]
-          : await Promise.all([
-              ctx.reader.operatorPaymentsAscFor(valoper),
-              ctx.reader.epochBoundariesAsc(),
-            ]);
+      // STREAMED, not materialized: the reader yields keyset-paged chunks and
+      // each is rendered and released, so peak memory is one chunk rather than
+      // the operator's whole history. That matters because `operator_payments`
+      // is fed by a PERMISSIONLESS write path — anyone may PayTip for any
+      // validator — so nothing bounds its row count, and the pre-stream
+      // version measured 14.8 s and +323 MB RSS per concurrent request at 300
+      // 000 rows (2026-07-28 review).
+      //
+      // The epoch boundaries are read ONCE and closed over: they are ~one row
+      // per calendar month, and every chunk derives its `epoch_index` from the
+      // same snapshot, so a mid-export epoch close cannot make the file
+      // internally inconsistent.
+      const boundaries = valoper === null ? [] : await ctx.reader.epochBoundariesAsc();
+      const source =
+        valoper === null ? emptyPaymentStream() : ctx.reader.operatorPaymentsAscStream(valoper);
       const headers = new Headers();
       headers.set("content-type", "text/csv; charset=utf-8");
       headers.set("content-disposition", 'attachment; filename="operator-payments.csv"');
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
       if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
-      return new Response(
-        operatorPaymentsCsv(facts.map((f) => toOperatorPaymentRow(f, boundaries))),
-        { status: 200, headers },
-      );
+      return new Response(operatorPaymentsCsvStream(source, boundaries), { status: 200, headers });
     }
 
     const [facts, boundaries] =

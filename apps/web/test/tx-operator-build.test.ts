@@ -26,6 +26,7 @@ import {
   encodeTxBody,
   encodeTxRaw,
   FUNDED_VARIANTS,
+  guardOperatorExecute,
   intentToProtoJson,
   MSG_EXECUTE_CONTRACT,
   MSG_SWAP_IN,
@@ -225,12 +226,46 @@ describe("builder ↔ decoder round trip for operator messages", () => {
     expect(decoded.messages[0]!.execFunds).toEqual([]);
   });
 
-  it("a payment amount of zero encodes no funds (the guard then refuses it)", () => {
-    // Belt and braces: the UI cannot submit a zero payment, and if it did the
-    // relay would reject the fundless payment rather than send a no-op.
-    const plan = buildTxPlan({ ...base, amount: 0n }, fee, signer);
-    const decoded = decodeTxRaw(encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]));
-    expect(decoded.messages[0]!.execFunds).toEqual([]);
+  // THE ENCODER/GUARD AGREEMENT (2026-07-28 review). The builder must never
+  // produce a message the relay guard refuses: a disagreement is only
+  // discovered after the user has signed. This previously failed in the
+  // zero-amount direction — a `pay_commission` at 0 encoded with no funds and
+  // was then rejected at the relay as "a payment must attach exactly one coin".
+  it("refuses to build a payment with a zero amount", () => {
+    expect(() => buildTxPlan({ ...base, amount: 0n }, fee, signer)).toThrow(
+      /requires a positive Uint128 amount/,
+    );
+  });
+
+  it("refuses to build a payment above the Uint128 ceiling", () => {
+    expect(() => buildTxPlan({ ...base, amount: 1n << 128n }, fee, signer)).toThrow(
+      /requires a positive Uint128 amount/,
+    );
+  });
+
+  it("refuses to attach funds to a fundless variant", () => {
+    expect(() =>
+      buildTxPlan({ ...base, variant: "report_jailed_validator", amount: 1n }, fee, signer),
+    ).toThrow(/must not carry funds/);
+  });
+
+  it("everything the encoder DOES build passes the relay guard", () => {
+    // The invariant stated as a property over the whole closed variant set,
+    // so a new variant cannot land on one side of the pair only.
+    for (const variant of OPERATOR_VARIANTS) {
+      const amount = FUNDED_VARIANTS.has(variant) ? 1_500_000_000n : 0n;
+      const plan = buildTxPlan({ ...base, variant, amount }, fee, signer);
+      const decoded = decodeTxRaw(
+        encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]),
+      );
+      const verdict = guardOperatorExecute(decoded.messages[0]!, {
+        contractAddress: base.contractAddress,
+      });
+      expect(verdict, `${variant} must round-trip through the guard`).toEqual({
+        ok: true,
+        variant,
+      });
+    }
   });
 });
 

@@ -331,14 +331,18 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
           p,
         ),
       ),
-    operatorPaymentsAscFor: (valoper) =>
-      Promise.resolve(
-        [...(facts.operatorPayments ?? [])]
-          .filter((r) => r.valoper === valoper)
-          .sort((a, b) =>
-            a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1,
-          ),
-      ),
+    // Chunked like the Prisma reader (CHUNK rows per yield), so a consumer that
+    // only works for a single-chunk stream cannot pass here and fail in
+    // production. Order mirrors production exactly: (height, msgIndex) asc.
+    async *operatorPaymentsAscStream(valoper) {
+      const CHUNK = 1000;
+      const rows = [...(facts.operatorPayments ?? [])]
+        .filter((r) => r.valoper === valoper)
+        .sort((a, b) =>
+          a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1,
+        );
+      for (let i = 0; i < rows.length; i += CHUNK) yield rows.slice(i, i + CHUNK);
+    },
     epochBoundariesAsc: () =>
       Promise.resolve(
         [...(facts.epochs ?? [])]

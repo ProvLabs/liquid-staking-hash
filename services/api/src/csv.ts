@@ -68,24 +68,40 @@ export const OPERATOR_PAYMENTS_CSV_COLUMNS = [
   "txhash",
 ] as const;
 
+/**
+ * The export's header line (terminated). Split from the row renderer so the
+ * route can emit the export INCREMENTALLY as the reader's keyset stream yields
+ * chunks, instead of joining the whole history into one string — a 300 000-row
+ * export measured 33 MB of string on top of the rows it was built from
+ * (2026-07-28 review). Header + rows concatenated is byte-identical to what
+ * `operatorPaymentsCsv` produced before the split, so the pinned column gate
+ * and the CSV goldens are unaffected.
+ */
+export function operatorPaymentsCsvHeader(): string {
+  return `${OPERATOR_PAYMENTS_CSV_COLUMNS.join(",")}\n`;
+}
+
+/** Render payment rows only (no header), each line `\n`-terminated. */
+export function operatorPaymentsCsvRows(rows: readonly OperatorPaymentRow[]): string {
+  let out = "";
+  for (const row of rows) {
+    out += `${[
+      row.occurred_at,
+      String(row.height),
+      row.epoch_index === null ? "" : String(row.epoch_index),
+      row.payment_type,
+      row.amount,
+      row.txhash,
+    ]
+      .map(csvField)
+      .join(",")}\n`;
+  }
+  return out;
+}
+
 /** Render the operator payment export (§14.11): header + one line per payment. */
 export function operatorPaymentsCsv(rows: readonly OperatorPaymentRow[]): string {
-  const lines = [OPERATOR_PAYMENTS_CSV_COLUMNS.join(",")];
-  for (const row of rows) {
-    lines.push(
-      [
-        row.occurred_at,
-        String(row.height),
-        row.epoch_index === null ? "" : String(row.epoch_index),
-        row.payment_type,
-        row.amount,
-        row.txhash,
-      ]
-        .map(csvField)
-        .join(","),
-    );
-  }
-  return `${lines.join("\n")}\n`;
+  return operatorPaymentsCsvHeader() + operatorPaymentsCsvRows(rows);
 }
 
 /** Render the export: header line + one line per row, `\n`-joined. */

@@ -173,7 +173,12 @@ function payEvents(action: "pay_commission" | "pay_tip", amount: string, msgInde
 
 describe("operator-payment decode against the fixture corpus", () => {
   it("decodes PayCommission from the captured tx (amount from the attached funds)", () => {
-    const payments = decodeTxPayments(txEvents(load("operator/pay-commission.json")), txCtx, scope);
+    const { payments, undecodable } = decodeTxPayments(
+      txEvents(load("operator/pay-commission.json")),
+      txCtx,
+      scope,
+    );
+    expect(undecodable).toEqual([]);
     expect(payments).toHaveLength(1);
     expect(payments[0]).toMatchObject({
       kind: "operator_payment",
@@ -195,7 +200,8 @@ describe("operator-payment decode against the fixture corpus", () => {
     );
     expect(wasm?.attributes.map((a) => a.key)).not.toContain("amount");
 
-    const payments = decodeTxPayments(events, txCtx, scope);
+    const { payments, undecodable } = decodeTxPayments(events, txCtx, scope);
+    expect(undecodable).toEqual([]);
     expect(payments).toHaveLength(1);
     expect(payments[0]).toMatchObject({
       kind: "operator_payment",
@@ -208,7 +214,9 @@ describe("operator-payment decode against the fixture corpus", () => {
   });
 
   it("ignores a non-payment execute against our contract (enroll)", () => {
-    expect(decodeTxPayments(txEvents(load("operator/register-participation.json")), txCtx, scope)).toEqual([]);
+    expect(
+      decodeTxPayments(txEvents(load("operator/register-participation.json")), txCtx, scope).payments,
+    ).toEqual([]);
   });
 
   it("scopes out another contract's identically-shaped pay event", () => {
@@ -220,36 +228,65 @@ describe("operator-payment decode against the fixture corpus", () => {
           : a,
       ),
     }));
-    expect(decodeTxPayments(foreign, txCtx, scope)).toEqual([]);
+    expect(decodeTxPayments(foreign, txCtx, scope).payments).toEqual([]);
   });
 
   it("decodes each payment in a multi-message tx by its own msg_index", () => {
     const events = [...payEvents("pay_commission", "111", "0"), ...payEvents("pay_tip", "222", "1")];
-    expect(decodeTxPayments(events, txCtx, scope)).toMatchObject([
+    expect(decodeTxPayments(events, txCtx, scope).payments).toMatchObject([
       { paymentType: "commission", amount: 111n, msgIndex: 0 },
       { paymentType: "tip", amount: 222n, msgIndex: 1 },
     ]);
   });
 
-  it("throws rather than guessing when the funds transfer is missing", () => {
+  // ── Ambiguous funds pairing: SKIPPED and reported, never guessed — and
+  // never fatal (2026-07-28 review). How many transfers land at a msg_index is
+  // a property of how the TRANSACTION was composed, which is not ours to
+  // control: paying is permissionless, and a contract batching two pay_tip
+  // sub-calls in one message legally produces two. Throwing aborted
+  // `collectWindow`, and since the runner re-collects an aborted window on
+  // restart, ONE such tx stalled the whole chain-events stream — transactions
+  // and redemption_requests included — permanently. These three cases are the
+  // gate on that: a reason is recorded, no payment is fabricated, and no throw
+  // escapes to the worker loop.
+  it("skips and reports, without throwing, when the funds transfer is missing", () => {
     const events = payEvents("pay_tip", "500").filter((e) => e.type !== TRANSFER_EVENT);
-    expect(() => decodeTxPayments(events, txCtx, scope)).toThrow(/exactly one funds transfer/);
+    const { payments, undecodable } = decodeTxPayments(events, txCtx, scope);
+    expect(payments).toEqual([]);
+    expect(undecodable).toMatchObject([{ msgIndex: 0, reason: /exactly one funds transfer/ }]);
   });
 
-  it("throws rather than guessing when two transfers into the contract share a msg_index", () => {
+  it("skips and reports when two transfers into the contract share a msg_index", () => {
+    // The batching case: one message, two payments' worth of funds.
     const [transfer, wasm] = payEvents("pay_tip", "500");
-    expect(() => decodeTxPayments([transfer!, transfer!, wasm!], txCtx, scope)).toThrow(
-      /exactly one funds transfer/,
-    );
+    const { payments, undecodable } = decodeTxPayments([transfer!, transfer!, wasm!], txCtx, scope);
+    expect(payments).toEqual([]);
+    expect(undecodable).toMatchObject([{ reason: /found 2/ }]);
   });
 
-  it("throws when a commission's declared amount disagrees with the funds moved", () => {
+  it("skips and reports when a commission's declared amount disagrees with the funds moved", () => {
     const events = payEvents("pay_commission", "500").map((e) =>
       e.type === TRANSFER_EVENT
         ? { ...e, attributes: e.attributes.map((a) => (a.key === "amount" ? { ...a, value: "499nhash" } : a)) }
         : e,
     );
-    expect(() => decodeTxPayments(events, txCtx, scope)).toThrow(/disagrees with the attached funds/);
+    const { payments, undecodable } = decodeTxPayments(events, txCtx, scope);
+    expect(payments).toEqual([]);
+    expect(undecodable).toMatchObject([{ reason: /disagrees with the attached funds/ }]);
+  });
+
+  it("still decodes the OTHER payments in a tx that contains an ambiguous one", () => {
+    // Isolation is the point: one unpairable payment must not cost the window
+    // the facts around it.
+    const [badTransfer, badWasm] = payEvents("pay_tip", "500", "0");
+    const good = payEvents("pay_commission", "111", "1");
+    const { payments, undecodable } = decodeTxPayments(
+      [badTransfer!, badTransfer!, badWasm!, ...good],
+      txCtx,
+      scope,
+    );
+    expect(payments).toMatchObject([{ paymentType: "commission", amount: 111n, msgIndex: 1 }]);
+    expect(undecodable).toHaveLength(1);
   });
 
   it("throws on a multi-coin funds transfer (must_pay bounds it to one)", () => {
@@ -271,7 +308,14 @@ describe("operator-payment decode against the fixture corpus", () => {
         { key: "amount", value: "1nhash" },
       ],
     };
-    const payments = decodeTxPayments([feeToContract, transfer!, wasm!], txCtx, scope);
+    const { payments, undecodable } = decodeTxPayments(
+      [feeToContract, transfer!, wasm!],
+      txCtx,
+      scope,
+    );
     expect(payments).toMatchObject([{ amount: 500n }]);
+    // The fee transfer must not count toward the pairing either — otherwise
+    // this reads as two transfers and the payment is skipped, not decoded.
+    expect(undecodable).toEqual([]);
   });
 });

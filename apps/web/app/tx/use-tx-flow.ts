@@ -195,7 +195,18 @@ export function useTxFlow(): TxFlow {
         sequence: BigInt(sim.signer.sequence),
         pubkeyBase64,
       };
-      dispatch({ type: "SIMULATED", plan: buildTxPlan(intent, fee, signer) });
+      // buildTxPlan asserts the encoder's funds invariant and throws if the
+      // intent violates it. Preflight and the simulate route both reject that
+      // case first, so reaching here means a bug — but the flow's contract is
+      // to land in a restartable state, never to strand mid-flight.
+      try {
+        dispatch({ type: "SIMULATED", plan: buildTxPlan(intent, fee, signer) });
+      } catch (cause) {
+        dispatch({
+          type: "SIMULATE_FAILED",
+          detail: cause instanceof Error ? cause.message : "could not build the transaction",
+        });
+      }
     },
     [pubkeyBase64],
   );

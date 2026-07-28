@@ -391,6 +391,24 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
     );
   });
 
+  it("an explicit claimant_valoper: null → 400 (one accepted encoding only)", () => {
+    // There is exactly ONE byte sequence per (variant, arguments): the
+    // canonical builder omits a null claimant entirely, so spelling it out
+    // explicitly is a different encoding of the same intent and the
+    // canonical-bytes check refuses it. The body-shape check deliberately
+    // tolerates the null — condition 5 is what closes it, and this pins that
+    // division of labour so a future edit to either half cannot open a second
+    // accepted encoding unnoticed (2026-07-28 review).
+    reject(
+      signedExecuteTx(
+        rawExecute({
+          msg: `{"purge_jailed_validator":{"valoper":"${VALOPER}","claimant_valoper":null}}`,
+        }),
+      ),
+      "explicit null claimant",
+    );
+  });
+
   it("a valoper that is not a valoper → 400", () => {
     for (const bad of [
       SESSION_ADDRESS, // an ACCOUNT address where a valoper is required

@@ -25,6 +25,7 @@
 
 import { LcdClient, NvhashContractClient, type FetchLike } from "@nvhash/chain-client";
 import { z } from "zod";
+import { PROGRAM_UNDERLYING_DENOM } from "~/tx/build";
 import { CLIENT_SAFE_CONFIG_KEYS, type ClientConfig } from "./client";
 
 // Bech32-shaped Provenance address (SECURITY.md: addresses validated for
@@ -206,8 +207,11 @@ export async function runBootChecks(
   );
   const contract = new NvhashContractClient(lcd, config.contractAddress);
   let onChainVault: string;
+  let onChainUnderlying: string;
   try {
-    onChainVault = (await contract.config()).vaultAddress;
+    const onChain = await contract.config();
+    onChainVault = onChain.vaultAddress;
+    onChainUnderlying = onChain.underlyingDenom;
   } catch (cause) {
     throw new BootCheckError(
       `vault-address cross-check could not run: querying Config {} on ` +
@@ -221,6 +225,23 @@ export async function runBootChecks(
       `vault-address cross-check failed: VAULT_ADDRESS="${config.vaultAddress}" but the ` +
         `contract's Config {} reports vault_address="${onChainVault}". The environment ` +
         `profile points at the wrong vault or the wrong contract; refusing to start.`,
+    );
+  }
+  // Underlying-denom cross-check (M6.4 §2.5, added 2026-07-28). The relay's
+  // operator guard bounds a payment's denom against the CONSTANT
+  // `PROGRAM_UNDERLYING_DENOM`, which is deliberately code and not
+  // configuration — but a constant that must match chain reality and is never
+  // checked against it is an assumption, not a control (SECURITY.md: enforced
+  // mechanisms, never assumptions). This is the same `Config {}` read the
+  // vault check already performs, so it costs no extra round-trip. Without it a
+  // mismatch surfaces only as every operator payment being refused at the
+  // relay, with no boot-time signal.
+  if (onChainUnderlying !== PROGRAM_UNDERLYING_DENOM) {
+    throw new BootCheckError(
+      `underlying-denom cross-check failed: the relay guard bounds payments to ` +
+        `"${PROGRAM_UNDERLYING_DENOM}" but the contract's Config {} reports ` +
+        `underlying_denom="${onChainUnderlying}". Every operator payment would be ` +
+        `rejected; refusing to start.`,
     );
   }
 }

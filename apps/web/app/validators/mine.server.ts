@@ -40,6 +40,7 @@ import {
 import { CHROME_READ_TIMEOUT_MS } from "~/chrome/chrome.server";
 import type { WebConfig } from "~/config/config.server";
 import { bpsToPercent, formatBaseAmount, HASH_EXPONENT } from "~/learn/amounts";
+import { isValoperAddress } from "~/lib/bech32";
 import { personalApiHeaders } from "~/lib/services/assertion.server";
 import { requireSession, type SessionDeps } from "~/lib/services/session.server";
 import { verifyHref } from "~/components/verify-link";
@@ -506,7 +507,7 @@ export async function exportOperatorPaymentsCsv(
 ): Promise<Response> {
   const session = await requireSession(config, request, deps.sessionOverride);
   const valoper = new URL(request.url).searchParams.get("valoper") ?? "";
-  if (!/^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/.test(valoper)) {
+  if (!isValoperAddress(valoper)) {
     return Response.json({ error: "valoper required" }, { status: 400 });
   }
   const headers = personalApiHeaders(config, session.address);

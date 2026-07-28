@@ -115,11 +115,22 @@ export interface IndexedReader {
   operatorPaymentsFor(valoper: string, page: Pagination): Promise<OperatorPaymentFacts[]>;
   /**
    * One validator's COMPLETE payment history ascending by (height, msgIndex),
-   * chunked internally — the §14.11 CSV export's source. Pagination bounds the
-   * JSON view only; a statement of fact is never a paginated slice (the 6.1
-   * `transactionsAscFor` precedent).
+   * yielded in bounded chunks — the §14.11 CSV export's source. Pagination
+   * bounds the JSON view only; a statement of fact is never a paginated slice
+   * (the 6.1 completeness precedent).
+   *
+   * It is a STREAM, not an array, and it walks by KEYSET, for two measured
+   * reasons (2026-07-28 review, at 300 000 payments on one valoper):
+   *   - an `OFFSET`-chunked walk re-scans and discards every prior row, so the
+   *     export cost is quadratic — the last chunk alone sorted 300 000 rows to
+   *     return 1 000 (10 845 buffers, 68 ms); the whole export took 14.8 s.
+   *     Keyset makes each chunk constant-cost (40 buffers, 0.5 ms).
+   *   - materializing the history cost 323 MB RSS per concurrent request, on a
+   *     table fed by a PERMISSIONLESS write path (anyone may PayTip for any
+   *     validator), so its row count is bounded by nobody.
+   * `operator_payments` is append-only, so a keyset walk cannot skip a row.
    */
-  operatorPaymentsAscFor(valoper: string): Promise<OperatorPaymentFacts[]>;
+  operatorPaymentsAscStream(valoper: string): AsyncIterable<readonly OperatorPaymentFacts[]>;
   /** Epoch closing heights ascending — how a payment's epoch is derived. */
   epochBoundariesAsc(): Promise<EpochBoundary[]>;
 }
@@ -172,6 +183,7 @@ export const emptyReader: IndexedReader = {
   validatorEpochsFor: () => Promise.resolve([]),
   operatorPaymentTotalsFor: () => Promise.resolve([]),
   operatorPaymentsFor: () => Promise.resolve([]),
-  operatorPaymentsAscFor: () => Promise.resolve([]),
+  // An unwired process has no rows, so the stream yields nothing at all.
+  async *operatorPaymentsAscStream() {},
   epochBoundariesAsc: () => Promise.resolve([]),
 };

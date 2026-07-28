@@ -8,6 +8,7 @@ import { OperatorFlows } from "~/components/validators/mine/operator-flows";
 import { PaymentHistory } from "~/components/validators/mine/payment-history";
 import { StandingHeader } from "~/components/validators/mine/standing-header";
 import { getBootedConfig } from "~/config/config.server";
+import { isValoperAddress } from "~/lib/bech32";
 import { t, type Locale } from "~/i18n";
 import { detectRoles } from "~/lib/services/roles.server";
 import { getSessionContext } from "~/lib/services/session.server";
@@ -19,10 +20,9 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "My validator · nvHASH" }];
 }
 
-/** Bech32 valoper shape, bounded at the route boundary (SECURITY.md). Selects
- * among the operator's OWN validators; services/api enforces ownership against
- * the asserted address regardless, so this is a shape bound, not the control. */
-const VALOPER_RE = /^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/;
+// `?valoper=` is shape-bounded at this route boundary (SECURITY.md). It selects
+// among the operator's OWN validators; services/api enforces ownership against
+// the asserted address regardless, so this is a shape bound, not the control.
 
 /**
  * Three honest states before any data loads (plan §2.3):
@@ -50,7 +50,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const raw = new URL(request.url).searchParams.get("valoper");
-  const valoper = raw !== null && VALOPER_RE.test(raw) ? raw : null;
+  const valoper = raw !== null && isValoperAddress(raw) ? raw : null;
   const data = await loadOperatorViewData(config, { address: session.address }, { valoper });
   // The contract address is client-safe config (§7 allowlist); the client needs
   // it to build the plan for the confirm disclosure. The relay's deep guard
@@ -200,7 +200,7 @@ function NotOperatorEnroll({
           placeholder="tpvaloper1…"
         />
       </label>
-      {VALOPER_RE.test(trimmed) ? (
+      {isValoperAddress(trimmed) ? (
         <OperatorFlows
           locale={locale}
           valoper={trimmed}

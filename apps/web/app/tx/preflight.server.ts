@@ -22,6 +22,7 @@ import {
 } from "@nvhash/chain-client";
 import { z } from "zod";
 
+import { VALOPER_RE } from "~/lib/bech32";
 import { sameBech32Payload } from "~/lib/adr36-verify.server";
 import type { WebConfig } from "~/config/config.server";
 import { OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM } from "./build";
@@ -60,10 +61,7 @@ export const preflightRequestSchema = z.object({
 export type PreflightRequest = z.infer<typeof preflightRequestSchema>;
 
 /** Valoper shape, bounded at the route boundary like every other input. */
-const valoperString = z
-  .string()
-  .max(90)
-  .regex(/^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/);
+const valoperString = z.string().max(90).regex(VALOPER_RE);
 
 /** M6.4 operator preflight (§2.4). `amount` is required only for payments. */
 export const operatorPreflightRequestSchema = z.object({
