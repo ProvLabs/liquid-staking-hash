@@ -14,6 +14,7 @@ import vaultGet from "@nvhash/fixtures/queries/vault/get";
 import { loadConfig } from "~/config/config.server";
 import {
   FEE_PROVISION_NHASH,
+  MAX_PROGRAM_VALIDATORS,
   operatorPreflightReasons,
   operatorPreflightRequestSchema,
   preflightRequestSchema,
@@ -218,6 +219,9 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
 describe("operator preflight predicates (M6.4 §2.4)", () => {
   const ADDRESS = "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk";
   const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
+  /** The valoper ADDRESS actually operates: same bech32 payload, `valoper` HRP
+   * — the pair the contract's `is_operator` accepts. */
+  const VALOPER_OWNED = "tpvaloper18kkn20p7dphkal2x84t30cv7z6v9rf9cndtxzn";
   const NOW = 1_800_000_000;
 
   const enrolledEntry = {
@@ -262,6 +266,38 @@ describe("operator preflight predicates (M6.4 §2.4)", () => {
     }
   });
 
+  // Every nullable fact must block the variants that CONSUME it. A branch that
+  // skipped its check on a null would return an empty (green) reason list for
+  // an action the contract then rejects — the failure mode this asserts away.
+  it("a fact a variant CONSUMES is missing → chain-unavailable, never silence", () => {
+    // Payments weigh spendable balance.
+    expect(codes(operatorPreflightReasons(request(), facts({ spendableNhash: null })))).toEqual([
+      "chain-unavailable",
+    ]);
+
+    // Purge weighs the report list AND the halt flag.
+    const purge = request({ variant: "purge_jailed_validator", amount: "0" });
+    const jailed = { exists: true, jailed: true } as const;
+    for (const broken of [{ jailReports: null }, { halted: null }] as const) {
+      expect(
+        codes(operatorPreflightReasons(purge, facts({ chainValidator: jailed, ...broken }))),
+      ).toEqual(["chain-unavailable"]);
+    }
+  });
+
+  it("a variant that does NOT consume a fact is unaffected by its absence", () => {
+    // Enrolment weighs neither balance nor jail reports, so a failed read of
+    // either must not block it — chain-unavailable is for consumed facts only.
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "register_participation", valoper: VALOPER_OWNED, amount: "0" }),
+          facts({ validators: [], spendableNhash: null, jailReports: null, halted: null }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
   it("a clean payment on an enrolled validator has no reasons", () => {
     expect(codes(operatorPreflightReasons(request(), facts()))).toEqual([]);
   });
@@ -286,18 +322,32 @@ describe("operator preflight predicates (M6.4 §2.4)", () => {
   });
 
   it("a payment beyond spendable (including the fee provision) is blocked", () => {
+    // Spendable covers the payment itself but NOT the payment plus the fee
+    // provision — the case that proves the provision is part of the check.
+    const amount = 1_000_000_000n;
     const reasons = operatorPreflightReasons(
-      request({ amount: "1000000000" }),
-      facts({ spendableNhash: 1_500_000_000n }), // < amount + 2 HASH provision
+      request({ amount: amount.toString() }),
+      facts({ spendableNhash: amount + FEE_PROVISION_NHASH - 1n }),
     );
     expect(codes(reasons)).toContain("insufficient-balance");
+
+    // Exactly enough → clear. Pinned so a provision change cannot quietly
+    // start rejecting payments a wallet can afford.
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ amount: amount.toString() }),
+          facts({ spendableNhash: amount + FEE_PROVISION_NHASH }),
+        ),
+      ),
+    ).toEqual([]);
   });
 
   it("enrolment requires an existing, not-already-enrolled validator", () => {
     expect(
       codes(
         operatorPreflightReasons(
-          request({ variant: "register_participation", amount: "0" }),
+          request({ variant: "register_participation", valoper: VALOPER_OWNED, amount: "0" }),
           facts({ chainValidator: { exists: false, jailed: false }, validators: [] }),
         ),
       ),
@@ -305,11 +355,51 @@ describe("operator preflight predicates (M6.4 §2.4)", () => {
     expect(
       codes(
         operatorPreflightReasons(
-          request({ variant: "register_participation", amount: "0" }),
-          facts(),
+          request({ variant: "register_participation", valoper: VALOPER_OWNED, amount: "0" }),
+          facts({ validators: [{ ...enrolledEntry, valoper: VALOPER_OWNED }] }),
         ),
       ),
     ).toContain("already-enrolled");
+  });
+
+  // The contract's `register` checks is_operator BEFORE anything else: the
+  // caller's account and the valoper must share one bech32 payload. That is a
+  // LOCAL fact, so preflight restates it with no chain read at all.
+  it("enrolment requires the caller to be the valoper's own operator account", () => {
+    // A valoper whose payload is not this wallet's → blocked.
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "register_participation", valoper: VALOPER, amount: "0" }),
+          facts({ validators: [] }),
+        ),
+      ),
+    ).toEqual(["not-validator-operator"]);
+
+    // The wallet's OWN valoper, existing and unenrolled → clear.
+    expect(
+      codes(
+        operatorPreflightReasons(
+          request({ variant: "register_participation", valoper: VALOPER_OWNED, amount: "0" }),
+          facts({ validators: [] }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("enrolment is blocked at the contract's validator ceiling", () => {
+    const full = Array.from({ length: MAX_PROGRAM_VALIDATORS }, (_, i) => ({
+      ...enrolledEntry,
+      valoper: `${VALOPER}${i}`,
+    }));
+    const reasons = operatorPreflightReasons(
+      request({ variant: "register_participation", valoper: VALOPER_OWNED, amount: "0" }),
+      facts({ validators: full }),
+    );
+    expect(codes(reasons)).toContain("too-many-validators");
+    expect(reasons.find((r) => r.code === "too-many-validators")).toMatchObject({
+      max: MAX_PROGRAM_VALIDATORS,
+    });
   });
 
   it("unregistering requires enrolment AND the operator account", () => {

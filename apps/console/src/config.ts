@@ -18,7 +18,12 @@ export interface AppConfig {
   pollMedSecs: number;
   pollSlowSecs: number;
   staleAfterMisses: number;
-  gasPrice: string; // e.g. "1905nhash"
+  // NO `gasPrice`, deliberately. Provenance flat fees make a tx's cost a
+  // deterministic per-message amount that `Simulate` returns directly (see
+  // `src/tx/execute.tsx`), so there is no price to configure — and a knob here
+  // is an invitation to recompute `gas × price`, which the protocol REJECTS.
+  // Removed 2026-07-27 with the stale `1905nhash` it carried; when the §14.1
+  // extension-wallet adapter lands, take the fee from simulate verbatim.
   redemptionMarginBps: number; // display mirror of the contract constant
   devnetKeyMode: boolean;
   explorerTxBase: string;
@@ -51,7 +56,6 @@ export const config: AppConfig = Object.freeze({
   pollMedSecs: num(env.VITE_POLL_MED_SECS, 30),
   pollSlowSecs: num(env.VITE_POLL_SLOW_SECS, 300),
   staleAfterMisses: num(env.VITE_STALE_AFTER_MISSES, 3),
-  gasPrice: env.VITE_GAS_PRICE ?? "1905nhash",
   redemptionMarginBps: num(env.VITE_REDEMPTION_MARGIN_BPS, 50),
   devnetKeyMode: bool(env.VITE_DEVNET_KEY_MODE, false),
   explorerTxBase: env.VITE_EXPLORER_TX_BASE ?? "",

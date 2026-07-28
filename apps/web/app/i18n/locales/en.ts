@@ -378,6 +378,8 @@ export default {
   "tx.reason-purge-cooldown": "The cooldown has not elapsed. A purge becomes possible at {readyAt}.",
   "tx.reason-program-halted":
     "The program's fund-moving cranks are halted, so a purge cannot run right now.",
+  "tx.reason-too-many-validators":
+    "The program is at its limit of {max} enrolled validators, so no new one can enroll right now.",
   "tx.reconnect-to-sign": "Reconnect your wallet to sign — the session is active but the signing connection was lost.",
   "tx.status-signing": "Approve the transaction in your wallet…",
   "tx.view-explorer": "View on explorer",

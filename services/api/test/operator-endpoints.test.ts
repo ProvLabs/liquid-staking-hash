@@ -313,7 +313,12 @@ describe("operator CSV export (§14.11 pinned columns; [R3] freshness headers)",
       expect(res.headers.get("cache-control")).toBe("no-store");
 
       const lines = (await res.text()).trimEnd().split("\n");
-      expect(lines[0]).toBe("datetime_utc,block_height,epoch_index,payment_type,hash_amount,txhash");
+      // `nhash_amount`, NOT §14.11's proposed `hash_amount` — the served value
+      // is nhash base units, and the [R4] deviation names the column for what
+      // it holds so a spreadsheet total is not 10⁹× off.
+      expect(lines[0]).toBe(
+        "datetime_utc,block_height,epoch_index,payment_type,nhash_amount,txhash",
+      );
       expect(lines[0]).toBe(OPERATOR_PAYMENTS_CSV_COLUMNS.join(","));
       // Ascending by (height, msg_index) — a statement of fact reads forward.
       expect(lines[1]).toBe("2026-03-01T00:00:00.000Z,50,1,commission,100,P1");

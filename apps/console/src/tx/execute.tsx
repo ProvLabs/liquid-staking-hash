@@ -87,8 +87,16 @@ export function TxProvider({ children }: { children: ReactNode }) {
                 {pending.consequence}
               </div>
             )}
+            {/* §17 honesty: this said "simulated at gas × 1905nhash (×1.3)" —
+                a fee that was never computed (no simulate runs here), on a
+                basis the chain rejects. Under Provenance flat fees the cost is
+                a deterministic per-message amount the chain's own Simulate
+                returns; there is no gas × price math to state. Say what is
+                actually true until the §14.1 wallet adapter lands. */}
             <div className="muted" style={{ fontSize: 13 }}>
-              Fee: simulated at gas × {config.gasPrice} (×1.3). Mock mode does not broadcast.
+              Fee: not estimated here. Provenance charges a fixed per-message
+              fee, taken from the chain&rsquo;s simulate result when signing is
+              wired (§14.1).{config.mock ? " Mock mode does not broadcast." : ""}
             </div>
             <details className="disclosure">
               <summary className="muted" style={{ cursor: "pointer" }}>

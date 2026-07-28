@@ -981,8 +981,9 @@ Every response from either process carries the freshness envelope `{ data, meta:
 >   operator export — the **complete** history ascending (the 6.1
 >   completeness precedent: `limit`/`offset` bound only the JSON view), with
 >   the pinned columns `datetime_utc, block_height, epoch_index, payment_type,
->   hash_amount, txhash`, the formula-injection guard, and the [R3] freshness
->   headers.
+>   nhash_amount, txhash` (the [R4] §14.11 deviation: the served amount is
+>   nhash base units, so the column is named for base units), the
+>   formula-injection guard, and the [R3] freshness headers.
 >
 > **A second boundary, enforced as a mechanism.** These routes carry an
 > ownership check the other personal routes do not need: the address→valoper
@@ -1121,7 +1122,7 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 
 1. **Build** client-side: typed Provenance messages (vault `MsgSwapIn` / `MsgSwapOut` `[VERIFY §14.2: exact msg names/fields on the deployed vault module]`; group `MsgSubmitProposal` / `MsgVote` / `MsgExec`).
 2. **Preflight** from server-supplied context: vault not paused, amount within min/max, balance sufficient (incl. fee), vesting-lock check for deposits; disabled controls always carry the reason (the console's R1 rule adopted verbatim).
-3. **Simulate** for gas; fee = gas × gas price with adjustment `[VERIFY: reuse console §14.3 result]`.
+3. **Simulate**, and use the returned fee **verbatim** — `[RESOLVED 2026-07-27, Ira]`, replacing the earlier `[VERIFY §14.3]` "reuse the console's result" marker. Under Provenance's flat-fee model the required fee is a deterministic **per-message** cost (`x/flatfees` `CalculateMsgCost`), unrelated to gas consumed, and `Simulate` returns **that fee amount** in the gas-wanted field — which is why the chain's guidance is a gas price of exactly **1nhash** (provenance [`internal/antewrapper/utils.go`](https://github.com/provenance-io/provenance/blob/5e8f6b621e0d04dcd5531f56337d554cfb01aac1/internal/antewrapper/utils.go#L126) `GetGasWanted`; the antewrapper then substitutes a real gas limit for execution). Therefore: the price is 1nhash and is **not a tunable** — a tx priced off the old `price × gas estimate` model is **rejected** by the protocol, deliberately, so no client re-imports that assumption; there is **no adjustment buffer**, since padding a deterministic cost buys no out-of-gas headroom (the number is not gas); and `gas_limit` equals the fee amount, as captured devnet txs show (`fee: 2nhash`, `gas_limit: "2"`, ~201k gas actually consumed). Gated by `apps/web/test/tx-fee.test.ts`.
 4. **Confirm:** consumer-worded consequence summary + the exact message JSON behind a disclosure + fee. Warning tier for redemptions ("shares escrow now; guaranteed release date D; typically sooner") and governance execution; **danger-tier confirmation for the program-ops now originated in the App** (halt/resume, pause/unpause, config change, bridge config, jailed-validator purge — §14.6 decided), with the decoded action and its consequence stated before signing.
 5. **Sign & broadcast** via the wallet; **track** inclusion; toast lifecycle (sonner) with explorer link; on success the affected live reads refresh and an indexer fast-poll reconciles the user's history within seconds (an optimistic pending row bridges the gap, clearly marked pending).
 
@@ -1142,8 +1143,12 @@ Incidents are **computed from indexed facts, never hand-entered**: contract halt
 > disclosure equals the decoded sign-doc bytes). Preflight runs
 > server-side from live reads with machine-readable reasons
 > (`test/tx-preflight.test.ts` drives the reject-never-clamp boundary
-> matrix); simulation prices fee = gas × 1905 nhash × 1.3 in integer math
-> (the console's basis, still `[VERIFY §14.3]`). **Broadcast is the §12.3
+> matrix); simulation uses the chain's returned fee **verbatim** at a
+> **1 nhash** price, with **no adjustment buffer** and `gas_limit` equal to the
+> fee amount — the deterministic flat-fee basis, `[RESOLVED 2026-07-27, Ira]`
+> and pinned by `test/tx-fee.test.ts`. A price other than 1 nhash, or any
+> padding of the returned figure, is a defect: the protocol rejects the former
+> and the latter inflates a deterministic cost for nothing. **Broadcast is the §12.3
 > guarded relay** (amendment below); tracking polls inclusion through the
 > web tier, then fast-polls `/api/v1/transactions` under a Decision-2
 > assertion until the indexed row lands and the pending row drops (bounded
@@ -1426,7 +1431,7 @@ Protocol and platform facts this design must respect (chain constraints identica
 11. **[DECIDED 2026-07-15, Ira] CSV export & cost-basis method.** The export is a **statement of fact, not a computed tax position**, and splits into two role-scoped exports:
     - **Holder export (§8.2):** raw per-event rows — one per `SwapIn`/`SwapOut` — carrying the **share price in HASH (NAV) at the event**, so the holder (or their accountant) does their own cost-basis math. Proposed columns: `datetime_utc`, `block_height`, `event_type` (swap_in | swap_out | refund | transfer_in | transfer_out), `nvhash_amount`, `hash_amount`, `nav_hash_per_nvhash` (share price in HASH at event), `txhash`. No FIFO/average lot-matching is computed in the export.
     - **Validator/operator export (§8.6 `/validators/mine`):** a record of **commission/TIP payment amounts and times** so a participating validator has a complete fact set for their own tax analysis. Proposed columns: `datetime_utc`, `block_height`, `epoch_index`, `payment_type` (commission | tip), `hash_amount`, `txhash`.
-      **[DELIVERED 2026-07-27, PR 6.4 commit B/C]** exactly those six columns, in that order, over the COMPLETE payment history ascending (pagination bounds the JSON view only), with the formula-injection guard and the [R3] freshness headers, proxied to the browser by the session-gated `/operator/export?valoper=`. Two recorded facts: `epoch_index` is **empty** when the crediting epoch has not closed yet (never a guessed epoch — see the §9.1 `operator_payments` note), and the row's `payer` is served in the JSON view but deliberately **not** in the CSV, since payment is permissionless and the payer is often not the operator — adding that column is a §14.11 amendment, not an implementation choice.
+      **[DELIVERED 2026-07-27, PR 6.4 commit B/C]** exactly those six columns, in that order, over the COMPLETE payment history ascending (pagination bounds the JSON view only), with the formula-injection guard and the [R3] freshness headers, proxied to the browser by the session-gated `/operator/export?valoper=`. Three recorded facts: `epoch_index` is **empty** when the crediting epoch has not closed yet (never a guessed epoch — see the §9.1 `operator_payments` note); the row's `payer` is served in the JSON view but deliberately **not** in the CSV, since payment is permissionless and the payer is often not the operator — adding that column is a §14.11 amendment, not an implementation choice; and **[R4] the amount column ships as `nhash_amount`, not the `hash_amount` proposed above.** The value served is the payment's nhash **base units**, so a column named for whole HASH would read 10⁹× too large in the spreadsheet this export exists for — and it would contradict `/validators/mine`, which formats the same fact to whole HASH. The holder export above carries the same correction (it serves `nhash`/`shares` for the proposed `hash_amount`/`nvhash_amount`), so base-unit content under a base-unit column name is the settled convention for both exports. Gated by the operator CSV assertions in `services/api/test/operator-endpoints.test.ts`.
     - **Displayed** cost basis / accrued gain (§8.2, §9.5.1) uses **average-cost** (not FIFO): average deposit cost per share × remaining shares; accrued gain = current shares × current NAV − remaining average-cost basis, plus realized gains on completed redemptions. The on-screen figure is labeled as an aid; the raw-event export is the authoritative record.
 12. **[DECIDED 2026-07-15, Ira] Time-to-payout display threshold & epoch-metric cold-start.**
     - **Typical time-to-payout (§9.5.3):** show the median/p90 only once the cohort has **≥ 10 terminal (matured/expedited) redemption requests**; below that, the flow shows the **60-day guarantee alone** as the default/fallback. The statistic is physically bounded — a request cannot resolve faster than the ~21-day unbonding period nor slower than the 60-day ceiling — so the displayed "typical" settles into a **21–60-day band**; copy never implies precision or a range outside what the mechanism can deliver.

@@ -45,8 +45,24 @@ End-user web interface. Production quality.
   session-gated; the browser never talks to the LCD or the API). Broadcast
   is the §12.3 **guarded signed-tx relay** — closed msg allowlist, sole
   signer must derive the session address, size + rate caps
-  (`test/broadcast-guard.test.ts`). Fee basis mirrors the console
-  (1905 nhash × 1.3, `[VERIFY §14.3]`).
+  (`test/broadcast-guard.test.ts`). **Fee basis — read this before touching
+  `simulate.server.ts`.** Under Provenance flat fees the required fee is a
+  deterministic PER-MESSAGE cost, unrelated to gas consumed, and `Simulate`
+  returns **that fee amount** in the gas-wanted field — hence the chain's
+  1nhash guidance (provenance `internal/antewrapper/utils.go` `GetGasWanted`;
+  the antewrapper substitutes a real gas limit for execution). So the simulate
+  result is used **verbatim**: price 1nhash (**not a tunable** — the protocol
+  rejects a tx priced off the old `price × gas estimate` model, on purpose),
+  **no adjustment buffer** (padding a deterministic cost buys no out-of-gas
+  headroom, because the number is not gas), and `gasLimit == amount`, matching
+  captured devnet txs (`fee: 2nhash`, `gas_limit: "2"`, ~201k gas consumed).
+  `FEE_PROVISION_NHASH` is only preflight's pre-simulation reserve and stays
+  small, since an inflated reserve reports `insufficient-balance` for
+  affordable transactions. Pinned by `test/tx-fee.test.ts` — this shipped wrong
+  (1905nhash × 1.3, inherited from the pre-flat-fee console) precisely because
+  no test held it. `[RESOLVED 2026-07-27, Ira]`, retiring `[VERIFY §14.3]`.
+  `apps/console` was corrected in the same change (its `VITE_GAS_PRICE` knob is
+  gone — see its `CLAUDE.md` and console-spec §7/§10.2).
 - **Transacting pages** (PR 5.3, app-spec §8.3; PR 5.4, §8.4): pages drive
   the lifecycle through **`useTxFlow`** (`app/tx/use-tx-flow.ts`) —
   preflight → simulate → confirm → sign → broadcast → track — never calling
@@ -131,6 +147,20 @@ End-user web interface. Production quality.
   `test/tx-confirm.test.ts` (the disclosure equals the signed bytes for every
   variant), `test/tx-preflight.test.ts` (the predicate matrix; note payments
   carry NO operator check — paying is permissionless).
+  **The preflight fact rule:** every fact in `OperatorPreflightFacts` is
+  nullable (a failed live read), and a variant MUST short-circuit to
+  `chain-unavailable` on every fact IT consumes — `validators`/`chainValidator`
+  up front for all variants, `spendableNhash` in the payment branch,
+  `jailReports` + `halted` in the purge branch. Skipping a check on a null
+  instead returns an empty (green) reason list for an action the contract then
+  rejects, which is the "silently hiding it" the module forbids; a variant is
+  equally forbidden from blocking on a fact it does NOT consume. Both
+  directions are gated in `test/tx-preflight.test.ts`. The
+  `register_participation` operator check needs no chain read: the contract's
+  `is_operator` compares the decoded bech32 payloads of caller and valoper, so
+  `sameBech32Payload` (in `lib/adr36-verify.server.ts`, which holds the app's
+  bech32 primitives) restates it locally. `MAX_PROGRAM_VALIDATORS` mirrors the
+  contract's `MAX_VALIDATORS` and moves with it in the same change.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

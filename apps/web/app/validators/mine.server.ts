@@ -357,6 +357,7 @@ export async function loadOperatorViewData(
   const operatorAccount = summaryRow?.operator ?? session.address;
   const payments: OperatorPaymentRowVM[] = (paymentsEnv?.data ?? []).map((row) => ({
     time: row.occurred_at,
+    msgIndex: row.msg_index,
     paymentType: row.payment_type,
     amountHash: formatBaseAmount(BigInt(row.amount), HASH_EXPONENT, 4),
     epochIndex: row.epoch_index,

@@ -71,7 +71,10 @@ export function PaymentHistory({
             </thead>
             <tbody>
               {payments.map((row) => (
-                <tr key={`${row.txhash}-${row.time}`} className="border-b last:border-0">
+                // `(txhash, msgIndex)` — NOT txhash+time: one tx can carry
+                // several payments (paying is permissionless), and they share
+                // both txhash and the per-tx block time.
+                <tr key={`${row.txhash}-${row.msgIndex}`} className="border-b last:border-0">
                   <td className="py-2 pr-4 whitespace-nowrap">{row.time.slice(0, 10)}</td>
                   <td className="py-2 pr-4">
                     {t(

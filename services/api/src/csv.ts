@@ -50,13 +50,21 @@ export function csvField(value: string): string {
  *
  * `epoch_index` is empty when the crediting epoch has not closed yet — an empty
  * cell, never a guessed epoch (app-spec §9.1).
+ *
+ * The amount column is `nhash_amount`, not §14.11's proposed `hash_amount`: the
+ * value served is `OperatorPaymentRow.amount`, which is nhash BASE UNITS, and a
+ * column named for whole HASH holding base units reads a billion times too
+ * large in the spreadsheet this export exists for. The holder export made the
+ * same correction (§14.11 proposed `hash_amount`/`nvhash_amount`; it serves
+ * `nhash`/`shares`), so base-unit content under a base-unit name is the
+ * established convention here. Recorded as the [R4] §14.11 deviation.
  */
 export const OPERATOR_PAYMENTS_CSV_COLUMNS = [
   "datetime_utc",
   "block_height",
   "epoch_index",
   "payment_type",
-  "hash_amount",
+  "nhash_amount",
   "txhash",
 ] as const;
 

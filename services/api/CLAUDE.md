@@ -94,7 +94,14 @@ Query API over the indexer's data store.
   and asserts an unowned valoper and a nonexistent one are indistinguishable.
   `?valoper=` is bounded by `bech32ValoperSchema` (the `valoper` HRP required).
   `payer` rides the JSON row (permissionless payment — the operator's audit
-  case) but NOT the CSV, whose six columns §14.11 pins; `payment.epoch_index`
+  case) but NOT the CSV, whose six columns §14.11 pins — with the **[R4]
+  deviation** that the amount column is `nhash_amount`, not §14.11's proposed
+  `hash_amount`: the served value is nhash BASE UNITS, so a whole-HASH column
+  name would read 10⁹× high and contradict `/validators/mine`, which formats
+  the same fact to whole HASH. Base-unit content under a base-unit column name
+  is the convention for both exports (the holder CSV serves `nhash`/`shares`
+  for the same reason). A CSV column that renames a unit renames it in the
+  spec's §14.11 delivery note in the same change; `payment.epoch_index`
   is derived at read time (`paymentEpochIndex` over `epochBoundariesAsc`, null
   while the crediting epoch is open) because the indexer cannot know it at
   ingest. The `format=csv` export is the COMPLETE history ascending (the 6.1

@@ -112,6 +112,15 @@ export interface OperatorEpochRowVM {
 
 export interface OperatorPaymentRowVM {
   time: string;
+  /**
+   * The payment's index within its transaction. Carried because ONE tx can
+   * hold several payments — paying is permissionless, so an external batched
+   * tx (two `pay_commission`s, or a commission plus a tip) is lawful — and
+   * those rows share `txhash` AND `time` (block time is per-tx). `(txhash,
+   * msgIndex)` is the identity the indexer and the API row already key on, so
+   * it is what identifies a row here too.
+   */
+  msgIndex: number;
   paymentType: "commission" | "tip";
   amountHash: string;
   /** Null while the crediting epoch is still open — rendered "pending". */

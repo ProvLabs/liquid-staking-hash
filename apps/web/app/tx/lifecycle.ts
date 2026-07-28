@@ -41,7 +41,8 @@ export type PreflightReason =
   | { code: "validator-not-jailed" }
   | { code: "no-jail-report" }
   | { code: "purge-cooldown"; readyAtIso: string }
-  | { code: "program-halted" };
+  | { code: "program-halted" }
+  | { code: "too-many-validators"; max: number };
 
 export type FailureStage = "simulate" | "sign" | "broadcast" | "execute";
 

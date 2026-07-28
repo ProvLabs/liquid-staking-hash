@@ -61,6 +61,8 @@ export function reasonText(
       return t(locale, "tx.reason-purge-cooldown", { readyAt: reason.readyAtIso });
     case "program-halted":
       return t(locale, "tx.reason-program-halted");
+    case "too-many-validators":
+      return t(locale, "tx.reason-too-many-validators", { max: String(reason.max) });
   }
 }
 
