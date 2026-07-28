@@ -307,6 +307,20 @@ Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
   lives only in the test process (`e2e-live/signer.ts`); `check:bundle`
   scans for its sentinel so it can never ship. Runs on the stack schedule,
   not in the offline CI lane.
+  **`E2E_LIVE_OPERATOR_KEY` (optional, M6.4)** — the VALIDATOR's own operator
+  key, which unlocks `operator.spec.ts`'s enroll/unregister leg. The funded
+  throwaway key cannot cover it: the contract's `is_operator` compares the
+  bech32 payloads of caller and valoper, so enrolment is authorization-gated,
+  not funding-gated. Absent, that leg skips loudly and the permissionless
+  payment legs still run — which is the honest test of preflight applying no
+  operator check to payments.
+  **Re-run trap, learned the hard way:** the compose `web` service builds at
+  container START, so a long-running stack serves a stale bundle. A live run
+  against it can pass for the wrong reason — the M6.4 guard assertions "passed"
+  against a build where `MsgExecuteContract` was not in the allowlist at all,
+  a first-level rejection indistinguishable from the deep guard's. Restart the
+  service (`docker compose --profile app --profile db restart web` from
+  `infra/dev/`) before trusting a green live run.
 - `test:e2e` — production build + Playwright against `react-router-serve`
   with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
   fully offline). Includes the axe accessibility scans on both themes (route
