@@ -109,6 +109,28 @@ End-user web interface. Production quality.
   (BigInt goldens for the estimate; a missing input yields null, never 0),
   `test/session-scope.test.ts` (the export joins it), offline
   `e2e/validators-mine.spec.ts`, and `/validators/mine` in the axe route list.
+- **Operator flows + the two-level broadcast allowlist** (PR 6.4 commit D,
+  app-spec §10.3/§12.3/§14.6): the five operator actions run through the
+  **unmodified** 5.2 lifecycle (`useTxFlow`) as `MsgExecuteContract` intents;
+  `app/components/validators/mine/operator-flows.tsx` is the only UI, and the
+  enroll flow is also offered on the non-operator state (an operator becomes
+  one by enrolling). **THE convention to know: `ALLOWED_MSG_TYPE_URLS` is
+  TWO-LEVEL.** `MsgExecuteContract` is in it only because
+  `guardOperatorExecute` (in `app/tx/build.ts`, wired in
+  `broadcast.server.ts`) runs for that type URL alone — on its own the entry
+  would carry any call to any contract. The guard checks the configured
+  contract, a single top-level key from the closed six-variant operator set
+  (no admin/keeper variant), the per-variant body, funds discipline, and
+  finally **canonical byte equality** with `operatorInnerJson`, which is what
+  keeps it out of a parser arms race. **Extending either level — a new type
+  URL or a new variant — is a design-review event, never an edit.** Gates:
+  `test/broadcast-guard.test.ts` (the rejection matrix, incl. every admin
+  variant, mixed batches, duplicate proto fields, and non-canonical
+  encodings), `test/tx-operator-build.test.ts` (byte-goldens against three
+  captured devnet txs — the proof the canonical form is the accepted form),
+  `test/tx-confirm.test.ts` (the disclosure equals the signed bytes for every
+  variant), `test/tx-preflight.test.ts` (the predicate matrix; note payments
+  carry NO operator check — paying is permissionless).
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

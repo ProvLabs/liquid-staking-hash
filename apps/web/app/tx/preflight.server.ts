@@ -15,13 +15,15 @@ import {
   AuthClient,
   BankClient,
   LcdClient,
+  NvhashContractClient,
+  StakingClient,
   VaultClient,
   type FetchLike,
 } from "@nvhash/chain-client";
 import { z } from "zod";
 
 import type { WebConfig } from "~/config/config.server";
-import { OPERATOR_VARIANTS } from "./build";
+import { OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM } from "./build";
 import type { PreflightReason } from "./lifecycle";
 
 /**
@@ -285,4 +287,87 @@ export function operatorPreflightReasons(
     }
   }
   return reasons;
+}
+
+/**
+ * Run the operator preflight for a session-scoped action. Same contract as
+ * `runPreflight`: the acting address comes from the SESSION, every read is
+ * live, and a failed read blocks with `chain-unavailable` rather than a guess.
+ */
+export async function runOperatorPreflight(
+  config: WebConfig,
+  address: string,
+  request: OperatorPreflightRequest,
+  deps: PreflightDeps = {},
+): Promise<PreflightContext> {
+  const lcd = new LcdClient(config.lcdUrl, deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {});
+  const contract = new NvhashContractClient(lcd, config.contractAddress);
+  const staking = new StakingClient(lcd);
+  const bank = new BankClient(lcd);
+  const auth = new AuthClient(lcd);
+
+  const [validators, jailReports, epochStatus, stakingSet, account, spendable] = await Promise.all([
+    contract.validators().catch(() => null),
+    contract.jailReports().catch(() => null),
+    contract.epochStatus().catch(() => null),
+    staking.validators().catch(() => null),
+    auth.account(address).catch(() => null),
+    bank.spendableBalances(address).catch(() => null),
+  ]);
+
+  const chainValidator =
+    stakingSet === null
+      ? null
+      : (() => {
+          const found = stakingSet.validators.find((v) => v.operatorAddress === request.valoper);
+          return { exists: found !== undefined, jailed: found?.jailed ?? false };
+        })();
+
+  const reasons = operatorPreflightReasons(request, {
+    address,
+    validators:
+      validators === null
+        ? null
+        : validators.map((v) => ({
+            valoper: v.valoper,
+            operator: v.operator,
+            jailed: v.jailed,
+            commissionDue: v.commissionDue,
+            commissionPaid: v.commissionPaid,
+          })),
+    jailReports:
+      jailReports === null
+        ? null
+        : jailReports.map((r) => ({
+            valoper: r.valoper,
+            purgeReadyAtSeconds: r.purgeReadyAtSeconds,
+          })),
+    chainValidator,
+    halted: epochStatus?.halted ?? null,
+    spendableNhash:
+      spendable === null
+        ? null
+        : (spendable.balances.find((c) => c.denom === PROGRAM_UNDERLYING_DENOM)?.amount ?? 0n),
+    nowSeconds: Math.floor(Date.now() / 1000),
+  });
+
+  if (account === null && !reasons.some((r) => r.code === "chain-unavailable")) {
+    reasons.push({ code: "account-missing" });
+  }
+
+  return {
+    reasons,
+    signer:
+      account === null
+        ? null
+        : {
+            accountNumber: account.accountNumber.toString(),
+            sequence: account.sequence.toString(),
+            chainId: config.chainId,
+          },
+    balance: (
+      spendable?.balances.find((c) => c.denom === PROGRAM_UNDERLYING_DENOM)?.amount ?? 0n
+    ).toString(),
+    denom: PROGRAM_UNDERLYING_DENOM,
+  };
 }

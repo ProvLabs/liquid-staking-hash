@@ -1,14 +1,17 @@
+import { useState } from "react";
+
 import { CommissionBanner } from "~/components/validators/mine/commission-banner";
 import { DelegationChart } from "~/components/validators/mine/delegation-chart";
 import { EpochHistory } from "~/components/validators/mine/epoch-history";
 import { NetBenefitPanel } from "~/components/validators/mine/net-benefit-panel";
+import { OperatorFlows } from "~/components/validators/mine/operator-flows";
 import { PaymentHistory } from "~/components/validators/mine/payment-history";
+import { StandingHeader } from "~/components/validators/mine/standing-header";
 import { getBootedConfig } from "~/config/config.server";
-import { t } from "~/i18n";
+import { t, type Locale } from "~/i18n";
 import { detectRoles } from "~/lib/services/roles.server";
 import { getSessionContext } from "~/lib/services/session.server";
 import { loadOperatorViewData } from "~/validators/mine.server";
-import { StandingHeader } from "~/components/validators/mine/standing-header";
 import { useLocale } from "~/root";
 import type { Route } from "./+types/validators-mine";
 
@@ -27,7 +30,9 @@ const VALOPER_RE = /^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}
  *   roles degraded       → an explicit "we could not check" note; the App never
  *                          renders a privileged surface from a failed read
  *   connected non-operator → the plain "this address does not operate a program
- *                          validator" state with the enrollment path
+ *                          validator" state, WITH the enroll entry (§14.6): an
+ *                          operator becomes one by enrolling, so this state is
+ *                          a starting point, not a dead end.
  *
  * The acting address comes ONLY from the session (the standing session-scope
  * gate); `?valoper=` selects among the operator's own validators and is
@@ -40,12 +45,17 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const roles = await detectRoles(config, session.address);
   if (roles.degraded) return { state: "degraded" } as const;
-  if (!roles.operator) return { state: "not-operator" } as const;
+  if (!roles.operator) {
+    return { state: "not-operator", contractAddress: config.contractAddress } as const;
+  }
 
   const raw = new URL(request.url).searchParams.get("valoper");
   const valoper = raw !== null && VALOPER_RE.test(raw) ? raw : null;
   const data = await loadOperatorViewData(config, { address: session.address }, { valoper });
-  return { state: "operator", data } as const;
+  // The contract address is client-safe config (§7 allowlist); the client needs
+  // it to build the plan for the confirm disclosure. The relay's deep guard
+  // re-checks it against config server-side regardless (§2.5 condition 1).
+  return { state: "operator", data, contractAddress: config.contractAddress } as const;
 }
 
 export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
@@ -78,11 +88,12 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
           {t(locale, "operator.not-operator")}
         </p>
         <p className="text-sm text-muted-foreground">{t(locale, "operator.enroll-hint")}</p>
+        <NotOperatorEnroll locale={locale} contractAddress={loaderData.contractAddress} />
       </Shell>
     );
   }
 
-  const { data } = loaderData;
+  const { data, contractAddress } = loaderData;
 
   return (
     <Shell title={t(locale, "operator.title")}>
@@ -125,6 +136,17 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
             </>
           ) : null}
 
+          {/* Actions render independently of the INDEXED plane: an operator
+              must be able to clear arrears even when history is unavailable. */}
+          {data.selectedValoper !== null ? (
+            <OperatorFlows
+              locale={locale}
+              valoper={data.selectedValoper}
+              contractAddress={contractAddress}
+              ownedValopers={data.owned.map((v) => v.valoper)}
+            />
+          ) : null}
+
           {data.personalReadsAvailable ? (
             <>
               {data.netBenefit !== null ? (
@@ -139,11 +161,7 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
                   valoper={data.selectedValoper}
                 />
               ) : null}
-              <EpochHistory
-                locale={locale}
-                epochs={data.epochs}
-                truncated={data.epochsTruncated}
-              />
+              <EpochHistory locale={locale} epochs={data.epochs} truncated={data.epochsTruncated} />
             </>
           ) : (
             <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
@@ -153,6 +171,45 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
         </>
       )}
     </Shell>
+  );
+}
+
+/**
+ * The enroll entry on the non-operator state (§14.6). The valoper is typed in
+ * and shape-bounded here; the CONTRACT enforces that the signer is that
+ * validator's operator account, so this is an affordance, never a claim of
+ * authority — and preflight says so in advance when it is not.
+ */
+function NotOperatorEnroll({
+  locale,
+  contractAddress,
+}: {
+  locale: Locale;
+  contractAddress: string;
+}) {
+  const [valoper, setValoper] = useState("");
+  const trimmed = valoper.trim();
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1 text-sm">
+        <span>{t(locale, "operator.enroll-valoper-label")}</span>
+        <input
+          className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+          value={valoper}
+          onChange={(event) => setValoper(event.target.value)}
+          placeholder="tpvaloper1…"
+        />
+      </label>
+      {VALOPER_RE.test(trimmed) ? (
+        <OperatorFlows
+          locale={locale}
+          valoper={trimmed}
+          contractAddress={contractAddress}
+          ownedValopers={[]}
+          only={["register_participation"]}
+        />
+      ) : null}
+    </div>
   );
 }
 

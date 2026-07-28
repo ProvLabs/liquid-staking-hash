@@ -8,17 +8,37 @@ import { z } from "zod";
 import { getBootedConfig } from "~/config/config.server";
 import { requireSession } from "~/lib/services/session.server";
 import { AuthClient, LcdClient } from "@nvhash/chain-client";
-import type { TxIntent } from "~/tx/build";
+import { OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM, type TxIntent } from "~/tx/build";
 import { simulateIntent } from "~/tx/simulate.server";
 import type { Route } from "./+types/tx-simulate";
+
+/** base64 33-byte compressed secp256k1 from the connected wallet. */
+const pubkeySchema = z.string().length(44).regex(/^[A-Za-z0-9+/]+={0,2}$/);
+const valoperSchema = z
+  .string()
+  .max(90)
+  .regex(/^[a-z]{1,10}valoper1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/);
 
 const bodySchema = z.object({
   kind: z.enum(["swap_in", "swap_out"]),
   amount: z.string().regex(/^[0-9]{1,39}$/),
   denom: z.string().min(1).max(64),
-  /** base64 33-byte compressed secp256k1 from the connected wallet. */
-  pubkey: z.string().length(44).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  pubkey: pubkeySchema,
   redeemDenom: z.string().max(64).default(""),
+});
+
+/** M6.4 operator actions: a separate bounded schema, never a widened one. The
+ * client chooses the variant, its validator and the amount; the SENDER and the
+ * CONTRACT are filled server-side, so it cannot name another signer or a
+ * different contract. */
+const operatorBodySchema = z.object({
+  kind: z.literal("operator"),
+  variant: z.enum(OPERATOR_VARIANTS),
+  valoper: valoperSchema,
+  claimantValoper: valoperSchema.nullable().default(null),
+  amount: z.string().regex(/^[0-9]{1,39}$/).default("0"),
+  denom: z.string().min(1).max(64).default(PROGRAM_UNDERLYING_DENOM),
+  pubkey: pubkeySchema,
 });
 
 export async function action({ request }: Route.ActionArgs) {
@@ -27,12 +47,14 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const config = await getBootedConfig();
   const session = await requireSession(config, request);
-  let body;
-  try {
-    body = bodySchema.parse(await request.json());
-  } catch {
+  const payload: unknown = await request.json().catch(() => null);
+
+  const operator = operatorBodySchema.safeParse(payload);
+  const swap = operator.success ? null : bodySchema.safeParse(payload);
+  if (!operator.success && (swap === null || !swap.success)) {
     return Response.json({ error: "invalid request" }, { status: 400 });
   }
+  const pubkey = operator.success ? operator.data.pubkey : swap!.data!.pubkey;
 
   const lcd = new LcdClient(config.lcdUrl);
   const account = await new AuthClient(lcd).account(session.address);
@@ -43,24 +65,34 @@ export async function action({ request }: Route.ActionArgs) {
     chainId: config.chainId,
     accountNumber: account.accountNumber,
     sequence: account.sequence,
-    pubkeyBase64: body.pubkey,
+    pubkeyBase64: pubkey,
   };
-  const intent: TxIntent =
-    body.kind === "swap_in"
+  const intent: TxIntent = operator.success
+    ? {
+        kind: "operator",
+        variant: operator.data.variant,
+        sender: session.address,
+        contractAddress: config.contractAddress,
+        valoper: operator.data.valoper,
+        claimantValoper: operator.data.claimantValoper,
+        amount: BigInt(operator.data.amount),
+        denom: operator.data.denom,
+      }
+    : swap!.data!.kind === "swap_in"
       ? {
           kind: "swap_in",
           owner: session.address,
           vaultAddress: config.vaultAddress,
-          amount: BigInt(body.amount),
-          denom: body.denom,
+          amount: BigInt(swap!.data!.amount),
+          denom: swap!.data!.denom,
         }
       : {
           kind: "swap_out",
           owner: session.address,
           vaultAddress: config.vaultAddress,
-          amount: BigInt(body.amount),
-          denom: body.denom,
-          redeemDenom: body.redeemDenom,
+          amount: BigInt(swap!.data!.amount),
+          denom: swap!.data!.denom,
+          redeemDenom: swap!.data!.redeemDenom,
         };
   try {
     const result = await simulateIntent(config, intent, signer);

@@ -585,6 +585,57 @@ export default {
   "operator.paid-by-other": "(not your operator account)",
   "operator.epoch-pending": "pending",
 
+  // Operator ACTIONS (§14.6 flows). Confirm copy restates the CONTRACT's
+  // mechanics from its msg.rs doc comments — the counter-intuitive facts
+  // (commission carries, TIP does not, purge is two-phase) are the ones an
+  // operator most needs before signing.
+  "operator.actions-title": "Actions",
+  "operator.actions-caption":
+    "Each action is built, previewed and signed by your wallet. The exact message is shown before you sign; the contract, not this page, decides whether it succeeds.",
+  "operator.actions-connect": "Connect your wallet to take an action on this validator.",
+  "operator.flow-pay-commission": "Pay commission",
+  "operator.flow-pay-tip": "Pay TIP",
+  "operator.flow-enroll": "Enroll validator",
+  "operator.flow-unregister": "Withdraw from program",
+  "operator.flow-report-jailed": "Report jailed",
+  "operator.flow-purge-jailed": "Purge jailed",
+  "operator.amount-label": "Amount (HASH)",
+  "operator.amount-invalid": "Enter an amount as a plain decimal, e.g. 12.5",
+  "operator.claimant-label": "Claimant validator (optional)",
+  "operator.claimant-placeholder": "leave empty to unbond the full delegation",
+  "operator.claimant-caption":
+    "With a claimant you operate, the program redelegates up to that validator's headroom instead of unbonding everything. It appears in the exact message below before you sign.",
+  "operator.review-action": "Review action",
+  "operator.enroll-valoper-label": "Validator operator address to enroll",
+
+  "operator.confirm-pay-commission-1":
+    "This payment is NON-REFUNDABLE. Once signed, it cannot be returned.",
+  "operator.confirm-pay-commission-2":
+    "Paying more than is currently accrued is not wasted: program commission is cumulative, so the excess prepays future accrual and carries forward.",
+  "operator.confirm-pay-commission-3":
+    "The funds are held by the contract and swept into vault principal at the next epoch, raising NAV for every holder.",
+  "operator.confirm-pay-tip-1":
+    "A TIP credits the CURRENT epoch only and resets when that epoch completes — unlike commission, it does not carry forward.",
+  "operator.confirm-pay-tip-2":
+    "It is NON-REFUNDABLE, and sweeps into vault principal at the next epoch.",
+  "operator.confirm-enroll-1":
+    "Enrolling makes this validator eligible for program delegation from the next epoch, assessed live against the uptime and commission rules.",
+  "operator.confirm-enroll-2":
+    "Only the validator's own operator account can enroll it, and the contract checks that on execution.",
+  "operator.confirm-unregister-1":
+    "The program's stake on this validator is UNBONDED at the next epoch and redeployed to others.",
+  "operator.confirm-unregister-2":
+    "Re-enrolling later is possible, but the stake does not return automatically — it is redeployed by the normal epoch planning.",
+  "operator.confirm-report-1":
+    "Reporting does NOT move any stake. It records the first observation that this validator is jailed and starts the cooldown before a purge becomes possible.",
+  "operator.confirm-report-2":
+    "If the validator unjails before the cooldown ends, the contract clears the report on its next observation and no purge happens.",
+  "operator.confirm-purge-1":
+    "This MOVES the program's stake off the validator: redelegated up to a claimant's headroom if you named one, otherwise unbonded in full.",
+  "operator.confirm-purge-2":
+    "It only succeeds if the validator is still jailed and the cooldown from the report has elapsed.",
+  "operator.confirm-purge-3": "Stake that is unbonded is unavailable until the unbonding period ends.",
+
   "operator.epochs-title": "Per-epoch history",
   "operator.epochs-caption":
     "Commission accrued, paid, and due are cumulative lifetime totals at each epoch; TIP is the credit for that epoch alone.",

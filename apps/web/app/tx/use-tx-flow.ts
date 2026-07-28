@@ -17,6 +17,7 @@ import {
   encodeTxRaw,
   intentSigner,
   type Fee,
+  type OperatorVariant,
   type SignerContext,
   type TxIntent,
 } from "./build";
@@ -33,7 +34,18 @@ import { trackTransaction } from "./track";
  * session + config server-side, so the client never names them. */
 export type FlowIntentInput =
   | { kind: "swap_in"; amount: bigint; denom: string }
-  | { kind: "swap_out"; amount: bigint; denom: string; redeemDenom: string };
+  | { kind: "swap_out"; amount: bigint; denom: string; redeemDenom: string }
+  /** M6.4 operator actions. The client names the variant, its validator and
+   * the amount; the SENDER and the CONTRACT are supplied by the caller from
+   * session + config, and re-checked server-side on every hop. */
+  | {
+      kind: "operator";
+      variant: OperatorVariant;
+      valoper: string;
+      claimantValoper: string | null;
+      amount: bigint;
+      denom: string;
+    };
 
 interface PreflightResponse {
   reasons: PreflightReason[];
@@ -60,7 +72,9 @@ export interface TxFlow {
   state: TxState;
   /** Run preflight → simulate → reach the confirm step (or a blocked/failed
    * state). Safe to call again after an edit; resets any prior terminal. */
-  begin(input: FlowIntentInput, owner: string, vaultAddress: string): Promise<void>;
+  /** `target` is the vault address for swaps, the CONTRACT address for
+   * operator actions — both re-checked server-side by the relay guard. */
+  begin(input: FlowIntentInput, owner: string, target: string): Promise<void>;
   /** Accept the confirm dialog: sign → broadcast → track. */
   confirm(): Promise<void>;
   /** Cancel the confirm dialog (returns to idle). */
@@ -74,9 +88,21 @@ export function useTxFlow(): TxFlow {
   const { signDirect, pubkeyBase64 } = useWallet();
 
   const begin = useCallback(
-    async (input: FlowIntentInput, owner: string, vaultAddress: string) => {
+    async (input: FlowIntentInput, owner: string, target: string) => {
       dispatch({ type: "RESET" });
-      const intent: TxIntent = { ...input, owner, vaultAddress } as TxIntent;
+      const intent: TxIntent =
+        input.kind === "operator"
+          ? {
+              kind: "operator",
+              variant: input.variant,
+              sender: owner,
+              contractAddress: target,
+              valoper: input.valoper,
+              claimantValoper: input.claimantValoper,
+              amount: input.amount,
+              denom: input.denom,
+            }
+          : ({ ...input, owner, vaultAddress: target } as TxIntent);
       dispatch({ type: "START", intent });
 
       // Preflight (server, session-scoped). Reasons block the flow with a
@@ -85,7 +111,18 @@ export function useTxFlow(): TxFlow {
       // always land in a state the user can restart from, never strand.
       let pf: PreflightResponse;
       try {
-        const pfRes = await postJson("/tx/preflight", { kind: input.kind, amount: input.amount.toString() });
+        const pfRes = await postJson(
+          "/tx/preflight",
+          input.kind === "operator"
+            ? {
+                kind: "operator",
+                variant: input.variant,
+                valoper: input.valoper,
+                claimantValoper: input.claimantValoper,
+                amount: input.amount.toString(),
+              }
+            : { kind: input.kind, amount: input.amount.toString() },
+        );
         if (!pfRes.ok) {
           dispatch({ type: "PREFLIGHT_BLOCKED", reasons: [{ code: "chain-unavailable" }] });
           return;
@@ -117,13 +154,26 @@ export function useTxFlow(): TxFlow {
       dispatch({ type: "SIMULATE" });
       let sim: SimulateResponse;
       try {
-        const simRes = await postJson("/tx/simulate", {
-          kind: input.kind,
-          amount: input.amount.toString(),
-          denom: input.denom,
-          pubkey: pubkeyBase64,
-          redeemDenom: input.kind === "swap_out" ? input.redeemDenom : "",
-        });
+        const simRes = await postJson(
+          "/tx/simulate",
+          input.kind === "operator"
+            ? {
+                kind: "operator",
+                variant: input.variant,
+                valoper: input.valoper,
+                claimantValoper: input.claimantValoper,
+                amount: input.amount.toString(),
+                denom: input.denom,
+                pubkey: pubkeyBase64,
+              }
+            : {
+                kind: input.kind,
+                amount: input.amount.toString(),
+                denom: input.denom,
+                pubkey: pubkeyBase64,
+                redeemDenom: input.kind === "swap_out" ? input.redeemDenom : "",
+              },
+        );
         if (!simRes.ok) {
           const detail = await simRes.text().catch(() => "simulation failed");
           dispatch({ type: "SIMULATE_FAILED", detail });
