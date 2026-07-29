@@ -129,6 +129,51 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       under the enumerated-trust-surfaces rule, not a config change. The same
       constraint is why the devnet bootstrap must create the group and policy
       **before** contract instantiation (M7.1 plan §3.1).
+      **VERIFIED 2026-07-29 (App PR 7.1 commit A), devnet `chain-dev`, node
+      image `sha256:d7e307a6…`:** the described topology had never been run —
+      the devnet deployed `Config.admin` as a plain account and
+      `fixtures/queries/group/groups.json` was empty. It is now real and
+      drilled. `infra/devnet/bootstrap/nvhash-group-bootstrap.sh` creates a
+      3-member group (weights 1/1/1) with **two** threshold policies on it
+      (threshold 2), deliberately two so the set-valued discovery above is
+      exercised by data rather than claimed; it prints the primary policy
+      address for `nvhash-deploy-p2p.sh`'s existing `CONTRACT_ADMIN` hook.
+      `contracts/drills/gov-drill.sh` then drives the lifecycle: **30
+      assertions passed, 1 skipped.** Produced and asserted — a two-message
+      proposal accepted and executed (`SUCCESS`); an accepted proposal whose
+      messages failed (`ACCEPTED` + `FAILURE`); an accepted-but-unexecuted
+      proposal (`ACCEPTED` + `NOT_RUN`); `REJECTED` at voting-period end in a
+      block carrying no `x/group` transaction (38 of 39 heights in the
+      transition span were txless); `WITHDRAWN`; two prune routes; and the
+      multiplicity cases — two messages in one proposal, two proposals in one
+      transaction sharing a `voting_period_end`, two `MsgVote`s in one
+      transaction at distinct `msg_index`es, and a real two-page paginated read.
+      **Six findings, four of which contradicted the plan's assumptions:**
+      (1) a successfully executed proposal is **pruned in the same
+      transaction**, so `ACCEPTED` + `SUCCESS` is a pair no state read can ever
+      observe — `EventExec.result` plus `EventProposalPruned` (which carries the
+      terminal status AND the full tally) are its only record; (2) **votes are
+      deleted at the voting-period-end tally** even for an accepted proposal, so
+      per-voter provenance for any closed proposal exists only in transaction
+      history; (3) the LCD answers a missing proposal with **HTTP 500, not 404**,
+      and the body is byte-identical for a pruned and a never-existing id — so
+      prune can never be inferred from a status code, only from absence in the
+      authoritative paginated sweep or from `EventProposalPruned`; (4)
+      voting-period-end transitions are **eventless** (no tally event in
+      `finalize_block_events`; `EventProposalPruned` is the only `x/group`
+      EndBlocker event observed across 295 scanned heights); (5) the `Vote`
+      payload carries **no weight**, so a voter's weight must come from
+      `group_members` or stay null; (6) a second `MsgVote` from the same voter is
+      **rejected by the chain**, so `(proposalId, voter)` is a sound natural key
+      — measured, not assumed. **One state was NOT produced:**
+      `PROPOSAL_STATUS_ABORTED` proved unreachable on this build (a mid-vote
+      group-members change did not abort an open proposal; the proposal executed
+      successfully at `group_version` 1 against a group already at version 2).
+      It stays in the status enum because it is in the module's proto, and the
+      gap is recorded in `packages/fixtures/fixtures/manifest.json` rather than
+      assumed away. The devnet voting periods (300s / 40s) and the
+      two-policies-on-one-group shape are **devnet-only drill affordances**,
+      labeled as such in the manifest.
 - [ ] **ReceiptAccounting query (spec §11.3)** [TRIVIAL] (partially served by
       `EpochStatus.receipt_minted` today)
 - [ ] **Capture-signal incentive (spec §10.4 [DECIDE])** [OPTIONAL, post-v1

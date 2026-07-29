@@ -32,16 +32,27 @@ pexec() { docker exec "$CONTAINER" provenanced "$@"; }
 cli_q() { pexec query "$@" -t --home "$HOME_DIR" -o json; }
 
 if [ "${SKIP_RESET:-0}" != "1" ]; then
-  echo "== 1/4: fresh chain (slashing window patched for the anchor validator) =="
+  echo "== 1/5: fresh chain (slashing window patched for the anchor validator) =="
   SLASH_WINDOW="${SLASH_WINDOW:-10000000}" "$REPO/infra/devnet/dev-node.sh" reset
-  "$REPO/infra/devnet/dev-node.sh" bootstrap
+
+  # The x/group substrate goes up BEFORE the deploy, and the contract is
+  # instantiated with the policy as its admin (App PR 7.1 commit A). Order is
+  # forced, not preferred: `ExecuteMsg` has no admin-rotation variant and
+  # `InstantiateMsg.admin` is set once, so a policy created after instantiate can
+  # never become the admin. Doing it here means the corpus records the GOVERNED
+  # topology — the one liquid-staking-spec §12.1 describes — instead of the
+  # plain-account admin every earlier capture ran against.
+  echo "== 2/5: x/group substrate (group + policy set), then a governed deploy =="
+  GOV_POLICY_ADDR="$("$REPO/infra/devnet/bootstrap/nvhash-group-bootstrap.sh" --quiet)"
+  echo "  policy: $GOV_POLICY_ADDR"
+  CONTRACT_ADMIN="$GOV_POLICY_ADDR" "$REPO/infra/devnet/bootstrap/nvhash-deploy-p2p.sh"
 fi
 
-echo "== 2/4: p2p drill (full money path) =="
+echo "== 3/5: p2p drill (full money path) =="
 bash "$REPO/contracts/drills/p2p-drill.sh"
 
 echo
-echo "== 3/4: unfunded-maturity refund =="
+echo "== 4/5: unfunded-maturity refund =="
 VAULT="$(cli_q vault list | jq -r --arg d "$SHARE" \
   '.vaults[]?|select(.total_shares.denom==$d)|.base_account.address' | head -1)"
 PRINCIPAL="$(cli_q vault get "$VAULT" | jq -r '.principal.address')"
@@ -78,7 +89,7 @@ while :; do
 done
 
 echo
-echo "== 4/4: standalone expedite (burn-free crank) =="
+echo "== 5/5: standalone expedite (burn-free crank) =="
 # A swap-out small enough that standing marker liquidity covers its payout,
 # then service_redemptions: the D2 expedite leg lives in that crank too
 # (epoch.rs "Phases B + D2 alone"), so the already-funded request expedites

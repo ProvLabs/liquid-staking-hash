@@ -95,3 +95,49 @@ smart() {
   resolve
   qj wasm contract-state smart "$CONTRACT" "$q" | jq "$filter"
 }
+
+# --- x/group governance (app plan PR 7.1) ----------------------------------
+# The program's admin group policy. Discovery is deliberately the SAME shape the
+# indexer uses (M7.1 plan §2.1): the contract's `Config.admin` is the entry
+# point, never a hardcoded policy — the dual-policy split
+# (contracts/IMPLEMENTATION-STATUS.md) is still open, so assuming "the" policy
+# would be the topology assumption SECURITY.md forbids.
+#
+# `GOV_POLICY` overrides it, which is how these scripts work on a chain whose
+# contract was deployed before the group existed (there is no admin-rotation
+# message — M7 overview F2).
+resolve_gov_policy() {
+  if [ -n "${GOV_POLICY:-}" ]; then return 0; fi
+  resolve
+  GOV_POLICY="$(qj wasm contract-state smart "$CONTRACT" '{"config":{}}' 2>/dev/null | jq -r '.data.admin // empty')"
+  [ -n "$GOV_POLICY" ] || { echo "could not read Config.admin from $CONTRACT" >&2; exit 1; }
+  # Is it actually a group policy, or a plain account? A 404 here is the honest
+  # "no governance behind the admin" state, not an error to paper over.
+  if ! qj group group-policy-info "$GOV_POLICY" >/dev/null 2>&1; then
+    echo "Config.admin ($GOV_POLICY) is a plain account, not an x/group policy." >&2
+    echo "Bootstrap one with infra/devnet/bootstrap/nvhash-group-bootstrap.sh and either" >&2
+    echo "redeploy with CONTRACT_ADMIN=<policy>, or set GOV_POLICY=<policy> to act on it" >&2
+    echo "directly (see that script's warning)." >&2
+    exit 1
+  fi
+}
+
+# gov_group_id — the group behind the resolved policy.
+gov_group_id() {
+  resolve_gov_policy
+  qj group group-policy-info "$GOV_POLICY" | jq -r '.info.group_id'
+}
+
+# Write a file inside the container (the group CLI takes file paths).
+put_container_file() { docker exec -i "$CONTAINER" sh -c "cat > $1"; }
+
+# gov_tx <from-key> -- <tx group subcommand...>   like tx(), with group gas.
+# `tx` signs as the global $FROM, so swap it for this call and put it back —
+# these scripts sign as a specific MEMBER, not as the default account.
+gov_tx() {
+  local from="$1" prev="$FROM"; shift
+  [ "$1" = "--" ] && shift
+  FROM="$from"
+  tx --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- "$@"
+  FROM="$prev"
+}

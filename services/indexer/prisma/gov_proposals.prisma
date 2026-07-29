@@ -1,20 +1,90 @@
 // gov_proposals (app-spec §9.1): indexed mirror of `x/group` proposal state for
-// history and per-member status. `proposer`/`metadata`/`messages` are the
-// on-chain proposal payload (public); `metadata` is the chain's free-form
-// proposal metadata string, not off-chain identity.
+// history, per-member status and outcome rendering (§8.7).
+//
+// WHY THIS TABLE IS LOAD-BEARING RATHER THAN A CACHE. `x/group` keeps no
+// proposal archive, and the 2026-07-29 devnet drill established two facts that
+// make the mirror the ONLY durable record:
+//
+//   - a proposal that executes SUCCESSFULLY is pruned in the same transaction,
+//     so `ACCEPTED` + `SUCCESS` is a state pair no chain read can ever return;
+//   - rejected, aborted and withdrawn proposals are pruned by the module's
+//     EndBlocker after their voting period ends.
+//
+// Every column below is public chain data — a proposal payload, a tally, a
+// height. None is identity-, device- or IP-shaped. The additions were approved
+// in advance as a design-review event (M7 overview decision D3, app-spec §9.1
+// forward note); the `test/security/allowed-fields.ts` edit is still the gate.
 
 model GovProposal {
   proposalId         BigInt   @id
   groupPolicyAddress String
-  proposer           String
+  /// The group behind the policy AT SUBMIT TIME, so a member set resolves
+  /// without a second live read.
+  groupId            BigInt
+  /// x/group permits SEVERAL proposers and makes each one a required signer.
+  /// One scalar column would be a lie whenever there are two.
+  proposers          String[]
   status             String
+  /// NOT_RUN | SUCCESS | FAILURE. Independent of `status`: "it passed and then
+  /// the messages failed" is invisible in `status` alone, and is exactly what an
+  /// administrator needs to see.
+  executorResult     String
+  /// The chain's free-form proposal metadata string — not off-chain identity.
   metadata           String?
+  /// Author-supplied title and summary (SDK >= 0.50 proposal fields, observed on
+  /// the devnet payload 2026-07-29). Public chain data, and the only
+  /// human-readable label a proposal has — a pruned proposal's title exists
+  /// nowhere else, so omitting them would make closed history unreadable.
+  /// Added by direction (Ira, 2026-07-29) beyond the M7.1 §3.2 enumeration.
+  title              String
+  summary            String
+  /// The proposal's messages, stored VERBATIM. 7.2 decodes them and 7.4
+  /// re-encodes them canonically byte-for-byte as a relay-guard condition, so
+  /// normalizing here would break that guard far away from here.
   messages           Json
   submitTime         DateTime
-  height             BigInt
-  txhash             String
+  /// The countdown the §8.7 surface renders — and the only thing that explains a
+  /// status change arriving with no transaction.
+  votingPeriodEnd    DateTime
+  /// The four tally counts. Decimal(39,0) because member WEIGHTS are unbounded
+  /// integers with no protocol ceiling (they are not token amounts), so a JS
+  /// number would corrupt them silently.
+  yesCount           Decimal  @db.Decimal(39, 0)
+  noCount            Decimal  @db.Decimal(39, 0)
+  abstainCount       Decimal  @db.Decimal(39, 0)
+  noWithVetoCount    Decimal  @db.Decimal(39, 0)
+  /// The group and policy versions the proposal was created under. Without them
+  /// the UI can assert an abort but not explain it.
+  groupVersion       BigInt
+  groupPolicyVersion BigInt
+  /// The decision policy IN FORCE AT SUBMIT — a snapshot, not a reference. The
+  /// live policy can be updated, so a historical tally-vs-threshold is otherwise
+  /// unrenderable.
+  decisionPolicy     Json
+  /// The AS-OF of the mirrored status/tally: the §12.1 freshness fact and the
+  /// replay-monotonicity key. Distinct from `height`, which is submit
+  /// provenance.
+  observedHeight     BigInt
+  observedAt         DateTime
+  /// Submit provenance. NULLABLE, unlike the original columns: a proposal first
+  /// seen by the height-pinned state sweep — one submitted before the stream's
+  /// start height, or whose tx history the node has pruned — has no submit
+  /// transaction to point at. Null is honest; a fabricated height would be the
+  /// invented state SECURITY.md forbids, and `indexed_from_height` on the list
+  /// payload is what tells a reader the window exists.
+  height             BigInt?
+  txhash             String?
+  /// Set when the chain no longer holds this proposal. Written ONLY from an
+  /// authoritative signal — absence from a SUCCESSFUL paginated policy sweep, or
+  /// an observed `EventProposalPruned` — never from a failed read. The LCD
+  /// answers a missing proposal with HTTP 500 whose body is identical for a
+  /// pruned id and one that never existed (observed 2026-07-29), and a node
+  /// outage or a bad height pin answers 500 as well, so a read failure can never
+  /// establish a prune.
+  prunedAtHeight     BigInt?
 
   @@index([groupPolicyAddress])
+  @@index([groupPolicyAddress, proposalId])
   @@map("gov_proposals")
   @@schema("indexed")
 }

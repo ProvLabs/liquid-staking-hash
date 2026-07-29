@@ -162,8 +162,22 @@ assert_eq "validator eligible" "$ELIG" "true"
 HEADROOM="$(smart '{"validators":{}}' '.data.validators[0].headroom' | tr -d '"')"
 if [ "$HEADROOM" = "0" ]; then
   echo "  lifting cap mirrors to the bounded maximum (10000 bps, offset 0)"
-  tx "$ADMIN" --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- \
-    wasm execute "$CONTRACT" '{"update_config":{"max_bonded_cap_bps":10000,"concentration_safety_offset_bps":0}}' >/dev/null
+  # `update_config` is admin-gated, and since App PR 7.1 the devnet's
+  # `Config.admin` may be an x/group POLICY rather than a member account — the
+  # topology liquid-staking-spec §12.1 describes. A direct execute is then
+  # correctly rejected as Unauthorized, so route it through governance.
+  # Detected, never assumed: a plain-account admin still takes the direct path,
+  # so this drill runs on both a governed and an ungoverned bootstrap.
+  CFG_ADMIN="$(smart '{"config":{}}' '.data.admin' | tr -d '"')"
+  if qj group group-policy-info "$CFG_ADMIN" >/dev/null 2>&1; then
+    echo "  Config.admin is an x/group policy — submitting a governance proposal"
+    GOV_POLICY="$CFG_ADMIN" \
+      "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../infra/devnet/actions" && pwd)/gov-execute-contract.sh" \
+      '{"update_config":{"max_bonded_cap_bps":10000,"concentration_safety_offset_bps":0}}' >/dev/null
+  else
+    tx "$ADMIN" --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- \
+      wasm execute "$CONTRACT" '{"update_config":{"max_bonded_cap_bps":10000,"concentration_safety_offset_bps":0}}' >/dev/null
+  fi
   HEADROOM="$(smart '{"validators":{}}' '.data.validators[0].headroom' | tr -d '"')"
   if [ "$HEADROOM" = "0" ]; then
     echo "  FAIL: headroom still 0 at the 100% cap — is the phase-0 anchor bonded?" >&2

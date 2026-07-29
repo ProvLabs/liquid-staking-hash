@@ -1,14 +1,42 @@
 // gov_votes (app-spec §9.1): indexed mirror of `x/group` votes for per-member
-// status. Natural key is (proposalId, voter); `voter` is a public group-member
-// address. No PII.
+// status. `voter` is a public group-member address. No PII.
+//
+// WHY THIS IS THE ONLY DURABLE PER-VOTER RECORD. `x/group` DELETES a proposal's
+// votes at its voting-period-end tally — even for a proposal that PASSES —
+// keeping only the aggregate in `final_tally_result` (observed on devnet
+// 2026-07-29). So `votes_by_proposal` returns an empty list for every closed
+// proposal, and "who voted, and how" exists after that only in transaction
+// history and in this table. A mirror built on state reads alone would show a
+// passed proposal that nobody voted for.
+//
+// The natural key `(proposalId, voter)` is MEASURED, not assumed: the drill
+// attempts a vote change (the same voter submitting a second `MsgVote` on one
+// proposal) and the chain rejects it. That measurement exists because M6.4
+// shipped a plan-level natural key that was wrong, named, and gated by a test
+// that passed anyway (M7 overview §7.1) — so the assumption is drilled rather
+// than believed. If a future build accepts vote changes, the drill fails and this
+// key gains a discriminator before anything writes it.
 
 model GovVote {
   proposalId BigInt
   voter      String
   option     String
+  /// The vote's own free-form on-chain metadata — public chain data, symmetric
+  /// with `GovProposal.metadata`, and never off-chain identity.
+  metadata   String?
   submitTime DateTime
-  height     BigInt
-  txhash     String
+  /// The voter's weight at the vote height. NULLABLE because the module's `Vote`
+  /// payload carries NO weight field (pinned 2026-07-29): it has to be resolved
+  /// from `group_members`, and membership rotates. Null means "not recoverable",
+  /// never 0 — a stored tally line with a fabricated weight would misstate how a
+  /// proposal passed.
+  weight     Decimal? @db.Decimal(39, 0)
+  /// Provenance, NULLABLE. A vote recovered from a height-pinned state read
+  /// (a proposal still open when the sweep ran, whose vote transaction fell
+  /// outside the indexed window) has no transaction to point at. Null is honest
+  /// where a fabricated height is not.
+  height     BigInt?
+  txhash     String?
 
   @@id([proposalId, voter])
   @@index([voter])

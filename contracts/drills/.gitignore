@@ -1,0 +1,5 @@
+# gov-drill.sh's observation record: a per-run artifact of a disposable devnet,
+# consumed by packages/fixtures/scripts/capture-fixtures.sh --governance, whose
+# durable facts land in the corpus manifest. Committing it would pin one chain's
+# proposal ids as if they were repo facts.
+.gov-drill.json
