@@ -243,7 +243,7 @@ plus five privileged write flows (§14.6), which made it the largest M6 PR rathe
 than a parallelizable leaf. The `[P]` marker on row 6.4 is dropped accordingly.
 
 **M7 delivers its six rows as four PRs (recorded 2026-07-28).** Estimated
-changed files against a ~70-file review ceiling: **7.0 + 7.1 ≈ 62** (branch 1),
+changed files against a ~70-file review ceiling: **7.0 + 7.1 ≈ 64** (branch 1),
 **7.2 ≈ 27**, **7.3 + 7.4 ≈ 32**, **7.5 + 7.6 ≈ 50**. Row numbering is
 unchanged — two plans each cover a numbered pair, the way the M3 plan covers
 PRs 3.1–3.3 — so §5's cross-references and PR-title attribution stay valid.
@@ -632,6 +632,43 @@ correctness burden for no benefit. Folding 7.2 forward as well would have fit
 under the ceiling (≈55) but was declined: it would put the relay-guard review
 in the same PR as decoded-message honesty and a11y, and filling a ceiling is
 not a goal.*
+
+*2026-07-28 (rev 21): **§4b completeness obligations added to the plan format**,
+piloted on the four M7 plans. Cause: a defect review of PRs #19–#22 found seven
+P1s, six genuine, and **all six were the same shape** — a discrete space with an
+unenumerated cell (cardinality assumed 1 where the domain allows N ×2; a wire
+bound paired across components but agreed only by eye; plane precedence for a
+stale-but-successful read; a state×affordance gap; a read-then-write race).
+None was a wrong algorithm, a misunderstood protocol, or a security-model
+error.*
+
+*The decisive observation is that two of those P1s were **plan** defects, not
+code defects: [the M6.4 plan §4](2026-07-24-app-m6.4-operator-view.md:685)
+asserted `(txhash, msgIndex)` as the `operator_payments` natural key with a
+gating test, payment is permissionless so a caller can batch, and the test
+verified the wrong invariant while CI stayed green. Code review cannot catch a
+faithfully-implemented wrong spec, so the remedy belongs in the plan format.*
+
+*An initial reading — that the contract side's lower defect rate proves a
+better method — **was corrected by Ira on 2026-07-29 and is not the
+justification.** Most of `contracts/` came from a separate research spike and
+was ported in, with many defects found during that work; `sim.rs`'s invariant
+battery is better read as the residue of a discovery phase than as evidence
+that up-front enumeration prevents defects. The real asymmetry is that the app
+side has **no discovery phase**: plan → implement → review → merge, with
+external review as the only thing that ever contradicts an assumption. What
+stands without inference is narrower and sufficient: §4's *named* invariants
+with *named* gating tests prove every case the author thought of, cannot
+surface the one they did not, and make a wrong assumption **look verified**.
+§4b is an attempt to buy on paper some of what a spike buys empirically — an
+unproven substitution, deliberately piloted rather than adopted. It adds five
+closed spaces (natural keys & cardinality, wire bounds, concurrency,
+state×affordance, plane precedence) that a plan must enumerate or mark n/a with
+a reason; a `*Disproof:*` line on every invariant asserting a domain fact; and
+drills that must generate the N>1 case for each "one per X" assumption, since
+M6.4's drill covered every terminal state and never a batched payment. Defined
+in [the M7 overview](2026-07-28-app-m7-governance.md) §7. Repo-wide adoption is
+deliberately deferred until M7.1 has run the format once.*
 
 *Four findings from the planning pass, each of which changed scope. (1)
 **There is no `x/group` anything on the devnet** — the groups fixture is empty

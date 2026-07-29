@@ -76,7 +76,7 @@ changed files per PR.
 | PR | Plan | Est. files | Branch |
 | --- | --- | --- | --- |
 | 7.0 | *this doc + the four below* | 9 | 1 |
-| 7.1 | [m7.1 governance indexing + endpoints](2026-07-28-app-m7.1-governance-indexing.md) | ≈53 | 1 |
+| 7.1 | [m7.1 governance indexing + endpoints](2026-07-28-app-m7.1-governance-indexing.md) | ≈55 | 1 |
 | 7.2 | [m7.2 governance read UI](2026-07-28-app-m7.2-governance-read-ui.md) | ≈27 | 2 |
 | 7.3 + 7.4 | [m7.3–7.4 governance write path](2026-07-28-app-m7.3-7.4-governance-write-path.md) | ≈32 | 3 |
 | 7.5 + 7.6 | [m7.5–7.6 admin analytics + funnel](2026-07-28-app-m7.5-7.6-admin-analytics-and-funnel.md) | ≈50 | 4 (∥) |
@@ -102,7 +102,8 @@ Two merges were taken, both justified by cohesion rather than by headroom:
   and buys nothing, since neither blocks the other. Merged, it disappears and
   the two `app`-schema tables land under a single data-minimization review.
 
-**Branch 1 = 7.0 + 7.1 ≈ 62 files**, and the break is before 7.2. Folding 7.2
+**Branch 1 = 7.0 + 7.1 ≈ 64 files** (7.1 gained `bounds.ts` and its test from
+§7's C2 obligation), and the break is before 7.2. Folding 7.2
 into branch 1 would reach ≈89. Folding 7.2 forward into the write-path branch
 instead would reach ≈55 — under the ceiling, but justified only by headroom,
 and it would put the relay-guard review in the same PR as decoded-message
@@ -208,7 +209,138 @@ assumption. Per-PR invariants live in each plan's §4; this is the map.
 | Reproducible verification documented in the status ledger with dates | `contracts/drills/gov-drill.sh` (7.1) and its result recorded in `IMPLEMENTATION-STATUS.md` with a date and the build it ran against |
 | Devnet keys are throwaway | The 7.1 bootstrap uses existing keyring entries, generates no key material, accepts no mnemonic, and points only at the disposable local chain |
 
-## 7. Revision log
+## 7. Completeness obligations (new with M7 — read before writing any §4b)
+
+### 7.1 Why this exists
+
+A defect review of PRs #19–#22 (2026-07-28) found seven P1s. Six were genuine,
+and **all six were the same shape**: a discrete space had a cell nobody
+enumerated. Two were batched-payment cardinality; one was a wire bound paired
+across two components but agreed only by eye; one was plane precedence for a
+*stale-but-successful* read; one was a state×affordance gap; one was a
+read-then-write race. None was a wrong algorithm, a misunderstood protocol, or
+a security-model error.
+
+The sharpest one: [the M6.4 plan §4](2026-07-24-app-m6.4-operator-view.md:685)
+asserted `(txhash, msgIndex)` as the `operator_payments` natural key, with a
+gating test. Payment is permissionless, so a caller can batch several into one
+message — **the invariant was wrong, the test verified it anyway, and CI was
+green.** Two of that PR's four P1s were therefore *plan* defects, not code
+defects. No amount of code review catches a faithfully-implemented wrong spec.
+
+The initial framing of this — that the contract side's lower defect rate proves
+a better *method* — **is confounded and has been corrected (Ira, 2026-07-29).**
+Most of `contracts/` was built in a separate research spike and ported in;
+plenty of defects were found during that work. What the app side sees is a
+matured artifact, not a process that prevented defects the first time. On the
+evidence available, `contracts/src/sim.rs`'s invariant battery is better read as
+the **residue** of a discovery phase — lessons encoded after the fact — than as
+proof that enumeration up front prevents them.
+
+The correction sharpens the actual problem rather than dissolving it. The app
+side has **no discovery phase at all**: it goes plan → implement → review →
+merge, with external review as the only mechanism that ever contradicts an
+assumption. The contract side got to be wrong repeatedly in a spike, cheaply.
+The app side gets to be wrong once, in a PR, expensively.
+
+What survives without inference, because it is direct observation: §4's *named*
+invariants with *named* gating tests prove every case the author thought of and
+cannot surface the one they did not, and a named-and-gated wrong assumption
+**looks verified** — which is exactly what happened to M6.4's natural key.
+
+§4b is therefore an attempt to buy some of what a spike buys, on paper. **That
+substitution is unproven** and is the thing 7.1 tests (§7.5).
+
+§4b is the app-side analogue of the simulation domain: not "here are the cases
+I checked" but "here is the space, and here is why it has no other cells."
+
+### 7.2 The obligation table
+
+Every M7 PR plan carries a **§4b Completeness obligations** section that walks
+this closed list. Each row is either filled or explicitly marked *n/a with a
+reason*. "Not mentioned" is not an allowed state — an unfilled row fails plan
+review the way a missing gating test fails §4.
+
+| # | Space | What the plan must enumerate |
+| --- | --- | --- |
+| C1 | **Natural keys & cardinality** | For every key: what makes each component unique, and the **maximum multiplicity of each component sourced from the producing system** — the chain, the contract, the module — **never from the observed happy path**. State the N>1 case explicitly even when you believe N is always 1. |
+| C2 | **Wire bounds** | Every bound that exists on both sides of a component boundary (server cap ↔ client schema cap). Each pair must be **one declaration imported by both**, not two numbers that happen to agree, with a test asserting the producer's bound is inside the consumer's. |
+| C3 | **Concurrency** | Every read-then-write on a uniqueness or cap constraint. The default remedy is a **database constraint**, not application logic; application-level enforcement requires a stated reason. |
+| C4 | **State × affordance** | Every state a record can occupy × every action the UI offers on it. Adding a state — including a state introduced by fixing something else — re-derives the whole matrix. |
+| C5 | **Plane precedence** | Per field: `{live ok, live stale, live down} × {indexed ok, indexed stale, indexed down}`. Note **stale** is a distinct column from **down**: M6.4's honesty matrix had degradation on its axes but not staleness, and that is precisely the cell that leaked. |
+
+### 7.3 Invariants carry a disproof
+
+Any §4 invariant that asserts a **fact about the domain** — a cardinality, a
+precedence, the closure of a set, a uniqueness claim — carries a
+`*Disproof:*` line naming the observation that would show the invariant is the
+wrong one. For M6.4's natural key that line would have read *"a transaction
+emitting two payments under one msgIndex"* — a sentence that, once written,
+makes the gap self-evident and is directly executable as a drill case.
+
+Invariants that merely restate a standing gate ("axe passes", "i18n coverage")
+need no disproof line. The test is whether the invariant could be *wrong*, not
+merely *unmet*.
+
+### 7.4 Drills generate multiplicity
+
+Terminal-state coverage is necessary and not sufficient. M6.4's drill produced
+every terminal payment state and never a batched payment, which is why the
+corpus could not contradict the plan. **Every C1 "one per X" assumption gets a
+drill case that produces N>1**, so the fixture corpus can falsify the
+assumption rather than merely illustrate it.
+
+### 7.5 How to tell, after 7.1, whether this earned its cost
+
+§4b is a pilot. It could plausibly be ceremony, and the honest position is that
+some of it probably is. Predictions are recorded **now**, before 7.1 is built,
+so the retrospective is a check rather than a rationalization.
+
+**Expected to pay** — because each produces an *executable* artifact that can
+contradict the author:
+
+- **C1 + §7.4 drill multiplicity.** The drill either emits the N>1 case or it
+  does not, and the corpus either contradicts the assumed key or does not. This
+  is the direct analogue of what a spike buys.
+- **C2 bounds.** `packages/api-types/test/bounds.test.ts` mechanically fails on
+  an unpaired bound. No judgment involved.
+- **C3 concurrency.** "DB constraint, or state why not" is a binary the
+  reviewer can check.
+
+**At risk of being ceremony** — because they are prose tables whose quality is
+bounded by the author's imagination, which is the faculty that failed:
+
+- **C4 state × affordance** and **C5 plane precedence.** A table can be filled
+  completely and still omit the row nobody conceived of. If 7.2/7.3 ship a
+  state×affordance defect *despite* a filled C4, the remedy is not a better
+  table — it is generating the matrix from the type system or the drill corpus
+  rather than by hand.
+- **`*Disproof:*` lines.** Genuinely useful when they name a *runnable*
+  observation; decorative when they restate the invariant in the negative.
+  Count how many became drill cases or tests. If the ratio is low, drop the
+  convention and keep only the drill requirement.
+
+**The ceremony detector.** For each filled §4b cell in 7.1, record at closure
+(commit D) whether it **changed the implementation** — a different key, an
+added constraint, a new drill case, a test that did not exist — or was filled
+and had no effect. Cells with no effect across two milestones should be cut.
+
+**Reading the review outcome.** A P1 in a category C1–C5 *names* means the
+obligation was filled but filled wrongly — the format is sound, the enumeration
+was lazy. A P1 in a category C1–C5 *does not name* means the list is incomplete
+and that category joins it. **Zero P1s is the ambiguous case** and must not be
+read as success on its own: 7.1 has a devnet substrate and a fixture corpus
+that M6.4 lacked, which is a confound in the same family as the one that
+invalidated the original contract-side comparison. Weigh it against how many
+§4b cells actually changed the implementation.
+
+Five §4b claims are already falsifiable during 7.1, most of them before much
+code exists: the `(proposalId, voter)` vote-change verdict, the `incident_acks`
+key, the conditional-update guard, the bounds pairing, and the residual
+stale-admin window. If none of the five turns out to matter, that is real
+evidence for the ceremony reading.
+
+## 8. Revision log
 
 *2026-07-28: initial milestone overview and the six PR plans, written as the
 M7.0 documentation commit. Structure follows Ira's standing preference —
