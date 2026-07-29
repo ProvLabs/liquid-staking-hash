@@ -149,6 +149,46 @@ personal endpoint → 403; public endpoints accept no-credential requests.
 > `services/api/test/assertion-vectors.test.ts` carry identical literals) —
 > either side drifting fails its own CI until both move together.
 
+> **Amendment 2026-07-28 (M7 planning; implemented at PR 7.5): the scope union
+> gains `admin:<bech32>`.** The §8.8 admin analytics surface is program-wide
+> rather than address-scoped, so neither existing scope fits: the data is not
+> personal, but it is not public either. The scope vocabulary becomes
+> `address:<bech32> | internal:notifier | admin:<bech32>`, and routes declare
+> `public | address | internal:notifier | admin`.
+>
+> **`services/api` stays DB-only.** Two alternatives were rejected. Re-verifying
+> group membership *inside* the API would give the read API an outbound LCD
+> dependency and put a chain read in every admin request path — it has no chain
+> client by design. Keeping admin analytics in `apps/web` fails on Decision 1:
+> `app_writer` has **no grants on `indexed`**, so the web tier structurally
+> cannot read the history those panels need. So the web tier — which already
+> holds the LCD client and the role logic — mints the scope, and the API
+> verifies it in-process exactly as it verifies the other two.
+>
+> **The minting rule is the security-critical part, and it is a deliberate
+> exception to the role cache.** `detectRoles()` caches for
+> `ROLE_CACHE_TTL_SECONDS` (60 s), which is correct for *rendering* an operator
+> view and wrong for *minting a privilege*: a 60 s stale admin is 60 s of
+> retained capability after membership is revoked. Minting an `admin:`
+> assertion therefore performs a **fresh on-chain group-membership read and
+> bypasses the cache**, and a degraded read mints nothing (401 downstream)
+> rather than a hopeful assertion. This is what makes app-spec §12's "admin
+> endpoints re-verify group membership on-chain per session refresh, not per
+> cached role" a mechanism instead of a description.
+>
+> The envelope is otherwise unchanged — same HMAC over `{scope, iat, exp}`,
+> same `exp − iat ≤ 60 s`, constant-time compare, forward-skew bound,
+> fail-closed with no key, one undifferentiated 401 — and the golden vectors
+> stay cross-pinned in both suites.
+>
+> **Gating test:** an `ADMIN_PATHS` matrix joins
+> `services/api/test/cross-address.test.ts` alongside the registry-derived
+> `PERSONAL_PATHS`/`INTERNAL_PATHS` matrices — `address:` on an admin path →
+> 403; `internal:notifier` on an admin path → 403; `admin:` on another
+> address's personal path → 403; absent/expired/bad-signature → 401 — plus a
+> cache-bypass case in `apps/web/test/roles.test.ts` proving that a revoked
+> member's **next** admin request fails rather than succeeding for up to 60 s.
+
 ## Decision 3 — Notifier: a worker process in `apps/web`, reading through the API
 
 The notifier (alert-rule evaluation on indexer ticks) is app-state machinery:
@@ -250,3 +290,7 @@ To revisit:
    notifier worker `apps/web/notifier/` reads them and holds no `indexed`
    grant; cross-pinned assertion vector + registry-derived `INTERNAL_PATHS`
    gate).
+7. [ ] PR 7.5: the `admin:<bech32>` scope of the 2026-07-28 amendment —
+   cache-bypassing mint in `apps/web`, `RouteAuth`/`VerifiedScope` extension in
+   `services/api`, the `ADMIN_PATHS` matrix, and the `app`-schema
+   `incident_acks` table that Decision 1 assigns to the web tier.

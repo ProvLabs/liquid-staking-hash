@@ -117,6 +117,18 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
 - [ ] **Dual x/group policies (spec §12.1)** [SMALL]
       Split single `admin` into `admin_group_policy` (fund administration,
       pause/halt/clear) and `ops_group_policy` (`UpdateConfig`).
+      **Two facts recorded 2026-07-28 during M7 planning.** (a) **The App does
+      not assume the split.** Its governance indexer discovers the policy set
+      (`Config.admin` → policy → group → all policies on that group) and
+      mirrors 1..n of them, so this item can land with **zero App change** —
+      hardcoding a single "admin policy" would have been the topology
+      assumption `SECURITY.md` forbids. (b) **There is no admin-rotation
+      path**: `ExecuteMsg` has no variant that changes `Config.admin`, and
+      `InstantiateMsg.admin` is set once. Performing this split therefore
+      requires a redeploy or a new admin-rotation message — a spec-level event
+      under the enumerated-trust-surfaces rule, not a config change. The same
+      constraint is why the devnet bootstrap must create the group and policy
+      **before** contract instantiation (M7.1 plan §3.1).
 - [ ] **ReceiptAccounting query (spec §11.3)** [TRIVIAL] (partially served by
       `EpochStatus.receipt_minted` today)
 - [ ] **Capture-signal incentive (spec §10.4 [DECIDE])** [OPTIONAL, post-v1

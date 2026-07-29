@@ -770,6 +770,46 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > derives the CSV column by joining `epoch_snapshots` at read time (§9.4). The
 > column stays so a later indexer-side derivation has somewhere to land.
 
+> **Forward note 2026-07-28 (M7 planning; the migration lands with PR 7.1
+> commit B): `gov_proposals`/`gov_votes` gain columns, and the addition is
+> approved in advance as a design-review event.** Both tables have existed
+> since the init migration and nothing has ever written them; standing up the
+> `x/group` mirror shows the original nine and six columns cannot express what
+> §8.7 requires. Recorded here so the migration executes an approved change
+> rather than proposing one — the `test/security/allowed-fields.ts` edit is
+> still what gates it.
+>
+> `gov_proposals` adds: `groupId`; `proposers String[]` **replacing**
+> `proposer` (x/group permits several, and one column is a lie when there are
+> two); `votingPeriodEnd` (the §8.7 countdown, and the only thing that explains
+> a status change arriving with no transaction); the four tally counts
+> `yesCount`/`noCount`/`abstainCount`/`noWithVetoCount` as `Decimal(39,0)`
+> (weights are unbounded integers, so they join `AMOUNT_FIELDS`);
+> `executorResult` (`NOT_RUN|SUCCESS|FAILURE` — "passed but execution failed"
+> is invisible in `status`); `groupVersion`/`groupPolicyVersion` (x/group ABORTs
+> a proposal when the group or policy changes, and without these the UI can
+> assert an abort but not explain it); `decisionPolicy Json`, the threshold **in
+> force at submit**, since the live policy can change and a historical
+> tally-vs-threshold is otherwise unrenderable; `observedHeight`/`observedAt`,
+> the AS-OF of the mirrored status and tally (the §12.1 freshness fact and the
+> replay-monotonicity key — `height`/`txhash` keep their existing meaning of
+> *submit* provenance); and `prunedAtHeight`.
+>
+> `gov_votes` adds `weight Decimal(39,0)?` (the voter's weight at the vote
+> height; membership rotates, so a stored tally line is otherwise
+> unexplainable — null means "not recoverable", never 0) and `metadata String?`
+> (a public chain field, symmetric with `GovProposal.metadata`), and **widens
+> `height`/`txhash` to nullable**, because a vote recovered from state has no
+> transaction provenance and null is honest where a fabricated height is not.
+>
+> `prunedAtHeight` is the column worth understanding: `x/group` **prunes**
+> rejected, aborted and executed proposals out of chain state, so the mirror
+> routinely outlives the thing it mirrors. A 404 on re-read therefore
+> **preserves** the stored row and stamps this column — never deletes, never
+> nulls — and the read surfaces say the chain no longer holds it rather than
+> offering a verify path that resolves to nothing (§12.2 revision). Every
+> column above is public chain data; none is identity-, device- or IP-shaped.
+
 ### 9.2 Indexer workers
 
 - **Transport:** dual-source per the §14.5 resolution (RESOLVED 2026-07-20, PR 2.1) — tx-search by height range for DeliverTx events, and `block_results` per height for EndBlocker payout/refund + the NAV marker (which never appear in tx-search, §14.2); paging to exhaustion per block window; RPC websocket subscription is a latency optimization, not a correctness dependency.
@@ -1321,6 +1361,19 @@ This section encodes boundary §5 as build requirements.
 > console has no governance panel yet, and a verify link must never be a dead
 > link; adding the panel and the target is a console follow-on alongside the
 > §14.13 entity-level anchors.
+>
+> **Revision 2026-07-28 (M7 planning): the `governance` target stays absent
+> through M7**, including the §8.7 pages that would most tempt someone to add
+> it. Two reasons, and the second is new. The console still has no governance
+> panel, so the target would be dead — and this section pins every verify href
+> strictly under `{CONSOLE_URL}` with a chain-id boot check, so an external
+> block explorer is not a substitute for one. Beyond that, `x/group` **prunes**:
+> rejected, aborted and executed proposals leave chain state entirely, so a
+> closed proposal frequently has nothing on chain to verify against at all. The
+> indexed mirror is the durable record by design (§9.1), and PR 7.1 marks such
+> rows `pruned` precisely so the UI can say the chain no longer holds it rather
+> than offer a path that resolves to nothing. The panel and the target remain
+> one pair, scheduled with the §14.13 console follow-on before 8.4.
 
 ### 12.3 Application security
 
@@ -1434,12 +1487,20 @@ Protocol and platform facts this design must respect (chain constraints identica
    - **Admin program-ops** (halt/resume, pause/unpause, config, bridge config) are originated in the App via the §8.7 governance templates — these program-ops *are* group-policy proposals, so "admin actions in the App" and "template-scoped governance" are the same mechanism.
    - **Boundary amendment:** this supersedes the prior "§10.3 everything-else-is-a-link" rule and §8.6's "every action lands in the Console." The App now **fully** implements these privileged writes (no half-implementation) — all still wallet-signed, message-building only, **no key material** (SECURITY.md apps rules unchanged; the contract remains the enforcement boundary and UI preflight stays convenience only). The Console retains free-form compose, the devnet key mode, and raw engineering ops as an engineering surface, not a user dependency (console §14.6 keeps the composer).
    - **Register B2 (validator-elected admins):** unchanged — this decision takes no position; if B2 resolves toward validator voting, that surface is the §8.7 page.
+   - **[SCHEDULED 2026-07-28, M7 plan] Governance side sequenced across three PRs.** [7.1](../plans/2026-07-28-app-m7.1-governance-indexing.md) mirrors `x/group` proposals and votes durably and serves them read-only (no signing path; the relay is unchanged and a governance message is still provably rejected). [7.2](../plans/2026-07-28-app-m7.2-governance-read-ui.md) is the §8.7 read surface, also read-only. [**7.3–7.4**](../plans/2026-07-28-app-m7.3-7.4-governance-write-path.md) is the whole write path in one PR — `MsgVote`, `MsgExec` and `MsgSubmitProposal` admitted together under a **single** §12.3 amendment, because they are one guard and staging the third across an intervening PR bought nothing. Vote and exec are guarded structurally (closed scalar payloads); `MsgSubmitProposal` carries `messages []Any` and is guarded by **six** conditions — type URL → proposer↔session binding → program-policy check → each inner `Any` against a closed template set → **byte-identical canonical re-encode per inner message** → `exec` pinned so a submission cannot execute in the same transaction. That PR is the design-review event this item's 6.4 note anticipated. **Admin program-ops reach the chain only as §8.7 templates**: the direct-`MsgExecuteContract` admin variants stay rejected afterwards, and that rejection matrix is a standing gate, not a transitional state.
    - **[IMPLEMENTED 2026-07-27, PR 6.4 commit D] Validator chain-ops delivered.** All five operator flows ship as first-class App transaction flows through the unmodified §10.2 lifecycle: pay commission, pay TIP, enroll, unregister, and the two-phase jailed purge (report → cooldown → purge) — see the §10.3 revision for tiers and copy, and the §12.3 amendment for the two-level relay allowlist that makes carrying them safe. **Admin program-ops remain outstanding** (halt/resume, pause/unpause, config, bridge config, originating as §8.7 governance templates); they are NOT in the relay's variant set and are provably rejected by its rejection matrix, so delivering them later is a deliberate design-review event rather than a config change.
 7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Email remains excluded and is not an option.
    **[DECIDED 2026-07-24, Ira] Default-on alert kinds = the R2 minimal set (PR 6.2 commit B).** Holders: `redemption_update` (matured | expedited | refunded — one settings row, §8.2/§8.4) is **on by default, opt-out** (§10.3). Operators: `operator_arrears` is **on by default** for sessions the live role read reports as operator (§8.6). Everything else — `nav_step_posted`, `vault_status`, `validator_set_incident` — is **opt-in** (off by default). The mechanism is **absence-means-default** (§9.1): no `alert_rules` row means the kind's default, so a user who never touches settings has zero rows and the default-on set costs no stored subscription (data minimization by construction). The market-spread kind is **deferred with §14.4** (no market data in v1) — enabling it later is an enum migration + allowlist review + a `thresholdBps` column, a spec-recorded amendment, not a config toggle.
 8. **[DECIDED 2026-07-14, ADR-001 Decision 4]** Design-system packaging (boundary §7.4): design tokens are **web-local** (`apps/web`) for v1, not a shared package — the two surfaces deliberately wear different registers and the console is mid-migration. Family coherence is enforced where it matters: both surfaces run the same dataviz palette validation (`validate_palette.js`) in CI on every token change, both themes. Shared TypeScript code (fixtures, chain client, API types, read-only indexed DB client) lives in a root pnpm workspace under `packages/` (`@nvhash/*`); the console may join the workspace with its own migration. Revisit shared token packaging post-v1 if drift is observed. **Brand pass delivered (PR 1.4, 2026-07-17):** program-specific accent and status tokens set web-local in `apps/web/app/theme/tokens.css` over the nuva base — NUVA mint-green primary CTA / focus ring (dark green-black label, WCAG AA both themes) and the fixed good/warning/serious/critical status set (icon + label; `warning`/`serious` are sub-3:1 on the light surface only under that relief rule). Both theme token sets pass the shared validation method in CI: the categorical chart palette via `check:palette`, the accent/status contrast via `test/brand-tokens.test.ts` (both computed by `validate_palette.js`, never eyeballed). §14.8 is now fully resolved.
 9. **[DECIDED 2026-07-15, Ira] Launch locale set: `en` only.** v1 ships a single English locale. Future locales (`zh`/`ko` precedents or others) are TBD and explicitly **not in v1**. The `$lang+` i18n routing/plumbing (§8.0, §15) is retained with a single `en` catalog so additional locales are additive without a routing change — adding one is a content+config change, not a re-architecture.
-10. **[DECIDE] Aggregate-analytics event taxonomy:** which page classes and funnel stages are counted, and the consent posture for the counters — within the `SECURITY.md` constraint that analytics are first-party, aggregate-only, and never keyed by wallet, session, or device.
+10. **[DECIDED 2026-07-28, Ira] Aggregate-analytics event taxonomy: counters are aggregates by construction, so there is no per-person record to restrain.** The question was which page classes and funnel stages are counted and what consent posture the counters carry, within the `SECURITY.md` constraint that analytics are first-party, aggregate-only, and never keyed by wallet, session, or device. The resolution answers it structurally rather than by policy.
+    - **Storage:** one `app`-schema table, `funnel_counters`, keyed `(stage, day)` with an integer `count` and **no other columns**. There is no row per visit, per session, per wallet, or per device — the row *is* the aggregate. The `SECURITY.md` accepted-exceptions list (push tokens, first/last-seen) is unchanged; this adds nothing to it.
+    - **Stages:** the closed §8.8 funnel — `visit`, `due_diligence_depth`, `connect`, `first_deposit` — plus a closed **page-class** enum on the `visit` stage, chosen so no class identifies a niche page a rare visitor would read. `first_deposit` is derived from public chain history rather than incremented from web behavior.
+    - **Increment site:** **server-side, in the route loader.** No client script, no beacon, no pixel, **no cookie, no client identifier**. A beacon design would fight §12.3's requirement that transacting pages function with third-party scripts blocked, and a consent banner would be a surface asking permission for something that collects nothing about the person.
+    - **Consent posture:** none is required or presented, because nothing personal is collected. That is a claim the schema makes, not a promise the code keeps.
+    - **Honesty consequence, accepted:** without an identifier the counters cannot deduplicate visitors, so a returning reader increments `visit` again. These are **event totals, not unique people**, and the surfaces say so. The funnel's terminal stage is exact (chain-derived) while its top is not, and the view must not imply uniform precision across stages. Acquiring an identifier to make a prettier number is not an available trade.
+    - **Retention:** a stated, enforced window recorded in the allowlist comment, after which day rows aggregate up or drop.
+    - **Enforcement:** the master plan §4 security-executable check — analytics counters never keyed by wallet, session, or device — is `apps/web/test/app-schema-allowlist.test.ts`, extended with this model's exact column set and a domain-specific forbidden-substring denylist (`address`, `wallet`, `session`, `device`, `ip`, `user`, `fingerprint`), gating `apps/web` CI from PR 7.6 on. A migration without the allowlist edit fails CI; adding a column is a design-review event, not an implementation choice.
 11. **[DECIDED 2026-07-15, Ira] CSV export & cost-basis method.** The export is a **statement of fact, not a computed tax position**, and splits into two role-scoped exports:
     - **Holder export (§8.2):** raw per-event rows — one per `SwapIn`/`SwapOut` — carrying the **share price in HASH (NAV) at the event**, so the holder (or their accountant) does their own cost-basis math. Proposed columns: `datetime_utc`, `block_height`, `event_type` (swap_in | swap_out | refund | transfer_in | transfer_out), `nvhash_amount`, `hash_amount`, `nav_hash_per_nvhash` (share price in HASH at event), `txhash`. No FIFO/average lot-matching is computed in the export.
     - **Validator/operator export (§8.6 `/validators/mine`):** a record of **commission/TIP payment amounts and times** so a participating validator has a complete fact set for their own tax analysis. Proposed columns: `datetime_utc`, `block_height`, `epoch_index`, `payment_type` (commission | tip), `hash_amount`, `txhash`.

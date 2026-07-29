@@ -170,12 +170,38 @@ waiting for implementations.
 
 | PR | Scope | Depends on |
 | --- | --- | --- |
-| 7.1 [P] | **Governance indexing + endpoints:** `x/group` stream → `gov_proposals`/`gov_votes`; proposal list/detail endpoints. | 2.x harness |
+| 7.0 | **Planning & documentation:** the [milestone overview](2026-07-28-app-m7-governance.md) + one plan per PR (7.1–7.6), plus the four same-change doc amendments below. Resolves D3/D7/D9/D10 so no later PR starts on an open decision. | — |
+| 7.1 | **Governance indexing + endpoints:** devnet `x/group` substrate + drill + fixtures; `x/group` stream → `gov_proposals`/`gov_votes`; proposal list/detail/policies endpoints. | 2.x harness; **devnet x/group substrate (none exists today)** |
 | 7.2 | **Governance center read UI** (§8.7): decoded proposals, tallies, per-member status, outcome history. | 7.1, 4.1 |
-| 7.3 | **Vote/execute signing:** `MsgVote`/`MsgExec` through the 5.2 lifecycle, would-fail simulation before sign. | 7.2, 5.2 |
-| 7.4 | **Template proposal composer** — scope gated on the §14.6 decision; if it resolves to vote/execute-only at launch, this PR moves post-v1. | 7.3, §14.6 |
-| 7.5 [P] | **Admin analytics endpoints + dashboard** (§8.8): program health, holder/validator cohorts, upkeep timeliness, incident feed w/ acknowledgment; admin gate re-verifies group membership on-chain. | 3.1, 2.x, 5.1 |
-| 7.6 [P] | **Aggregate funnel counters** (§14.10 taxonomy): first-party, aggregate-only stage tallies + the Learn funnel view; includes the executable no-per-wallet-keying test (§4). | 1.3; **§14.10 taxonomy decision (blocking)** |
+| 7.3 ⟂ | **Vote/execute signing:** `MsgVote`/`MsgExec` through the 5.2 lifecycle, would-fail simulation before sign; carries the §12.3 relay amendment. | 7.2, 5.2 |
+| 7.4 ⟂ | **Template proposal composer** (§8.7, §14.6): decoded admin-action templates with a config diff view, behind a three-level `MsgSubmitProposal` guard. | 7.3 |
+| 7.5 [P] ⟂ | **Admin analytics endpoints + dashboard** (§8.8): program health, holder/validator cohorts, upkeep timeliness, incident feed w/ acknowledgment; admin gate re-verifies group membership on-chain. | 3.1, 2.x, 5.1; **ADR-001 Decision 2 amendment (`admin:` scope)** |
+| 7.6 [P] ⟂ | **Aggregate funnel counters** (§14.10 taxonomy): first-party, aggregate-only stage tallies + the Learn funnel view; includes the executable no-per-wallet-keying test (§4). | 1.3 |
+
+⟂ marks rows **delivered as a paired PR**: 7.3+7.4 as
+[m7.3–7.4 governance write path](2026-07-28-app-m7.3-7.4-governance-write-path.md),
+7.5+7.6 as
+[m7.5–7.6 admin analytics + funnel](2026-07-28-app-m7.5-7.6-admin-analytics-and-funnel.md).
+The rows keep their numbers for attribution and for §5's cross-references; see
+§3 for the pairing rationale and file counts.
+
+> **Row 7.4 amended 2026-07-28 (M7.0 planning).** The original row — "scope
+> gated on the §14.6 decision; if it resolves to vote/execute-only at launch,
+> this PR moves post-v1" — was written before §14.6 was decided on 2026-07-15
+> and is stale against it: §14.6 ships **template-scoped creation in v1** and
+> states the App is "**not** vote/execute-only". Same defect and same fix as
+> row 6.4's 2026-07-27 amendment. 7.4 stays in v1.
+>
+> **Row 7.1 dependency widened, same date.** There is no `x/group` anything on
+> the devnet — `fixtures/queries/group/groups.json` is empty and
+> `CONTRACT_ADMIN` defaults to a plain account — and the contract has **no
+> admin-rotation message**, so the group and policy must be bootstrapped before
+> deploy. Building that substrate, its drill and its fixture family is inside
+> 7.1, which is why it is roughly twice its original size. Every developer
+> resets devnet when it lands.
+>
+> **Row 7.6's blocking marker dropped, same date:** §14.10 is DECIDED
+> 2026-07-28 (§5).
 
 ### M8 — Hardening & pilot
 
@@ -198,7 +224,7 @@ M0 ─ M1 ─┬─ services lane:  2.1 ∥ 2.2 ∥ 2.3 ∥ 2.4 → 2.5 → 3.1 
           └─ wallet lane:    5.1 → 5.2 ────────────→ 5.3 ∥ 5.4
                                           (5.4 also needs 3.3)
 M6: 6.1 → 6.2 → 6.3 → 6.4          (planned 6.1 ∥ 6.2 ∥ 6.4 → 6.3; ran serialized)
-M7: (7.1 → 7.2 → 7.3 → 7.4)  ∥  (7.5 ∥ 7.6)      — can start once M2 harness + 5.1 exist
+M7: 7.0 → 7.1 → 7.2 → [7.3+7.4]  ∥  [7.5+7.6]    — 4 PRs; 7.1 also needs a devnet x/group substrate
 M8: (8.0 external gate) ∥ 8.1 ∥ 8.2 ∥ 8.3 → 8.4 → 8.5   (8.4/8.5 also gated on 8.0)
 ```
 
@@ -216,6 +242,36 @@ a parallel branch's assumptions; and 6.4 grew from a read view into a read view
 plus five privileged write flows (§14.6), which made it the largest M6 PR rather
 than a parallelizable leaf. The `[P]` marker on row 6.4 is dropped accordingly.
 
+**M7 delivers its six rows as four PRs (recorded 2026-07-28).** Estimated
+changed files against a ~70-file review ceiling: **7.0 + 7.1 ≈ 62** (branch 1),
+**7.2 ≈ 27**, **7.3 + 7.4 ≈ 32**, **7.5 + 7.6 ≈ 50**. Row numbering is
+unchanged — two plans each cover a numbered pair, the way the M3 plan covers
+PRs 3.1–3.3 — so §5's cross-references and PR-title attribution stay valid.
+
+Two rows were paired, both on cohesion rather than headroom. **7.3 + 7.4 are
+the same guard:** the three-level `MsgSubmitProposal` shape was fixed at 7.0,
+so staging it as present-but-provably-rejected across one intervening PR bought
+nothing, and splitting would have had 7.4 immediately re-edit the guard files
+7.3 had just written. Merged, the guard is written once, §12.3 is amended once,
+and the rejection matrix is authored once. **7.6 feeds one of 7.5's six
+panels:** split, 7.5 must ship a placeholder for the evaluator funnel and be
+provably correct in either merge order — merged, that contingency disappears
+and both `app`-schema tables land under one data-minimization review.
+
+The break before 7.2 holds. Bundling it into branch 1 reaches ≈89; folding it
+forward into the write-path branch reaches ≈55, under the ceiling but justified
+only by headroom, and it would put the relay-guard review in the same PR as
+decoded-message honesty and a11y — the 6.4 failure mode in miniature. Branch 1
+ends at the frozen `@nvhash/api-types` governance shapes, the seam this section
+already relies on: the web lane builds offline against MSW.
+
+The `[P]` markers on 7.5/7.6 stand — that pair is genuinely independent of the
+7.1→7.4 chain — but the M6 lesson above applies to whether it is *run*
+parallel. Note also that 7.1 flips a switch for everyone: once `Config.admin`
+is a real group policy, the previously-dead `groupPolicyInfo → groupMembers`
+branch of `roles.server.ts` goes live in every environment, which is its own
+reason to merge it alone.
+
 ## 4. Automated testing plan
 
 Each layer is introduced in the milestone that creates its subject and then
@@ -229,7 +285,7 @@ Each layer is introduced in the milestone that creates its subject and then
 | API contract | Vitest supertest-style harness | M3 | Envelope shape (`meta.source`, heights) on every endpoint; zod bounds on every query param; rate-limit behavior; CSV column set |
 | e2e (offline) | Playwright + MSW | M4 | Every page renders from mocks: content, banners, freshness labels, verify-link hrefs, **cold-start/below-threshold states**, chart honesty (step-after NAV present, no interpolation, "n/a" under minimum window) |
 | e2e (live) | Playwright against the 1.5 stack + `contracts/drills/` | M5 | Fund-moving flows signed on devnet through full drill cycles; every redemption terminal state (expedite, matured, refund) rendered from real chain history |
-| Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device; personal endpoints reject cross-address access (the `PERSONAL_PATHS` matrix is registry-derived since 6.4, so a new address-scoped route joins automatically); push-token deletion on opt-out; **the broadcast relay stays closed** — the 6.4 two-level allowlist's rejection matrix proves no `MsgExecuteContract` outside the six operator variants, on the configured contract, in canonical form, can be relayed; **operator ownership** — an unowned valoper answers honest-empty, indistinguishable from a nonexistent one, never a 403 that would reveal who operates what |
+| Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device; personal endpoints reject cross-address access (the `PERSONAL_PATHS` matrix is registry-derived since 6.4, so a new address-scoped route joins automatically); push-token deletion on opt-out; **the broadcast relay stays closed** — the 6.4 two-level allowlist's rejection matrix proves no `MsgExecuteContract` outside the six operator variants, on the configured contract, in canonical form, can be relayed; **operator ownership** — an unowned valoper answers honest-empty, indistinguishable from a nonexistent one, never a 403 that would reveal who operates what; **M7 governance additions** — the relay stays closed across the governance amendment (7.3's two-level matrix admits only `MsgVote`/`MsgExec` in canonical form with `MsgVote.exec` pinned, and 7.4's three-level matrix admits `MsgSubmitProposal` only when **every** inner message is an exact template instance, while the 6.4 direct-admin variants stay rejected throughout); **the mirror never claims chain state it no longer holds** — `x/group` prunes, so a 404 preserves the indexed row and stamps `prunedAtHeight` rather than deleting, and no verify affordance is offered for it (7.1); **admin capability is never served from a cached role** — minting an `admin:` assertion performs a fresh on-chain membership read and bypasses the 60 s role cache, so a revoked member's next request fails (7.5) |
 | Accessibility | axe in Playwright + manual walk | M4, M8 | WCAG AA both themes, keyboard operability, reduced-motion |
 | Visual/design | palette validator in CI | M1 | Both theme token sets pass the dataviz validation on every change |
 | Degradation drills | Playwright scenarios (8.1) | M8 | The honesty machinery works under failure: reconciler alarm, indexer outage, LCD outage each produce the specified labeled degradation, never silence |
@@ -275,11 +331,11 @@ and recorded in `app-spec.md` §14.
 | §14.3 pool/bridge facts | VERIFY — external (NUVA bridge deployment) | 2.4, 3.2 config |
 | §14.4 bridge transit UX | DECIDED 2026-07-15 (deferred to post-launch; DEX/market surfaces ship as labeled "coming soon" shells; v1 exit is native-redemption-only in practice) | 5.4 |
 | §14.5 indexer transport/depth | DECIDE/VERIFY — resolved inside 2.1 (tx-search primary, ws optional) | 2.1 |
-| §14.6 governance composer scope | DECIDE — needed before 7.4 only; 7.1–7.3 unaffected | 7.4 |
+| §14.6 governance composer scope | DECIDED 2026-07-15 (template-scoped creation ships in v1; the App is **not** vote/execute-only; free-form compose stays Console-only). Operator side IMPLEMENTED 2026-07-27 (PR 6.4); governance side **scheduled 2026-07-28** across 7.1–7.4, with admin program-ops reaching the chain only as §8.7 templates at 7.4 | 7.4 (row amended 2026-07-28 — the "may move post-v1" caveat was stale) |
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
 | §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages); **brand pass DELIVERED 2026-07-17 (PR 1.4): web-local accent/status tokens, both themes validated by `check:palette` + `test/brand-tokens.test.ts`** | 0.3, 1.4 |
 | §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
-| §14.10 analytics taxonomy | DECIDE — needed before 7.6 | 7.6 |
+| §14.10 analytics taxonomy | DECIDED 2026-07-28, Ira (one `app`-schema `funnel_counters` table keyed `(stage, day)` with an integer count and no other columns; closed stage + page-class enums; incremented **server-side in the loader**; no cookie, no client script, no consent surface because nothing personal is collected; stated retention; totals labeled as events, not unique people) | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |
 | §14.12 typical-payout sample threshold | DECIDED 2026-07-15 (≥ 10 terminal requests, else the 60-day guarantee alone; epoch-metric cold-start rules; calendar-month cadence — E-CAL delivered 2026-07-22) | 5.4, 6.2 |
 | §14.13 console entity anchors | FOLLOW-ON (console repo/area) — schedule with console work before 8.4 | 4.x verify links, 8.4 |
@@ -555,4 +611,48 @@ drill specs in 5.3/5.4. Stale-row correction in this change: §5's §14.4 and
 `app-spec.md` §14 — the rows and 5.4's §2 dependency cell now point at the
 recorded decisions; 5.4's remaining gates are Tranche B plan refinement and
 the typical-payout serving source (plan §7 Q4), not open decisions.*
+
+*2026-07-28 (rev 20): M7 planned and documented (PR 7.0, docs-only). Structure
+per Ira: **one plan per PR** under a
+[milestone overview](2026-07-28-app-m7-governance.md), not a single multi-PR
+file — the M3/M5 precedent is superseded for this milestone. Five new plan
+documents; §2 gains a 7.0 row and amends rows 7.1/7.4/7.5/7.6; §3 records the
+branch split with file-count estimates against the ~70-file review ceiling;
+§4's security-executable row gains the three M7 governance checks; §5 flips
+§14.6 and §14.10 to their recorded decisions.*
+
+*Six rows, four PRs. Two pairs were consolidated on cohesion after the initial
+per-row estimates proved inflated (7.3 ≈19 not 30, 7.4 ≈23 not 34, 7.5 ≈40 not
+60, 7.6 ≈19 not 27). **7.3+7.4** are one guard — the three-level
+`MsgSubmitProposal` shape was fixed at 7.0, so staging it across an intervening
+PR bought nothing and splitting would have had 7.4 immediately re-edit the
+guard files 7.3 had just written. **7.5+7.6** — 7.6 feeds one of 7.5's six
+panels, so splitting forced a placeholder state and an either-merge-order
+correctness burden for no benefit. Folding 7.2 forward as well would have fit
+under the ceiling (≈55) but was declined: it would put the relay-guard review
+in the same PR as decoded-message honesty and a11y, and filling a ceiling is
+not a goal.*
+
+*Four findings from the planning pass, each of which changed scope. (1)
+**There is no `x/group` anything on the devnet** — the groups fixture is empty
+and `CONTRACT_ADMIN` defaults to a plain account, so `roles.server.ts`'s
+group-policy branch has never executed. (2) **The contract has no
+admin-rotation message**, so the group and policy must be bootstrapped before
+deploy; every developer resets devnet when 7.1 lands. Together these put an
+entire devnet substrate, drill and fixture family inside 7.1 and are why it is
+roughly twice its original row. (3) **`services/api` has no path parameters**
+(`findRoute` is an exact match), so proposal detail is a query param. (4)
+**`x/group` prunes** — closed proposals leave chain state, which is what makes
+the indexed mirror load-bearing rather than a convenience, and which is a
+second, independent reason the `governance` verify-link target stays absent.*
+
+*Four decisions resolved in the same change so no later PR starts on an open
+question: the `gov_proposals`/`gov_votes` column additions (app-spec §9.1
+forward note); the three-level `MsgSubmitProposal` guard shape, decided now so
+§12.3 is amended once at 7.3 rather than twice; the `admin:<bech32>` scope
+(ADR-001 Decision 2 amendment), including the rule that minting bypasses the
+60 s role cache; and §14.10's analytics taxonomy, which was the milestone's one
+blocking decision. `contracts/IMPLEMENTATION-STATUS.md` records that the App
+does not assume the pending dual-policy split and that performing it needs a
+redeploy or a new message.*
 
