@@ -693,3 +693,43 @@ blocking decision. `contracts/IMPLEMENTATION-STATUS.md` records that the App
 does not assume the pending dual-policy split and that performing it needs a
 redeploy or a new message.*
 
+
+*2026-07-29 — **PR 7.1 (governance indexing + endpoints) delivered**, closing
+branch 1. The devnet gained an `x/group` substrate (group + two threshold
+policies, bootstrapped BEFORE deploy through the existing `CONTRACT_ADMIN` hook,
+since the contract has no admin-rotation message), a scripted lifecycle drill
+(`contracts/drills/gov-drill.sh`, 30 assertions), and a governance fixture
+family. The `governance` indexer stream mirrors `x/group` into `gov_proposals`/
+`gov_votes` across three planes, and `services/api` serves three public
+governance routes. `liquid-staking-spec` §12.1's policy topology is now
+EXERCISED rather than merely described.*
+
+*The drill contradicted **four** of the 7.1 plan's own mechanism assumptions, and
+that is the milestone's most useful output. A successfully executed proposal is
+pruned in its own transaction, so `ACCEPTED`+`SUCCESS` is a state pair no chain
+read can return; votes are deleted at the voting-period-end tally even when a
+proposal passes; a missing proposal answers HTTP 500 — not 404 — with a body
+identical to an outage's, so prune can never be inferred from a status code; and
+voting-period-end transitions are eventless. All four are corrected in app-spec
+§9.1/§9.2, the 7.1 plan §3.5, and `services/indexer/CLAUDE.md`, with the fixture
+manifest's `pinned_facts` as authority. Two states remain unproduced and are
+recorded rather than assumed away: `PROPOSAL_STATUS_ABORTED` is unreachable on
+the drilled build, so 7.2's rendering of it is unexercised by real data.*
+
+*§4's Security-executable row gains two standing mechanisms. The **wire-bounds
+registry** (`packages/api-types/src/bounds.ts` + its table-driven test) closes
+the PR #19 defect class rather than instancing it again: bounds that cross the
+API↔web boundary are now one declaration imported by both tiers, and the three
+M6.1 portfolio pairs — previously coupled by a COMMENT in the row types — were
+adopted into it. The **governance monotonicity guard** is enforced by SQL
+(`ON CONFLICT … WHERE observedHeight < EXCLUDED.observedHeight`) rather than
+application logic, gated by a Postgres-backed round-trip that the TypeScript
+replay suite deliberately cannot substitute for.*
+
+*On the §4b pilot (overview §7.5), the honest reading is narrower than "it
+worked": C1, C2 and C3 each changed the implementation, C4 and C5 were forward
+obligations only, and the four plan-contradicting findings came from the DRILL
+rather than from the prose tables. What §4b contributed was telling the drill
+what to try to falsify. The overview §7.2 obligation table stands for 7.2–7.6;
+the case for the prose cells (C4, C5) remains untested, since neither applied
+here.*

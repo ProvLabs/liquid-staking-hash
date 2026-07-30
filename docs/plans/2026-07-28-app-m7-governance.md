@@ -340,9 +340,59 @@ key, the conditional-update guard, the bounds pairing, and the residual
 stale-admin window. If none of the five turns out to matter, that is real
 evidence for the ceremony reading.
 
+> **RECORDED 2026-07-29 at 7.1 closure. The full detector table is in
+> [the 7.1 plan §3.7](2026-07-28-app-m7.1-governance-indexing.md); the summary
+> is that the substitution partly worked, for a reason the pilot did not
+> predict.**
+>
+> **C1, C2 and C3 each changed the implementation.** C1's cardinality table sent
+> the drill after a vote change, which is what made `(proposalId, voter)` a
+> measured key instead of a believed one, and it produced `proposers String[]`
+> plus per-`msgIndex` discovery. C2 became `packages/api-types/src/bounds.ts` and
+> its table-driven test — a mechanism that did not exist, and which immediately
+> covered three PRE-EXISTING pairs that PR #19's fix had left coupled by a
+> comment. C3's "DB constraint or state why not" produced an
+> `ON CONFLICT … WHERE` guard plus the Postgres-backed round-trip that exists
+> because the TypeScript replay suite would still pass without it — and that
+> suite then caught a real regression review had missed.
+>
+> **C4 and C5 were n/a for 7.1** (no UI, DB-only API), so the two cells §7.5
+> predicted were at risk of being ceremony remain **untested as a format**. Their
+> forward obligations did hold, and C5 earned itself indirectly: finding 3 showed
+> the *down* column has two shapes — absent versus unreadable — that no status
+> code distinguishes, which is exactly the axis M6.4's matrix was missing.
+>
+> **Three of the five predicted claims landed in 7.1 and all three mattered**
+> (the vote-change verdict, the conditional-update guard, the bounds pairing).
+> `incident_acks` and the stale-admin window belong to 7.5.
+>
+> **The correction to §7.1's framing.** The four assumptions this milestone got
+> WRONG were caught by the **drill**, not by the §4b tables: a successful exec
+> prunes itself, votes are deleted at tally, a missing proposal is a 500 not a
+> 404, and voting-period-end is eventless. §7.4's "drills generate multiplicity"
+> rule did the work; C1's table is what told the drill where to aim. So the
+> evidence supports a narrower claim than "enumeration on paper substitutes for a
+> spike": what the app side lacked was a **discovery phase**, and a scripted drill
+> against a live chain is the cheapest available one. §4b's contribution was
+> naming what to falsify. Keep C1–C3 and the drill rule; leave C4/C5 on probation
+> until 7.2 exercises them.
+
 ## 8. Revision log
 
 *2026-07-28: initial milestone overview and the six PR plans, written as the
 M7.0 documentation commit. Structure follows Ira's standing preference —
 plans at PR level under the milestone, parallel work flagged — rather than the
 M3/M5 multi-PR single-file precedent.*
+
+*2026-07-29: PR 7.1 delivered, closing branch 1. §4's D1/D2/D2b/D13/D17 are all
+discharged; §7.5's ceremony detector is recorded above. Two findings amend this
+document's own §2: **F4 is stronger than written** — `x/group` prunes a
+SUCCESSFULLY EXECUTED proposal in its own transaction, not only at the EndBlocker,
+so the happy path is precisely the path that leaves no chain state, which
+strengthens rather than weakens the case for the durable mirror. And **F1 needs a
+qualifier**: `x/group` was always SERVED on this build; what was missing was any
+group on the devnet. The module was never in doubt, only the substrate. Two
+obligations pass to 7.2: `PROPOSAL_STATUS_ABORTED` is renderable but unreachable
+on the drilled build, so its UI is unexercised by real data; and per-voter history
+for any CLOSED proposal exists only in the mirror, since the module deletes votes
+at the tally.*
