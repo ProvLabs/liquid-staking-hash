@@ -33,6 +33,7 @@ import { runWorker, type Worker, type WorkerRuntimeDeps } from "./runtime/worker
 import { PinnedLcdClient, RpcClient } from "./transport/rpc.ts";
 import { createChainEventsWorker } from "./workers/chain-events/index.ts";
 import { createEpochHistoryWorker } from "./workers/epoch-history/index.ts";
+import { createGovernanceWorker } from "./workers/governance/index.ts";
 import { createValidatorSamplerWorker } from "./workers/validator-sampler/index.ts";
 import { runReconciler } from "./reconciler/index.ts";
 
@@ -103,6 +104,18 @@ export async function run(): Promise<void> {
     }),
     createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
     createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),
+    // Governance (PR 7.1). Starts on every chain, including one with no x/group
+    // substrate at all: policy discovery then resolves to the empty set and the
+    // worker commits empty windows, which is the honest no-governance state
+    // rather than a crash or a silently disabled stream.
+    createGovernanceWorker({
+      rpc,
+      pinned,
+      contractAddress: config.contractAddress,
+      lcdUrl: config.lcdUrl,
+      overridePolicies: config.govGroupPolicies,
+      startHeight: BigInt(config.govStartHeight),
+    }),
   ];
 
   const deps: WorkerRuntimeDeps = {

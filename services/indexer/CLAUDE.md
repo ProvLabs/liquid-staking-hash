@@ -151,6 +151,81 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   2.5 derives jail/arrears incidents from them. Tests:
   `test/workers/validator-sampler-decode` (corpus) and `-replay` (fast-check).
 
+- **`workers/governance/`** (stream `governance`, PR 7.1) → `gov_proposals` +
+  `gov_votes`. Structurally chain-events (tx + block planes) crossed with
+  validator-sampler (height-pinned sweep), because `x/group` needs both. Policy
+  discovery is **set-valued** (`policies.ts`, decision D1): `Config.admin` →
+  `group_policy_info` → group → all policies on that group ∪ all policies the
+  group's admin administers. A plain-account admin yields the **empty set** and
+  empty committed windows — the honest no-governance state, not a crash.
+  `GOV_GROUP_POLICIES` adds policies to (never replaces) discovery, for a chain
+  whose contract was deployed before its group existed; `GOV_START_HEIGHT`
+  defaults to 1 (D13).
+
+  **Six devnet observations (2026-07-29, `contracts/drills/gov-drill.sh`, pinned
+  in `packages/fixtures/fixtures/manifest.json`) shape this worker, and FOUR of
+  them contradicted the M7.1 plan. The manifest is authority over the plan text
+  where they differ:**
+  1. **A successfully executed proposal is pruned in its OWN transaction**, so
+     `ACCEPTED` + `SUCCESS` is a pair no state read can ever return.
+     `EventExec.result` plus `EventProposalPruned` (which carries the terminal
+     status AND the full tally) are its only record — which is why the tx plane
+     is load-bearing rather than provenance-only.
+  2. **Votes are DELETED at the voting-period-end tally**, even for a proposal
+     that passes; only `final_tally_result` survives. So `votes_by_proposal`
+     recovers votes only while a proposal is OPEN (`state.ts` reads them for
+     `SUBMITTED` only), per-voter history for anything closed exists solely in tx
+     history, and an empty vote read must **never** delete stored rows (the
+     writer's `COALESCE` arms).
+  3. **A missing proposal answers HTTP 500, not 404**, with a body identical for
+     a pruned id and one that never existed — and an LCD outage answers 500 too.
+     Prune is therefore **never** inferred from a status code: only from absence
+     in a **successful** paginated sweep (`sweepOk`) or an observed
+     `EventProposalPruned`. `sweepOk` is a single flag across all policies
+     because a partial sweep is not a weaker prune signal, it is none at all.
+  4. **Voting-period-end transitions are EVENTLESS** — no tally event in
+     `finalize_block_events`, so the state sweep is their only observer.
+     `EventProposalPruned` is the ONE x/group EndBlocker event (295 heights
+     scanned), which is what the block plane exists for; `GROUP_BLOCK_EVENT_TYPES`
+     is a set, and an empty set skips the per-height fetch entirely.
+  5. `EventVote` carries only `proposal_id` + `msg_index` — voter and option come
+     from the **`MsgVote` body**, paired by `msg_index` (never positionally, and
+     never by txhash: one tx may carry several votes for different proposals).
+     The `Vote` payload has **no weight**; weight comes from `group_members` at
+     the height, or stays null.
+  6. A second `MsgVote` from the same voter is **rejected by the chain**, so
+     `(proposalId, voter)` is a sound natural key — **measured, not assumed**,
+     because M6.4 shipped a named-and-gated natural key that was wrong.
+
+  **Idempotency is a property of the SQL, not of scheduling** (§4b C3):
+  `store.ts` upserts with `INSERT … ON CONFLICT DO UPDATE … WHERE
+  observedHeight < EXCLUDED.observedHeight`, so a window observing height H
+  cannot overwrite a row observed at H′ > H even with a backfill running beside
+  the live worker. Prisma cannot express a conditional update arm, which is why
+  these are `$executeRaw`. Provenance and prune stamps are set-once
+  (`IS NULL` / `COALESCE`); `executorResult` is monotone and a sweep's `NOT_RUN`
+  default can never erase a known outcome (a hole the replay suite caught, not
+  review). A prune **stamps, never deletes**. Pagination follows to exhaustion
+  and **throws at the page cap** rather than truncating — a short sweep is
+  indistinguishable from a prune and would mark live proposals pruned.
+  Tally counts and weights are `Decimal(39,0)`: they are unbounded WEIGHT sums,
+  not token amounts, so a JS number would corrupt them past 2^53.
+
+  Tests: `test/workers/governance-decode` (fixture corpus, 18),
+  `-sources` (discovery, pagination cap, `sweepOk` gating, honest-empty, 12),
+  `-replay` (fast-check convergence + the three §9 invariants, 15), and
+  `test/integration/governance-roundtrip.test.ts` (13) — the last is the only one
+  that proves the guards are real SQL, since the replay suite mirrors them in
+  TypeScript and would still pass if the `ON CONFLICT … WHERE` clause were
+  dropped. Plus **`-live`**, which skips unless `GOV_LIVE_LCD`/`GOV_LIVE_CONTRACT`
+  are set (the `e2e-live` convention; it needs a devnet with the substrate
+  bootstrapped and `gov-drill.sh` run — invocation is in the file header). None of
+  the other three exercises the real transport, real pagination, or the
+  interaction between the three planes; this one does, and on the governed devnet
+  it reproduced all six drill findings in a single pass — including the load-
+  bearing one, that successfully executed proposals are absent from chain state
+  while their outcome is still recoverable from events.
+
 ## Reconciler (PR 2.5)
 
 `src/reconciler/` is the honesty alarm (spec §9.6/§12.1) and the **sole writer of
@@ -196,8 +271,11 @@ Package scripts (`./dev pnpm --filter @nvhash/indexer run <script>`):
   so `pnpm -r run test` stays Postgres-free).
 - `test:grants` — the Postgres-backed integration tests (needs Postgres, see
   "Full-stack wiring" below): the grant-boundary gate, the PR 2.5 reconciler
-  alarm acceptance gate, and the PR 6.4 `operator_payments` round-trip
-  (`test/integration/`).
+  alarm acceptance gate, the PR 6.4 `operator_payments` round-trip, and the PR
+  7.1 `gov_proposals`/`gov_votes` round-trip (`test/integration/`). That last one
+  is where the governance monotonicity guard is actually gated: the unit replay
+  suite mirrors the conditional-update arm in TypeScript, so only this suite
+  fails if the SQL loses it.
 - `generate` — regenerate the Prisma client from `prisma/`.
 - `start` — `prisma generate` then run the scaffold supervisor (`src/index.ts`):
   it connects to the `indexed` schema as `indexer_writer`, proves the connection
@@ -253,7 +331,21 @@ post-scan filter — no column added, allowlist unaffected. The `indexed` schema
 indexer-owned; only DDL runs as `indexer_writer`.
 
 **Allowlist extensions to date** (each a recorded design-review event, per the
-gate's own contract): the PR #22 review added `OperatorPayment.ordinal`
+gate's own contract): PR 7.1 commit B extended `GovProposal` and
+`GovVote` (`20260729000000_governance_state`) — the tables had existed since the
+init migration with nine and six columns and NOTHING had ever written them,
+because the devnet had no `x/group` substrate at all until commit A bootstrapped
+one. The column set and its rationale were approved IN ADVANCE (M7 overview D3 +
+the app-spec §9.1 forward note), with two deltas recorded rather than slipped in:
+`proposer` was **replaced** by `proposers String[]` (x/group permits several, so
+the scalar was a lie whenever there were two), and `title`/`summary` were added
+by direction (Ira, 2026-07-29) beyond that enumeration — SDK >= 0.50 proposal
+fields, public chain text, and the only human-readable label a proposal has,
+which for a pruned proposal exists nowhere else. `height`/`txhash` widened to
+NULLABLE on both tables: a proposal or vote recovered from a height-pinned sweep
+has no transaction to point at, and null is honest where a fabricated height is
+not. Every column is public chain data; the tally counts and `weight` are
+`Decimal(39,0)` unbounded weight sums, not token amounts. the PR #22 review added `OperatorPayment.ordinal`
 (`20260728010000_operator_payment_ordinal`) — the payment's position within its
 `(txhash, msgIndex)`, derived from event order in the tx. It is part of the
 row's natural key: a message may batch several payments, and the old two-part

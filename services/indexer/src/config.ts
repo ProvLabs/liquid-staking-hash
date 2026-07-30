@@ -25,6 +25,22 @@ export interface IndexerConfig {
   pollIntervalMs: number;
   /** reconciler pass cadence (slower than the workers; §12.1 honesty alarm). */
   reconcileIntervalMs: number;
+  /**
+   * Extra x/group policy addresses to mirror, ON TOP of what discovery finds
+   * (`Config.admin` → policy → group → all policies on that group). Comma
+   * separated; empty by default.
+   *
+   * This exists for a real deployment shape, not for convenience: the contract has
+   * no admin-rotation message (`ExecuteMsg` has no variant that changes
+   * `Config.admin`, `InstantiateMsg.admin` is set once), so on a chain whose
+   * contract was instantiated before its group existed, discovery correctly
+   * resolves to the empty set and the only way to mirror governance is to name the
+   * policies. It never REPLACES discovery — the two are unioned — so it cannot be
+   * used to pin the indexer to one policy and miss the pending admin/ops split.
+   */
+  govGroupPolicies: string[];
+  /** first height the governance stream ingests (D13: 1, like the other streams). */
+  govStartHeight: number;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -61,5 +77,32 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig 
     indexWindowSpan: boundedInt(env, "INDEX_WINDOW_SPAN", 500, 1),
     pollIntervalMs: boundedInt(env, "POLL_INTERVAL_MS", 5000, 100),
     reconcileIntervalMs: boundedInt(env, "RECONCILE_INTERVAL_MS", 30000, 1000),
+    govGroupPolicies: bech32List(env, "GOV_GROUP_POLICIES"),
+    govStartHeight: boundedInt(env, "GOV_START_HEIGHT", 1, 1),
   };
+}
+
+/** Bech32 shape, bounded at the boundary. Shape only, not a checksum — a
+ * well-formed address that does not exist simply resolves to no policy — but
+ * malformed input is rejected before any read runs (SECURITY.md: validate and
+ * bound every input; a value that cannot be bounded safely is an error). */
+const BECH32_RE = /^[a-z]{1,10}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/;
+
+/** Optional comma-separated bech32 list. An entry that is not a bech32 address is
+ * a configuration ERROR, never silently dropped: a typo'd policy address would
+ * otherwise present as "this policy has no proposals", which is indistinguishable
+ * from honest-empty and would hide the misconfiguration indefinitely. */
+function bech32List(env: NodeJS.ProcessEnv, key: string): string[] {
+  const raw = env[key];
+  if (raw === undefined || raw.trim() === "") return [];
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  for (const part of parts) {
+    if (part.length > 90 || !BECH32_RE.test(part)) {
+      throw new Error(`Invalid ${key}: ${JSON.stringify(part)} is not a bech32 address`);
+    }
+  }
+  return parts;
 }

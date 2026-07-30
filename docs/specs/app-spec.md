@@ -810,6 +810,46 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > offering a verify path that resolves to nothing (§12.2 revision). Every
 > column above is public chain data; none is identity-, device- or IP-shaped.
 
+> **Revision 2026-07-29 (PR 7.1 commit B): the forward note above is CORRECTED
+> in three places by what the devnet actually does.** The columns it approved are
+> unchanged and are delivered as written; what it got wrong is the mechanism, and
+> the corrections are recorded here rather than left as a discrepancy between
+> spec and code. All three were measured by `contracts/drills/gov-drill.sh` and
+> are pinned in `packages/fixtures/fixtures/manifest.json`.
+>
+> 1. **"A 404 on re-read" — there is no 404.** The LCD answers a missing proposal
+>    with **HTTP 500**, and the body is byte-identical for a proposal that was
+>    pruned and one that never existed. An LCD outage and a wrong height pin
+>    answer 500 as well. So a failed read can **never** justify stamping
+>    `prunedAtHeight`: doing so would durably assert "the chain discarded this"
+>    about live governance. Prune is established only by **absence from a
+>    successful paginated policy sweep**, or by an observed
+>    `EventProposalPruned`. The row-preserving, never-deleting behavior the note
+>    describes is unchanged and correct.
+> 2. **A successfully executed proposal is pruned in its OWN transaction**, so
+>    `status = ACCEPTED` with `executorResult = SUCCESS` is a pair **no state
+>    read can ever return**. `executorResult` therefore earns its place more
+>    strongly than the note argued: it is not merely invisible in `status`, it is
+>    unobtainable except from `EventExec.result` plus `EventProposalPruned`, which
+>    carries the terminal status and the full tally.
+> 3. **`gov_votes` is load-bearing for a reason the note did not state:** the
+>    module **deletes a proposal's votes at its voting-period-end tally**, even
+>    when the proposal passes, keeping only `final_tally_result`. Per-voter
+>    history for any closed proposal exists solely in transaction history, so an
+>    empty vote read must never delete stored rows. Two column consequences:
+>    `GovVote.weight` is nullable because the module's `Vote` payload carries **no
+>    weight field** at all (it must come from `group_members` at the vote height),
+>    and `GovProposal.height`/`txhash` widen to **nullable** alongside
+>    `GovVote`'s — a proposal first seen by the sweep has no submit transaction to
+>    point at, and null is honest where a fabricated height is not.
+>
+> Two columns join the approved set: **`title` and `summary`** (SDK ≥ 0.50
+> proposal fields, added by direction — Ira, 2026-07-29). They are public,
+> author-supplied chain text and the only human-readable label a proposal has;
+> for a pruned proposal that label exists nowhere else, so omitting them would
+> make closed history unreadable. `proposer` is **removed** in favour of
+> `proposers`, as the note specified.
+
 ### 9.2 Indexer workers
 
 - **Transport:** dual-source per the §14.5 resolution (RESOLVED 2026-07-20, PR 2.1) — tx-search by height range for DeliverTx events, and `block_results` per height for EndBlocker payout/refund + the NAV marker (which never appear in tx-search, §14.2); paging to exhaustion per block window; RPC websocket subscription is a latency optimization, not a correctness dependency.
@@ -837,6 +877,41 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > stays untrusted: a missing, duplicated, or multi-coin funds transfer, or a
 > `pay_commission` whose declared `amount` disagrees with the funds moved,
 > raises `DecodeError` rather than storing a guess.
+
+> **Revision 2026-07-29 (PR 7.1 commit B, the `governance` worker):** a fourth
+> stream joins §9.2, and it is the first one whose AUTHORITY is a height-pinned
+> state read rather than an event. Three planes, because `x/group` splits its
+> truth across them and no two are substitutable:
+>
+> - **tx-search** — submit provenance, per-voter votes, and the terminal outcomes
+>   the chain does not keep. `EventVote` carries only `proposal_id` and
+>   `msg_index`, so voter and option come from the **`MsgVote` body** paired by
+>   `msg_index` — never positionally and never by txhash, since one transaction may
+>   legally carry several votes for different proposals.
+> - **`block_results`** — `EventProposalPruned` and nothing else. It is the ONLY
+>   x/group EndBlocker event on the drilled build (295 heights scanned), so
+>   voting-period-end transitions are **eventless**.
+> - **height-pinned reads** — authority for the status and tally of everything the
+>   chain still holds, and consequently the only observer of that eventless
+>   transition: a sweep returning REJECTED where the previous sweep returned
+>   SUBMITTED is the sole evidence it happened.
+>
+> **Idempotency here is a property of the SQL, not of the reducer.** Unlike the
+> other workers' natural-key upserts, this one carries a monotonic guard — a
+> window observing height H must not overwrite a row observed at H′ > H — and it
+> is written as `INSERT … ON CONFLICT DO UPDATE … WHERE observedHeight <
+> EXCLUDED.observedHeight` rather than a read-compare-write, so convergence holds
+> with a backfill running beside the live worker. Pagination follows to exhaustion
+> and **fails the window at its page cap** instead of truncating: a short sweep is
+> indistinguishable from a prune, and the write path treats absence from a
+> successful sweep as evidence the chain dropped a proposal, so truncation would
+> mark live proposals pruned. An empty policy set (a plain-account `Config.admin`)
+> commits empty windows and concludes nothing absent — the honest no-governance
+> state.
+>
+> **Lag accounting** picks the stream up automatically; a chain with no `x/group`
+> substrate reports a caught-up `governance` cursor over an empty mirror, which is
+> correct rather than degraded.
 
 ### 9.3 Backfill
 
