@@ -429,6 +429,34 @@ export class GroupClient {
   }
 
   /**
+   * The module's own tally for a proposal — `TallyResult`.
+   *
+   * WHY THIS EXISTS SEPARATELY FROM `proposal()` (app plan PR 7.2). A proposal's
+   * `final_tally_result` is written by the module only when it TALLIES: it is
+   * zeros for the whole voting period, whatever has been voted. So the state
+   * plane — which is what both the indexer's sweep and `proposal()` read — cannot
+   * report where an OPEN proposal stands, and rendering its `final_tally_result`
+   * would state "nobody has voted" about a proposal that has votes. That is the
+   * one number a member is looking at when they decide, so it gets the module's
+   * own computation rather than one derived here from votes and member weights.
+   *
+   * A closed proposal answers with its stored final result, so callers need not
+   * branch on status; they branch on WHICH PLANE is canonical for the status
+   * they hold.
+   *
+   * The response ENVELOPE is not pinned by the fixture corpus (the 2026-07-29
+   * capture predates this read), so both `{ tally: {...} }` and a bare tally
+   * object are accepted. The tally SHAPE itself is corpus-pinned — it is the
+   * same `TallyResult` `parseProposal` already decodes.
+   */
+  async tallyResult(proposalId: bigint): Promise<GroupTallyResult> {
+    const o = expectObject(
+      await this.lcd.get(`cosmos/group/v1/proposals/${proposalId.toString()}/tally`),
+    );
+    return parseTallyResult(o["tally"] ?? o, "$.tally");
+  }
+
+  /**
    * Votes on a proposal, paginated. Answers 200 with an EMPTY list once the
    * proposal's tally is final — the module deletes the votes at voting-period
    * end — so an empty result here never means "nobody voted", and the mirror

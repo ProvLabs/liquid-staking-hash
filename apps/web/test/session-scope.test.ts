@@ -5,6 +5,9 @@
 // prompt-and-explain (page) or a reasonless 401 (resource route) — never
 // blank, never someone else's data.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
 import { describe, expect, it } from "vitest";
@@ -214,5 +217,36 @@ describe("operator/export joins the standing gate (M6.4 §2.3)", () => {
       expect(response.status, bad).toBe(400);
     }
     expect(called).toBe(false);
+  });
+});
+
+// The other direction of the same gate, and it is the one M7.2 needs: §8.7 is a
+// PUBLIC read. Proposals and votes are public chain facts with no address
+// keying, so there is nothing to scope — `services/api` creates no
+// `PERSONAL_PATHS` entry for them, and the web routes must not acquire a session
+// requirement either. A governance route that started calling `requireSession`
+// would turn a public audit trail into a members-only one without anyone
+// deciding to; this asserts it has not.
+describe("governance routes must NOT join the personal-route list (M7.2 invariant 9)", () => {
+  const GOVERNANCE_ROUTE_MODULES = ["app/routes/governance.tsx", "app/routes/governance.$proposalId.tsx"];
+
+  it("neither governance route imports or calls requireSession", () => {
+    for (const path of GOVERNANCE_ROUTE_MODULES) {
+      const source = readFileSync(join(__dirname, "..", path), "utf8");
+      expect(source, path).not.toMatch(/\brequireSession\b/);
+      // `getSessionContext` IS allowed: it returns null for an anonymous
+      // visitor, which is what makes the highlight a decoration and not a gate.
+      expect(source, path).toMatch(/\bgetSessionContext\b/);
+    }
+  });
+
+  it("the composition seam reads the session address only as an optional input", async () => {
+    // Anonymous and connected must reach the same data path; the address may
+    // only decorate. `governance-data.test.ts` proves the rendered result is the
+    // same page — this proves the seam's signature cannot require an address.
+    const seam = await import("~/governance/governance.server");
+    expect(typeof seam.loadGovernanceListData).toBe("function");
+    // Two arguments: config, then options. An address is never positional here.
+    expect(seam.loadGovernanceListData.length).toBeLessThanOrEqual(2);
   });
 });

@@ -46,6 +46,9 @@ export default [
     // Operator view (M6.4 §2.3, app-spec §8.6) — registered AFTER `validators`
     // so the public page keeps the bare path.
     route("validators/mine", "routes/validators-mine.tsx"),
+    // Governance center (M7.2, app-spec §8.7). Public read; the detail route is
+    // registered AFTER the list so the bare path stays the list.
     route("governance", "routes/governance.tsx"),
+    route("governance/:proposalId", "routes/governance.$proposalId.tsx"),
   ]),
 ] satisfies RouteConfig;

@@ -14,6 +14,9 @@ const ROUTES = [
   "/validators",
   "/validators/mine",
   "/governance",
+  // The proposal detail (M7.2). A concrete id from the mirrored corpus: the
+  // detail page has table, disclosure and time semantics the list does not.
+  "/governance/4",
 ];
 
 for (const route of ROUTES) {

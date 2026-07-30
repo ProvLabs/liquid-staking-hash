@@ -653,9 +653,177 @@ export default {
   "operator.accrued-header": "Accrued (HASH)",
   "operator.due-header": "Due (HASH)",
 
+  // Governance center (§8.7, PR 7.2). Read-only in this milestone: voting and
+  // execution arrive with 7.3–7.4, so nothing here offers an action.
   "governance.title": "Governance",
-  "governance.placeholder":
-    "Governance participation arrives here in a later milestone. This deployment is a development scaffold.",
+  "governance.lede":
+    "Proposals for the program's group policies, with what each one would do, where its tally stands, and how it ended.",
+  "governance.read-only-note":
+    "This page is read-only. Casting a vote and executing a passed proposal arrive in a later release.",
+
+  "governance.policies-title": "Policies",
+  "governance.policies-empty": "No group policy has been observed for this program yet.",
+  "governance.policy-live": "Current",
+  "governance.policy-historical": "Historical only",
+  "governance.policy-rule-threshold": "Passes at {value} weight in favour",
+  "governance.policy-rule-percentage": "Passes at {value} of total weight",
+  "governance.policy-rule-unknown": "Decision rule not recognized by this build",
+  "governance.policy-voting-period": "Voting period {period}",
+  "governance.policy-proposals": "{count} mirrored",
+  "governance.policy-proposals-none": "None mirrored",
+  "governance.group-summary": "Group {groupId}, version {version} · {members} members, total weight {weight}",
+  "governance.policies-truncated":
+    "More policies exist than this page read. The list below is incomplete.",
+
+  "governance.not-governed":
+    "This deployment's program admin is a plain account rather than a group policy, so there is no live group behind it. Mirrored history is shown below.",
+  "governance.live-unavailable":
+    "The chain could not be read, so current tallies and membership are unavailable. Mirrored values are shown with the height they were observed at.",
+
+  "governance.proposals-title": "Proposals",
+  "governance.proposals-empty": "No proposals have been mirrored yet.",
+  "governance.proposals-unavailable":
+    "The mirrored proposal history could not be read. This is not an empty history.",
+  "governance.indexed-from": "Mirrored from height {height}. Anything pruned before then is unrecoverable.",
+  "governance.indexed-from-unknown":
+    "No height certifies how far back this mirror reaches, so it may be incomplete.",
+
+  "governance.filter-label": "Status",
+  "governance.filter-all": "All",
+  "governance.status-submitted": "Open",
+  "governance.status-accepted": "Accepted",
+  "governance.status-rejected": "Rejected",
+  "governance.status-aborted": "Aborted",
+  "governance.status-withdrawn": "Withdrawn",
+  "governance.status-unspecified": "Unrecognized status",
+
+  "governance.executor-not-run": "Not executed",
+  "governance.executor-success": "Executed successfully",
+  "governance.executor-failure": "Execution FAILED",
+  "governance.executor-unspecified": "Execution outcome unrecognized",
+
+  "governance.plane-live": "From the chain, now",
+  "governance.plane-indexed-fallback":
+    "The chain could not be read; mirrored as of height {height}",
+  "governance.plane-indexed": "Mirrored record, as of height {height}",
+  "governance.plane-pruned": "The chain no longer holds this proposal; mirrored record only",
+  "governance.plane-live-only": "On chain now, not mirrored yet",
+
+  "governance.na": "n/a",
+  "governance.open-heading": "Open",
+  "governance.history-heading": "Outcome history",
+  "governance.view-proposal": "View proposal {id}",
+  "governance.page-next": "Next",
+  "governance.page-previous": "Previous",
+  "governance.page-position": "Page {page}",
+
+  "governance.proposal-heading": "Proposal {id}",
+  "governance.back-to-list": "All proposals",
+  "governance.untitled": "Untitled proposal",
+  "governance.no-summary": "The proposer supplied no summary.",
+  "governance.proposers": "Proposed by",
+  "governance.proposers-truncated":
+    "The proposer list was trimmed for transport and is incomplete.",
+  "governance.policy-label": "Policy",
+  "governance.submitted-at": "Submitted",
+  "governance.voting-ends": "Voting ends",
+  "governance.voting-ended": "Voting ended",
+  "governance.voting-ends-approx": "about {duration} from now",
+  "governance.submit-tx": "Submitted in transaction",
+  "governance.submit-tx-unknown":
+    "No submit transaction is recorded — this proposal was first seen by a state read.",
+
+  "governance.duration-day": "{count} day",
+  "governance.duration-days": "{count} days",
+  "governance.duration-hour": "{count} hour",
+  "governance.duration-hours": "{count} hours",
+  "governance.duration-minute": "{count} minute",
+  "governance.duration-minutes": "{count} minutes",
+  "governance.duration-second": "{count} second",
+  "governance.duration-seconds": "{count} seconds",
+
+  "governance.tally-title": "Tally",
+  "governance.tally-yes": "Yes",
+  "governance.tally-no": "No",
+  "governance.tally-abstain": "Abstain",
+  "governance.tally-no-with-veto": "No with veto",
+  "governance.tally-total": "Total weight cast",
+  "governance.tally-threshold": "Passes at {value} weight in favour",
+  "governance.tally-percentage": "Passes at {value} of total group weight",
+  "governance.tally-rule-unknown":
+    "This decision rule is not one this build understands, so whether it passes cannot be stated.",
+  "governance.tally-meets-yes": "Meets its threshold",
+  "governance.tally-meets-no": "Does not meet its threshold",
+  "governance.tally-meets-unknown": "Cannot be decided from what is known",
+  "governance.tally-participation": "{percent}% of total group weight has voted",
+  "governance.tally-snapshot-note":
+    "The rule shown is the one recorded when this proposal was submitted, not the policy's current rule.",
+
+  "governance.members-title": "Member status",
+  "governance.members-not-checked":
+    "The current member set could not be read, so only recorded votes are shown.",
+  "governance.members-changed":
+    "Group membership has changed since this proposal (group version {proposalVersion}, now {currentVersion}). Only the recorded votes are shown — today's members were not its electorate.",
+  "governance.member-address": "Member",
+  "governance.member-weight": "Weight",
+  "governance.member-vote": "Vote",
+  "governance.member-voted-at": "Voted",
+  "governance.member-not-voted": "Has not voted",
+  "governance.member-you": "you",
+
+  "governance.vote-yes": "Yes",
+  "governance.vote-no": "No",
+  "governance.vote-abstain": "Abstain",
+  "governance.vote-no-with-veto": "No with veto",
+  "governance.vote-unspecified": "Unrecognized option",
+
+  "governance.votes-title": "Recorded votes",
+  "governance.votes-empty":
+    "No votes are recorded. For a closed proposal this can also mean its votes were pruned before they were mirrored.",
+  "governance.votes-truncated": "The vote list was trimmed for transport and is incomplete.",
+  "governance.vote-live-only": "on chain, not mirrored yet",
+  "governance.vote-weight-unknown": "weight unknown",
+
+  "governance.messages-title": "What this proposal does",
+  "governance.messages-empty": "This proposal carries no messages.",
+  "governance.messages-truncated":
+    "This proposal carries more messages than were transported. What is shown below is incomplete.",
+  "governance.message-position": "Message {index} of {total}",
+  "governance.message-type": "Type",
+  "governance.message-contract": "Contract",
+  "governance.message-funds": "Funds attached",
+  "governance.message-exact": "Exact message",
+  "governance.message-json-truncated":
+    "This payload is longer than the page will render; what is shown is the beginning of it.",
+
+  "governance.msg-send": "Send {amount} to {recipient}",
+  "governance.msg-send-no-coins": "nothing",
+  "governance.msg-pay-commission": "Pay program commission for {valoper}",
+  "governance.msg-pay-tip": "Pay a TIP for {valoper}",
+  "governance.msg-register-participation": "Enrol {valoper} in the program",
+  "governance.msg-unregister-participation": "Withdraw {valoper} from the program",
+  "governance.msg-report-jailed": "Report {valoper} as jailed",
+  "governance.msg-purge-jailed": "Move the program's stake off jailed {valoper}",
+  "governance.msg-set-halted-on": "Halt the program's fund-moving cranks",
+  "governance.msg-set-halted-off": "Resume the program's fund-moving cranks",
+  "governance.msg-set-halted-unknown": "Change the program's crank halt state",
+  "governance.msg-update-config": "Update program configuration: {fields}",
+  "governance.msg-update-config-generic": "Update program configuration",
+  "governance.msg-pause-vault": "Pause the managed vault",
+  "governance.msg-unpause-vault": "Unpause the managed vault",
+  "governance.msg-clear-pending-delegations": "Abort a stuck epoch continuation",
+  "governance.msg-run-epoch": "Run the epoch crank",
+  "governance.msg-claim-rewards": "Claim accrued staking rewards",
+  "governance.msg-service-redemptions": "Service queued redemptions",
+  "governance.msg-capture-uptime-signal": "Capture the uptime signal",
+  "governance.msg-unknown-type":
+    "Unrecognized message type — this build cannot say what it does. The exact message is below.",
+  "governance.msg-unknown-contract":
+    "A call to a contract that is not this program's. This build does not summarize it; the exact message is below.",
+  "governance.msg-unknown-variant":
+    "An unrecognized action on the program contract. The exact message is below.",
+  "governance.msg-malformed":
+    "This message could not be read as its declared type. The exact payload is below.",
 
   "theme.toggle-label": "Theme",
   "theme.auto": "Auto",

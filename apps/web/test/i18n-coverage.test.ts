@@ -254,7 +254,27 @@ function scanApp(): Scan {
 // can't have their params checked statically, so they must need none. A
 // placeholder-bearing key may be exempted here only with every call site
 // hand-verified to supply its params.
-const INDIRECT_KEY_ALLOWLIST: ReadonlySet<string> = new Set();
+//
+// The six below are the valoper-bearing program-action summaries in
+// `app/governance/decode.ts` (M7.2). They reach t() through
+// `VARIANT_SUMMARY_KEYS`, which exists so the summary set is TOTAL over the
+// variant vocabulary `app/tx/build.ts` exports — that totality is itself a
+// gating property (invariant 3), so the table is not replaceable by literal
+// call sites without losing it.
+//
+// HAND-VERIFIED: there is exactly ONE call site for the table,
+// `summarizeMessage`'s final `t(locale, key, { valoper })`, which always
+// supplies `valoper`. `test/governance-decode.test.ts` asserts the substituted
+// output of all six against golden strings, so an unfilled placeholder here
+// fails that suite rather than reaching a user.
+const INDIRECT_KEY_ALLOWLIST: ReadonlySet<string> = new Set([
+  "governance.msg-pay-commission",
+  "governance.msg-pay-tip",
+  "governance.msg-register-participation",
+  "governance.msg-unregister-participation",
+  "governance.msg-report-jailed",
+  "governance.msg-purge-jailed",
+]);
 
 describe("i18n placeholder coverage", () => {
   const enKeys = Object.keys(EN).sort();

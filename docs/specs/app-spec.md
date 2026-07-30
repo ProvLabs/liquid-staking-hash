@@ -674,6 +674,65 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 - **Proposal creation:** v1 scopes composition to **selecting from decoded templates of the program's admin actions** (config change with a diff view, halt/resume, pause/unpause, bridge config) rather than free-form message building — free-form compose stays a Console strength (§14.6 decided: template-scoped creation ships in v1).
 - **Validator votes:** if register B2 resolves toward validator-elected admins, the voting surface is this page; the spec takes no position on B2 itself.
 
+> **Revision 2026-07-30 (PR 7.2 delivered): the read surface, and the four
+> places it refuses to guess.**
+>
+> `/governance` (list) and `/governance/:proposalId` (detail) ship as a **public
+> read**. No signing path is added: `ALLOWED_MSG_TYPE_URLS` is unchanged and a
+> governance message is still provably rejected by the relay's rejection matrix.
+> Voting, execution and proposal creation are 7.3–7.4.
+>
+> **The division of planes is the design.** An OPEN proposal's status and tally
+> are read live from `x/group` and are canonical (§12.1.1); anything CLOSED is
+> served from the mirror, because a successfully executed proposal is pruned in
+> its own transaction and the chain holds nothing. Four consequences are pinned
+> here because each is a place a later change would plausibly get it wrong:
+>
+> - **A proposal's `final_tally_result` is ZEROS until the module tallies.** So
+>   the state read cannot report where an open proposal stands, and the live
+>   tally comes from x/group's own `TallyResult` query
+>   (`GroupClient.tallyResult`). Rendering the state read's zeros would assert
+>   that nobody has voted. When that read fails, the page falls back to the
+>   mirror **with the height it was observed at**, never silently.
+> - **A live read failure is never evidence of a prune.** The LCD answers a
+>   missing proposal with HTTP 500 and a body identical for a pruned id, an id
+>   that never existed, and an outage. `pruned_at_height` from the mirror is the
+>   only source of "the chain no longer holds this", and a pruned proposal is
+>   never live-read at all.
+> - **Membership drift is stated.** A proposal whose `group_version` differs from
+>   the group's current version was decided by a different electorate, so the
+>   page shows recorded votes only plus an explicit note — and it uses the
+>   `decision_policy` snapshotted at submit, never the live policy. The rule
+>   holds for open proposals too: the 2026-07-29 drill measured that a mid-vote
+>   members change does not abort an open proposal on this build.
+> - **Decoded summaries come from a CLOSED union or say they do not.**
+>   `MsgSend` (corpus-pinned) and `MsgExecuteContract` against the configured
+>   program contract (pinned to `contracts/src/msg.rs`, with the variant
+>   vocabulary imported from `app/tx/build.ts` so this reader and 7.4's composer
+>   cannot diverge). Everything else — including a call to any other contract and
+>   every x/group message — renders as "unrecognized" plus the exact payload,
+>   which is shown for **every** message either way (D6).
+>
+> **Two live-plane failures are different answers**, and the page says which: a
+> program admin that is not a group-policy account ("this deployment has no group
+> behind it") versus a chain read that failed ("we could not check"). Only an
+> LCD 404 decides the first; everything else is the second.
+>
+> Policy discovery is **set-valued** (D1) and paginated to exhaustion under a
+> page cap; the live tally reads a list render makes are capped, with any
+> proposal past the cap rendering on the mirror with its stale badge rather than
+> on a different, quieter degradation.
+>
+> **No `governance` verify-link target** (D8, §12.2): the console has no
+> governance panel, and a pruned proposal has nothing on chain left to link to.
+>
+> Standing gates added: `apps/web/test/governance-decode.test.ts` (golden
+> summaries per variant, totality over the shared vocabulary, unknown/malformed
+> arms), `governance-tally.test.ts`, `governance-data.test.ts` (the plane
+> precedence matrix incl. the stale-but-successful cells), `governance-compose.test.ts`,
+> offline `e2e/governance.spec.ts`, skip-clean `e2e-live/governance.spec.ts`, and
+> both governance routes in the axe route list.
+
 ### 8.8 Admin Analytics (route `/admin`, admin only)
 
 The cohort-satisfaction dashboard the no-backend console cannot render (register A4), fed by the indexer and the first-party aggregate analytics (§3 decision 14):
