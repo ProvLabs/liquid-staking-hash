@@ -393,6 +393,8 @@ export default {
     "Voting is still open until {endsAt}. A proposal can only be executed after its voting period closes.",
   "tx.reason-min-execution-pending":
     "This policy requires a waiting period after passage. This proposal becomes executable at {readyAt}.",
+  "tx.reason-min-execution-unknown":
+    "This proposal's policy requires a waiting period after passage, and this build could not read it — so we cannot confirm the proposal is executable yet.",
   "tx.reason-already-executed": "This proposal has already been executed.",
   "tx.reason-policy-not-found":
     "That group policy is not one of this program's, so a proposal cannot be submitted to it.",

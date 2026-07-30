@@ -663,8 +663,19 @@ export function governancePreflightReasons(
     // FAILURE is terminal too: x/group does not permit a second attempt.
     reasons.push({ code: "already-executed" });
   } else {
+    // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW (PR #25 review, 2026-07-30).
+    // `minExecutionPeriod` is null ONLY when it could not be determined — the
+    // proposal's policy is outside the discovered set, or its decision rule is a
+    // kind this build does not model. x/group serializes a Duration for both
+    // recognized kinds, so a policy with no waiting period yields `"0s"`, never
+    // null. Passing null through as "nothing to wait for" returned a green
+    // reason list for an action the chain would reject with "must wait until …"
+    // — the exact "silently hiding it" this module's contract forbids, and the
+    // `min_execution_period` is a fact THIS branch consumes.
     const readyAtIso = executableAtIso(submitTime, facts.minExecutionPeriod);
-    if (readyAtIso !== null && facts.nowMs < Date.parse(readyAtIso)) {
+    if (readyAtIso === null) {
+      reasons.push({ code: "min-execution-pending", readyAtIso: null });
+    } else if (facts.nowMs < Date.parse(readyAtIso)) {
       reasons.push({ code: "min-execution-pending", readyAtIso });
     }
   }

@@ -79,7 +79,9 @@ export function reasonText(
     case "voting-period-open":
       return t(locale, "tx.reason-voting-period-open", { endsAt: reason.endsAtIso });
     case "min-execution-pending":
-      return t(locale, "tx.reason-min-execution-pending", { readyAt: reason.readyAtIso });
+      return reason.readyAtIso === null
+        ? t(locale, "tx.reason-min-execution-unknown")
+        : t(locale, "tx.reason-min-execution-pending", { readyAt: reason.readyAtIso });
     case "already-executed":
       return t(locale, "tx.reason-already-executed");
     case "policy-not-found":

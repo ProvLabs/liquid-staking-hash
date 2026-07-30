@@ -55,7 +55,10 @@ export type PreflightReason =
   | { code: "not-group-member" }
   | { code: "proposal-not-passed" }
   | { code: "voting-period-open"; endsAtIso: string }
-  | { code: "min-execution-pending"; readyAtIso: string }
+  /** `readyAtIso` is null when the window could NOT BE DETERMINED — the policy
+   * is outside the discovered set, or its decision rule is a kind this build
+   * does not model. An unresolved window is not a zero window (PR #25 review). */
+  | { code: "min-execution-pending"; readyAtIso: string | null }
   | { code: "already-executed" }
   | { code: "policy-not-found" }
   /** A composed template failed its own bounds before anything was encoded. */

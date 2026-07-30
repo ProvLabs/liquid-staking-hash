@@ -215,19 +215,44 @@ describe("C4 — the execute column, one case per row", () => {
     });
   });
 
-  it("an UNPARSEABLE min_execution_period → disabled with an unknown time, not offered", () => {
-    // A policy declares a waiting period this build cannot read. Offering the
-    // button would invite the chain's own "must wait until …" rejection; saying
-    // "not yet, and we cannot say when" is the honest degradation.
-    expect(
-      executeAffordance(input({ live: { ...liveAccepted, minExecutionPeriod: "P2D" } })),
-    ).toEqual({ state: "disabled", reason: "min-execution-pending", readyAtIso: null });
+  it("an UNDETERMINED window → disabled with an unknown time, NEVER offered", () => {
+    // THE DEFECT THIS REPLACES (PR #25 review, 2026-07-30). The null case used
+    // to fall through to `offered` on the reasoning that there was "no window to
+    // wait out". That was wrong: x/group serializes a Duration for both
+    // recognized decision-policy kinds, so a policy with NO waiting period
+    // yields `"0s"` — null means only that we could not DETERMINE it (the policy
+    // is outside the discovered set, or its rule is a kind this build does not
+    // model). Offering execute on it let the user sign into the chain's own
+    // "must wait until …" rejection.
+    //
+    // Reachable, not theoretical: `/governance/:proposalId` accepts any proposal
+    // id and the live read is unscoped, so a proposal belonging to ANOTHER
+    // group's policy resolves a `liveState` whose policy is absent from this
+    // program's discovered set.
+    for (const minExecutionPeriod of [null, "P2D", "600", "", "1m"]) {
+      expect(
+        executeAffordance(input({ live: { ...liveAccepted, minExecutionPeriod } })),
+        String(minExecutionPeriod),
+      ).toEqual({ state: "disabled", reason: "min-execution-pending", readyAtIso: null });
+    }
   });
 
-  it("NO declared min_execution_period → offered (there is no window to wait out)", () => {
+  it("a ZERO window is still offered — `\"0s\"` is a value, not an absence", () => {
+    // The other half: the fix must not turn a legitimately-executable proposal
+    // into a permanently disabled one. A policy with no waiting period says so
+    // explicitly, and that is distinguishable from not knowing.
     expect(
-      executeAffordance(input({ live: { ...liveAccepted, minExecutionPeriod: null } })),
+      executeAffordance(input({ live: { ...liveAccepted, minExecutionPeriod: "0s" } })),
     ).toEqual({ state: "offered" });
+  });
+
+  it("an unparseable SUBMIT TIME is also undetermined → disabled, not offered", () => {
+    // The other input to the window. Same rule, same reason.
+    expect(
+      executeAffordance(
+        input({ live: { ...liveAccepted, submitTime: "not-a-date", minExecutionPeriod: "0s" } }),
+      ),
+    ).toEqual({ state: "disabled", reason: "min-execution-pending", readyAtIso: null });
   });
 });
 

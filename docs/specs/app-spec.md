@@ -756,7 +756,10 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 > coming, with the eligible-at time, computed from `submit_time +
 > min_execution_period` as x/group's own `Exec` computes it. A waiting period
 > this build cannot parse leaves the control disabled with "we cannot say when",
-> never offered.
+> never offered — **as does a window that could not be resolved at all**. A
+> policy with no waiting period serializes `"0s"`, so an absent value means
+> "undetermined", never "none", and the App does not offer a privileged action
+> on a window it could not read.
 >
 > **That period is read from the LIVE policy, and the UI and the preflight read
 > it the same way** (corrected 2026-07-30 after a PR-review finding that they

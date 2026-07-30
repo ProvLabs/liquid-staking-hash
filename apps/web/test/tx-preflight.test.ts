@@ -26,6 +26,7 @@ import {
   type OperatorPreflightRequest,
 } from "~/tx/preflight.server";
 import { MAX_PROPOSAL_METADATA_LEN } from "@nvhash/api-types";
+import { executeAffordance } from "~/governance/actions";
 import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
 import { server } from "~/mocks/node";
 
@@ -646,6 +647,61 @@ describe("governance preflight — exec", () => {
       code: "min-execution-pending",
       readyAtIso: "2026-07-31T12:00:00.000Z",
     });
+  });
+
+  it("an UNDETERMINED window BLOCKS — an unresolved window is not a zero window", () => {
+    // The preflight half of the PR #25 review finding. `minExecutionPeriod` is
+    // null only when it could not be determined (policy outside the discovered
+    // set, or a decision rule this build does not model); x/group serializes
+    // `"0s"` for a policy that genuinely has no waiting period. Passing null
+    // through as "nothing to wait for" returned a GREEN reason list for an
+    // action the chain rejects with "must wait until …", which is the exact
+    // "silently hiding it" the module's contract forbids — and this branch
+    // CONSUMES the window, so it must block on it.
+    const reasons = governancePreflightReasons(
+      exec,
+      govFacts({ proposal: accepted, minExecutionPeriod: null }),
+    );
+    expect(reasons).toContainEqual({ code: "min-execution-pending", readyAtIso: null });
+  });
+
+  it("a ZERO window still passes — `\"0s\"` is a value, not an absence", () => {
+    // The fix must not block a legitimately-executable proposal.
+    expect(
+      govCodes(
+        governancePreflightReasons(exec, govFacts({ proposal: accepted, minExecutionPeriod: "0s" })),
+      ),
+    ).toEqual([]);
+  });
+
+  it("preflight and the AFFORDANCE agree on an undetermined window", () => {
+    // These two disagreeing is what the review found twice in this area (first
+    // snapshot-vs-live, then null-vs-zero). Asserting the agreement directly is
+    // cheaper than re-deriving it: the button and the check that gates it must
+    // reach the same verdict from the same facts.
+    const undetermined = govFacts({ proposal: accepted, minExecutionPeriod: null });
+    const blocked = governancePreflightReasons(exec, undetermined).some(
+      (r) => r.code === "min-execution-pending",
+    );
+    const affordance = executeAffordance({
+      live: {
+        status: "accepted",
+        executorResult: "not_run",
+        submitTime: accepted.submitTime,
+        votingPeriodEnd: accepted.votingPeriodEnd,
+        groupVersion: "1",
+        minExecutionPeriod: null,
+      },
+      pruned: false,
+      membershipChanged: false,
+      sessionAddress: ADDRESS,
+      isMember: true,
+      hasVoted: false,
+      votedOption: null,
+      nowMs: GOV_NOW,
+    });
+    expect(blocked).toBe(true);
+    expect(affordance.state).toBe("disabled");
   });
 
   it("already executed — SUCCESS or FAILURE — → already-executed", () => {

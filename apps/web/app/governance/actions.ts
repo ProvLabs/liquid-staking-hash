@@ -231,14 +231,30 @@ export function executeAffordance(input: AffordanceInput): ExecuteAffordance {
   // Both inputs come from `live`: the submit time the chain reports and the
   // waiting period the chain will actually compare against.
   const readyAtIso = executableAtIso(input.live.submitTime, input.live.minExecutionPeriod);
-  if (readyAtIso !== null && input.nowMs < Date.parse(readyAtIso)) {
-    return { state: "disabled", reason: "min-execution-pending", readyAtIso };
-  }
-  if (readyAtIso === null && input.live.minExecutionPeriod !== null) {
-    // The policy declares a waiting period this build could not parse. Disabled
-    // with an unknown eligible-at is honest; offering it would invite a
-    // transaction the chain may reject with "must wait until …".
+
+  // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW (PR #25 review, 2026-07-30).
+  // This previously fell through to `offered` when `minExecutionPeriod` was
+  // null, on the reasoning that there was "no window to wait out". That
+  // reasoning was wrong: for both decision-policy kinds x/group serializes a
+  // Duration, so a policy with no waiting period yields `"0s"` — never null
+  // (`parseDecisionPolicy`, `packages/chain-client/src/group.ts`). Null means
+  // only that we COULD NOT DETERMINE it: the policy is outside the discovered
+  // set, or its rule is a kind this build does not model.
+  //
+  // That is reachable, not theoretical. `/governance/:proposalId` accepts any
+  // proposal id on the chain and the live read is unscoped, so a proposal
+  // belonging to ANOTHER group's policy resolves a `liveState` while its policy
+  // is absent from this program's discovered set — and the old branch offered
+  // execute on it.
+  //
+  // So null and unparseable collapse to the same honest answer: disabled, with
+  // no eligible-at time. The App does not offer a privileged action on a window
+  // it could not read, exactly as it hides one on a proposal it could not read.
+  if (readyAtIso === null) {
     return { state: "disabled", reason: "min-execution-pending", readyAtIso: null };
+  }
+  if (input.nowMs < Date.parse(readyAtIso)) {
+    return { state: "disabled", reason: "min-execution-pending", readyAtIso };
   }
   return { state: "offered" };
 }
