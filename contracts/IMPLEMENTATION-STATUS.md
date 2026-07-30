@@ -181,7 +181,8 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       consequence in the App: `apps/web/test/governance-templates.test.ts`
       asserts the template ↔ admin-variant mapping is **total in both
       directions** against the committed `cargo schema` output
-      (`contracts/schema/raw/execute.json`), reading authority from each
+      (`contracts/schema/nvhash-staking.json` — the tracked IDL; `schema/raw/`
+      is gitignored), reading authority from each
       variant's own `Admin-gated:` doc comment rather than from a list restated
       in TypeScript. **The admin-capability surface is unchanged by that PR** —
       it remains exactly `PauseVault`, `UnpauseVault`, `UpdateConfig`,

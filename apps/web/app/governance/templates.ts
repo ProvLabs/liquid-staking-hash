@@ -30,7 +30,8 @@
 // A template exists for EVERY admin variant in `contracts/src/msg.rs` and for
 // no other variant. `test/governance-templates.test.ts` asserts that mapping is
 // total in BOTH directions against the committed `cargo schema` output
-// (`contracts/schema/raw/execute.json`). That gate is now a PRODUCT
+// (`contracts/schema/nvhash-staking.json`, the tracked IDL — `schema/raw/` is
+// gitignored). That gate is now a PRODUCT
 // completeness property rather than a security one: a contract that gains an
 // admin capability fails CI here rather than leaving it unreachable from the
 // App's composer.

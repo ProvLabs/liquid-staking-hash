@@ -11,6 +11,12 @@
 // The schema is read from disk on purpose. A hand-copied variant list in this
 // file would be a third place the vocabulary lives, and the whole point of
 // invariant 6 is that there is ONE.
+//
+// READ THE COMMITTED ARTIFACT, NOT A BUILD BYPRODUCT. This gate first read
+// `contracts/schema/raw/execute.json`, which is GITIGNORED — it passed on every
+// developer machine that had run `cargo schema` and failed CI on a clean
+// checkout with `ENOENT`. "The reviewed interface" has to mean a file the repo
+// actually carries, so the source is now the tracked bundled IDL.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -45,9 +51,21 @@ interface SchemaVariant {
   properties: Record<string, { properties?: Record<string, unknown>; required?: string[] }>;
 }
 
-const executeSchema = JSON.parse(
-  readFileSync(resolve(process.cwd(), "../../contracts/schema/raw/execute.json"), "utf8"),
-) as { oneOf: SchemaVariant[] };
+/**
+ * The BUNDLED IDL, and it must be the bundled one.
+ *
+ * `cargo schema` writes two things: `contracts/schema/<name>.json` (the IDL,
+ * committed) and `contracts/schema/raw/*.json` (per-message, **gitignored** —
+ * `.gitignore:6`). This gate first read `raw/execute.json`, which passed
+ * locally and failed CI with `ENOENT` on a clean checkout — a gate cannot read
+ * authority from a file the repo does not carry. `bundled.execute` is
+ * content-identical to `raw/execute.json`, so every assertion below is
+ * unchanged; only the source moved to the artifact that is actually reviewed.
+ */
+const SCHEMA_PATH = resolve(process.cwd(), "../../contracts/schema/nvhash-staking.json");
+const executeSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")).execute as {
+  oneOf: SchemaVariant[];
+};
 
 /** Every `ExecuteMsg` variant, keyed by its serde name. */
 const SCHEMA_VARIANTS = new Map(
