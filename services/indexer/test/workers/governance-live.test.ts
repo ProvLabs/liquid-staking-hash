@@ -78,14 +78,35 @@ describe.skipIf(!LCD || !CONTRACT)("governance collector against a live governed
     // THE CLAIM THE MIRROR RESTS ON: a proposal that executed successfully is
     // gone from chain state, and its outcome survives only in the tx plane.
     const succeeded = batch.execResults.filter((e) => e.result === "SUCCESS");
-    if (succeeded.length > 0) {
-      const onChain = new Set(batch.proposals.map((p) => p.proposalId.toString()));
-      for (const exec of succeeded) {
-        expect(onChain.has(exec.proposalId.toString())).toBe(false);
-        // …and the prune event carried its terminal status, so the row is still
-        // reconstructible.
-        expect(batch.prunes.some((p) => p.proposalId === exec.proposalId)).toBe(true);
-      }
+    const onChain = new Set(batch.proposals.map((p) => p.proposalId.toString()));
+    const recovered = new Set(batch.recoveredProposals.map((r) => r.snapshot.proposalId.toString()));
+    for (const exec of succeeded) {
+      expect(onChain.has(exec.proposalId.toString())).toBe(false);
+      // …and the prune event carried its terminal status, so the row is still
+      // reconstructible.
+      expect(batch.prunes.some((p) => p.proposalId === exec.proposalId)).toBe(true);
+    }
+
+    // PR #23's P1, against real chain data. This whole window covers every
+    // proposal's full lifecycle, so before the recovery pass the successfully
+    // executed ones were absent from the sweep AND had no base row — the writer's
+    // event-derived UPDATEs affected nothing and they vanished from the mirror.
+    // Every proposal an event proved existed must now be reachable through one of
+    // the two paths.
+    for (const id of new Set([...batch.submits.map((s) => s.proposalId.toString())])) {
+      expect(
+        onChain.has(id) || recovered.has(id),
+        `proposal ${id} was seen submitted but is in neither the sweep nor the recovery set`,
+      ).toBe(true);
+    }
+    // And on this corpus the recovery path is genuinely exercised, not merely
+    // available: the drill executed and withdrew proposals, all of which pruned.
+    expect(batch.recoveredProposals.length).toBeGreaterThan(0);
+    for (const r of batch.recoveredProposals) {
+      // A recovered row carries its own AS-OF, strictly below the window's end.
+      expect(r.observedHeight).toBeLessThan(batch.observedHeight);
+      expect(r.snapshot.groupPolicyAddress).toMatch(/^tp1/);
+      expect(Array.isArray(r.snapshot.messages)).toBe(true);
     }
 
     // A failed execution, by contrast, leaves the proposal in state.

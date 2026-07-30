@@ -398,9 +398,18 @@ describe("governance derive", () => {
     expect(row.tally.yes).toBe(huge.toString());
   });
 
-  it("preserves multiple proposers", () => {
+  it("preserves multiple proposers, and flags a trim", () => {
     // x/group permits several, so a scalar would be a lie for two.
-    expect(toGovProposalRow(facts).proposers).toEqual(["tp1a", "tp1b"]);
+    const row = toGovProposalRow(facts);
+    expect(row.proposers).toEqual(["tp1a", "tp1b"]);
+    expect(row.proposers_truncated).toBe(false);
+    // And an over-limit list is trimmed WITH a flag — silently shortening identity
+    // data leaves a consumer unable to tell it happened (PR #23 review, P2).
+    const trimmed = toGovProposalRow({
+      ...facts,
+      proposers: Array.from({ length: 40 }, (_, i) => `tp1p${i}`),
+    });
+    expect(trimmed.proposers_truncated).toBe(true);
   });
 
   it("surfaces prunedAtHeight and keeps submit provenance", () => {

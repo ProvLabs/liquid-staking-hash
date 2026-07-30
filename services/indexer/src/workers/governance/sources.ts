@@ -27,7 +27,7 @@ import {
 } from "./decode.ts";
 import { GROUP_BLOCK_EVENT_TYPES, GROUP_EVENT } from "./events.ts";
 import { discoverGovernance, type PolicySource } from "./policies.ts";
-import { sweepPolicies } from "./state.ts";
+import { recoverAbsentProposals, sweepPolicies } from "./state.ts";
 import type {
   ExecFact,
   ProposalSnapshot,
@@ -62,6 +62,14 @@ export interface GovernanceBatch {
   readonly observedAt: Date;
   readonly policies: string[];
   readonly proposals: ProposalSnapshot[];
+  /**
+   * Proposals the tx/block plane proved existed but the ending sweep cannot
+   * return, because their whole lifecycle fell inside this window. Carried
+   * SEPARATELY from `proposals` because each has its own AS-OF: the height it was
+   * recovered at, not `observedHeight` — at `observedHeight` the chain no longer
+   * holds it, and stamping it with the window's end would assert otherwise.
+   */
+  readonly recoveredProposals: { snapshot: ProposalSnapshot; observedHeight: bigint }[];
   readonly stateVotes: VoteSnapshot[];
   readonly submits: SubmitFact[];
   readonly txVotes: TxVoteFact[];
@@ -81,6 +89,7 @@ const EMPTY_BATCH = (observedHeight: bigint, observedAt: Date): GovernanceBatch 
   observedAt,
   policies: [],
   proposals: [],
+  recoveredProposals: [],
   stateVotes: [],
   submits: [],
   txVotes: [],
@@ -200,11 +209,72 @@ export async function collectWindow(
   //    voting-period-end transition.
   const sweep = await sweepPolicies(source, policies, memberWeights, window.to);
 
+  // 5. Recovery pass. Anything the events proved existed but the sweep cannot
+  //    return was submitted AND pruned inside this window — the normal outcome for
+  //    a promptly executed proposal, since a successful exec prunes in its own
+  //    transaction. Without this the row is never created and every event-derived
+  //    UPDATE below silently affects nothing (PR #23 review, P1).
+  const present = new Set(sweep.proposals.map((p) => p.proposalId.toString()));
+
+  // Which height to pin is the whole correctness of this pass, and the two signals
+  // are NOT interchangeable:
+  //   - a SUBMIT height is a height the proposal existed at (it was created there);
+  //   - a terminal height is one where it is already GONE, since a prune lands in
+  //     the same block as the transaction that caused it — so the block BEFORE it
+  //     is the last one that still had it.
+  // Taking a naive minimum across both mixes the two and can pin BEFORE the
+  // proposal existed, which reads as not-found and loses the row for the wrong
+  // reason. So they are tracked separately.
+  const submitHeight = new Map<string, bigint>();
+  const terminalHeight = new Map<string, bigint>();
+  const noteEarliest = (m: Map<string, bigint>, id: bigint, height: bigint): void => {
+    const key = id.toString();
+    const prev = m.get(key);
+    if (prev === undefined || height < prev) m.set(key, height);
+  };
+  for (const s of submits) noteEarliest(submitHeight, s.proposalId, s.height);
+  for (const e of execResults) noteEarliest(terminalHeight, e.proposalId, e.height);
+  for (const p of prunes) noteEarliest(terminalHeight, p.proposalId, p.height);
+  for (const w of withdrawals) noteEarliest(terminalHeight, w.proposalId, w.height);
+
+  const absent: { proposalId: bigint; pinHeight: bigint }[] = [];
+  for (const key of new Set([...submitHeight.keys(), ...terminalHeight.keys()])) {
+    if (present.has(key)) continue;
+    const submitted = submitHeight.get(key);
+    const terminal = terminalHeight.get(key);
+
+    if (submitted !== undefined) {
+      // Submitted AND finished in the same BLOCK — reachable with
+      // `MsgSubmitProposal.exec = EXEC_TRY` when the proposers alone meet the
+      // threshold. No height has this proposal alive, so a pinned read cannot
+      // recover it; the tx BODY could, and doing so is a recorded follow-on rather
+      // than a silent gap.
+      if (terminal !== undefined && terminal <= submitted) {
+        logger.warn("governance proposal submitted and finished in one block: not recoverable by a pinned read", {
+          stream: "governance",
+          height: submitted,
+          error: `proposal ${key} has no height at which it was alive`,
+        });
+        continue;
+      }
+      absent.push({ proposalId: BigInt(key), pinHeight: submitted });
+      continue;
+    }
+    // No submit in this window: the proposal came from an earlier one, so the row
+    // should already exist and this read is a repair rather than the primary path.
+    if (terminal !== undefined && terminal > 0n) {
+      absent.push({ proposalId: BigInt(key), pinHeight: terminal - 1n });
+    }
+  }
+
+  const recoveredProposals = await recoverAbsentProposals(source, policies, absent);
+
   return {
     observedHeight: window.to,
     observedAt,
     policies: policies.map((p) => p.address),
     proposals: sweep.proposals,
+    recoveredProposals,
     stateVotes: sweep.votes,
     submits,
     txVotes,

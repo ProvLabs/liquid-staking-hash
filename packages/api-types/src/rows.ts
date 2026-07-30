@@ -719,6 +719,12 @@ export interface GovProposalRow {
    * served FLAGGED, never silently shortened — quietly truncating the payload
    * would misstate what is being voted on. */
   messages_truncated: boolean;
+  /** True when `proposers` was trimmed to its wire bound. Same rule, and it needs
+   * stating separately because WHO proposed something is identity data: a trimmed
+   * list that carried no flag would be indistinguishable from the complete one, so
+   * a consumer could not tell a 32-proposer proposal from a 40-proposer one
+   * (PR #23 review, P2). */
+  proposers_truncated: boolean;
   /** The proposal's messages, VERBATIM and undecoded. 7.2 decodes them against a
    * closed typed union with a tagged `unknown`; no summary is invented here. */
   messages: unknown[];

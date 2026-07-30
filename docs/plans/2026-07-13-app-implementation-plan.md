@@ -733,3 +733,25 @@ rather than from the prose tables. What §4b contributed was telling the drill
 what to try to falsify. The overview §7.2 obligation table stands for 7.2–7.6;
 the case for the prose cells (C4, C5) remains untested, since neither applied
 here.*
+
+*2026-07-29 (PR #23 review) — two issues raised, both valid, both fixed in the
+branch. The **P1** was silent data loss in the common case: a proposal submitted,
+executed and pruned inside ONE indexing window was absent from that window's
+ending sweep, and since every event-derived write is an UPDATE keyed on
+`proposalId`, the whole lifecycle affected zero rows while the votes survived as
+orphans. The M7.1 plan had specified the height-pinned recovery read that prevents
+it; the read was dropped in implementation while correcting the
+404-means-pruned semantics. Restored, with the AS-OF of the recovery read rather
+than the window's end, and with orphan votes refused where recovery is impossible.
+The **P2** was an unflagged proposer truncation, fixed with `proposers_truncated`.*
+
+*The §4b consequence is recorded rather than smoothed over: the escaped P1 sits in
+a category none of C1–C5 names, so per the overview's own reading rule the list was
+incomplete and **C6 — temporal spans** is added to it (which windows can an
+entity's lifecycle occupy, and does each write path hold when they collapse into
+one?). The sharper lesson is that the replay suite already carried an invariant
+named for exactly that behavior which seeded its row in a PRIOR window — passing
+while the defect it named was live. That is the M6.4 failure mode reproduced inside
+the PR piloting the fix for it, and it strengthens §7.5's own prediction that a
+leaking-but-filled table should be answered by generating the matrix from the drill
+corpus rather than by hand.*

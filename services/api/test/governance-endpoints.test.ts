@@ -20,6 +20,7 @@ import { fakeReader, type FakeFacts } from "./reader-fake.ts";
 import type { GovProposalFacts, GovVoteFacts } from "../src/derive.ts";
 import {
   MAX_GOV_PROPOSAL_MESSAGES,
+  MAX_GOV_PROPOSERS,
   MAX_GOV_VOTES_PER_PROPOSAL,
   type GovPolicyRow,
   type GovProposalDetail,
@@ -266,6 +267,24 @@ describe("GET /governance/proposal", () => {
     // A governance payload that quietly lost a message would misstate what is
     // being voted on — the one truncation that must never be silent.
     expect(detail.proposal.messages_truncated).toBe(true);
+  });
+
+  it("FLAGS a truncated proposer list (PR #23 review, P2)", async () => {
+    const many = Array.from({ length: 40 }, (_, i) => `tp1proposer${String(i).padStart(3, "0")}`);
+    const { body } = await get("/api/v1/governance/proposal?id=2", {
+      ...FACTS,
+      govProposals: [proposal({ proposalId: 2n, proposers: many })],
+    });
+    const row = (body.data as GovProposalDetail).proposal;
+    expect(row.proposers).toHaveLength(MAX_GOV_PROPOSERS);
+    // Without the flag a 40-proposer proposal is indistinguishable from a
+    // 32-proposer one, and WHO proposed something is identity data.
+    expect(row.proposers_truncated).toBe(true);
+  });
+
+  it("does not flag a proposer list that fits", async () => {
+    const { body } = await get("/api/v1/governance/proposal?id=2");
+    expect((body.data as GovProposalDetail).proposal.proposers_truncated).toBe(false);
   });
 
   it("carries messages VERBATIM when under the bound", async () => {

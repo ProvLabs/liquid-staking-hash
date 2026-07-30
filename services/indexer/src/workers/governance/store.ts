@@ -75,6 +75,12 @@ export interface GovernanceStore {
   markPruned(proposalId: bigint, height: bigint): Promise<void>;
   /** Proposal ids stored for the given policies — the absence diff's left side. */
   storedIdsForPolicies(policies: readonly string[]): Promise<bigint[]>;
+  /** Which of these proposal ids the mirror actually holds, as decimal strings.
+   * The writer needs it to refuse ORPHAN votes: a vote inserts unconditionally on
+   * `(proposalId, voter)` while a proposal upserts on `proposalId`, so a vote for a
+   * proposal that could not be recovered would be both unreachable (the detail
+   * endpoint reaches votes only through a proposal) and untrue. */
+  existingProposalIds(proposalIds: readonly bigint[]): Promise<Set<string>>;
   /** Upsert a vote. Provenance is set-once; a null never overwrites a value. */
   upsertVote(row: VoteUpsert): Promise<void>;
 }
@@ -219,6 +225,15 @@ export class PrismaGovernanceStore implements GovernanceStore {
       select: { proposalId: true },
     });
     return rows.map((r) => r.proposalId);
+  }
+
+  async existingProposalIds(proposalIds: readonly bigint[]): Promise<Set<string>> {
+    if (proposalIds.length === 0) return new Set();
+    const rows = await this.tx.govProposal.findMany({
+      where: { proposalId: { in: [...proposalIds] } },
+      select: { proposalId: true },
+    });
+    return new Set(rows.map((r) => r.proposalId.toString()));
   }
 
   async upsertVote(row: VoteUpsert): Promise<void> {

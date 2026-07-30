@@ -268,6 +268,7 @@ review the way a missing gating test fails §4.
 | C3 | **Concurrency** | Every read-then-write on a uniqueness or cap constraint. The default remedy is a **database constraint**, not application logic; application-level enforcement requires a stated reason. |
 | C4 | **State × affordance** | Every state a record can occupy × every action the UI offers on it. Adding a state — including a state introduced by fixing something else — re-derives the whole matrix. |
 | C5 | **Plane precedence** | Per field: `{live ok, live stale, live down} × {indexed ok, indexed stale, indexed down}`. Note **stale** is a distinct column from **down**: M6.4's honesty matrix had degradation on its axes but not staleness, and that is precisely the cell that leaked. |
+| C6 | **Temporal spans** *(added 2026-07-29 by 7.1's own escaped P1)* | For every entity: which INDEXING WINDOWS can its lifecycle occupy, and does each write path still hold when they **collapse into one**? State the single-window case explicitly. 7.1 lost proposals whose submit, execute and prune all landed in one window — every event-derived write was an UPDATE with no row to update, and the votes survived as orphans. §7.2's reading rule is explicit that a P1 in a category the list does not name means the list is incomplete, so this is that amendment rather than a note. |
 
 ### 7.3 Invariants carry a disproof
 
@@ -365,6 +366,19 @@ evidence for the ceremony reading.
 > **Three of the five predicted claims landed in 7.1 and all three mattered**
 > (the vote-change verdict, the conditional-update guard, the bounds pairing).
 > `incident_acks` and the stale-admin window belong to 7.5.
+>
+> **And a P1 escaped in a category none of C1–C5 named** (7.1 plan §3.5b): a
+> proposal whose whole lifecycle fell inside ONE window was silently dropped,
+> because every event-derived write is an UPDATE and the ending sweep could not
+> supply the row. §7.2's reading rule says a P1 outside the named categories means
+> the LIST is incomplete — so **C6 (temporal spans) is added above**, not merely
+> noted. Two things make this the sharpest evidence in the pilot: the space was
+> temporal, which no existing cell touches; and the replay suite already held an
+> invariant named for exactly that behavior which seeded the row in a PRIOR window,
+> so it passed while the defect it named was live. That is the M6.4 failure mode
+> reproduced inside the PR piloting the fix for it, and it is an argument for
+> generating these matrices from the drill corpus rather than by hand — which is
+> what §7.5 predicted the remedy would be if a filled table still leaked.
 >
 > **The correction to §7.1's framing.** The four assumptions this milestone got
 > WRONG were caught by the **drill**, not by the §4b tables: a successful exec

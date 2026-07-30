@@ -192,6 +192,19 @@ describe("prune PRESERVES the row — the mirror outlives chain state", () => {
     expect(row.prunedAtHeight).toBe(205n);
   });
 
+  it("reports which proposal ids it holds — the orphan-vote guard's input", async () => {
+    // PR #23's P1 fix leans on this: votes insert unconditionally while proposals
+    // upsert, so the writer must be able to ask what exists before storing a vote
+    // whose proposal could not be recovered.
+    const known = await inTx((s) => s.existingProposalIds([ID_GUARD, ID_PRUNE, 9_999_999n]));
+    expect(known.has(ID_GUARD.toString())).toBe(true);
+    // A PRUNED proposal is still HELD — the row is the durable record — so its
+    // votes are legitimate and must not be refused.
+    expect(known.has(ID_PRUNE.toString())).toBe(true);
+    expect(known.has("9999999")).toBe(false);
+    expect(await inTx((s) => s.existingProposalIds([]))).toEqual(new Set());
+  });
+
   it("excludes pruned rows from the absence-diff candidate set", async () => {
     // `storedIdsForPolicies` feeds the prune diff. A row already stamped must not
     // come back, or every window would re-stamp it and the log would never quiet.

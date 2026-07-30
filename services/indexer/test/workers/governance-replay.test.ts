@@ -111,6 +111,12 @@ class MemStore implements GovernanceStore {
       .map((r) => r.proposalId);
   }
 
+  async existingProposalIds(proposalIds: readonly bigint[]): Promise<Set<string>> {
+    return new Set(
+      proposalIds.map((id) => id.toString()).filter((id) => this.proposals.has(id)),
+    );
+  }
+
   async upsertVote(row: VoteUpsert): Promise<void> {
     const key = `${row.proposalId}|${row.voter}`;
     const existing = this.votes.get(key);
@@ -180,6 +186,7 @@ function batch(over: Partial<GovernanceBatch> & { observedHeight: bigint }): Gov
   return {
     observedAt: new Date(Number(over.observedHeight) * 1000),
     policies: [POLICY],
+    recoveredProposals: [],
     stateVotes: [],
     submits: [],
     txVotes: [],
@@ -335,6 +342,100 @@ describe("invariant 3 — the voting-period-end transition is OBSERVED, not infe
 });
 
 describe("invariant 4 — the mirror outlives chain state and never claims otherwise", () => {
+  // THE PR #23 P1 REGRESSION. The case below it ("from EVENTS ALONE") seeded the
+  // row in a PRIOR window and only then applied the prune — so it verified the
+  // easy variant and never the real one, which is precisely the M6.4 failure the
+  // §4b apparatus was built to prevent: a named, gated invariant that passes while
+  // the defect it names is live.
+  //
+  // A proposal submitted, executed and pruned inside ONE window is absent from
+  // that window's ending sweep, and every event-derived write is an UPDATE — so
+  // with no base row the whole lifecycle silently affected zero rows. This is the
+  // COMMON case, not an edge: a successful exec prunes in its own transaction and
+  // a 500-height window is about eight minutes.
+  it("records a proposal whose ENTIRE lifecycle fell inside one window", async () => {
+    const store = new MemStore();
+    await applyBatch(
+      store,
+      batch({
+        observedHeight: 500n,
+        // Absent from the sweep — already pruned by the time the window ended.
+        proposals: [],
+        presentIds: [],
+        // Recovered by a height-pinned read at a height it was still alive at.
+        recoveredProposals: [{ snapshot: snapshot(9n, "SUBMITTED"), observedHeight: 100n }],
+        submits: [{ proposalId: 9n, txhash: "SUBMITTX", height: 100n, msgIndex: 0 }],
+        txVotes: [
+          {
+            proposalId: 9n,
+            voter: "tp1a",
+            option: "YES",
+            metadata: "",
+            txhash: "VOTETX",
+            height: 110n,
+            msgIndex: 0,
+            blockTime: new Date("2026-07-29T00:01:00Z"),
+          },
+        ],
+        execResults: [{ proposalId: 9n, result: "SUCCESS", height: 120n }],
+        prunes: [
+          {
+            proposalId: 9n,
+            status: "ACCEPTED",
+            tally: { yes: "2", no: "0", abstain: "0", noWithVeto: "0" },
+            height: 120n,
+          },
+        ],
+      }),
+    );
+
+    const row = store.proposals.get("9");
+    expect(row, "the proposal must exist in the mirror").toBeDefined();
+    expect(row!.status).toBe("ACCEPTED");
+    expect(row!.executorResult).toBe("SUCCESS");
+    expect(row!.tally.yes).toBe("2");
+    expect(row!.txhash).toBe("SUBMITTX");
+    expect(row!.prunedAtHeight).toBe(120n);
+    // The recovered row's AS-OF starts at the height it was read at, then the
+    // terminal event raises it — never the window's end, at which the chain no
+    // longer held it.
+    expect(row!.observedHeight).toBe(120n);
+    // And its vote is stored, not orphaned.
+    expect(store.votes.get("9|tp1a")?.txhash).toBe("VOTETX");
+  });
+
+  it("refuses ORPHAN votes when the proposal could not be recovered at all", async () => {
+    // A pinned read below a pruning node's retention horizon recovers nothing
+    // (app-spec §9.3). Losing the proposal is then unavoidable, but storing its
+    // votes anyway would leave rows the detail endpoint can never reach — and which
+    // assert participation in a proposal the mirror cannot show.
+    const store = new MemStore();
+    await applyBatch(
+      store,
+      batch({
+        observedHeight: 500n,
+        proposals: [],
+        presentIds: [],
+        recoveredProposals: [],
+        submits: [{ proposalId: 11n, txhash: "SUBMITTX", height: 100n, msgIndex: 0 }],
+        txVotes: [
+          {
+            proposalId: 11n,
+            voter: "tp1a",
+            option: "YES",
+            metadata: "",
+            txhash: "VOTETX",
+            height: 110n,
+            msgIndex: 0,
+            blockTime: new Date("2026-07-29T00:01:00Z"),
+          },
+        ],
+      }),
+    );
+    expect(store.proposals.size).toBe(0);
+    expect(store.votes.size, "no orphan votes").toBe(0);
+  });
+
   it("records ACCEPTED + SUCCESS from EVENTS ALONE, a pair no state read can return", async () => {
     // The happy path leaves nothing behind: a successful exec prunes the proposal
     // in its own transaction. The row exists only because the events carried the

@@ -24,8 +24,7 @@ import type { GovernanceBatch } from "./sources.ts";
 import type { GovernanceStore } from "./store.ts";
 
 export async function applyBatch(store: GovernanceStore, batch: GovernanceBatch): Promise<void> {
-  // 1. Authoritative observations for everything the chain still holds.
-  for (const p of batch.proposals) {
+  const upsert = async (p: GovernanceBatch["proposals"][number], observedHeight: bigint) => {
     await store.upsertProposal({
       proposalId: p.proposalId,
       groupPolicyAddress: p.groupPolicyAddress,
@@ -43,10 +42,26 @@ export async function applyBatch(store: GovernanceStore, batch: GovernanceBatch)
       groupVersion: p.groupVersion,
       groupPolicyVersion: p.groupPolicyVersion,
       decisionPolicy: p.decisionPolicy,
-      observedHeight: batch.observedHeight,
+      observedHeight,
       observedAt: batch.observedAt,
     });
-  }
+  };
+
+  // 1. Authoritative observations for everything the chain still holds.
+  for (const p of batch.proposals) await upsert(p, batch.observedHeight);
+
+  // 1b. Proposals recovered by a height-pinned read because the sweep could not
+  //     return them — submitted AND pruned inside this window, which is the normal
+  //     outcome for a promptly executed proposal (a successful exec prunes in its
+  //     own transaction). WITHOUT THIS ROW every event-derived update below
+  //     affects nothing and the proposal is silently lost (PR #23 review, P1).
+  //
+  //     Each carries the AS-OF of ITS OWN read, not the window's end: at the
+  //     window's end the chain no longer holds it, so `batch.observedHeight` would
+  //     assert a state that did not exist. The monotonic guard then does the right
+  //     thing on its own — a recovery pinned below a row's existing observation
+  //     loses, and steps 3–5 raise `observedHeight` to the terminal event's.
+  for (const r of batch.recoveredProposals) await upsert(r.snapshot, r.observedHeight);
 
   // 2. Submit provenance, set-once. A proposal seen only by the sweep keeps null
   //    height/txhash — honest, and what `indexed_from_height` exists to explain.
@@ -103,11 +118,30 @@ export async function applyBatch(store: GovernanceStore, batch: GovernanceBatch)
     }
   }
 
-  // 7. Votes. The tx plane goes FIRST so its provenance is what lands in the row;
+  // 7. Votes, but only for proposals the mirror actually holds.
+  //
+  //    Votes insert unconditionally on `(proposalId, voter)` while every proposal
+  //    write is an upsert on `proposalId`, so a vote whose proposal could not be
+  //    recovered would persist as an ORPHAN — a vote referring to a proposal the
+  //    API cannot serve. That is a worse failure than losing the vote too: the
+  //    detail endpoint reaches votes only through a proposal, so the orphan is
+  //    unreachable AND untrue. Filtered, and reported, rather than stored.
+  const known = await store.existingProposalIds([
+    ...new Set([...batch.txVotes, ...batch.stateVotes].map((v) => v.proposalId)),
+  ]);
+  const orphaned = new Set<string>();
+  const holdsProposal = (proposalId: bigint): boolean => {
+    if (known.has(proposalId.toString())) return true;
+    orphaned.add(proposalId.toString());
+    return false;
+  };
+
+  // The tx plane goes FIRST so its provenance is what lands in the row;
   //    the state plane then confirms option/weight for still-open proposals, and
   //    its COALESCEd nulls cannot erase a txhash. Votes are never deleted — the
   //    module deletes them at the tally, which is exactly why this table exists.
   for (const v of batch.txVotes) {
+    if (!holdsProposal(v.proposalId)) continue;
     await store.upsertVote({
       proposalId: v.proposalId,
       voter: v.voter,
@@ -120,6 +154,7 @@ export async function applyBatch(store: GovernanceStore, batch: GovernanceBatch)
     });
   }
   for (const v of batch.stateVotes) {
+    if (!holdsProposal(v.proposalId)) continue;
     await store.upsertVote({
       proposalId: v.proposalId,
       voter: v.voter,
@@ -129,6 +164,14 @@ export async function applyBatch(store: GovernanceStore, batch: GovernanceBatch)
       submitTime: v.submitTime,
       height: null,
       txhash: null,
+    });
+  }
+
+  for (const proposalId of orphaned) {
+    logger.warn("governance votes skipped: the mirror holds no such proposal", {
+      stream: "governance",
+      height: batch.observedHeight,
+      error: `proposal ${proposalId} could not be recovered, so its votes would be orphans`,
     });
   }
 }

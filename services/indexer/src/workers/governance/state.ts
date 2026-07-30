@@ -46,6 +46,114 @@ export interface SweepResult {
   readonly sweptPolicies: string[];
 }
 
+/** A proposal recovered by a single height-pinned read, with the AS-OF of THAT
+ * read rather than the window's end — because at the window's end it no longer
+ * exists, and stamping it with `window.to` would assert the chain still held it. */
+export interface RecoveredProposal {
+  readonly snapshot: ProposalSnapshot;
+  readonly observedHeight: bigint;
+}
+
+/**
+ * Recover proposals that the tx/block plane saw but the ending sweep cannot
+ * return, because their whole lifecycle — submit, vote, execute, prune — fell
+ * inside ONE window.
+ *
+ * WITHOUT THIS THE MIRROR SILENTLY LOSES THEM (PR #23 review, P1). Every
+ * event-derived write in `write.ts` is an UPDATE against `proposalId`, so with no
+ * base row they all affect zero rows and the proposal, its provenance, its
+ * execution result and its terminal tally are simply absent — while its votes,
+ * which key on `(proposalId, voter)` and insert unconditionally, survive as
+ * orphans. And this is the COMMON case, not an edge: a proposal executed promptly
+ * is pruned in that same transaction (the drill's proposals 1 and 2 did exactly
+ * this), and a 500-height window is roughly eight minutes.
+ *
+ * The M7.1 plan §2.2 specified this read. It was dropped in implementation when
+ * the 404-means-pruned semantics were corrected — the mechanism went out with the
+ * wrong error handling instead of being kept and re-based on the right one.
+ *
+ * WHICH HEIGHT TO PIN. A height at which the proposal was demonstrably alive:
+ *   - the SUBMIT height when this window saw the submit (it was created there);
+ *   - otherwise one block BEFORE the earliest exec/prune we saw, since a prune
+ *     lands in the same block as the transaction that caused it.
+ * A read that fails recovers nothing and writes nothing — pinned reads below a
+ * pruning node's retention horizon are the documented app-spec §9.3 caveat, not a
+ * prune signal — so the outcome is logged loudly rather than guessed at.
+ */
+export async function recoverAbsentProposals(
+  source: PolicySource,
+  policies: readonly PolicyInfo[],
+  absent: readonly { proposalId: bigint; pinHeight: bigint }[],
+): Promise<RecoveredProposal[]> {
+  if (absent.length === 0) return [];
+  const byAddress = new Map(policies.map((p) => [p.address, p]));
+  const recovered: RecoveredProposal[] = [];
+
+  for (const { proposalId, pinHeight } of absent) {
+    let body: unknown;
+    try {
+      body = await source.getAtHeight(
+        `cosmos/group/v1/proposal/${proposalId.toString()}`,
+        {},
+        pinHeight,
+      );
+    } catch (cause) {
+      // Not-found and node-error are indistinguishable at this transport (both
+      // arrive as HTTP 500 with the same body), so neither is treated as
+      // information. What IS certain is that events proved this proposal existed,
+      // so failing to recover it is a real gap and is reported as one.
+      logger.warn("governance proposal could not be recovered; it will be absent from the mirror", {
+        stream: "governance",
+        height: pinHeight,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      continue;
+    }
+
+    const o =
+      typeof body === "object" && body !== null ? (body as Record<string, unknown>) : undefined;
+    const raw = o?.["proposal"];
+    if (raw === undefined) {
+      logger.warn("governance proposal recovery returned no proposal payload", {
+        stream: "governance",
+        height: pinHeight,
+      });
+      continue;
+    }
+
+    // The policy is read off the recovered payload, never assumed: the events do
+    // not carry it, and attributing a proposal to the wrong policy would be worse
+    // than losing it.
+    const policyAddress =
+      typeof (raw as Record<string, unknown>)["group_policy_address"] === "string"
+        ? ((raw as Record<string, unknown>)["group_policy_address"] as string)
+        : "";
+    const policy = byAddress.get(policyAddress);
+    if (policy === undefined) {
+      // A proposal on a policy outside the discovered set is not ours to mirror.
+      continue;
+    }
+
+    try {
+      recovered.push({
+        snapshot: decodeProposal(
+          raw,
+          { groupId: policy.groupId, decisionPolicy: policy.decisionPolicy },
+          `$.proposal[${proposalId}]`,
+        ),
+        observedHeight: pinHeight,
+      });
+    } catch (cause) {
+      logger.warn("undecodable recovered governance proposal skipped", {
+        stream: "governance",
+        height: pinHeight,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }
+  return recovered;
+}
+
 /**
  * Sweep every discovered policy at `height`.
  *

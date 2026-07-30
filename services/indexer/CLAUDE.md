@@ -197,6 +197,30 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
      `(proposalId, voter)` is a sound natural key — **measured, not assumed**,
      because M6.4 shipped a named-and-gated natural key that was wrong.
 
+  **A proposal whose WHOLE lifecycle lands in one window is RECOVERED by a pinned
+  read** (`state.ts` `recoverAbsentProposals`, added by the PR #23 review's P1).
+  It is absent from the ending sweep, and every event-derived write is an UPDATE on
+  `proposalId` — so without a base row the submit, exec result, terminal tally and
+  prune all silently affected zero rows and the proposal vanished, while its votes
+  (which insert on `(proposalId, voter)`) survived as orphans. **This is the common
+  case, not an edge:** a successful exec prunes in its own transaction and a
+  500-height window is about eight minutes. The M7.1 plan §2.2 specified this read;
+  it was dropped in implementation when the 404-means-pruned semantics were
+  corrected — the mechanism went out with the wrong error handling instead of being
+  re-based on the right one.
+  Which height gets pinned is the correctness of the pass, and the two signals are
+  NOT interchangeable: a SUBMIT height is one the proposal existed at, while a
+  terminal height is one where it is already gone (a prune lands in the same block
+  as its transaction), so the block before it is the last that had it. A naive
+  minimum across both can pin BEFORE the proposal existed — caught by a test, not by
+  review. Submit-and-finish in the SAME block (reachable with
+  `MsgSubmitProposal.exec = EXEC_TRY` when the proposers alone meet the threshold)
+  has no live height at all: no read is attempted, it is logged, and recovering it
+  from the submit tx BODY is a recorded follow-on. A failed pinned read recovers
+  NOTHING — below a pruning node's retention horizon it is the app-spec §9.3 caveat,
+  not a prune signal — and the writer then declines to store that proposal's votes
+  rather than leave orphans the detail endpoint can never reach.
+
   **Idempotency is a property of the SQL, not of scheduling** (§4b C3):
   `store.ts` upserts with `INSERT … ON CONFLICT DO UPDATE … WHERE
   observedHeight < EXCLUDED.observedHeight`, so a window observing height H
@@ -214,7 +238,7 @@ Every worker uses these — none re-implements a cursor, a decode, or a transpor
   Tests: `test/workers/governance-decode` (fixture corpus, 18),
   `-sources` (discovery, pagination cap, `sweepOk` gating, honest-empty, 12),
   `-replay` (fast-check convergence + the three §9 invariants, 15), and
-  `test/integration/governance-roundtrip.test.ts` (13) — the last is the only one
+  `test/integration/governance-roundtrip.test.ts` (14) — the last is the only one
   that proves the guards are real SQL, since the replay suite mirrors them in
   TypeScript and would still pass if the `ON CONFLICT … WHERE` clause were
   dropped. Plus **`-live`**, which skips unless `GOV_LIVE_LCD`/`GOV_LIVE_CONTRACT`

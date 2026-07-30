@@ -287,6 +287,236 @@ describe("collectWindow", () => {
     expect(batch.observedHeight).toBe(10n);
   });
 
+  // PR #23 P1: the collector must RECOVER a proposal whose whole lifecycle fell
+  // inside one window, or the writer has no row to apply its events to. The M7.1
+  // plan §2.2 specified this read; it was dropped in implementation when the
+  // 404-means-pruned semantics were corrected.
+  it("recovers a proposal absent from the sweep by a pinned read at a live height", async () => {
+    const pinned: { path: string; height: bigint }[] = [];
+    const source: PolicySource = {
+      smartAtHeight: async () => ({ admin: POLICY_A }),
+      getAtHeight: async (path, _params, height) => {
+        if (path.startsWith("cosmos/group/v1/proposal/")) {
+          pinned.push({ path, height });
+          return {
+            proposal: {
+              id: "9",
+              group_policy_address: POLICY_A,
+              proposers: ["tp1a"],
+              submit_time: "2026-07-29T00:00:00Z",
+              voting_period_end: "2026-07-29T00:05:00Z",
+              group_version: "1",
+              group_policy_version: "1",
+              status: "PROPOSAL_STATUS_SUBMITTED",
+              executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
+              final_tally_result: { yes_count: "0", no_count: "0", abstain_count: "0", no_with_veto_count: "0" },
+              messages: [],
+            },
+          };
+        }
+        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        for (const [prefix, body] of Object.entries(fullRoutes)) {
+          if (path.startsWith(prefix)) return body;
+        }
+        throw new Error(`no route for ${path}`);
+      },
+    };
+
+    const batch = await collectWindow(
+      eventSource([
+        // Submitted at 100, executed and pruned at 120 — the normal shape, since a
+        // proposal must be voted on before it can execute.
+        {
+          hash: "AABB",
+          height: 100n,
+          events: [ev(GROUP_EVENT.submitProposal, { proposal_id: '"9"', msg_index: "0" })],
+        },
+        {
+          hash: "CCDD",
+          height: 120n,
+          events: [
+            ev(GROUP_EVENT.exec, { proposal_id: '"9"', result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"', msg_index: "0" }),
+            ev(GROUP_EVENT.proposalPruned, { proposal_id: '"9"', status: '"PROPOSAL_STATUS_ACCEPTED"', msg_index: "0" }),
+          ],
+        },
+      ]),
+      source,
+      CONTRACT,
+      { from: 1n, to: 500n },
+    );
+
+    expect(batch.proposals).toEqual([]);
+    expect(batch.recoveredProposals).toHaveLength(1);
+    expect(batch.recoveredProposals[0]!.snapshot.proposalId).toBe(9n);
+    // Pinned at the SUBMIT height — a height the proposal demonstrably existed at.
+    // Not the window's end, where it is gone, and not the prune height, where the
+    // read would fail for the same reason.
+    expect(batch.recoveredProposals[0]!.observedHeight).toBe(100n);
+    expect(pinned).toHaveLength(1);
+  });
+
+  it("pins one block BEFORE an exec/prune when this window saw no submit", async () => {
+    // A proposal submitted in an earlier window and pruned in this one: the prune
+    // lands in the same block as its transaction, so that block is already too
+    // late and the one before it is the last where the proposal was there.
+    const heights: bigint[] = [];
+    const source: PolicySource = {
+      smartAtHeight: async () => ({ admin: POLICY_A }),
+      getAtHeight: async (path, _params, height) => {
+        if (path.startsWith("cosmos/group/v1/proposal/")) {
+          heights.push(height);
+          throw new Error("500 not found: load proposal");
+        }
+        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        for (const [prefix, body] of Object.entries(fullRoutes)) {
+          if (path.startsWith(prefix)) return body;
+        }
+        throw new Error(`no route for ${path}`);
+      },
+    };
+    await collectWindow(
+      eventSource([
+        {
+          hash: "CCDD",
+          height: 300n,
+          events: [ev(GROUP_EVENT.proposalPruned, { proposal_id: '"4"', status: '"PROPOSAL_STATUS_REJECTED"', msg_index: "0" })],
+        },
+      ]),
+      source,
+      CONTRACT,
+      { from: 1n, to: 500n },
+    );
+    expect(heights).toEqual([299n]);
+  });
+
+  it("attempts no read when submit and prune land in the SAME block", async () => {
+    // Reachable with `MsgSubmitProposal.exec = EXEC_TRY` when the proposers alone
+    // meet the threshold. No height has the proposal alive, so a pinned read would
+    // 500 for a reason indistinguishable from an outage — better to not ask and say
+    // so than to ask, fail, and log a misleading transport error.
+    const attempted: bigint[] = [];
+    const source: PolicySource = {
+      smartAtHeight: async () => ({ admin: POLICY_A }),
+      getAtHeight: async (path, _params, height) => {
+        if (path.startsWith("cosmos/group/v1/proposal/")) {
+          attempted.push(height);
+          throw new Error("500 not found: load proposal");
+        }
+        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        for (const [prefix, body] of Object.entries(fullRoutes)) {
+          if (path.startsWith(prefix)) return body;
+        }
+        throw new Error(`no route for ${path}`);
+      },
+    };
+    const batch = await collectWindow(
+      eventSource([
+        {
+          hash: "AABB",
+          height: 200n,
+          events: [
+            ev(GROUP_EVENT.submitProposal, { proposal_id: '"12"', msg_index: "0" }),
+            ev(GROUP_EVENT.exec, { proposal_id: '"12"', result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"', msg_index: "0" }),
+            ev(GROUP_EVENT.proposalPruned, { proposal_id: '"12"', status: '"PROPOSAL_STATUS_ACCEPTED"', msg_index: "0" }),
+          ],
+        },
+      ]),
+      source,
+      CONTRACT,
+      { from: 1n, to: 500n },
+    );
+    expect(attempted).toEqual([]);
+    expect(batch.recoveredProposals).toEqual([]);
+  });
+
+  it("recovers NOTHING, and reports it, when the pinned read fails", async () => {
+    // A read below a pruning node's retention horizon (app-spec §9.3) is not a
+    // prune signal and not information — so it recovers nothing and the writer will
+    // decline to store orphan votes for it.
+    const source: PolicySource = {
+      smartAtHeight: async () => ({ admin: POLICY_A }),
+      getAtHeight: async (path) => {
+        if (path.startsWith("cosmos/group/v1/proposal/")) throw new Error("LCD down");
+        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        for (const [prefix, body] of Object.entries(fullRoutes)) {
+          if (path.startsWith(prefix)) return body;
+        }
+        throw new Error(`no route for ${path}`);
+      },
+    };
+    const batch = await collectWindow(
+      eventSource([
+        {
+          hash: "EEFF",
+          height: 120n,
+          events: [ev(GROUP_EVENT.submitProposal, { proposal_id: '"9"', msg_index: "0" })],
+        },
+      ]),
+      source,
+      CONTRACT,
+      { from: 1n, to: 500n },
+    );
+    expect(batch.recoveredProposals).toEqual([]);
+    // The submit fact survives so the failure is visible downstream rather than
+    // erased here.
+    expect(batch.submits).toHaveLength(1);
+  });
+
+  it("does NOT attempt recovery for a proposal the sweep already returned", async () => {
+    const attempted: string[] = [];
+    const source: PolicySource = {
+      smartAtHeight: async () => ({ admin: POLICY_A }),
+      getAtHeight: async (path) => {
+        if (path.startsWith("cosmos/group/v1/proposal/")) {
+          attempted.push(path);
+          throw new Error("should not be called");
+        }
+        if (path.includes("votes_by_proposal")) return { votes: [], pagination: noPage };
+        if (path.includes("proposals_by_group_policy")) {
+          return {
+            proposals: [
+              {
+                id: "9",
+                group_policy_address: POLICY_A,
+                proposers: ["tp1a"],
+                submit_time: "2026-07-29T00:00:00Z",
+                voting_period_end: "2026-07-29T00:05:00Z",
+                group_version: "1",
+                group_policy_version: "1",
+                status: "PROPOSAL_STATUS_SUBMITTED",
+                executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
+                final_tally_result: { yes_count: "0", no_count: "0", abstain_count: "0", no_with_veto_count: "0" },
+                messages: [],
+              },
+            ],
+            pagination: noPage,
+          };
+        }
+        for (const [prefix, body] of Object.entries(fullRoutes)) {
+          if (path.startsWith(prefix)) return body;
+        }
+        throw new Error(`no route for ${path}`);
+      },
+    };
+    const batch = await collectWindow(
+      eventSource([
+        {
+          hash: "AABB",
+          height: 120n,
+          events: [ev(GROUP_EVENT.submitProposal, { proposal_id: '"9"', msg_index: "0" })],
+        },
+      ]),
+      source,
+      CONTRACT,
+      { from: 1n, to: 500n },
+    );
+    // Recovery is a fallback, not a second read on the happy path — one extra
+    // pinned read per proposal per window would be a real cost.
+    expect(attempted).toEqual([]);
+    expect(batch.proposals).toHaveLength(2);
+    expect(batch.recoveredProposals).toEqual([]);
+  });
+
   it("collects submit, exec and prune facts from the tx plane", async () => {
     const source = policySource({ routes: { ...fullRoutes, "cosmos/group/v1/proposals_by_group_policy/": { proposals: [], pagination: noPage } } });
     const batch = await collectWindow(

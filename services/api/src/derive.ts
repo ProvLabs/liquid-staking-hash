@@ -886,6 +886,10 @@ export function toGovDecisionPolicy(stored: unknown): GovDecisionPolicy | null {
 export function toGovProposalRow(f: GovProposalFacts): GovProposalRow {
   const messages = Array.isArray(f.messages) ? f.messages : [];
   const truncated = messages.length > MAX_GOV_PROPOSAL_MESSAGES;
+  // Flagged for the same reason `messages` is, and it is NOT covered by that flag:
+  // `proposers` is identity data, so a silent trim leaves a consumer unable to tell
+  // a full list from a shortened one (PR #23 review, P2).
+  const proposersTruncated = f.proposers.length > MAX_GOV_PROPOSERS;
   return {
     // u64 ids stay STRINGS on the wire: the JSON number domain stops at 2^53.
     proposal_id: f.proposalId.toString(),
@@ -916,6 +920,7 @@ export function toGovProposalRow(f: GovProposalFacts): GovProposalRow {
     pruned_at_height:
       f.prunedAtHeight === null ? null : toSafeInt(f.prunedAtHeight, "gov_proposals.prunedAtHeight"),
     messages_truncated: truncated,
+    proposers_truncated: proposersTruncated,
     messages: truncated ? messages.slice(0, MAX_GOV_PROPOSAL_MESSAGES) : messages,
   };
 }
