@@ -1,9 +1,9 @@
-// R3 sim-trace replay gate (M6.1 plan §2.8.2). The chain-free traces (Task A,
+// R3 sim-trace replay gate. The chain-free traces (Task A,
 // packages/fixtures/fixtures/sim-traces) drive the production planners through
 // realistic economies; here they replay through the pure derived-metrics fold
 // and gate its conservation, non-negativity, and reconciliation invariants.
 //
-// Attribution note (plan §7 Q1, RESOLVED 2026-07-23): the traces tag events
+// Attribution note (Q1, RESOLVED 2026-07-23): the traces tag events
 // round-robin to three synthetic addresses as documented METADATA over
 // single-pooled economics: a per-address fold is not economically meaningful
 // (a tagged redemption carries the whole pooled amount). derivePortfolioMetrics

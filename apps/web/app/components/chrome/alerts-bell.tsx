@@ -3,7 +3,7 @@ import { Link, useFetcher } from "react-router";
 
 import { t, type Locale } from "~/i18n";
 
-// §8.0 / M6.2: anonymous users see the alerting feature advertised (the 4.1
+// §8.0: anonymous users see the alerting feature advertised (the
 // advert, verbatim); a connected session sees the real bell + unread badge and
 // a popover that fetches /alerts/notifications and posts mark-read. Only the
 // unread integer arrives from the root loader; the notifications themselves are

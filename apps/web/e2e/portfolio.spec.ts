@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Portfolio page (plan M6.1 §2.6, app-spec §8.2) against the fixture-backed
+// Portfolio page (plan, app-spec §8.2) against the fixture-backed
 // server. Offline there is no session, so the page must render the connect
 // prompt (prompt-and-explain, never blank, never another address's data) and
 // expose no personal figures. The authenticated view needs a real session,

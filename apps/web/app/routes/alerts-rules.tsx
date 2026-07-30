@@ -1,4 +1,4 @@
-// GET/POST /alerts/rules (plan 6.2 §2.6): the session address's effective
+// GET/POST /alerts/rules: the session address's effective
 // alert settings (closed kind list × effective enabled × is-default) and rule
 // upsert. Session-gated (the standing gate): the acting address is the session
 // address only. `is_operator` rides the GET so the settings UI can show the

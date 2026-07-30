@@ -1,4 +1,4 @@
-// Assertion-minting gate (plan 5.1 §4.7; ADR-001 Decision 2): the web tier
+// Assertion-minting gate (ADR-001 Decision 2): the web tier
 // mints EXACTLY what services/api verifies — one contract, two
 // implementations. The golden vectors below are CROSS-PINNED: the identical
 // literals live in services/api/test/assertion-vectors.test.ts, verified by
@@ -23,7 +23,7 @@ export const VECTOR_ADDRESS = "tp1l39wu7cht0zcycc5rkcd90sdd4ksjmxwdf388y";
 export const VECTOR_IAT = 1_750_000_000;
 export const VECTOR_HEADER =
   "Bearer eyJzY29wZSI6ImFkZHJlc3M6dHAxbDM5d3U3Y2h0MHpjeWNjNXJrY2Q5MHNkZDRrc2pteHdkZjM4OHkiLCJpYXQiOjE3NTAwMDAwMDAsImV4cCI6MTc1MDAwMDA2MH0.QgKm9gljB0IjyLvWnH60oT-J549e08V5UW3_SO3apIU";
-// The internal:notifier vector (M6.2) — IDENTICAL to the literal in
+// The internal:notifier vector — IDENTICAL to the literal in
 // services/api/test/assertion-vectors.test.ts.
 export const VECTOR_INTERNAL_HEADER =
   "Bearer eyJzY29wZSI6ImludGVybmFsOm5vdGlmaWVyIiwiaWF0IjoxNzUwMDAwMDAwLCJleHAiOjE3NTAwMDAwNjB9.4lQonJSxF49FCo2K7mV4YXnnSiiRZiUv0-1UCw7_DsQ";

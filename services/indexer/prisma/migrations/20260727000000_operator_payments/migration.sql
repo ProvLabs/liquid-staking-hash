@@ -1,4 +1,4 @@
--- Per-payment operator payment rows (App M6.4 commit A, plan §2.1). The
+-- Per-payment operator payment rows (App). The
 -- §14.11 operator CSV is per-PAYMENT (datetime, height, epoch, type, amount,
 -- txhash); `validator_epochs` holds only per-epoch cumulative totals with no
 -- txhash, so the facts do not exist until this table does.

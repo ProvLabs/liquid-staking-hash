@@ -3,11 +3,11 @@
 // safely is an error, never a best-effort continue). Secrets come from the
 // environment only; `.env.example` carries placeholders.
 //
-// PR 3.1 wires `DATABASE_URL` (the SELECT-only `api_reader` role, ADR-001
+// Wires `DATABASE_URL` (the SELECT-only `api_reader` role, ADR-001
 // Decision 1) as an OPTIONAL knob: absent, the server runs dataless with the
 // honest empty reader (null heights — the scaffold behavior). The
 // service-assertion key (`API_SERVICE_ASSERTION_KEY`, ADR-001 Decision 2)
-// lands with the PR 3.3 address-scoped routes so config never claims to
+// lands with the address-scoped routes so config never claims to
 // consume a secret the code does not use.
 
 import { z } from "zod";
@@ -28,7 +28,7 @@ export const configSchema = z.object({
     .optional(),
   /**
    * HMAC key verifying the web tier's service assertions (ADR-001
-   * Decision 2), consumed since PR 3.3. Optional — absent, address-scoped
+   * Decision 2), consumed. Optional — absent, address-scoped
    * routes fail closed (401). Bounded to a real secret length; never
    * logged, never serialized into any response.
    */

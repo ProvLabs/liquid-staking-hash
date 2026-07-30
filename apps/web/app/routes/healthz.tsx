@@ -1,7 +1,7 @@
 import { getBootedConfig } from "~/config/config.server";
 
-// Operational readiness probe (app plan PR 1.5 full-stack wiring; reused by the
-// M8 deploy configs). Resource route — no UI, so it sits OUTSIDE the `$lang+`
+// Operational readiness probe (full-stack wiring; reused by the
+// Deploy configs). Resource route — no UI, so it sits OUTSIDE the `$lang+`
 // i18n tree and takes no locale segment. Its loader awaits the same boot checks
 // the server gates startup on (console chain-id match + vault-address
 // cross-check against the contract's Config {}, app-spec §7/§12.2), so a 200

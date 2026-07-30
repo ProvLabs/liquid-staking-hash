@@ -1,4 +1,4 @@
-// CSV export for `/transactions?format=csv` (app plan §4: "CSV column set"
+// CSV export for `/transactions?format=csv` ("CSV column set"
 // is a tested contract; app-spec §14.11: the export is a statement of fact —
 // raw per-event rows with the NAV at each event — never a computed tax
 // position). Pure functions; the route builds the Response.

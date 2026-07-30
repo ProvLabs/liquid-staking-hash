@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Market page (plan 4.4, app-spec §8.5) against the fixture-backed server:
+// Market page (app-spec §8.5) against the fixture-backed server:
 // the labeled v1 forthcoming shell (the REAL contract state), the always-on
 // explainer, live local supply, history cold states, and the §12.1 rule that
 // market figures never carry a verify link.

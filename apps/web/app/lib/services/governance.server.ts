@@ -1,5 +1,5 @@
-// The LIVE x/group plane for the governance center (app-spec §8.7, §12.1.1;
-// M7.2 §2.1). Server-only: the LCD is never reached from the browser.
+// The LIVE x/group plane for the governance center (app-spec §8.7, §12.1.1).
+// Server-only: the LCD is never reached from the browser.
 //
 // `services/api` is DB-only by design (ADR-001 Decision 1), so it serves the
 // durable MIRROR. Everything that must be true RIGHT NOW — an open proposal's

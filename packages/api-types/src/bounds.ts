@@ -1,12 +1,11 @@
-// Wire bounds — declared ONCE, imported by both sides (M7.1 §4b C2).
+// Wire bounds — declared ONCE, imported by both sides.
 //
-// WHY THIS FILE EXISTS. PR #19 shipped this exact defect: `yield_by_epoch` was
-// uncapped server-side against a `.max(2_000)` Zod cap in the web tier, and the
-// whole derived read nulled out because the producer could legitimately emit more
-// rows than the consumer would accept. The fix added a constant. It did not add a
-// mechanism — `rows.ts` went on coupling the two sides in a COMMENT ("most recent
-// MAX_YIELD_POINTS kept"), with nothing importing or testing the pairing, so the
-// next new payload was free to reproduce the bug.
+// WHY THIS FILE EXISTS. A collection bound that is written twice — a cap in the
+// producer and a `.max()` in the consumer's Zod schema — fails silently and
+// totally: the producer legitimately emits more rows than the consumer accepts,
+// and the whole derived read nulls out. Coupling the two sides in a COMMENT is
+// not a mechanism; nothing imports or tests a comment, so every new payload is
+// free to reproduce the defect.
 //
 // A bound that exists on both sides of a component boundary is therefore ONE
 // declaration here, and `test/bounds.test.ts` asserts for every registered pair
@@ -29,7 +28,7 @@ export interface WireBound {
   readonly consumer: number;
 }
 
-// --- governance (PR 7.1) ---------------------------------------------------
+// --- governance ---------------------------------------------------
 
 /** `GET /governance/proposals` → `proposals[]`. Proposals per policy are in the
  * tens on any real program, so this is generous rather than tight. */
@@ -74,7 +73,7 @@ export const MAX_GOV_TITLE_LENGTH = 512;
 export const MAX_GOV_SUMMARY_LENGTH = 4_096;
 export const MAX_GOV_METADATA_LENGTH = 4_096;
 
-// --- adopted from M6.1 (the pairs PR #19's fix left coupled by comment) ----
+// --- adopted (pairs previously coupled by comment alone) ----
 //
 // These were already correct, but only by inspection. Registering them here is
 // what makes them mechanically correct, and it is why `MAX_ACCRUAL_POINTS` and

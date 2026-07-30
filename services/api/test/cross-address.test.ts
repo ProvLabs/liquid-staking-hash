@@ -1,5 +1,5 @@
-// THE cross-address-rejection contract gate (ADR-001 Decision 2; master plan
-// §4) — a STANDING services/api CI gate from PR 3.3 on, never a one-time
+// THE cross-address-rejection contract gate (ADR-001 Decision 2
+// §4) — a STANDING services/api CI gate, never a one-time
 // audit. It proves the address-scoped authorization is an in-process
 // mechanism: an assertion for address A requesting address B → 403;
 // absent/expired/invalid → 401; `internal:notifier` on a personal endpoint →
@@ -37,7 +37,7 @@ function startAuthServer(): Promise<RunningServer> {
 
 // Registry-derived, like INTERNAL_PATHS below: every current AND future
 // `auth: "address"` route joins the cross-address matrix automatically. It was
-// a hand-kept list through M6.2; M6.4 added three routes at once, and a
+// a hand-kept list; three routes can land at once, and a
 // hand-kept list is exactly the thing that silently misses the fourth.
 const PERSONAL_PATHS = routes.filter((r) => r.auth === "address").map((r) => r.path);
 
@@ -65,7 +65,7 @@ function personalQuery(path: string, address: string): string {
 
 // Registry-derived, like the public-route loop below: every current AND future
 // `internal:notifier` route joins this matrix automatically — a new internal
-// route cannot slip past the gate (plan §2.3).
+// route cannot slip past the gate.
 const INTERNAL_PATHS = routes
   .filter((r) => r.auth === "internal:notifier")
   .map((r) => r.path);

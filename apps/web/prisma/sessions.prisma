@@ -1,4 +1,4 @@
-// sessions (app-spec §3 decision 5, §12.3; plan 5.1): one row per established
+// sessions (app-spec §3 decision 5, §12.3): one row per established
 // wallet session. The cookie carries ONLY the opaque `id` (256-bit random,
 // base64url) — the row is the session; deleting it is logout everywhere.
 //

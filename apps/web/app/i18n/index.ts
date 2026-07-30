@@ -1,6 +1,6 @@
 // $lang+ i18n (app-spec §8.0, nuva pattern): routes live under an optional
 // locale segment; `en` is the launch locale (spec §14.9 — DECIDE, `en`
-// assumed; confirmed at plan PR 8.5). Adding a locale = add a catalog with the
+// assumed; confirmed). Adding a locale = add a catalog with the
 // exact `en` key set (gated by test/i18n-coverage.test.ts) and list it here.
 
 import en from "./locales/en";

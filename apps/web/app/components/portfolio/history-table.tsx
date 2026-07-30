@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { t, type Locale, type MessageKey } from "~/i18n";
 import type { HistoryPageVM } from "~/portfolio/types";
 
-// §8.2 transaction history (plan §2.6): the set-table convention over the
+// §8.2 transaction history: the set-table convention over the
 // address's indexed events. Amounts are tabular-nums BigInt-formatted
 // strings; the txhash links to the configured explorer when one exists, else
 // renders as a plain truncated hash (no fabricated verify target). Pagination

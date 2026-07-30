@@ -1,4 +1,4 @@
--- M6.3 Web Push channel (app plan 6.3 commit A): the opt-in, per-browser push
+-- Web Push channel: the opt-in, per-browser push
 -- subscription store — the ONE accepted SECURITY.md exception (opaque,
 -- revocable tokens, deleted on opt-out/session removal). In the `app` schema
 -- (ADR-001 Decision 1), schema-qualified to land unambiguously in `app`

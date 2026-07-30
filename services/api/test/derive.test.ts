@@ -1,5 +1,5 @@
 // Unit: the pure derivation layer (indexed facts → frozen API shapes).
-// Covers the review resolutions of docs/plans/2026-07-22-app-m3-query-api.md:
+// Covers the recorded derivation resolutions:
 // [R1] NAV via the shared scale-then-floor helper (corpus golden value),
 // [R7a] loud safe-integer guards on every height/index crossing into JSON,
 // and the honest-null rules (empty-vault NAV, unsampled validators,
@@ -172,7 +172,7 @@ describe("validators derivation", () => {
   });
 });
 
-describe("portfolio derivation (PR 3.3, [R2] indexed facts only)", () => {
+describe("portfolio derivation ([R2] indexed facts only)", () => {
   const active = {
     requestId: "req-1",
     owner: "pb1walletaqq",
@@ -212,7 +212,7 @@ describe("portfolio derivation (PR 3.3, [R2] indexed facts only)", () => {
   });
 });
 
-describe("market derivation (PR 3.2)", () => {
+describe("market derivation", () => {
   it("toSafeSignedInt admits negatives but rejects beyond-safe magnitudes", () => {
     expect(toSafeSignedInt(-300n, "bps")).toBe(-300);
     expect(() => toSafeSignedInt(-(BigInt(Number.MAX_SAFE_INTEGER) + 1n), "bps")).toThrow(RangeError);
@@ -344,7 +344,7 @@ describe("payout statistics (§9.5.3, §14.12)", () => {
   });
 });
 
-// --- governance mappers (PR 7.1 commit C) -----------------------------------
+// --- governance mappers -----------------------------------
 
 describe("governance derive", () => {
   const facts: GovProposalFacts = {
@@ -404,7 +404,7 @@ describe("governance derive", () => {
     expect(row.proposers).toEqual(["tp1a", "tp1b"]);
     expect(row.proposers_truncated).toBe(false);
     // And an over-limit list is trimmed WITH a flag — silently shortening identity
-    // data leaves a consumer unable to tell it happened (PR #23 review, P2).
+    // data leaves a consumer unable to tell it happened.
     const trimmed = toGovProposalRow({
       ...facts,
       proposers: Array.from({ length: 40 }, (_, i) => `tp1p${i}`),

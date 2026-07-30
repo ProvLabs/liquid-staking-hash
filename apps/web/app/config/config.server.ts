@@ -6,14 +6,14 @@
 // This tier consumes only what it uses: the client-safe identity subset
 // (app-spec §7) plus the server-only LCD endpoint and console profile chain id
 // needed by the boot checks, the server-only services/api base URL for the
-// chrome's indexed-plane reads (PR 4.1), and — since PR 5.1 — the wallet and
+// chrome's indexed-plane reads, and — — the wallet and
 // session configuration: `WALLETCONNECT_PROJECT_ID` (client-safe: a WC v2
 // project id is public by design, §7 allowlist amendment), plus the
 // server-only `DATABASE_URL` (the `app_writer` role) and
 // `API_SERVICE_ASSERTION_KEY` (ADR-001 Decision 2 minting key).
-// `WEB_PUSH_VAPID_*` remains documented-but-unconsumed until PR 6.3, so
+// `WEB_PUSH_VAPID_*` is optional, so
 // config never claims to consume a secret the code does not use.
-// (`SESSION_SECRET` was retired in PR 5.1: sessions are opaque random ids
+// (`SESSION_SECRET` was retired: sessions are opaque random ids
 // resolved against a server-side row — nothing to sign, no key to hold.)
 //
 // Boot checks (app-spec §7, §12.2) — both fail startup loudly:
@@ -49,7 +49,7 @@ export const configSchema = z.object({
   /** Same-environment Console origin — verify-link base (app-spec §12.2). */
   consoleUrl: z.string().url(),
   /**
-   * services/api base URL for indexed-plane reads (app-spec §7, PR 4.1).
+   * services/api base URL for indexed-plane reads (app-spec §7).
    * Server-only: the browser reads indexed data only through this server's
    * loaders, never the API directly (classified in scripts/server-only-env.json).
    */
@@ -61,7 +61,7 @@ export const configSchema = z.object({
    */
   consoleChainId: z.string().min(1).max(64),
   /**
-   * WalletConnect v2 project id (app-spec §7, PR 5.1) — CLIENT-SAFE: a WC
+   * WalletConnect v2 project id (app-spec §7) — CLIENT-SAFE: a WC
    * project id is public by design (it rides in every pairing URI), amended
    * into the §7 allowlist in the same change. Null disables the WC transport
    * (the injected Figure extension still works); the WC vendors render a
@@ -73,7 +73,7 @@ export const configSchema = z.object({
     .nullable()
     .default(null),
   /**
-   * Block-explorer base URL for transaction verify-links (M6.1 Portfolio
+   * Block-explorer base URL for transaction verify-links (Portfolio
    * history). CLIENT-SAFE: an explorer URL is public by construction (§7
    * allowlist amendment). Optional: absent, history rows render without a
    * verify-link rather than a broken one.
@@ -99,7 +99,7 @@ export const configSchema = z.object({
    */
   apiServiceAssertionKey: z.string().min(32).max(512).optional(),
   /**
-   * Web Push VAPID credentials (app-spec §7, §10.4, §14.7; plan 6.3 §2.2).
+   * Web Push VAPID credentials (app-spec §7, §10.4, §14.7).
    * The three are ALL-OR-NONE (the `.superRefine` below): a deployment either
    * configures push fully or renders the honest "not configured for this
    * environment" state — a partial VAPID config is a boot error, never a
@@ -131,7 +131,7 @@ export const configSchema = z.object({
     )
     .optional(),
 }).superRefine((cfg, ctx) => {
-  // All-or-none: a partial VAPID config is a boot error (plan §2.2, §4.4).
+  // All-or-none: a partial VAPID config is a boot error (§4.4).
   const present = [cfg.webPushVapidPublicKey, cfg.webPushVapidPrivateKey, cfg.webPushVapidSubject].filter(
     (v) => v !== undefined,
   ).length;
@@ -227,7 +227,7 @@ export async function runBootChecks(
         `profile points at the wrong vault or the wrong contract; refusing to start.`,
     );
   }
-  // Underlying-denom cross-check (M6.4 §2.5, added 2026-07-28). The relay's
+  // Underlying-denom cross-check (added 2026-07-28). The relay's
   // operator guard bounds a payment's denom against the CONSTANT
   // `PROGRAM_UNDERLYING_DENOM`, which is deliberately code and not
   // configuration — but a constant that must match chain reality and is never

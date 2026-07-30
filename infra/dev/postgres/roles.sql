@@ -16,7 +16,7 @@
 --
 -- The grant boundary this file establishes is asserted by
 -- services/indexer/test/integration/grant-boundary.test.ts, a standing
--- services/* CI gate (plan §4 security-executable layer).
+-- services/* CI gate (security-executable layer).
 
 -- Login roles (idempotent — CREATE ROLE has no IF NOT EXISTS).
 DO $$
@@ -39,7 +39,7 @@ CREATE SCHEMA IF NOT EXISTS indexed AUTHORIZATION indexer_writer;
 CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION app_writer;
 
 -- Reassert ownership in case a schema pre-existed under another owner (e.g. a
--- superuser-run PR 1.1 migration on a reused volume). Determinism matters: the
+-- superuser-run migration on a reused volume). Determinism matters: the
 -- grant-boundary test must see indexer_writer as the owner of `indexed`.
 ALTER SCHEMA indexed OWNER TO indexer_writer;
 ALTER SCHEMA app OWNER TO app_writer;

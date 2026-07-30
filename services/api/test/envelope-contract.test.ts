@@ -1,5 +1,5 @@
-// Envelope contract harness (app plan §4 "API contract" layer; standing CI gate
-// for services/api from PR 1.2 on). Registry-driven: it iterates the ACTUAL
+// Envelope contract harness — a standing CI gate for services/api.
+// Registry-driven: it iterates the ACTUAL
 // route table, so every route now and in the future is held to the same three
 // contracts — envelope shape, read-only method gate, and zod query bounds — and
 // the harness cannot silently skip a new route.
@@ -38,7 +38,7 @@ const ADDRESS_ROUTE_QUERY = new URLSearchParams({
  */
 /**
  * Public routes that REQUIRE a query param, with a valid value. Declared rather
- * than inferred, for the reason M6.4 learned on the operator routes: a route with
+ * than inferred, for the reason the operator routes demonstrate: a route with
  * a required param 400s under the bare harness, and a 400 satisfies "not a 200"
  * assertions by accident — so a missing declaration would let a route slip past
  * the very gate that is supposed to cover it. The coverage assertion below is what
@@ -70,7 +70,7 @@ function validRequest(route: Route, baseUrl: string): { url: string; init: Reque
     };
   }
   if (route.auth === "internal:notifier") {
-    // Internal alert-facts routes (M6.2): the notifier scope, no address. They
+    // Internal alert-facts routes: the notifier scope, no address. They
     // serve honest-empty arrays on the default reader, still a valid envelope.
     return {
       url: `${baseUrl}${route.path}`,
@@ -203,7 +203,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
   });
 
   it("/epochs and /incidents return empty arrays with null heights (no fabrication)", async () => {
-    // /validators is covered by its own case below: since PR 3.1 it returns a
+    // /validators is covered by its own case below: it returns a
     // ValidatorsPayload object, not a bare array.
     const server = await startServer();
     try {
@@ -223,7 +223,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
   });
 
   it("/epochs is pagination-bounded like every collection route", async () => {
-    // /validators takes no pagination since PR 3.1 (whole current set).
+    // /validators takes no pagination (whole current set).
     const server = await startServer();
     try {
       const ok = await fetch(`${server.baseUrl}${API_BASE}/epochs?limit=48`);
@@ -434,7 +434,7 @@ describe("populated portfolio metrics (M6.1 derived fold behind the route)", () 
   });
 });
 
-describe("populated reader (PR 3.1: real derivations behind the frozen shapes)", () => {
+describe("populated reader (real derivations behind the frozen shapes)", () => {
   // Corpus NAV goldens (@nvhash/fixtures queries/vault/get.json) — the same
   // values pinning the shared helper, now proven through the HTTP surface.
   const FIXTURE_TVV = 315397882283n;

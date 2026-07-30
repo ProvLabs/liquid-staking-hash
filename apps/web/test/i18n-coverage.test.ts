@@ -1,4 +1,4 @@
-// i18n coverage (plan PR 1.3; placeholder gate added after the
+// i18n coverage (placeholder gate added after the
 // "exit.native-typical-withheld" {days} regression): every locale catalog
 // carries exactly the reference (`en`) key set, every `t(locale, "key")` call
 // site in app code references a defined key, and every message's
@@ -256,7 +256,7 @@ function scanApp(): Scan {
 // hand-verified to supply its params.
 //
 // The six below are the valoper-bearing program-action summaries in
-// `app/governance/decode.ts` (M7.2). They reach t() through
+// `app/governance/decode.ts`. They reach t() through
 // `VARIANT_SUMMARY_KEYS`, which exists so the summary set is TOTAL over the
 // variant vocabulary `app/tx/build.ts` exports — that totality is itself a
 // gating property (invariant 3), so the table is not replaceable by literal

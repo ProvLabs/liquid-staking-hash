@@ -5,11 +5,11 @@
 // exercises the same function over a real port for the supertest-style harness.
 //
 // Order of enforcement, PINNED by the [R4] review resolution
-// (docs/plans/2026-07-22-app-m3-query-api.md) and encoded in the contract
+// and encoded in the contract
 // tests (all before any handler runs):
 //   1. Rate limit            → 429   (SECURITY.md: defensive, rate-limited)
 //   2. Path match            → 404
-//   3. Read-only method gate → 405   (SECURITY.md/plan §1: no writes, ever)
+// 3. Read-only method gate → 405 (SECURITY.md/: no writes, ever)
 //   4. Credential validity   → 401   (non-public routes; BEFORE query
 //        validation, so an unauthenticated probe learns nothing about
 //        parameter validity — ADR-001 Decision 2)
@@ -34,7 +34,7 @@ const ALLOWED_METHODS = ["GET", "HEAD"] as const;
 export interface HandlerDeps {
   readonly limiter: RateLimiter;
   readonly appEnv: ApiConfig["appEnv"];
-  /** The indexed-data port (PR 3.1). `emptyReader` when no DB is configured. */
+  /** The indexed-data port. `emptyReader` when no DB is configured. */
   readonly reader: IndexedReader;
   /** What `/status` reports as the wired data source — never a fabrication. */
   readonly dataSource: "unwired" | "api_reader";

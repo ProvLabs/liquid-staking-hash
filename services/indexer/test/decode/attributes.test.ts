@@ -2,7 +2,7 @@
 // fact (packages/fixtures/manifest.json). Fixtures here are minimal inline
 // events reproducing the exact quirks the real corpus pins — vault values are
 // JSON-quoted (`"nvhash"`, `"3"`, `"36852482nhash"`), cosmos-sdk values are
-// bare (`EndBlock`). The full-corpus decode test lands with PR 2.1.
+// bare (`EndBlock`).
 
 import { describe, expect, it } from "vitest";
 import {

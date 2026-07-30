@@ -1,6 +1,6 @@
 // Security-executable gate (a): the `indexed` schema carries no column outside
 // the SECURITY.md allowed-fields list — no PII, no IP/device identifiers.
-// Standing in CI from PR 1.1 on (runs under `pnpm -r test`). A deliberate
+// Standing in CI (runs under `pnpm -r test`). A deliberate
 // violation (e.g. adding an `ipAddress` column) makes this suite — and CI —
 // fail.
 

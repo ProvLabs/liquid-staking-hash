@@ -1,4 +1,4 @@
-// gov_proposals / gov_votes round-trip — the PR 7.1 commit B database gate.
+// gov_proposals / gov_votes round-trip — the database gate.
 //
 // The unit suites prove the DECODE (fixture shapes) and the CONVERGENCE (the pure
 // writer over an in-memory store). This proves the third leg neither can: that
@@ -193,7 +193,7 @@ describe("prune PRESERVES the row — the mirror outlives chain state", () => {
   });
 
   it("reports which proposal ids it holds — the orphan-vote guard's input", async () => {
-    // PR #23's P1 fix leans on this: votes insert unconditionally while proposals
+    // Proposal recovery leans on this: votes insert unconditionally while proposals
     // upsert, so the writer must be able to ask what exists before storing a vote
     // whose proposal could not be recovered.
     const known = await inTx((s) => s.existingProposalIds([ID_GUARD, ID_PRUNE, 9_999_999n]));

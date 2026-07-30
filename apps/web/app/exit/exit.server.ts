@@ -1,4 +1,4 @@
-// Redeem & Exit data assembly (plan 5.4; app-spec §8.4, §9.5.3, §10.3
+// Redeem & Exit data assembly (app-spec §8.4, §9.5.3, §10.3
 // SwapOut). Composes the exit-path comparison (the public payout statistic +
 // the fixed 60-day guarantee), the native-flow context (live vault swap-out
 // gating, bounds, NAV pair, the connected share balance), and the redemption

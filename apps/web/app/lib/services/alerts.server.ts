@@ -1,4 +1,4 @@
-// Alert evaluation core (app-spec §8.2, §10.4; plan 6.2 §2.2/§2.4) — PURE,
+// Alert evaluation core (app-spec §8.2, §10.4; /§2.4) — PURE,
 // shared by the notifier worker and the settings/bell surfaces (Commit C).
 // No Prisma, no fetch, no clock: facts + effective settings + presence in,
 // candidate notifications out. Every branch is unit-testable without Postgres
@@ -113,7 +113,7 @@ export function parsePayload(kind: AlertKind, payload: unknown): unknown {
   return PAYLOAD_SCHEMAS[kind].parse(payload);
 }
 
-// ── Web Push payload subsetting (plan 6.3 §2.3, invariant 3) ─────────────────
+// ── Web Push payload subsetting (invariant 3) ─────────────────
 //
 // The push body is the CLOSED `{ kind, url }` shape — a strict subset of the
 // already-minimal stored payload: NO amounts, NO addresses, NO request ids, NO

@@ -13,7 +13,7 @@
 // Zero runtime dependencies (SECURITY.md supply chain), fetch-based with an
 // injectable impl and a request deadline, mirroring chain-client's LcdClient.
 // Config/compose wiring (RPC_URL, LCD base) lands with the first worker that
-// constructs these (PR 2.1); here they take an explicit base URL like
+// constructs these; here they take an explicit base URL like
 // LcdClient does, so the classes are unit-testable in isolation.
 
 import type { RawEvent } from "../decode/attributes.ts";
@@ -235,7 +235,7 @@ function toBase64(s: string): string {
  * matching chain-client decoder (e.g. `parseEpochSnapshot`). This is what makes
  * single-snapshot backfill (spec §9.3/§13) possible.
  *
- * Home decision deferred to PR 2.2: promote into @nvhash/chain-client (shared)
+ * Home is undecided: promote into @nvhash/chain-client (shared)
  * or keep App-local here. Kept App-local for now to keep the shared package
  * REST-only and dependency-minimal.
  */

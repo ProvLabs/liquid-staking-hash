@@ -1,4 +1,4 @@
-// Tally presentation — M7.2 §4 invariant 4 (app-spec §8.7, §12.1).
+// Tally presentation (app-spec §8.7, §12.1).
 //
 // The comparison itself is `@nvhash/api-types`'s shared `meetsThreshold`, gated
 // golden-pinned on BOTH sides by `packages/api-types/test/tally.test.ts`. What

@@ -1,4 +1,4 @@
-// @nvhash/chain-client — typed LCD reads for the nvHASH App (plan PR 0.3).
+// @nvhash/chain-client — typed LCD reads for the nvHASH App.
 // Every decoder validates shape at the boundary and returns bigint for every
 // chain amount; shapes are locked to the @nvhash/fixtures corpus in test/.
 

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Operator view (M6.4 §2.3, app-spec §8.6) against the fixture-backed server.
+// Operator view (app-spec §8.6) against the fixture-backed server.
 // Offline there is no session, so the page must render the connect prompt and
 // expose NOTHING operator-scoped — the same prompt-and-explain posture as
 // `/portfolio`. The authenticated states (arrears loudness, the three-state

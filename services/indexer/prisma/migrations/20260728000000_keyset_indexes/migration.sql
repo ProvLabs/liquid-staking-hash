@@ -1,6 +1,6 @@
 -- Keyset-walk indexes (2026-07-28 review). INDEX-ONLY migration: no column is
 -- added or removed, so the SECURITY.md schema-field allowlist is unaffected
--- (the M6.2 `redemption_requests.lastHeight` migration set this precedent).
+-- (`redemption_requests.lastHeight` migration set this precedent).
 --
 -- Both exports (§14.11 holder and operator) walk their history by keyset on
 -- `(height, msg_index)`. Measured on the dev DB at 300 000 rows for one

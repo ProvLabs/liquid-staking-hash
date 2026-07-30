@@ -1,4 +1,4 @@
-// Stake preview math (plan 5.3; app-spec §8.3, §10.3 SwapIn). `estimate_swap_in`
+// Stake preview math (app-spec §8.3, §10.3 SwapIn). `estimate_swap_in`
 // is gRPC-only (§14.2 pinned fact), so the App previews expected nvHASH out
 // from the live NAV pair with the vault's own share math — floor division,
 // rounding in the vault's favour (never over-promises shares), mirroring the

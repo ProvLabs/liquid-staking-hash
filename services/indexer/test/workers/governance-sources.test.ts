@@ -287,9 +287,9 @@ describe("collectWindow", () => {
     expect(batch.observedHeight).toBe(10n);
   });
 
-  // PR #23 P1: the collector must RECOVER a proposal whose whole lifecycle fell
-  // inside one window, or the writer has no row to apply its events to. The M7.1
-  // plan §2.2 specified this read; it was dropped in implementation when the
+  // P1: the collector must RECOVER a proposal whose whole lifecycle fell
+  // inside one window, or the writer has no row to apply its events to. The
+  // Specified this read; it was dropped in implementation when the
   // 404-means-pruned semantics were corrected.
   it("recovers a proposal absent from the sweep by a pinned read at a live height", async () => {
     const pinned: { path: string; height: bigint }[] = [];

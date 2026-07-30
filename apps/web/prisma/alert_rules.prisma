@@ -1,4 +1,4 @@
-// alert_rules (app-spec §8.2, §9.1; plan 6.2 §2.1) — **preference overrides,
+// alert_rules (app-spec §8.2, §9.1) — **preference overrides,
 // not subscription rows.** Absence-means-default is the core simplification:
 // no row for (address, kind) means "the kind's default" — ON for the R2 set
 // (redemption_update, operator_arrears), OFF for the rest. A row is only ever

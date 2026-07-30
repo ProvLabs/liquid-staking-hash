@@ -1,5 +1,4 @@
-// e2e-live: Alerts against the REAL devnet stack (plan 6.2 §3 commit C; master
-// plan §4 "e2e (live)" layer). Establishes a session (nonce → ADR-36 → cookie,
+// e2e-live: Alerts against the REAL devnet stack. Establishes a session (nonce → ADR-36 → cookie,
 // the session.spec pattern), then exercises the authenticated alert routes over
 // the real app + `app` schema: effective-settings CRUD roundtrip, the
 // notifications endpoint shape, and the Portfolio alert-settings section. Skips

@@ -4,7 +4,7 @@ import { NavLink, useParams } from "react-router";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
 // §8.0 top nav: Learn · Stake · Redeem · Portfolio · Market · Validators ·
-// Governance (Redeem/`/exit` added with PR 5.4, grouped with Stake as its
+// Governance (Redeem/`/exit` is grouped with Stake as its
 // transacting counterpart). Links are locale-prefixed (a reader on /en stays
 // on /en); the active route gets aria-current="page" via NavLink. On narrow
 // viewports the list collapses behind a keyboard-operable disclosure button.

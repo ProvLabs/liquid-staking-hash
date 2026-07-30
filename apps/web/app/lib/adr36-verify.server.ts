@@ -1,4 +1,4 @@
-// ADR-36 signature verification — SERVER-ONLY (plan 5.1 §3, app-spec §3
+// ADR-36 signature verification — SERVER-ONLY (app-spec §3
 // decision 5). Verifies that the wallet's secp256k1 signature covers the
 // exact challenge the server minted, and that the presented public key is
 // the claimed bech32 address (pubkey → sha256 → ripemd160 → bech32).

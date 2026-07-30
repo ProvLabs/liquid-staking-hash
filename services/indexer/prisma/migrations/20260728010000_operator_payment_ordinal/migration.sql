@@ -1,4 +1,4 @@
--- Sibling discriminator for batched operator payments (PR #22 review).
+-- Sibling discriminator for batched operator payments.
 --
 -- `operator_payments` was keyed `(txhash, msgIndex)`. That is the right natural
 -- key for ONE payment per message, which is the only shape the devnet corpus

@@ -1,13 +1,13 @@
-// services/api entrypoint (scaffold, app plan PR 1.2).
+// services/api entrypoint (scaffold).
 //
 // The API is a read-only HTTP service over `/api/v1` (app-spec §9.4): every
 // enveloped route carries the freshness envelope, every query param is
 // zod-bounded, and requests are rate-limited. It reads only — no write endpoint
-// of any kind, no keys, no signing (plan §1 ownership table). The indexed-data
+// of any kind, no keys, no signing (ownership table). The indexed-data
 // reader (`api_reader`, ADR-001 Decision 1) and the real program/address-scoped
-// endpoints land in M3; this scaffold establishes the serving shell + gates.
+// endpoints land; this scaffold establishes the serving shell + gates.
 //
-// Live invocation under `./dev` is wired with the PR 1.5 full-stack compose
+// Live invocation under `./dev` is wired with the full-stack compose
 // (as with the indexer, whose workers also land later); CI here is typecheck +
 // unit + the envelope/read-only/bounds contract harness, none of which needs a
 // listening socket or a database.
@@ -54,7 +54,7 @@ export async function main(): Promise<void> {
   // does not grow unbounded with unique client keys over the process lifetime.
   scheduleWindowSweep(limiter, config.rateLimitWindowMs);
 
-  // Graceful shutdown (PR #13 review): on SIGTERM/SIGINT (orchestrator pod
+  // Graceful shutdown: on SIGTERM/SIGINT (orchestrator pod
   // drain, ctrl-c) stop accepting connections, let in-flight responses
   // finish, then release the reader's connection pool via $disconnect so the
   // database sees a clean close instead of an abrupt drop.

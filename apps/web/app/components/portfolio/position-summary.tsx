@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { PositionSummaryVM } from "~/portfolio/types";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
-// §8.2 position summary (plan §2.6/§2.7): headline figures composed from the
+// §8.2 position summary (/§2.7): headline figures composed from the
 // live and indexed planes. Every figure is n/a when null, never 0 (§12.1);
 // the accrued gain carries an icon + sign word so state never rides color
 // alone; the §2.7 divergence / history-state note and the §14.11 basis aid

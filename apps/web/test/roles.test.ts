@@ -1,4 +1,4 @@
-// Role-detection gate (plan 5.1 §4.5): roles are LIVE on-chain facts —
+// Role-detection gate: roles are LIVE on-chain facts —
 // operator from the contract's Validators {} operator set, admin from the
 // x/group policy membership behind Config.admin — re-checked per refresh and
 // never persisted. The pinned behavior: remove the address from the group
@@ -35,14 +35,12 @@ const OPERATOR = "tp1l39wu7cht0zcycc5rkcd90sdd4ksjmxwdf388y"; // validators fixt
 const CONTRACT_ADMIN = "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk"; // config fixture admin
 const NOBODY = "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad";
 
-// The corpus DOES now carry group_policy_info / group_members (PR 7.1 commit A
-// bootstrapped an x/group substrate on the devnet — before that the admin group
-// did not exist, which is M7 finding F1). These handlers keep the local
-// override so the member set stays a test parameter, but their SHAPES are the
-// captured ones: notably `decision_policy` is served INLINE and is a real
-// object, not the `null` this stub used to pass. The stricter parser rejecting
-// `null` here is the corpus drift-detection working — the previous stub
-// described a response the chain never sends.
+// The corpus carries group_policy_info / group_members. These handlers keep the
+// local override so the member set stays a test parameter, but their SHAPES are
+// the captured ones: notably `decision_policy` is served INLINE and is a real
+// object, never `null`. A stub serving `null` is rejected by the parser, which
+// is corpus drift-detection working: such a stub describes a response the chain
+// never sends.
 function groupHandlers(members: string[]) {
   return [
     http.get("*/cosmos/group/v1/group_policy_info/:address", ({ params }) =>

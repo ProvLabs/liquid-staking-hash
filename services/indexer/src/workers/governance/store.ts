@@ -6,7 +6,7 @@
 // than `prisma.upsert`. The replay guarantee is that a window which observed the
 // chain at height H must never overwrite a row already observed at H' > H — and
 // that has to be a property of the SQL STATEMENT, not of application logic
-// (M7.1 §4b C3). Prisma's `upsert` cannot express a conditional update arm, so a
+// (C3). Prisma's `upsert` cannot express a conditional update arm, so a
 // read-compare-write would be the only alternative, and that would make
 // convergence depend on stream scheduling: two writers (a backfill running beside
 // the live worker — a real scenario, not a hypothetical) could interleave between

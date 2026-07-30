@@ -1,5 +1,5 @@
 // Golden-value gate for the shared NAV helper ([R1],
-// docs/plans/2026-07-22-app-m3-query-api.md): these are the SAME fixture
+// app-spec §9.4): these are the SAME fixture
 // values the web implementation is pinned to (apps/web/test/amounts.test.ts),
 // so the shared helper and the web copy cannot drift apart without one of the
 // two suites failing. Values come from the captured corpus

@@ -15,7 +15,7 @@
 import type { FreshnessMeta } from "@nvhash/api-types";
 
 /**
- * Where a validator stands on program commission (plan §2.3, verified against
+ * Where a validator stands on program commission (verified against
  * `contracts/src/validators.rs` 2026-07-27). THREE states, not two:
  * - `in-arrears`: `commission_paid < commission_due` — past the one-epoch
  *   grace, which alone makes the validator ineligible.

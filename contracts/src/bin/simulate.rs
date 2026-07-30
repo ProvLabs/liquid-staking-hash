@@ -12,7 +12,7 @@
 //! Defaults: random master seed, unbounded scenarios, 240 epochs (20 years,
 //! monthly) per scenario, a status line every 10 seconds. `--trace-out DIR`
 //! writes one `seed-<scenario_seed>.json` deposit/redemption/epoch trace per
-//! scenario into DIR (M6.1 plan commit A); omit it for today's behavior.
+//! scenario into DIR; omit it for today's behavior.
 
 use std::io::Write;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};

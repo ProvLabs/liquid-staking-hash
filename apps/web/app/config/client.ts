@@ -13,13 +13,13 @@ export const CLIENT_SAFE_CONFIG_KEYS = [
   "contractAddress",
   "vaultAddress",
   "consoleUrl",
-  // PR 5.1 (§7 allowlist amendment): a WalletConnect v2 project id is public
+  // §7 allowlist amendment: a WalletConnect v2 project id is public
   // by design — it rides in every pairing URI the user's wallet scans.
   "walletConnectProjectId",
-  // M6.1 (§7 allowlist amendment): a block-explorer base URL is public by
+  // §7 allowlist amendment: a block-explorer base URL is public by
   // construction (verify-link target for the Portfolio history).
   "explorerUrl",
-  // M6.3 (§7 allowlist amendment): a VAPID public key is public by
+  // §7 allowlist amendment: a VAPID public key is public by
   // construction — it ships in every `pushManager.subscribe` call. The private
   // key and subject stay server-only (scripts/server-only-env.json).
   "webPushVapidPublicKey",

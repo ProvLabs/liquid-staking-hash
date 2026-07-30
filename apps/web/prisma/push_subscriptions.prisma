@@ -1,4 +1,4 @@
-// push_subscriptions (app-spec §9.1, §10.4, §12.3; plan 6.3 §2.1) — the
+// push_subscriptions (app-spec §9.1, §10.4, §12.3) — the
 // per-browser Web Push channel, the ONE accepted SECURITY.md exception
 // (Ira, 2026-07-13): opt-in **Web Push subscription tokens**, "opaque,
 // revocable, deleted on opt-out". The row is exactly the W3C
@@ -8,14 +8,14 @@
 //   * `endpoint` / `p256dh` / `auth` are opaque browser- and push-service-
 //     generated material — THE token. The App derives nothing from them and
 //     NEVER logs them (an endpoint URL can fingerprint the browser vendor, so
-//     it is treated as secrets-adjacent; the fan-out logs scrub it, plan §2.3).
+// it is treated as secrets-adjacent; the fan-out logs scrub it).
 //   * `address` is the recipient scope (public by nature); `sessionId` is the
-//     creating session — the deletion chain (plan §2.4): removing a session
+// creating session — the deletion chain: removing a session
 //     removes its push rows.
 //   * `createdAt` is minimal operational metadata; the per-address cap evicts
 //     oldest-first by `id` (insertion order — a deterministic total order).
 //
-// Lifecycle (plan §2.1): created ONLY on explicit opt-in (a user gesture →
+// Lifecycle: created ONLY on explicit opt-in (a user gesture →
 // browser permission → pushManager.subscribe → POST); deleted on opt-out,
 // logout, session expiry/deletion, and dead-endpoint (404/410) pruning; a new
 // endpoint for the same session REPLACES, never accumulates (`endpoint`

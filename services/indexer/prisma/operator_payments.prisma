@@ -1,4 +1,4 @@
-// operator_payments (app-spec §9.1, App M6.4 §2.1): one row per PayCommission /
+// operator_payments (app-spec §9.1, App): one row per PayCommission /
 // PayTip execute against the program contract. `validator_epochs` carries only
 // per-epoch cumulative totals with no txhash, so the §14.11 operator CSV — whose
 // rows are per-PAYMENT — cannot be served from it. Every column is public chain
@@ -22,7 +22,7 @@ model OperatorPayment {
   // Position of this payment WITHIN its (txhash, msgIndex). Almost always 0 —
   // it is non-zero only when one message carries several payments, which a
   // contract batching sub-calls legally produces. Without it the natural key
-  // collides and siblings overwrite each other silently (PR #22 review).
+  // collides and siblings overwrite each other silently.
   // Derived from event order within the tx, so replay converges.
   ordinal     Int      @default(0)
   valoper     String

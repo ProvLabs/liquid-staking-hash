@@ -11,7 +11,7 @@
 //
 // The natural key `(proposalId, voter)` is MEASURED, not assumed: the drill
 // attempts a vote change (the same voter submitting a second `MsgVote` on one
-// proposal) and the chain rejects it. That measurement exists because M6.4
+// proposal) and the chain rejects it. It is MEASURED rather than assumed because
 // shipped a plan-level natural key that was wrong, named, and gated by a test
 // that passed anyway (M7 overview §7.1) — so the assumption is drilled rather
 // than believed. If a future build accepts vote changes, the drill fails and this

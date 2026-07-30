@@ -1,4 +1,4 @@
-// Auto/Light/Dark theming (app plan PR 1.3). The preference is a cookie so SSR
+// Auto/Light/Dark theming. The preference is a cookie so SSR
 // renders the right theme on first paint; "auto" means no `data-theme`
 // attribute and the CSS `color-scheme: light dark` + `light-dark()` tokens
 // follow the OS preference. The cookie holds one of three enum values and

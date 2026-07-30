@@ -1,4 +1,4 @@
-// POST /tx/broadcast (PR 5.2, §12.3 amendment): the guarded signed-tx
+// POST /tx/broadcast (§12.3 amendment): the guarded signed-tx
 // relay. Guard order and verdicts live in app/tx/broadcast.server.ts (each
 // with a case in test/broadcast-guard.test.ts); this route contributes the
 // session requirement (401) and the body bound.

@@ -1,4 +1,4 @@
-// Notifier config boundary (plan 6.2 §4.2): every input bounded at entry, and
+// Notifier config boundary: every input bounded at entry, and
 // the two required secrets fail-fast (a notifier without its store or its
 // minting key is worse than one that never boots).
 

@@ -1,12 +1,12 @@
-// The shared WalletConnect v2 core (app-spec §10.1; plan 5.1 §3): standard
+// The shared WalletConnect v2 core (app-spec §10.1): standard
 // pairing plus the standard Cosmos-namespace methods ONLY —
 // `cosmos_getAccounts`, `cosmos_signAmino` (ADR-36 session login),
-// `cosmos_signDirect` (arrives with PR 5.2). Nothing vendor-specific may
+// `cosmos_signDirect` (arrives with). Nothing vendor-specific may
 // live here: the dual-vendor §14.1 certification (Figure + Arculus) is the
 // conformance gate for this shared path, and any workaround a vendor needs
 // goes in that vendor's adapter module and is recorded in §14.1.
 //
-// Dependency posture (plan §7 Q3): `@walletconnect/sign-client` plus a
+// Dependency posture (Q3): `@walletconnect/sign-client` plus a
 // minimal QR renderer in the UI — no modal SDK. The client is imported
 // lazily on the user's explicit connect action.
 
@@ -44,7 +44,7 @@ export function normalizeBase64Bytes(raw: string, expectedLength: number): strin
   if (new RegExp(`^[0-9a-fA-F]{${expectedLength * 2}}$`).test(raw)) {
     return Buffer.from(raw, "hex").toString("base64");
   }
-  // base64url → standard base64 (PR #17 review: several Cosmos WC wallets
+  // base64url → standard base64 (several Cosmos WC wallets
   // emit base64url); unpadded input is tolerated by the decoder.
   const std = raw.replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(std)) return null;

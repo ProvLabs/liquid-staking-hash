@@ -1,4 +1,4 @@
-// The §10.2 transaction lifecycle as a typed reducer (app plan PR 5.2 §3):
+// The §10.2 transaction lifecycle as a typed reducer:
 //
 //   idle → building → blocked(reasons[]) | ready → simulating → confirm
 //        → signing → broadcasting → pending → confirmed | failed
@@ -31,7 +31,7 @@ export type PreflightReason =
   | { code: "amount-invalid" }
   | { code: "account-missing" }
   | { code: "chain-unavailable" }
-  // ── M6.4 operator flows (§2.4). Every one of these restates a predicate the
+  // ── Operator flows (§2.4). Every one of these restates a predicate the
   // CONTRACT enforces; preflight is convenience only (§12.1), so a reason
   // here is a courtesy and never the thing keeping the action safe.
   | { code: "not-validator-operator" }

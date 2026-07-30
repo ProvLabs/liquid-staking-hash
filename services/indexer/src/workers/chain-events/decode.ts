@@ -5,7 +5,7 @@
 // `wasm` events) drops other vaults'/contracts' events so a shared chain never
 // cross-contaminates this program's rows.
 //
-// `decodeTxPayments` (M6.4) is the one PAIR decoder here: it reads a whole tx's
+// `decodeTxPayments` is the one PAIR decoder here: it reads a whole tx's
 // events because an operator payment's amount lives in the funds transfer, not
 // in the contract's own event. Its coin DENOM is not re-checked against the
 // program's underlying — `cw_utils::must_pay(underlying_denom)` is what let the
@@ -114,7 +114,7 @@ export interface TxPaymentsDecode {
 
 /**
  * Decode this program's operator payments out of ONE tx's full event list
- * (M6.4 §2.1). Unlike the single-event decoders above this is a PAIR decode,
+ *. Unlike the single-event decoders above this is a PAIR decode,
  * and it has to be: the contract's `pay_tip` wasm event reports the
  * epoch-cumulative `tip_epoch`, never the payment's own nhash. The amount and
  * the payer are therefore read from the bank `transfer` emitted at the same
@@ -138,7 +138,7 @@ export interface TxPaymentsDecode {
  *     `transactions` and `redemption_requests`, stalled permanently on a block
  *     that is not going to change.
  *
- * **A batch is DECODED, not dropped** (PR #22 review). Grouping by `msg_index`
+ * **A batch is DECODED, not dropped**. Grouping by `msg_index`
  * and pairing the k-th payment event with the k-th funds transfer is well
  * founded: events are appended in EXECUTION order, and a (sub-)message's
  * attached-funds transfer is emitted when that sub-message runs, immediately

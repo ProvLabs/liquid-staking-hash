@@ -1,4 +1,4 @@
-// Portfolio position composition goldens (M6.1 §2.6): BigInt-only math for
+// Portfolio position composition goldens: BigInt-only math for
 // current value (held + escrow priced at live TVV/shares), signed accrued
 // gain (including a post-slash basis > value case), the divergence flag, and
 // the indexed-plane fallback when live reads are null. Floats never touch

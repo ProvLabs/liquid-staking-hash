@@ -1,4 +1,4 @@
-// GET/POST /alerts/notifications (plan 6.2 §2.6): the session address's
+// GET/POST /alerts/notifications: the session address's
 // in-app notifications and mark-read. Session-gated (the standing
 // session-scope gate): the acting address comes ONLY from requireSession,
 // never a query param. Registered OUTSIDE the `:lang?` segment (the

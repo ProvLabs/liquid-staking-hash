@@ -1,4 +1,4 @@
-// Push payload gate (plan 6.3 §3 commit B, §4.3 — new, standing). The push
+// Push payload gate (§4.3, standing). The push
 // body is the CLOSED `{ kind, url }` shape and a strict subset of the stored
 // notification payload's information: NO amounts, NO addresses, NO request ids,
 // nothing beyond the kind. Because `toPushPayload` takes only a KIND (never a

@@ -1,4 +1,4 @@
-// Stake NAV-preview gate (plan 5.3; app-spec §8.3, §10.3). The preview
+// Stake NAV-preview gate (app-spec §8.3, §10.3). The preview
 // mirrors the vault's floor share-mint math (rounds in the vault's favour,
 // never over-promises shares) and reports empty-vault honestly. e2e-live
 // cross-checks the same math against the real EventSwapIn.

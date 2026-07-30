@@ -1,4 +1,4 @@
-// Proposal-message decoding — M7.2 §4 invariant 2 and 3 (app-spec §8.7, §12.1).
+// Proposal-message decoding (app-spec §8.7, §12.1).
 //
 // WHAT THIS SUITE IS REALLY GUARDING. A member reads a summary and votes. A
 // summary that is confidently WRONG is therefore the worst failure this page
@@ -191,7 +191,7 @@ describe("program actions — golden summaries against contracts/src/msg.rs", ()
 
   it("every variant in the shared vocabulary has a golden summary here", () => {
     // The totality gate. `OPERATOR_VARIANTS`, `ADMIN_VARIANTS` and
-    // `KEEPER_VARIANTS` are the ONE vocabulary (M7.2 §2.2): a variant added
+    // `KEEPER_VARIANTS` are the ONE vocabulary: a variant added
     // there is a variant this page must be able to describe, and this assertion
     // is what makes that a build failure instead of a silent "unrecognized".
     const vocabulary = [...OPERATOR_VARIANTS, ...ADMIN_VARIANTS, ...KEEPER_VARIANTS];

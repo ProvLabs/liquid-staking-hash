@@ -1,4 +1,4 @@
-// POST /tx/simulate (PR 5.2, §10.2 step 3): price the intent's gas for the
+// POST /tx/simulate (§10.2 step 3): price the intent's gas for the
 // SESSION address. The intent is constructed server-side from the session
 // address and the configured vault — the client chooses only kind, amount,
 // and its pubkey; it cannot name another owner or vault.

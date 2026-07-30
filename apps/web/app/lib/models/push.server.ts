@@ -1,4 +1,4 @@
-// Web Push subscription persistence — the models layer (plan 6.3 §2.1). The
+// Web Push subscription persistence — the models layer. The
 // `session.server.ts` / `alerts.server.ts` port split: one contract, two
 // implementations (test/push-subscription.test.ts runs the in-memory one; the
 // Prisma one runs in production over the `app` schema as `app_writer`).
@@ -6,11 +6,11 @@
 // The row is the ONE accepted SECURITY.md exception (opaque, revocable push
 // tokens). The mechanisms this store enforces:
 //   * created ONLY on explicit opt-in (the route calls upsertForSession only
-//     behind requireSession — plan §2.1);
+// behind requireSession);
 //   * replace-by-session, never accumulate — a new endpoint for a session
 //     replaces its older ones (`endpoint` @unique + the delete in upsert);
 //   * a per-address cap (oldest evicted) so a hostile client cannot grow the
-//     table through repeated re-subscription (plan §7 Q4);
+// table through repeated re-subscription (Q4);
 //   * revocability: deleteForSession (opt-out + the session-removal deletion
 //     chain, Commit B) and deleteForEndpoint (404/410 pruning, Commit B);
 //   * the invariant itself: sweepOrphans (the notifier tick) deletes every
@@ -25,7 +25,7 @@
 import { SESSION_IDLE_SECONDS } from "./session.server.ts";
 
 /** Cap on active subscriptions per address; the oldest is evicted past it
- *  (plan §7 Q4 — cheap, bounded, and blunts re-subscription table growth). */
+ * (Q4 — cheap, bounded, and blunts re-subscription table growth). */
 export const PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP = 5;
 
 /** Serializable-upsert attempts before surfacing the conflict (see below). */

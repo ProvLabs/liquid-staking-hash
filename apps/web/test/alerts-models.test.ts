@@ -1,4 +1,4 @@
-// AlertStore contract (plan 6.2 §3 commit B). The behavioral contract runs
+// AlertStore contract. The behavioral contract runs
 // against the InMemoryAlertStore (the storeless posture routes/notifier use in
 // tests); the security-critical query shaping of the Prisma implementation
 // (mark-read is ALWAYS address-scoped; commitTick inserts with skipDuplicates

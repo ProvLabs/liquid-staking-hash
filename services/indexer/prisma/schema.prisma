@@ -25,7 +25,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// The read-only client for `services/api` (@nvhash/db-indexed, app plan PR
+// The read-only client for `services/api` (@nvhash/db-indexed
 // 3.1). Generated FROM this canonical schema — the package holds no schema
 // copy, so the two clients cannot drift (ADR-001 Decision 1: this service
 // owns the schema; the API consumes a generated view of it). Read-only is

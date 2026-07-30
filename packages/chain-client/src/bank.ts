@@ -1,4 +1,4 @@
-// x/bank balance reads (app plan PR 5.2): the balance-including-fee
+// x/bank balance reads: the balance-including-fee
 // preflight bound (§10.2 step 2). Spendable balances subtract vesting locks
 // — the honest number for "can this account fund the transfer + fee".
 

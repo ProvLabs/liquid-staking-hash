@@ -54,7 +54,7 @@ export async function applyBatch(store: GovernanceStore, batch: GovernanceBatch)
   //     return them — submitted AND pruned inside this window, which is the normal
   //     outcome for a promptly executed proposal (a successful exec prunes in its
   //     own transaction). WITHOUT THIS ROW every event-derived update below
-  //     affects nothing and the proposal is silently lost (PR #23 review, P1).
+  // affects nothing and the proposal is silently lost.
   //
   //     Each carries the AS-OF of ITS OWN read, not the window's end: at the
   //     window's end the chain no longer holds it, so `batch.observedHeight` would

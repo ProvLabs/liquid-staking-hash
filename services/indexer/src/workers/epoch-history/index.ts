@@ -1,4 +1,4 @@
-// The epoch-history worker (app-spec §9.2/§9.3, master plan PR 2.2): epoch
+// The epoch-history worker (app-spec §9.2/§9.3): epoch
 // decomposition → `epoch_snapshots`, backfilled from the contract's history.
 // Two-phase: `collect` finds epoch cranks in the window (tx-search) and reads
 // each closed epoch by height-pinned smart query (no DB); `write` upserts the

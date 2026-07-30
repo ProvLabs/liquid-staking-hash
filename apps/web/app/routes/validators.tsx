@@ -10,7 +10,7 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "Validators · nvHASH" }];
 }
 
-// The Validators public page (plan 4.3, app-spec §8.6 public view). Every
+// The Validators public page (app-spec §8.6 public view). Every
 // figure degrades independently and honestly (validators.server.ts); the
 // loader's clock rides along so SSR and hydration agree on tenure.
 export async function loader() {

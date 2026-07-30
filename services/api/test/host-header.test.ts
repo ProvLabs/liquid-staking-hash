@@ -1,4 +1,4 @@
-// Regression (PR #7 review P2): the client-controlled `Host` header must not
+// Regression: the client-controlled `Host` header must not
 // influence routing. Before the fix the adapter built the request URL as
 // `http://${host}${req.url}`, so a `Host` value carrying a path component
 // injected a prefix into `url.pathname` — misrouting a legitimate path to a 404

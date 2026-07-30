@@ -1,4 +1,4 @@
-// The governance endpoints' own gate (App PR 7.1 commit C).
+// The governance endpoints' own gate (App).
 //
 // The registry-driven harnesses already cover these routes for the envelope
 // shape, GET-only/405, query bounds, rate limits and credential-free access — a
@@ -269,7 +269,7 @@ describe("GET /governance/proposal", () => {
     expect(detail.proposal.messages_truncated).toBe(true);
   });
 
-  it("FLAGS a truncated proposer list (PR #23 review, P2)", async () => {
+  it("FLAGS a truncated proposer list", async () => {
     const many = Array.from({ length: 40 }, (_, i) => `tp1proposer${String(i).padStart(3, "0")}`);
     const { body } = await get("/api/v1/governance/proposal?id=2", {
       ...FACTS,

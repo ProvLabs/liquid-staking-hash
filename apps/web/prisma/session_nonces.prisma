@@ -1,4 +1,4 @@
-// session_nonces (app-spec §3 decision 5; plan 5.1): single-use login
+// session_nonces (app-spec §3 decision 5): single-use login
 // challenges. A nonce is minted address-bound with a short TTL, consumed
 // exactly once on successful signature verification (consume-on-verify:
 // the DELETE is the replay gate — a second presentation of the same signed

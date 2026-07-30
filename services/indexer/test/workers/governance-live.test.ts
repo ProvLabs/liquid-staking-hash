@@ -1,4 +1,4 @@
-// LIVE devnet check for the governance collector (App PR 7.1 commit B).
+// LIVE devnet check for the governance collector (App).
 //
 // Skips cleanly unless `GOV_LIVE_LCD` is set, following the `e2e-live`
 // convention: it needs a running devnet with the x/group substrate bootstrapped
@@ -22,7 +22,7 @@
 // SUCCESSFULLY are absent from chain state while their outcome is still
 // recoverable, which is the single claim the mirror's existence rests on.
 //
-// This test is an ADDITION beyond the M7.1 §3.2 file table, recorded as such.
+// This test exercises the real transport; no other suite does.
 
 import { describe, expect, it } from "vitest";
 import { PinnedLcdClient, RpcClient } from "../../src/transport/rpc.ts";
@@ -87,7 +87,7 @@ describe.skipIf(!LCD || !CONTRACT)("governance collector against a live governed
       expect(batch.prunes.some((p) => p.proposalId === exec.proposalId)).toBe(true);
     }
 
-    // PR #23's P1, against real chain data. This whole window covers every
+    // Proposal recovery, against real chain data. This whole window covers every
     // proposal's full lifecycle, so before the recovery pass the successfully
     // executed ones were absent from the sweep AND had no base row — the writer's
     // event-derived UPDATEs affected nothing and they vanished from the mirror.

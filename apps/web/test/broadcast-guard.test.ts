@@ -1,4 +1,4 @@
-// Broadcast-relay guard gate (plan 5.2 §4.9; §12.3 amendment): the relay
+// Broadcast-relay guard gate (§12.3 amendment): the relay
 // accepts ONLY a fully-signed tx whose sole signer is the session address,
 // whose messages are the closed vault set against the configured vault,
 // size-capped and rate-limited. Every guard has its case here — wrong
@@ -128,11 +128,11 @@ describe("relay guards (each an enforced mechanism)", () => {
     expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
   });
 
-  // M7.1 §2.5 / §4 invariant 13: the governance indexing PR adds NO signing path.
+  // / §4 invariant 13: the governance indexing PR adds NO signing path.
   // `ALLOWED_MSG_TYPE_URLS` is unchanged by it, and this row is what makes that a
   // gated fact rather than a claim in a plan — the governance amendment is
   // 7.3–7.4's focused review, and until it lands a vote must be refused.
-  it("a governance MsgVote → 400 (the relay stays closed through PR 7.1)", () => {
+  it("a governance MsgVote → 400 (the relay stays closed)", () => {
     // Hand-encode `cosmos.group.v1.MsgVote` (proposal_id, voter, option) inside a
     // TxBody signed by the session key: everything about it is legitimate EXCEPT
     // that its type URL is not on the allowlist.
@@ -235,7 +235,7 @@ describe("relay guards (each an enforced mechanism)", () => {
   });
 });
 
-// ── M6.4 §2.5: the operator-execute DEEP guard ───────────────────────────
+// ── The operator-execute DEEP guard ───────────────────────────
 //
 // `MsgExecuteContract` is in the allowlist, so on the first level this type
 // URL is "allowed". Everything below is an attempt to reach the chain with it
@@ -395,8 +395,8 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
 
   // The variants that halt the program, rewrite its config, pause the vault, or
   // drive the cranks. None is in the relay's set; each must be refused. The
-  // bodies are a TOTAL map over `ADMIN_VARIANTS ∪ KEEPER_VARIANTS` (M7.2 §3.4
-  // R4), so a variant added to either list without a case here is a type error
+  // bodies are a TOTAL map over `ADMIN_VARIANTS ∪ KEEPER_VARIANTS`, so a
+  // variant added to either list without a case here is a type error
   // rather than a silently unrejected message — before this the matrix was
   // string literals that could drift from the vocabulary it was proving closed.
   const REJECTED_VARIANT_BODIES = {

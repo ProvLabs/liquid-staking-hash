@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 
-// Integration-suite config: ONLY the database-backed reader gate (PR 3.1) —
+// Integration-suite config: ONLY the database-backed reader gate —
 // real Prisma queries as the SELECT-only `api_reader` role against rows
 // seeded as `indexer_writer`. Kept separate from the default config so the
 // unit gate stays Postgres-free; run via `test:db` in the app-ci `db-grants`

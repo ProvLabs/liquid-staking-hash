@@ -1,4 +1,4 @@
-// §10.2 step-5 tracking (app plan PR 5.2 §3), client-side: poll inclusion
+// §10.2 step-5 tracking, client-side: poll inclusion
 // through /tx/status, then fast-poll /tx/recent until the indexer's row
 // lands and the optimistic pending row can drop. All polling goes through
 // this server's routes — the browser talks to no chain endpoint.

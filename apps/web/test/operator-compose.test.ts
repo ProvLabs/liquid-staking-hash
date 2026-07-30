@@ -1,4 +1,4 @@
-// Operator-view pure composition (M6.4 §2.3). Everything here is a fold over
+// Operator-view pure composition. Everything here is a fold over
 // explicit inputs — no fetch, no clock — so the arithmetic an operator would
 // act on is pinned by goldens rather than by whatever the loader happened to
 // produce. Two things this suite exists to prevent:

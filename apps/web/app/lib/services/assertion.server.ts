@@ -1,4 +1,4 @@
-// Service-assertion minting (ADR-001 Decision 2; plan 5.1 §3). The OTHER
+// Service-assertion minting (ADR-001 Decision 2). The OTHER
 // half of the one contract services/api verifies in `services/api/src/auth.ts`
 // — same wire format, same bounds:
 //
@@ -47,7 +47,7 @@ export function mintAddressAssertion(
 
 /**
  * Mint the Authorization header for the notifier's `internal:notifier` reads
- * (M6.2; ADR-001 Decision 3). Same wire format, field order, lifetime, and
+ * (ADR-001 Decision 3). Same wire format, field order, lifetime, and
  * key as {@link mintAddressAssertion} — only the scope literal differs
  * (`internal:notifier`, no address). Cross-address by nature and never granting
  * a personal endpoint (services/api enforces both). The internal golden vector

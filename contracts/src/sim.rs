@@ -323,7 +323,7 @@ struct SimVal {
 }
 
 struct Redemption {
-    /// Trace-only owner tag (plan §7 Q1); a plain label carried alongside the
+    /// Trace-only owner tag (Q1); a plain label carried alongside the
     /// pooled entry, never a factor in the payout math or entry shape.
     address: String,
     shares: u128,
@@ -334,7 +334,7 @@ struct Redemption {
     requested_at: u64,
 }
 
-/// Synthetic per-user identities (plan §7 Q1): the sim otherwise models a
+/// Synthetic per-user identities (Q1): the sim otherwise models a
 /// single pooled depositor, so these label that pool purely for trace
 /// attribution. Deposits/redemption requests are tagged with a round-robin
 /// owner (no rng draw), one tag per pooled event; the pooled amounts, entry
@@ -381,8 +381,8 @@ pub struct TraceEvent {
     pub epoch_index: u64,
 }
 
-/// A full scenario trace for the derived-metrics property harness (M6.1 plan
-/// commit A). `packages/fixtures/fixtures/sim-traces/manifest.json` records
+/// A full scenario trace for the derived-metrics property harness.
+/// `packages/fixtures/fixtures/sim-traces/manifest.json` records
 /// how the committed traces were regenerated.
 #[derive(Serialize, Clone, Debug)]
 pub struct Trace {
@@ -1123,7 +1123,7 @@ impl Sim {
             self.shares += minted;
             self.user_shares += minted;
             self.stats.deposits += 1;
-            // Trace attribution only (plan §7 Q1): round-robin owner tag, no
+            // Trace attribution only (Q1): round-robin owner tag, no
             // rng draw, no change to the pooled deposit math above.
             let owner = ACTORS[self.next_actor % ACTORS.len()];
             self.next_actor += 1;
@@ -1289,7 +1289,7 @@ pub fn run_scenario(sc: Scenario) -> SimResult {
 }
 
 /// Same execution as `run_scenario`, plus the full deposit/redemption/epoch
-/// trace (M6.1 plan commit A) for the derived-metrics property harness.
+/// trace for the derived-metrics property harness.
 pub fn run_scenario_traced(sc: Scenario) -> (SimResult, Trace) {
     let (result, trace) = run_scenario_impl(sc, true);
     (result, trace.expect("trace requested"))
@@ -1453,7 +1453,7 @@ mod tests {
         }
     }
 
-    /// Golden test (M6.1 plan commit A): a tiny fixed scenario (one validator,
+    /// Golden test: a tiny fixed scenario (one validator,
     /// no rewards/fees/slashes/churn, a fixed deposit every step, one epoch)
     /// serializes to the exact expected trace JSON.
     #[test]
@@ -1485,7 +1485,7 @@ mod tests {
         assert_eq!(json, GOLDEN_TRACE_JSON);
     }
 
-    /// Regression for the actor-attribution split bug (M6.1 review): grouping
+    /// Regression for the actor-attribution split bug: grouping
     /// trace events by address and summing back across addresses must
     /// reproduce the pooled scenario totals exactly, one event per pooled
     /// occurrence. A regression that splits a pooled deposit/redemption

@@ -1,4 +1,4 @@
-// Portfolio-page data assembly (plan M6.1 §2.6; app-spec §8.2, §9.5, §14.11).
+// Portfolio-page data assembly (plan; app-spec §8.2, §9.5, §14.11).
 // Two planes composed honestly. The LIVE plane (the canonical chain read:
 // vault TVV/shares plus the address's on-chain share balance) prices the
 // position; the INDEXED plane (services/api, address-scoped assertion) carries

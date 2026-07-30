@@ -3,8 +3,8 @@
 // 2026-07-29 by `contracts/drills/gov-drill.sh` and is pinned in
 // `packages/fixtures/fixtures/manifest.json` — none is taken from module docs.
 //
-// THREE PLANES, and which one is authoritative for what. This split is not the
-// one the M7.1 plan §2.2 assumed, because the drill contradicted it twice:
+// THREE PLANES, and which one is authoritative for what. All three are
+// required: no one of them is complete (chain-facts §x/group 1–4).
 //
 //   1. TX PLANE (tx-search) — provenance AND the terminal outcomes the state
 //      plane cannot hold. A proposal that executes SUCCESSFULLY is pruned in the
@@ -139,7 +139,7 @@ export interface SubmitFact {
  * A vote read from a transaction. Keyed for discovery per `msgIndex`, never per
  * txhash: one transaction may legally carry several `MsgVote`s for different
  * proposals (the drill produces exactly that), and keying by txhash would drop
- * all but one — the M6.4 batched-payment defect in a new place.
+ * all but one — the batched-payment defect in a new place.
  */
 export interface TxVoteFact {
   readonly proposalId: bigint;

@@ -1,4 +1,4 @@
-// The M6.4 operator surface (app-spec §8.6/§9.4, plan §2.2/§3 commit B).
+// The operator surface (app-spec §8.6/§9.4).
 //
 // The cross-address gate (`test/cross-address.test.ts`) already holds these
 // three routes: it is registry-derived, so they joined it automatically. What

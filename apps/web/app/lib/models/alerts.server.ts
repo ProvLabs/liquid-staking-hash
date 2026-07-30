@@ -1,4 +1,4 @@
-// Alert persistence — the models layer (plan 6.2 §2.5: the ONLY new Prisma
+// Alert persistence — the models layer (the ONLY new Prisma
 // import site; the session.server.ts port split, so routes/tests run
 // storeless). The `AlertStore` port has two implementations behind one
 // contract (test/alerts-models.test.ts runs BOTH):
@@ -11,7 +11,7 @@
 // (`skipDuplicates` = ON CONFLICT DO NOTHING over `@@unique([address, kind,
 // dedupeKey])`) AND the per-stream cursor advance happen in ONE transaction —
 // crash before commit → cursor unmoved → re-fetch → duplicates skipped; crash
-// after → nothing lost (plan §2.4). Schema content is gated by
+// after → nothing lost. Schema content is gated by
 // test/app-schema-allowlist.test.ts.
 
 import type { AlertKind, Candidate } from "~/lib/services/alerts.server";
@@ -69,7 +69,7 @@ export interface AlertStore {
   /**
    * Insert the candidates (skipDuplicates) AND advance the cursor in ONE
    * transaction. Returns the NEWLY-INSERTED candidates (duplicates skipped) —
-   * the "newly inserted set" the 6.3 push fan-out delivers (plan §2.3); its
+   * the "newly inserted set" the 6.3 push fan-out delivers; its
    * length is the count callers previously used.
    */
   commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]>;
@@ -336,7 +336,7 @@ export class PrismaAlertStore implements AlertStore {
         // `createManyAndReturn` with `skipDuplicates` is INSERT … ON CONFLICT
         // DO NOTHING RETURNING (the exactly-once gate unchanged): it returns
         // ONLY the rows actually inserted — the "newly inserted set" the push
-        // fan-out delivers (plan §2.3), never the duplicates that were skipped.
+        // fan-out delivers, never the duplicates that were skipped.
         const created = await tx.notification.createManyAndReturn({
           data: candidates.map((c) => ({
             address: c.address,
@@ -354,7 +354,7 @@ export class PrismaAlertStore implements AlertStore {
           payload: r.payload,
         }));
       }
-      // Same transaction as the insert (plan §2.4): cursor advances iff the
+      // Same transaction as the insert: cursor advances iff the
       // batch committed.
       await tx.notifierCheckpoint.upsert({
         where: { stream },

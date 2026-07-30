@@ -1,4 +1,4 @@
-// Web Push feature-server module (plan 6.3 §2.2): the seam the
+// Web Push feature-server module: the seam the
 // `/push/subscription` resource route uses. Wraps the PushStore (models layer)
 // with the route boundary schema. Everything crosses a zod bound HERE before
 // touching the store (SECURITY.md: validate and bound at the boundary; reject,
@@ -41,7 +41,7 @@ export type PushSubscriptionBody = z.infer<typeof pushSubscriptionBodySchema>;
 /**
  * Store (opt-in) the session's subscription — replace-by-session, capped per
  * address (the store enforces both). Created only from a validated body behind
- * requireSession; the session id is the deletion-chain key (plan §2.4).
+ * requireSession; the session id is the deletion-chain key.
  */
 export async function saveSubscription(
   config: WebConfig,

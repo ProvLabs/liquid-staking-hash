@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-// Shared step-after chart (extracted from the Learn NAV chart in PR 4.4,
+// Shared step-after chart (extracted from the Learn NAV chart,
 // third instance). Repo dataviz method: single series titled not legended
 // (--viz-cat-1), a table view always offered, no interpolation ever.
 // Presentation-only by design (plan 4.4 open question 4): callers map their
@@ -8,7 +8,7 @@ import { useState } from "react";
 // two points. Geometry floats are pixel math only; every DISPLAYED number is
 // a caller-formatted string.
 //
-// M6.1 extension (back-compat, all new props optional): `markers` place event
+// Extension (back-compat, all new props optional): `markers` place event
 // dots on the primary series (filled for "in", hollow ring for "out": shape,
 // not color alone) with the event data carried in the caller's table rows; a
 // `compare` second series draws in --viz-cat-2 with a legend naming both. No
@@ -67,7 +67,7 @@ function geometry(points: number[], comparePoints?: number[]): Geometry {
   const innerH = HEIGHT - PAD.top - PAD.bottom;
   const stepW = innerW / points.length;
   // A constant series centers rather than sitting on the axis reading as
-  // zero (PR #12 review; a steady series is the healthy common case).
+  // zero (a steady series is the healthy common case).
   const yOf = (value: number) =>
     max === min
       ? PAD.top + innerH / 2

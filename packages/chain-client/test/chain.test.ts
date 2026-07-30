@@ -45,8 +45,8 @@ describe("staking decoders against the devnet corpus", () => {
 
 describe("group decoders against the devnet corpus", () => {
   // The 2026-07-14 corpus captured an EMPTY groups list, because the devnet had
-  // no x/group substrate at all — which is what M7 finding F1 recorded. The
-  // 2026-07-29 capture (PR 7.1 commit A) bootstrapped one, so this file now
+  // no x/group substrate at all. The
+  // 2026-07-29 capture bootstrapped one, so this file now
   // pins real groups. The module was always served; only the devnet was bare.
   it("decodes the groups list and its pagination envelope", async () => {
     const r = await new GroupClient(lcdServing(fixture("queries/group/groups.json"))).groups();
@@ -94,7 +94,7 @@ describe("group decoders against the devnet corpus", () => {
     expect(typeof info.groupId).toBe("bigint");
   });
 
-  // Set-valued discovery (plan §2.1 / decision D1): the corpus deliberately
+  // Set-valued discovery (/ decision D1): the corpus deliberately
   // carries MORE THAN ONE policy on the group, so a decoder that silently took
   // the first element could not pass this.
   it("decodes the policy SET on a group, not a single policy", async () => {
@@ -211,7 +211,7 @@ describe("group decoders against the devnet corpus", () => {
     expect(Object.keys(v)).not.toContain("weight");
   });
 
-  // The live tally read (app plan PR 7.2). It exists because a proposal's
+  // The live tally read. It exists because a proposal's
   // `final_tally_result` is zeros for the whole voting period — the module writes
   // it only when it tallies — so the state plane cannot say where an OPEN
   // proposal stands, and rendering those zeros would assert "nobody has voted".
@@ -257,7 +257,7 @@ describe("group decoders against the devnet corpus", () => {
 
   it("tags an unrecognized decision policy instead of throwing", () => {
     // An enum or policy type a later chain upgrade adds must not stall an
-    // indexer window mid-sweep (plan §4 invariant 8). The raw payload is kept so
+    // indexer window mid-sweep (invariant 8). The raw payload is kept so
     // the surface can say what it does not understand.
     const dp = parseDecisionPolicy({ "@type": "/cosmos.group.v1.FutureDecisionPolicy", magic: 7 });
     expect(dp.kind).toBe("unknown");
@@ -335,7 +335,7 @@ describe("LcdClient error surface", () => {
   });
 });
 
-describe("corpus manifest stays provisional until PR 8.0", () => {
+describe("corpus manifest stays provisional until the formal vault release", () => {
   it("manifest carries the provisional marker and the feature-probe result", () => {
     const m = expectObject(fixture("manifest.json"));
     expect(String(m["status"])).toContain("PROVISIONAL");

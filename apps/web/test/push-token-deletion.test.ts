@@ -1,5 +1,5 @@
-// Push-token deletion — THE STANDING SECURITY-EXECUTABLE GATE from PR 6.3 on
-// (master plan §4; plan 6.3 §4.1). This is the SECURITY.md accepted exception's
+// Push-token deletion — THE STANDING SECURITY-EXECUTABLE GATE
+//. This is the SECURITY.md accepted exception's
 // condition made mechanical: a Web Push token is opt-in, opaque, and REVOCABLE,
 // "deleted on opt-out AND session delete." All four deletion paths are asserted
 // here — not just opt-out:

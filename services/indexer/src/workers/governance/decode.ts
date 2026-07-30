@@ -10,7 +10,7 @@
 // values (`proposal_id: "6"`) and leaves `msg_index` bare (`0`) — the same mixed
 // shape the vault/contract corpus pins, so no new idiom is introduced.
 //
-// UNKNOWN SHAPES FAIL HONESTLY, NEVER FATALLY (M7.1 §4 invariant 8). An
+// UNKNOWN SHAPES FAIL HONESTLY, NEVER FATALLY (invariant 8). An
 // unrecognized enum member maps to `UNSPECIFIED` and an unrecognized decision
 // policy is kept as raw JSON: a chain upgrade that adds an enum value must not
 // stall a worker mid-window, because an aborted window is re-collected forever

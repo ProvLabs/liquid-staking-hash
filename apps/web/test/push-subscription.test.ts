@@ -1,4 +1,4 @@
-// Web Push subscription behavior (plan 6.3 §3 commit A, §4.2). Exercises the
+// Web Push subscription behavior (§4.2). Exercises the
 // push feature-server (the seam the `/push/subscription` route calls after
 // requireSession) over the in-memory store, plus the route boundary schema.
 // The acting address and session id come only from the session in the route;

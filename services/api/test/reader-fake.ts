@@ -60,7 +60,7 @@ export interface FakeFacts {
   /** Fixed "now" for the payout-stats recent-window filter (deterministic). */
   readonly payoutNow?: Date | undefined;
   /**
-   * M6.2 internal alert-facts fixtures. `alertIncidents` backs the internal
+   * Internal alert-facts fixtures. `alertIncidents` backs the internal
    * incidents projection (id + dedupeKey), distinct from `incidents` (the
    * public `/incidents` projection, which carries neither). Arrears derives
    * from `registry` (needs `operator`) + `validatorEpochs`, mirroring the
@@ -68,7 +68,7 @@ export interface FakeFacts {
    */
   readonly alertIncidents?: readonly AlertIncidentFacts[] | undefined;
   /**
-   * M6.4 operator fixtures. `operatorRegistry` carries the address→valoper
+   * Operator fixtures. `operatorRegistry` carries the address→valoper
    * mapping (`operator` is required here, unlike the public `registry`);
    * `operatorEpochs` is the FULL per-epoch economics the operator surface
    * serves, distinct from the narrow public `validatorEpochs`.
@@ -77,7 +77,7 @@ export interface FakeFacts {
   readonly operatorEpochs?: readonly OperatorEpochFacts[] | undefined;
   readonly operatorPayments?: readonly OperatorPaymentFacts[] | undefined;
   /**
-   * PR 7.1 governance fixtures. `govIndexedFromHeight` is separate from the
+   * Governance fixtures. `govIndexedFromHeight` is separate from the
    * proposals on purpose: the honest-empty case is "rows present, coverage
    * window unknown", and a fake that derived the field from the rows could not
    * express it.
@@ -159,7 +159,7 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
       return Promise.resolve({
         sample,
         // Sort by chain ascending to MATCH the Prisma reader's ordering
-        // (PR #13 review): Map insertion order is first temporal appearance,
+        //: Map insertion order is first temporal appearance,
         // which only coincidentally agrees with the real reader's
         // `chain: "asc"` — the fake must not diverge from production order.
         bridged_supply: [...latestByChain.values()]
@@ -230,7 +230,7 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
             }),
           ),
       ),
-    // --- M6.2 internal alert-facts (mirror reader-prisma.ts semantics) ------
+    // --- internal alert-facts (mirror reader-prisma.ts semantics) ------
     redemptionsChangedSince: (sinceHeight, afterId, limit) =>
       Promise.resolve(
         [...(facts.redemptions ?? [])]
@@ -288,7 +288,7 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
       }
       return Promise.resolve(out);
     },
-    // --- M6.4 operator surface (mirror reader-prisma.ts semantics) ----------
+    // --- operator surface (mirror reader-prisma.ts semantics) ----------
     operatorValopers: (address) =>
       Promise.resolve(
         [...(facts.operatorRegistry ?? [])]
@@ -364,7 +364,7 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         );
       for (let i = 0; i < rows.length; i += CHUNK) yield rows.slice(i, i + CHUNK);
     },
-    // Governance (PR 7.1). The fake mirrors the real reader's HONESTY contract, not
+    // Governance. The fake mirrors the real reader's HONESTY contract, not
     // merely its signature: `indexedFromHeight` stays null unless seeded (never 0,
     // which would claim coverage from genesis), and an unknown proposal id resolves
     // to null so the route's 404 path is exercised rather than an empty 200.

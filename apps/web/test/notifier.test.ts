@@ -1,4 +1,4 @@
-// Notifier worker gate (plan 6.2 §3 commit B, §4.5 exactly-once). Drives the
+// Notifier worker gate (§4.5 exactly-once). Drives the
 // pure tick over the InMemoryAlertStore + a fake fetch returning fixture
 // envelopes + a fixed clock — no Postgres, no network. Covers: presence
 // filter, opt-out suppression, default-off opt-in fan-out, incident→kind

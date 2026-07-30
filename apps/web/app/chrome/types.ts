@@ -1,4 +1,4 @@
-// Chrome state (app-spec §8.0, §12.1; plan 4.1): assembled server-side per
+// Chrome state (app-spec §8.0, §12.1): assembled server-side per
 // request (app/chrome/chrome.server.ts) and crossed to the client as root
 // loader data. Everything here is public chain data plus the public status
 // endpoint. It is NOT config, and the §7 client-safe allowlist is untouched.

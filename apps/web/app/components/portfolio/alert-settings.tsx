@@ -4,7 +4,7 @@ import { useFetcher } from "react-router";
 import { PushSettings } from "~/components/portfolio/push-settings";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
-// Alert settings (app-spec §8.2; plan 6.2 §2.6) — joins the Portfolio page,
+// Alert settings (app-spec §8.2) — joins the Portfolio page,
 // fulfilling the recorded 6.1 deferral. One toggle per kind in the closed
 // list; default-on kinds annotated "on by default" (not a fake rule row —
 // absence means default). `operator_arrears` shows only for operator sessions

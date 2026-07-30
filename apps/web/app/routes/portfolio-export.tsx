@@ -1,4 +1,4 @@
-// GET /portfolio/export (M6.1 §2.7, app-spec §14.11): the session address's
+// GET /portfolio/export (app-spec §14.11): the session address's
 // FULL transaction history streamed as CSV: a statement of fact, not a
 // computed tax position. Session-gated (the standing session-scope gate): the
 // acting address comes ONLY from requireSession, never a query param. The

@@ -1,4 +1,4 @@
-// POST /session/nonce (plan 5.1 §3): mint an address-bound single-use login
+// POST /session/nonce: mint an address-bound single-use login
 // challenge. Locale-independent resource route (the healthz precedent).
 // Input is zod-bounded at the boundary; a malformed body is a 400, never a
 // best-effort continue (SECURITY.md).

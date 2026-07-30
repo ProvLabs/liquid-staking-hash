@@ -1,5 +1,5 @@
 // Scalar decoders for smart-query JSON payloads (epoch snapshot, APR, and — in
-// PR 2.3 — validators). The canonical versions live in
+// Validators). The canonical versions live in
 // packages/chain-client/src/amounts.ts, but the indexer runs raw `.ts` on Node
 // and cannot import that package at runtime (Node refuses to type-strip a `.ts`
 // under node_modules — `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). This minimal mirror

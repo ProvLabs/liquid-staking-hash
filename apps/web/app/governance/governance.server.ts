@@ -1,5 +1,5 @@
-// Governance-center data assembly (`/governance`, app-spec §8.7, §12.1.1;
-// M7.2 §2.1). THE composition seam: the two planes meet here and nowhere else,
+// Governance-center data assembly (`/governance`, app-spec §8.7, §12.1.1).
+// THE composition seam: the two planes meet here and nowhere else,
 // and this module never throws — every read degrades to a stated absence.
 //
 //   LIVE plane (`app/lib/services/governance.server.ts`): the policy set, the

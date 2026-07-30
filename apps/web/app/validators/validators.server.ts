@@ -1,4 +1,4 @@
-// Validators-page data assembly (plan 4.3 §2 tranche 2; app-spec §8.6 public
+// Validators-page data assembly (app-spec §8.6 public
 // view, §12.1). Live reads answer "who is staking your HASH and are they
 // reliable": the contract's validator set joined with x/staking monikers and
 // the program's delegations; the indexed plane serves the set-health trend.

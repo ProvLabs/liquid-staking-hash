@@ -73,7 +73,7 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   ],
   // Validator enrollment; moniker is the operator's public on-chain label.
   ValidatorRegistry: ["valoper", "operator", "moniker", "enrolledAt", "unregisteredAt"],
-  // Per-payment PayCommission/PayTip facts (M6.4 §2.1) — reviewed 2026-07-27.
+  // Per-payment PayCommission/PayTip facts — reviewed 2026-07-27.
   // Every column is read straight off a public tx: `payer` is the message
   // sender (a bech32 account, already public in the tx body and its
   // `message.sender` attribute), NOT off-chain identity. `validator_epochs`
@@ -83,7 +83,7 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
     "txhash",
     "msgIndex",
     // Sibling discriminator within one (txhash, msgIndex) — an ordinal derived
-    // from event order, not user or off-chain data (PR #22 review).
+    // from event order, not user or off-chain data.
     "ordinal",
     "valoper",
     "payer",
@@ -115,7 +115,7 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   MarketSample: ["id", "venue", "pool", "price", "depthBands", "sampledAt"],
   // Remote-chain supply readings.
   BridgeSupplySample: ["id", "chain", "remoteSupply", "sampledAt"],
-  // x/group proposal mirror (App PR 7.1 commit B). Every column is public chain
+  // x/group proposal mirror (App). Every column is public chain
   // data: a proposal payload, a tally of member WEIGHTS, a height, a status.
   // Nothing is identity-, device- or IP-shaped.
   //
@@ -217,7 +217,7 @@ export const AMOUNT_FIELDS: Record<string, readonly string[]> = {
   OperatorPayment: ["amount"],
   MarketSample: ["price"],
   BridgeSupplySample: ["remoteSupply"],
-  // x/group tally counts and voter weights (App PR 7.1). Not token amounts —
+  // x/group tally counts and voter weights (App). Not token amounts —
   // they are sums of member weights — but they join the same discipline for the
   // same reason: they are unbounded chain integers with no protocol ceiling, so a
   // JS-number-backed column would corrupt them silently past 2^53.

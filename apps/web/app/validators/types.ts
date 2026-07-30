@@ -27,7 +27,7 @@ export interface ValidatorRow {
 }
 
 /**
- * The public projection of PR 3.1's `ValidatorSetHealth`: `in_arrears` is
+ * The public projection of `ValidatorSetHealth`: `in_arrears` is
  * deliberately NOT projected (operator economics stay off this page even as
  * an aggregate; the gating test forbids the substring).
  */

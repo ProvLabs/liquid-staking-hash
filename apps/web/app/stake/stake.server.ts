@@ -1,4 +1,4 @@
-// Stake-page data assembly (plan 5.3; app-spec §8.3, §10.3 SwapIn). All
+// Stake-page data assembly (app-spec §8.3, §10.3 SwapIn). All
 // live reads (§5.1 canonical plane): the vault record for swap gates, min/
 // max bounds, and the NAV inputs (total value / total shares), the epoch
 // status for the next-expected-epoch date, and — when a session exists —

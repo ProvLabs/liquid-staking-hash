@@ -1,4 +1,4 @@
-// Governance-center degradation + honesty matrix — M7.2 §4 invariants 5, 6, 7,
+// Governance-center degradation + honesty matrix — invariants 5, 6, 7,
 // 9 and 10, and the §4b C5 plane-precedence table walked cell by cell.
 //
 // This is the `operator-data.test.ts` idiom applied to governance, and the same
@@ -10,7 +10,7 @@
 // Chain reads come from the fixture corpus via MSW; API envelopes are built with
 // the same `@nvhash/api-types` producer the real service uses.
 //
-// NOTE on the corpus (M7.2 §3.4 R1): its contract admin is a PLAIN ACCOUNT, so
+// NOTE on the corpus (R1): its contract admin is a PLAIN ACCOUNT, so
 // the default MSW world has no group behind the program and the live plane
 // resolves to `not-governed`. The governed world is built explicitly by
 // `governedWorld()` below — which is also what makes the two states testably

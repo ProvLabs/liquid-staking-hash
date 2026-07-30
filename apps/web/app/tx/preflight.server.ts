@@ -1,4 +1,4 @@
-// §10.2 step-2 preflight (app plan PR 5.2 §3): server-supplied guard
+// §10.2 step-2 preflight: server-supplied guard
 // context from LIVE reads — vault swap gates, min/max bounds, balance
 // including fee, vesting lock, and the signer facts (account number /
 // sequence / chain id) the sign doc needs. Every disabled control carries a
@@ -196,7 +196,7 @@ export async function runPreflight(
   };
 }
 
-// ── M6.4 operator preflight (§2.4) ───────────────────────────────────────
+// ── Operator preflight (§2.4) ───────────────────────────────────────
 //
 // Every predicate below RESTATES one the contract already enforces. That is
 // the point and the limit: preflight is convenience (§12.1, SECURITY.md "UI

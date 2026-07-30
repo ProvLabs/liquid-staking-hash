@@ -7,7 +7,7 @@
 // The running marker NAV is persisted durably as a reserved `meta:` checkpoint
 // row (no schema change): `meta:chain-events:nav` holds the latest NAV price in
 // its `cursorPage` string. `meta:`-prefixed rows are markers, not worker
-// cursors — lag accounting (PR 2.5) excludes them.
+// cursors — lag accounting excludes them.
 
 import type { Prisma } from "@prisma/client";
 import type { OperatorPaymentRow, RedemptionRow, Store, TransactionRow } from "./reduce.ts";
@@ -82,7 +82,7 @@ export class PrismaStore implements Store {
     };
     // Keyed on the FULL natural key: a message that batches several payments
     // produces siblings sharing (txhash, msgIndex), and keying on that pair
-    // alone made each one overwrite the last (PR #22 review).
+    // alone made each one overwrite the last.
     await this.tx.operatorPayment.upsert({
       where: {
         txhash_msgIndex_ordinal: {

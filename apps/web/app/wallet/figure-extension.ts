@@ -3,8 +3,8 @@
 // lives here, never in the shared path (app-spec §10.1).
 //
 // PROVISIONAL until the §14.1 certification checklist runs against the real
-// extension on devnet (the PR 5.1 acceptance gate,
-// docs/plans/2026-07-23-m5.1-wallet-certification-runbook.md): the injected
+// extension on devnet (the acceptance gate,
+// the §14.1 certification runbook): the injected
 // surface below — `window.figure.provenance` with connect/signAmino — is the
 // interface this adapter certifies AGAINST; a divergence found by the
 // checklist run is fixed HERE and recorded in app-spec §14.1, exactly the

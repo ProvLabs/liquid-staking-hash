@@ -1,4 +1,4 @@
-// Unit: the M6.1 derived-metrics fold. Hand-computed BigInt goldens pin the
+// Unit: the derived-metrics fold. Hand-computed BigInt goldens pin the
 // average-cost basis (§14.11), realized gain, effective yield (§14.12), and the
 // accrual series. The corpus NAV pair (tvv=315397882283, shares=
 // 309963777029000000 -> 1.0175) also pins these against the shared helper.

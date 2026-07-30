@@ -8,7 +8,7 @@
 //
 // Correctness-first: EndBlocker events are found by scanning block_results for
 // every height in the window. block_search-based height narrowing is a later
-// optimization (noted in the M2.1 plan); functionally this is complete.
+// optimization (noted in the plan); functionally this is complete.
 
 import { dequote, type RawEvent } from "../../decode/attributes.ts";
 import { logger } from "../../logger.ts";
@@ -112,7 +112,7 @@ export async function collectWindow(
         if (de) ranked.push({ ev: de, phase: 0, seq: seq++ });
       }
       // Operator payments decode from the WHOLE tx: the amount rides the funds
-      // transfer, not the contract's own event (M6.4 §2.1).
+      // transfer, not the contract's own event.
       if (payments) {
         const decoded = decodeTxPayments(tx.events, ctx, scope);
         for (const de of decoded.payments) {

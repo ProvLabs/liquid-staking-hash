@@ -1,6 +1,6 @@
-// MSW harness over the PR 0.2 devnet fixture corpus (@nvhash/fixtures) —
+// MSW harness over the devnet fixture corpus (@nvhash/fixtures) —
 // verbatim captured LCD responses, never hand-written shapes. This is how the
-// web lane builds and tests offline (plan §3): Vitest uses it via mocks/node,
+// web lane builds and tests offline: Vitest uses it via mocks/node,
 // and the dev/e2e server enables it with NVHASH_MOCK=1 (entry.server).
 //
 // Coverage mirrors what @nvhash/chain-client can read over LCD REST. Two
@@ -55,7 +55,7 @@ function lcdError(status: number, message: string) {
   return HttpResponse.json({ code: 2, message, details: [] }, { status });
 }
 
-// ── x/group: the live plane, and a mirror derived from it (M7.1 / M7.2) ─────
+// ── x/group: the live plane, and a mirror derived from it (/) ─────
 //
 // Every row below is DERIVED from the captured corpus rather than authored. The
 // mirror's shape is the indexer's output, so a hand-written proposal here would
@@ -214,12 +214,12 @@ const GOV_MIRROR_POLICIES = [
 // NVHASH_MOCK_LIVE_DOWN=1 the two chrome live reads (vault `get`,
 // `epoch_status`) return 503 while everything else (notably the `config`
 // smart query the boot check needs) keeps working. This is how the e2e suite
-// exercises the "program status unavailable" footer honestly (plan 4.1 §3).
+// exercises the "program status unavailable" footer honestly.
 const liveReadsDown = () => process.env.NVHASH_MOCK_LIVE_DOWN === "1";
 
 export const handlers = [
-  // services/api scaffold responses (PR 1.2 shape): enveloped, honest null
-  // heights until M2.5/M3 wire real ones. Built with the same
+  // services/api scaffold responses (shape): enveloped, honest null
+  // heights until the reconciler and API wire real ones. Built with the same
   // @nvhash/api-types producers the real API uses, not hand-written shapes.
   // Tests exercising heights/lag/incidents override these with server.use().
   http.get("*/api/v1/status", () =>
@@ -233,7 +233,7 @@ export const handlers = [
   http.get("*/api/v1/incidents", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
-  // PR 4.2 tranche 1: the frozen /metrics and /epochs scaffold shapes
+  // The frozen /metrics and /epochs scaffold shapes
   // (@nvhash/api-types ProgramMetrics / EpochRow[]), honest nulls/empty
   // exactly like the services/api scaffold routes they mirror.
   http.get("*/api/v1/metrics", () =>
@@ -247,7 +247,7 @@ export const handlers = [
   http.get("*/api/v1/epochs", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
-  // PR 5.4 /redemptions/stats — honest cold-start (§14.12): no data, no
+  // /redemptions/stats — honest cold-start (§14.12): no data, no
   // completed epoch → null stats, the guarantee-alone state. Band bounds
   // ride as data. Tests exercising the sample-sufficient path override this.
   http.get("*/api/v1/redemptions/stats", () =>
@@ -265,7 +265,7 @@ export const handlers = [
       ),
     ),
   ),
-  // PR 5.4 address-scoped reads the redemption tracker composes. Honest-empty
+  // Address-scoped reads the redemption tracker composes. Honest-empty
   // by default (no session in offline e2e); tests override with populated data.
   http.get("*/api/v1/portfolio", ({ request }) =>
     HttpResponse.json(
@@ -284,14 +284,14 @@ export const handlers = [
   http.get("*/api/v1/transactions", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
-  // PR 3.2's /market shape (MarketSummary), honest-empty exactly as the real
+  // The /market shape (MarketSummary), honest-empty exactly as the real
   // route serves with the sampler parked: no sample, no bridged supply.
   http.get("*/api/v1/market", () =>
     HttpResponse.json(
       envelope({ sample: null, bridged_supply: [] }, { source: "indexed" }),
     ),
   ),
-  // M6.1 personal surfaces (/portfolio, /portfolio/metrics, /transactions):
+  // Personal surfaces (/portfolio, /portfolio/metrics, /transactions):
   // honest-empty defaults mirroring the services/api empty payloads (reader
   // stub + derivePortfolioMetrics over an empty history). Auth-agnostic (match
   // by path); tests exercising populated positions override with server.use().
@@ -337,7 +337,7 @@ export const handlers = [
   http.get("*/api/v1/transactions", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
-  // M6.4 operator surface (/operator/{summary,epochs,payments}): honest-empty
+  // Operator surface (/operator/{summary,epochs,payments}): honest-empty
   // defaults mirroring what services/api serves for an address that operates
   // no validator — which is also what the offline e2e (no session) sees. Tests
   // exercising a real operator override with server.use(). The CSV branch is
@@ -357,7 +357,7 @@ export const handlers = [
   http.get("*/api/v1/operator/payments", () =>
     HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
   ),
-  // PR 3.1's /validators shape (ValidatorsPayload), honest-empty exactly as
+  // The /validators shape (ValidatorsPayload), honest-empty exactly as
   // the real route serves with no reader wired.
   http.get("*/api/v1/validators", () =>
     HttpResponse.json(
@@ -368,7 +368,7 @@ export const handlers = [
     ),
   ),
 
-  // M7.1 governance mirror (/governance/{proposals,proposal,policies}). The
+  // Governance mirror (/governance/{proposals,proposal,policies}). The
   // rows are DERIVED FROM THE CAPTURED PROPOSALS (`GOV_MIRROR_ROWS` below), not
   // hand-written: the mirror's job is to hold what the chain held, so a mock
   // that invented proposals would exercise shapes the indexer can never produce.
@@ -451,12 +451,12 @@ export const handlers = [
     HttpResponse.json(stakingDelegations),
   ),
   http.get("*/cosmos/group/v1/groups", () => HttpResponse.json(groupGroups)),
-  // The x/group reads the governance center's LIVE plane makes (M7.2 §2.1).
+  // The x/group reads the governance center's LIVE plane makes.
   //
   // `group_policy_info` answers 404 for anything that is not one of the two
   // captured POLICY addresses — and the corpus's contract admin is a plain
   // account, so offline the live plane correctly resolves to "this deployment's
-  // admin is not a group policy" (M7.2 §3.4 R1). That is a property of the
+  // admin is not a group policy" (R1). That is a property of the
   // corpus, not a gap in the mock: the contract was deployed before the group
   // existed and has no admin-rotation message (M7 overview F2). Tests that need
   // the governed plane override this handler, the roles-test pattern.
@@ -512,7 +512,7 @@ export const handlers = [
       : HttpResponse.json({ tally: proposal.final_tally_result });
   }),
 
-  // PR 5.2 tx-lifecycle surfaces. The corpus has no auth/bank/simulate
+  // Tx-lifecycle surfaces. The corpus has no auth/bank/simulate
   // captures, so the defaults answer as a real LCD does for state that does
   // not exist — a 404 account, empty balances, and tx endpoints that refuse
   // (a mock must not fabricate gas or an inclusion). Tests exercising the

@@ -1,4 +1,4 @@
-// operator_payments round-trip — the M6.4 commit A database gate. The unit
+// operator_payments round-trip — the database gate. The unit
 // suites prove the DECODE (fixture shapes) and the CONVERGENCE (pure reducer
 // over an in-memory store); this proves the third leg neither can: that the
 // row survives real Postgres unchanged.
@@ -132,7 +132,7 @@ describe("operator_payments round-trip (M6.4 §2.1)", () => {
   });
 
   it("keeps BATCHED siblings as distinct rows, not one overwriting the other", async () => {
-    // PR #22 review, third P1. A message that batches several payments emits
+    // Review, third P1. A message that batches several payments emits
     // siblings sharing (txhash, msgIndex); under the old two-part key each one
     // upserted onto the previous row, so the operator's history, lifetime
     // totals and §14.11 CSV would show ONE payment where several occurred —

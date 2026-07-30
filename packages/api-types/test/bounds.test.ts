@@ -1,7 +1,7 @@
 // The C2 gate: every wire bound that crosses the API↔web boundary is ONE
 // declaration, and the producer's cap is inside the consumer's.
 //
-// This suite is mechanical on purpose. PR #19's `yield_by_epoch` defect was not a
+// This suite is mechanical on purpose. The `yield_by_epoch` defect was not a
 // hard problem — it was two numbers in two files that nobody compared, and the
 // fix that followed added a third number rather than a comparison. Judgment is
 // exactly the faculty that failed, so nothing here asks for any.
@@ -65,7 +65,7 @@ describe("wire bounds: producer inside consumer", () => {
 });
 
 describe("the M6.1 pairs this file adopted", () => {
-  it("keeps the PR #19 pair correct, now by import rather than by comment", () => {
+  it("keeps the yield_by_epoch pair correct, by import rather than by comment", () => {
     // The literal defect: 2 000 producer against a 20 000 consumer. Correct, and
     // until now correct only because someone checked once.
     expect(MAX_YIELD_POINTS).toBe(2_000);

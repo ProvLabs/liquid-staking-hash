@@ -1,8 +1,8 @@
--- x/group governance mirror (App plan PR 7.1 commit B).
+-- x/group governance mirror (App).
 --
 -- `gov_proposals` and `gov_votes` have existed since 20260715013707_init with
 -- nine and six columns, and NOTHING has ever written them: the devnet had no
--- x/group substrate at all until commit A of this PR bootstrapped one. Standing
+-- x/group substrate at all until one was bootstrapped. Standing
 -- the mirror up showed the original columns cannot express what app-spec §8.7
 -- requires. The additions are a DESIGN-REVIEW EVENT approved in advance (M7
 -- overview decision D3, app-spec §9.1 forward note), and every one is public

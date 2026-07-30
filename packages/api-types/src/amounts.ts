@@ -1,5 +1,5 @@
-// Shared BigInt-only NAV math (app plan PR 3.1, review resolution [R1] in
-// docs/plans/2026-07-22-app-m3-query-api.md).
+// Shared BigInt-only NAV math (review resolution [R1] in
+// app-spec §9.4).
 //
 // The API is the producer of the historical NAV series (`EpochRow.nav`) while
 // apps/web computes the live current-NAV figure with the same formula
@@ -8,7 +8,7 @@
 // lives here, in the shared zero-runtime-dependency contract package, and a
 // golden test (test/amounts.test.ts) pins its output to the web
 // implementation's fixture-corpus values. The web-side switch to this shared
-// copy is a recorded follow-on (PR 3.1 stays services-only).
+// copy is a recorded follow-on (stays services-only).
 //
 // Floats NEVER touch an amount (app-spec §5.8): scale with BigInt, floor by
 // integer division, and place the decimal point in the string.

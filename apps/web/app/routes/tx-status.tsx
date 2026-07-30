@@ -1,4 +1,4 @@
-// GET /tx/status?hash= (PR 5.2, §10.2 step 5): inclusion polling through
+// GET /tx/status?hash= (§10.2 step 5): inclusion polling through
 // the web tier (the browser never talks to the LCD). Session-gated so the
 // route is not an open chain proxy; the hash is zod-bounded.
 

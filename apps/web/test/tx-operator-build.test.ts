@@ -1,4 +1,4 @@
-// Byte-golden operator-message gate (M6.4 §3 commit D; app-spec §14.2 stage 1).
+// Byte-golden operator-message gate (app-spec §14.2 stage 1).
 //
 // The same discipline as the vault messages: re-encode the CAPTURED devnet
 // transactions from their proto-JSON and require sha256(TxRaw) to equal the
@@ -9,7 +9,7 @@
 // canonical form is provably the one the chain accepted.
 //
 // Fixtures: packages/fixtures/fixtures/operator/ (captured 2026-07-27, the
-// §7 Q1 drill). PR 8.0 re-vets the corpus.
+// §7 Q1 drill).
 
 import { describe, expect, it } from "vitest";
 

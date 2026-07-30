@@ -1,4 +1,4 @@
-// Operator-view data assembly (`/validators/mine`, plan M6.4 §2.3; app-spec
+// Operator-view data assembly (`/validators/mine`; app-spec
 // §8.6, §12.1). Two planes composed honestly, the market.server.ts pattern:
 // every read degrades to null independently and the loader NEVER throws.
 //
@@ -66,7 +66,7 @@ export const PAYMENT_PAGE_SIZE = 50;
 // ── Pure composition (BigInt only) ─────────────────────────────────────────
 
 /**
- * The THREE-state commission standing (plan §2.3). `in_arrears` is the
+ * The THREE-state commission standing. `in_arrears` is the
  * contract's own assessment (`paid < due` past the one-epoch grace); a prepaid
  * credit exists whenever cumulative paid exceeds cumulative accrued.
  */
@@ -225,7 +225,7 @@ export async function loadOperatorViewData(
   );
 
   // MEMBERSHIP comes from the LIVE contract set; the indexed registry only
-  // ENRICHES it (PR #22 review, greptile P1).
+  // ENRICHES it (greptile P1).
   //
   // The two planes are not interchangeable here. `validator_registry` is
   // written by the validator-sampler, which is anchored to EPOCH CRANKS — and
@@ -299,7 +299,7 @@ export async function loadOperatorViewData(
   // An explicit `?valoper=` is honoured even for an unregistered validator —
   // that is how its history is reached. But the DEFAULT prefers an enrolled
   // one: landing on an unregistered validator would open the page on the one
-  // subject the operator cannot act on (PR #22 review).
+  // subject the operator cannot act on.
   const selectedValoper =
     requested !== null && owned.some((v) => v.valoper === requested)
       ? requested

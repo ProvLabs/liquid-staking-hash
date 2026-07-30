@@ -1,4 +1,4 @@
-// Brand-token gate (app-spec §11 / §14.8 brand pass, plan §4 visual/design +
+// Brand-token gate (app-spec §11 / §14.8 brand pass,
 // security-executable layer). The categorical dataviz palette is gated by
 // check-palette.mjs; the two brand-pass additions that script does not cover —
 // the mint-green primary accent and the semantic UI status set — are gated

@@ -1,7 +1,7 @@
 import { t, type Locale, type MessageKey } from "~/i18n";
 import type { RedemptionVM } from "~/portfolio/types";
 
-// §8.2 active redemptions (plan §2.6): self-contained status rows from the
+// §8.2 active redemptions: self-contained status rows from the
 // 3.3 PortfolioSummary. Status ships icon + label (never color alone,
 // console-§11.2 family). No link to /exit until 5.4 ships that tracker; a
 // recorded deferral note stands in. The VM carries no maturity estimate yet,

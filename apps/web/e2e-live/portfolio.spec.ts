@@ -1,5 +1,4 @@
-// e2e-live: Portfolio against the REAL devnet stack (plan M6.1 §2.6; master
-// plan §4 "e2e (live)" layer). Establishes a session the same way session.spec
+// e2e-live: Portfolio against the REAL devnet stack. Establishes a session the same way session.spec
 // does (nonce → ADR-36 → HttpOnly cookie), then asserts the authenticated
 // Portfolio page renders the position summary and that the CSV export carries
 // its freshness headers. Skips cleanly when the stack is absent (no

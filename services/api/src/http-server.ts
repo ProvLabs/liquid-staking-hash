@@ -33,7 +33,7 @@ export interface ApiServer {
 
 /**
  * Build (but do not start) the node:http server for the given config.
- * `reader` is the indexed-data port (PR 3.1): absent, the honest empty
+ * `reader` is the indexed-data port: absent, the honest empty
  * reader serves the dataless null/empty state and `/status` says "unwired".
  */
 export function createApiServer(config: ApiConfig, now?: () => Date, reader?: IndexedReader): ApiServer {

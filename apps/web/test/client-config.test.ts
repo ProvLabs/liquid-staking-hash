@@ -1,7 +1,7 @@
 // Client-config allowlist (SECURITY.md: everything shipped to the browser is
 // public; app-spec §7 client-safe subset). Together with the bundle-secret
 // gate (scripts/check-bundle-secrets.mjs) this is the standing
-// security-executable check of plan §4 for the web component.
+// security-executable check for the web component.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,4 +1,4 @@
--- M6.2 alert domain (app plan 6.2 commit B): preference-override rules, the
+-- Alert domain: preference-override rules, the
 -- in-app notification log, and the notifier's per-stream checkpoints. All in
 -- the `app` schema (ADR-001 Decision 1), schema-qualified to match the init
 -- migration and land unambiguously in `app` regardless of search_path. The

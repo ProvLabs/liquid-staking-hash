@@ -1,4 +1,4 @@
-// Typical-display gate (plan 5.4; app-spec §8.4, §9.5.3, §14.12): the
+// Typical-display gate (app-spec §8.4, §9.5.3, §14.12): the
 // guaranteed-vs-typical rule is normative — the typical figure exists ONLY
 // when sample-sufficient and not cold-start, and the 60-day guarantee always
 // stands regardless. This pins the decision; the component/e2e pin that the

@@ -1,4 +1,4 @@
-// Postgres-backed reader gate (PR 3.1, plan §5): the real Prisma queries and
+// Postgres-backed reader gate: the real Prisma queries and
 // the Decimal → bigint → decimal-string serialization, exercised as the
 // SELECT-only `api_reader` role against rows seeded as `indexer_writer` —
 // the exact production read path, over the role split roles.sql establishes.
@@ -116,7 +116,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], tip: "0", commissionAccrued: "0", commissionPaid: "0", commissionDue: "5", programDelegation: "1000000000", height: 4100n, observedAt: new Date("2026-07-01T00:00:00Z") },
       ],
     });
-    // Address plane (PR 3.3): one active (enqueued) and one terminal
+    // Address plane: one active (enqueued) and one terminal
     // (matured) redemption — the portfolio read must escrow only the former.
     // 11 recent terminal (matured) requests dated RELATIVE TO NOW so the
     // payout-stats recent-window filter always captures them (the reader's
@@ -144,7 +144,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         ...recentTerminal,
       ],
     });
-    // Operator plane (M6.4): payments for alpha spanning the epoch-12 boundary
+    // Operator plane: payments for alpha spanning the epoch-12 boundary
     // (endHeight 4100) — one before it, one after — plus one for bravo, so the
     // per-valoper scoping and the derived epoch are both observable. Amounts at
     // Uint128 scale so the Decimal(39,0) → bigint sum is a real round trip.
@@ -156,7 +156,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         { txhash: "PAYB", msgIndex: 0, valoper: "pbvaloper1bbb", payer: "pb1bbb", paymentType: "tip", amount: "7", height: 3000n, occurredAt: new Date("2026-06-16T00:00:00Z") },
       ],
     });
-    // Market plane (PR 3.2): the sample predates every settled epoch, so the
+    // Market plane: the sample predates every settled epoch, so the
     // [R6] NAV-at-sample-time lookup finds none and the premium is honestly
     // null; depth bands round-trip through JSONB shape validation.
     await writer.marketSample.create({
@@ -300,7 +300,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     expect(stats.band_ceiling_seconds).toBe(60 * 24 * 60 * 60);
   });
 
-  // --- M6.2 internal alert-facts reads (the notifier's cross-address reads) ---
+  // --- internal alert-facts reads (the notifier's cross-address reads) ---
 
   it("reads redemptions changed since a height cursor, ascending, owner + no amount", async () => {
     // Past cursor 300: only the payout-N cohort (lastHeight 400) — req-1 (300)
@@ -317,7 +317,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
       expect(r.last_height).toBe(400);
       expect(r.owner.startsWith("pb1holder")).toBe(true);
       expect(r.status).toBe("matured");
-      // No amount field crosses the boundary (plan §2.1).
+      // No amount field crosses the boundary.
       expect(Object.keys(r)).not.toContain("shares");
     }
     // Cursor 0 sees every changed redemption (all lastHeight > 0).
@@ -365,7 +365,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
 
   it("excludes an unregistered validator's arrears from the join", async () => {
     // Unregister alpha, add a fresh owing validator: alpha (now unregistered)
-    // must drop out even though it still owes in epoch 12 (plan §2.3).
+    // must drop out even though it still owes in epoch 12.
     await writer.validatorRegistry.update({
       where: { valoper: "pbvaloper1aaa" },
       data: { unregisteredAt: new Date("2026-07-15T00:00:00Z") },
@@ -380,7 +380,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     }
   });
 
-  // --- M6.4 operator surface (the address→valoper mapping, over real SQL) ---
+  // --- operator surface (the address→valoper mapping, over real SQL) ---
 
   it("maps an address to only the validators it operates", async () => {
     const mine = await reader.operatorValopers("pb1aaa");
@@ -530,7 +530,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
   });
 
 
-  // --- governance (PR 7.1 commit C) -----------------------------------------
+  // --- governance -----------------------------------------
   //
   // The route suite exercises these payloads over an in-memory fake. What only
   // real Postgres can prove is that the SELECTs themselves are right as

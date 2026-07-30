@@ -1,4 +1,4 @@
-// Internal alert-facts surface (M6.2, `internal:notifier` scope; app-spec
+// Internal alert-facts surface (`internal:notifier` scope; app-spec
 // §9.4). Proves the three notifier reads over the in-memory fake — through the
 // SAME derive.ts mappers the Prisma reader uses — for shape, cursor windowing,
 // honest-empty, and the arrears active-registry join. The auth matrix
@@ -32,7 +32,7 @@ const facts: FakeFacts = {
   registry: [
     { valoper: "pbvaloper1aaa", moniker: "alpha", unregisteredAt: null, operator: "pb1opalpha" },
     { valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null, operator: "pb1opbravo" },
-    // charlie is UNREGISTERED — its arrears must never surface (plan §2.3).
+    // charlie is UNREGISTERED — its arrears must never surface.
     { valoper: "pbvaloper1ccc", moniker: "charlie", unregisteredAt: new Date("2026-05-01T00:00:00Z"), operator: "pb1opcharlie" },
   ],
   validatorEpochs: [
@@ -75,7 +75,7 @@ describe("internal alert-facts: redemptions", () => {
         refunded_at: null,
         last_height: 100,
       });
-      // Payload minimalism: no amount-bearing key leaks (plan §2.1).
+      // Payload minimalism: no amount-bearing key leaks.
       for (const row of data) {
         for (const key of Object.keys(row)) {
           expect(key).not.toMatch(/shares|amount|nhash/i);
@@ -91,7 +91,7 @@ describe("internal alert-facts: redemptions", () => {
     try {
       // Empty after_id: the boundary height is INCLUDED (tuple (100, id) >
       // (100, "")) — a height-only cursor re-scans its boundary and the
-      // notifier's unique constraint absorbs it (plan §2.4).
+      // notifier's unique constraint absorbs it.
       const { data } = await getData<Array<{ request_id: string }>>(
         s,
         `${API_BASE}/internal/alert-facts/redemptions?since_height=100`,
@@ -185,7 +185,7 @@ describe("internal alert-facts: incidents", () => {
       });
       // Height-less incident serves null, never a fabricated 0.
       expect(data[2]!.opened_height).toBeNull();
-      // No `payload` field crosses the boundary (plan §2.3).
+      // No `payload` field crosses the boundary.
       for (const row of data) expect("payload" in row).toBe(false);
     } finally {
       await s.close();
@@ -215,7 +215,7 @@ describe("internal alert-facts: arrears", () => {
         `${API_BASE}/internal/alert-facts/arrears`,
       );
       // Only alpha (epoch 12, due 7, active). bravo is square (due 0); charlie
-      // owes but is UNREGISTERED → excluded (plan §2.3).
+      // owes but is UNREGISTERED → excluded.
       expect(data).toEqual([
         { valoper: "pbvaloper1aaa", operator: "pb1opalpha", epoch_index: 12, commission_due: "7" },
       ]);

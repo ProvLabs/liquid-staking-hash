@@ -1,4 +1,4 @@
-// e2e-live: the M6.4 operator flows on devnet (plan 6.4 §3 commit D). The
+// e2e-live: the operator flows on devnet. The
 // offline layers prove the pieces — byte-goldens against captured txs, the
 // deep-guard rejection matrix, disclosure-equals-signed-bytes, the pure
 // predicate matrix. What ONLY a live run proves is the wiring between them:
@@ -19,7 +19,7 @@
 //     `register_participation` needs the caller's bech32 payload to equal the
 //     valoper's, and `unregister_participation` needs the enrolled operator.
 //     Those legs skip cleanly, loudly, when that key is absent.
-//   * JAIL-GATED (NOT covered — plan §7 Q4's honest-gap posture):
+// * JAIL-GATED (NOT covered — Q4's honest-gap posture):
 //     `report_jailed_validator` / `purge_jailed_validator` need a genuinely
 //     jailed validator plus an elapsed cooldown. `contracts/drills/jail-drill.sh`
 //     can produce one, but only on a chain reset for that purpose, which would

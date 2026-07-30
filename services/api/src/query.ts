@@ -71,7 +71,7 @@ export const transactionsQuerySchema = z.object({
 export type TransactionsQuery = z.infer<typeof transactionsQuerySchema>;
 
 /**
- * Operator-surface queries (M6.4). `address` is the assertion target the
+ * Operator-surface queries. `address` is the assertion target the
  * handler's scope check compares against — it is what makes these `auth:
  * "address"` routes enforceable. `valoper` is then checked for OWNERSHIP by the
  * handler against `validator_registry.operator`; the schema only bounds its
@@ -104,7 +104,7 @@ export const operatorPaymentsQuerySchema = z.object({
 export type OperatorPaymentsQuery = z.infer<typeof operatorPaymentsQuerySchema>;
 
 /**
- * Hard ceiling on an internal alert-facts page (M6.2). Higher than the public
+ * Hard ceiling on an internal alert-facts page. Higher than the public
  * page limit because the notifier scans a bounded fact stream per tick, but
  * still a firm bound — an internal caller may not request an unbounded scan
  * (SECURITY.md: bound every query param; the cursor is efficiency, the bound
@@ -123,7 +123,7 @@ export const DEFAULT_ALERT_FACT_LIMIT = 200;
  * instead of being skipped by a strictly-greater height cursor. An empty
  * `after_id` therefore INCLUDES the boundary height's rows (a re-scan the
  * notifier's unique constraint absorbs — the cursor is an efficiency device,
- * plan §2.1/§2.4).
+ * the notifier's unique constraint is the correctness).
  */
 export const alertRedemptionsQuerySchema = z.object({
   since_height: z.coerce.number().int().min(0).default(0),
@@ -150,7 +150,7 @@ export function searchParamsToRecord(params: URLSearchParams): Record<string, st
 }
 
 /**
- * Governance query schemas (PR 7.1 commit C). Every param bounded at the entry
+ * Governance query schemas. Every param bounded at the entry
  * boundary — out-of-range input is REJECTED with 400, never clamped
  * (SECURITY.md: a value that cannot be bounded safely is an error).
  *

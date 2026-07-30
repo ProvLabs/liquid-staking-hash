@@ -1,4 +1,4 @@
-// Learn-page data assembly (plan 4.2 §2 tranche 2; app-spec §8.1, §12.1).
+// Learn-page data assembly (app-spec §8.1, §12.1).
 // Runs in the home-route loader: live reads (vault get, apr, epoch_snapshot)
 // drive the proof strip and yield decomposition; the indexed plane
 // (/metrics, /epochs, /incidents) drives participant count, program age, the
@@ -80,7 +80,7 @@ export async function loadLearnData(
 
   const aprMature = apr !== null && apr.epochIndex >= MIN_APR_EPOCHS;
 
-  // Defense in depth for the never-crash invariant (PR #11 review): today the
+  // Defense in depth for the never-crash invariant: today the
   // chain client's parseU64Number guarantees safe-integer bps, but this
   // formatting runs outside every .catch guard, so a malformed value must
   // degrade to null here rather than 500 the page.

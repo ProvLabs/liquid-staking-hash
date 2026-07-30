@@ -1,4 +1,4 @@
-// Message building + SIGN_MODE_DIRECT encoding (app plan PR 5.2; app-spec
+// Message building + SIGN_MODE_DIRECT encoding (app-spec
 // §10.2 steps 1/4/5). ONE construction site serves three consumers:
 //
 //   * the confirm step's EXACT-JSON disclosure (§10.2 step 4) renders
@@ -12,7 +12,7 @@
 // Byte-golden discipline (§14.2 stage 1): the encoders reproduce the exact
 // bytes the chain accepted for the captured corpus transactions —
 // sha256(TxRaw) must equal the captured txhash (test/tx-build.test.ts).
-// PR 8.0 re-vets against the formal vault release.
+// Re-vets against the formal vault release.
 //
 // Amount discipline: bigint end to end; strings only at the wire/JSON
 // boundary. No floats, ever (spec §3 decision 8).
@@ -33,7 +33,7 @@ import {
 export const MSG_SWAP_IN = "/provlabs.vault.v1.MsgSwapInRequest";
 export const MSG_SWAP_OUT = "/provlabs.vault.v1.MsgSwapOutRequest";
 /**
- * `MsgExecuteContract` is the operator actions' carrier (M6.4 §2.5). It is
+ * `MsgExecuteContract` is the operator actions' carrier. It is
  * NOT a plain allowlist entry: on its own this type URL would open the relay
  * to ARBITRARY contract calls on any contract on chain, which is the exact
  * opposite of a closed allowlist. Its membership here is valid only together
@@ -68,7 +68,7 @@ export type OperatorVariant = (typeof OPERATOR_VARIANTS)[number];
  * carried by the relay, and `guardOperatorExecute` rejects every one of them.
  *
  * They are NAMED here, rather than left as prose, for two consumers that must
- * not describe the same action differently (M7.2 §2.2, "one vocabulary for one
+ * not describe the same action differently ("one vocabulary for one
  * action"): `test/broadcast-guard.test.ts`'s rejection matrix iterates them, so
  * it can no longer drift from the variant set; and `app/governance/decode.ts`
  * summarizes a `MsgExecuteContract` inside a governance proposal against them,
@@ -147,7 +147,7 @@ export interface SwapOutIntent {
 }
 
 /**
- * An operator action (M6.4 §2.4): one `MsgExecuteContract` against the program
+ * An operator action: one `MsgExecuteContract` against the program
  * contract carrying one of the six `OPERATOR_VARIANTS`. `amount` is the nhash
  * attached to a payment and MUST be 0 for every fundless variant — the guard
  * rejects funds on those, and the encoder emits none.
@@ -474,7 +474,7 @@ export function decodeTxRaw(txRawBytes: Uint8Array): DecodedTxRaw {
   return { bodyBytes, authInfoBytes, signatureCount, messages, signerPubkeys };
 }
 
-// ── The operator-execute deep guard (M6.4 §2.5) ──────────────────────────
+// ── The operator-execute deep guard ──────────────────────────
 //
 // `MsgExecuteContract` in the allowlist would, by itself, let the relay carry
 // ANY call to ANY contract. This is the second level that makes it closed, and

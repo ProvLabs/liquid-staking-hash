@@ -1,7 +1,7 @@
 import type { OperatorStandingVM } from "~/validators/mine-types";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
-// §8.6 commission standing (plan §2.3): THREE states, not two — in arrears,
+// §8.6 commission standing: THREE states, not two — in arrears,
 // current, and PREPAID. The third exists because program commission is
 // cumulative and an overpayment carries forward indefinitely
 // (`contracts/src/validators.rs::epoch_rollover` never resets `commission_paid`),

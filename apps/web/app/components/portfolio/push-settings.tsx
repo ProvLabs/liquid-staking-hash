@@ -4,9 +4,9 @@ import { useRouteLoaderData } from "react-router";
 import type { ClientConfig } from "~/config/client";
 import { t, type Locale } from "~/i18n";
 
-// Push settings (app-spec §10.4; plan 6.3 §2.2) — the per-browser "Push
+// Push settings (app-spec §10.4) — the per-browser "Push
 // notifications on this device" block inside the alert-settings section. The
-// browser permission states render HONESTLY (plan §2.2, invariant 7): no
+// browser permission states render HONESTLY (invariant 7): no
 // silent no-ops.
 //
 //   * unsupported     — no Push/Notification API in this browser.

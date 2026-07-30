@@ -1,4 +1,4 @@
-// §10.2 step-3 simulation (app plan PR 5.2 §3): the fee comes from the chain's
+// §10.2 step-3 simulation: the fee comes from the chain's
 // own simulate endpoint over the UNSIGNED tx bytes, and is used VERBATIM.
 //
 // THE ONE THING TO UNDERSTAND HERE. Under Provenance's flat-fee model the

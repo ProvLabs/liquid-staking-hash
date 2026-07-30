@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Redeem & Exit page (plan 5.4, app-spec §8.4) against the fixture-backed
+// Redeem & Exit page (app-spec §8.4) against the fixture-backed
 // server. Anonymous surface: the comparison OPENS the page (not a form), the
 // DEX column is a labeled "coming soon" shell, the guaranteed-vs-typical
 // framing is honest (cold-start → guarantee alone), and the native form

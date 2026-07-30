@@ -1,4 +1,4 @@
-// Preflight boundary-matrix gate (plan 5.2 §4.10): amount inputs validated
+// Preflight boundary-matrix gate: amount inputs validated
 // and bounded at the boundary — 0, 1 base unit, min−1, max+1, > balance,
 // non-numeric, float strings — rejected with machine-readable reasons,
 // never clamped. Vault gates (paused / disabled), vesting honesty, and the
@@ -206,7 +206,7 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
   });
 });
 
-// ── M6.4: the operator predicate matrix (§2.4) ───────────────────────────
+// ── The operator predicate matrix (§2.4) ───────────────────────────
 //
 // Pure over live facts, so every branch is drivable. Two properties matter
 // beyond the individual rules:

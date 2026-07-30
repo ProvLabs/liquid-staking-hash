@@ -1,4 +1,4 @@
-// Learn-data gates (plan 4.2 §3, SECURITY.md "never lie about state",
+// Learn-data gates (SECURITY.md "never lie about state",
 // app-spec §12.1): every figure degrades independently to null on a failed
 // or off-shape read, never a crash, a guess, or a stale substitute. Chain
 // reads come from the fixture corpus via MSW; API envelopes are built with

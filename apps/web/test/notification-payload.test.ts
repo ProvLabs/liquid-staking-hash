@@ -1,4 +1,4 @@
-// Payload minimalism gate (plan 6.2 §4.4, standing): stored notification
+// Payload minimalism gate (standing): stored notification
 // payloads are CLOSED shapes of identifiers/ordinals only — NEVER amounts. A
 // stored amount goes stale and violates §12.1, and this keeps the 6.3 push
 // payload a strict subset of an already-minimal shape. Each kind's schema

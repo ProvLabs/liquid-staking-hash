@@ -1,4 +1,4 @@
-// Gate (plan 5.1 §4.1): signing exists only behind the CLOSED wallet adapter
+// Gate: signing exists only behind the CLOSED wallet adapter
 // registry — exactly the §14.1-decided v1 vendor set, with the decided
 // transports. A vendor addition/removal or a transport change fails here
 // until app-spec §14.1 is amended alongside (spec-recorded, never a config
@@ -46,7 +46,7 @@ describe("pubkey normalization (vendor responses vary; server re-verifies)", () 
     expect(normalizePubkey(b64)).toBe(b64);
   });
 
-  it("accepts base64url (padded and unpadded), normalizing to standard base64 (PR #17 review)", () => {
+  it("accepts base64url (padded and unpadded), normalizing to standard base64", () => {
     const b64 = keyBytes.toString("base64");
     const b64url = keyBytes.toString("base64url");
     expect(b64url).not.toBe(b64); // the fixture really differs

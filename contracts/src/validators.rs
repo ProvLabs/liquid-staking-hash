@@ -1007,7 +1007,7 @@ mod tests {
     }
 }
 
-/// Regression tests for the jail-episode fingerprint (PR #2 review): a report
+/// Regression tests for the jail-episode fingerprint: a report
 /// recorded during one jail episode must not authorize a purge in a LATER
 /// episode, and reports are only recorded where the program has stake.
 #[cfg(test)]

@@ -89,7 +89,7 @@ export class LcdClient {
 
   /**
    * POST path with a JSON body (grpc-gateway tx endpoints: simulate,
-   * broadcast — app plan PR 5.2). Same bounded-timeout/error discipline as
+   * broadcast). Same bounded-timeout/error discipline as
    * `get`; the ONLY write surface is the chain's own tx submission — the
    * client grows no other mutating verb.
    */

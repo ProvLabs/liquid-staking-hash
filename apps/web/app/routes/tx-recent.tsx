@@ -1,4 +1,4 @@
-// GET /tx/recent (PR 5.2, §10.2 step 5): the indexer fast-poll reconcile
+// GET /tx/recent (§10.2 step 5): the indexer fast-poll reconcile
 // source — the session address's indexed transactions, read from
 // services/api with a freshly minted address-scoped assertion (ADR-001
 // Decision 2; the minter's first production consumer). The browser never

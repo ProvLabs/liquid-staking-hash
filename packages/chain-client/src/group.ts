@@ -1,9 +1,9 @@
 // Typed reads for x/group over LCD — the governance surface the App renders
 // (spec §8.7) and the admin role detection of the session layer (spec §4,
-// plan PR 5.1: admin = session address ∈ the admin group-policy's members,
+// Admin = session address ∈ the admin group-policy's members,
 // re-checked live per session refresh).
 //
-// Proposal/vote reads land here with plan PR 7.1. Every shape below is pinned
+// Proposal/vote reads live here. Every shape below is pinned
 // to the devnet corpus captured 2026-07-29 (`packages/fixtures/fixtures/
 // queries/group/`, manifest `pinned_facts`), not to the module's proto docs.
 // Four of those observations shape this file directly:
@@ -19,7 +19,7 @@
 //    normalizing here would quietly break the guard downstream.
 //  - an unrecognized decision-policy type parses to a tagged `unknown` rather
 //    than throwing. An unknown policy type must not stall a worker mid-window
-//    (plan §4 invariant 8), and the raw payload is preserved so the surface can
+// (invariant 8), and the raw payload is preserved so the surface can
 //    say what it does not understand instead of inventing a summary.
 
 import {
@@ -157,7 +157,7 @@ export function parseGroupMember(value: unknown, path = "$"): GroupMember {
   };
 }
 
-// --- proposals and votes (plan PR 7.1) -------------------------------------
+// --- proposals and votes -------------------------------------
 
 /** The module's proposal statuses. Closed set, and `ABORTED` is in it because
  * it is in the proto — NOT because the devnet corpus reaches it. The 2026-07-29
@@ -313,7 +313,7 @@ export class GroupClient {
   }
 
   /**
-   * Resolve a group-policy account address to its policy info (PR 5.1: the
+   * Resolve a group-policy account address to its policy info (the
    * contract's `Config.admin` is expected to be a group-policy address; a 404
    * from the LCD means it is a plain account instead — callers treat that as
    * "no group behind the admin").
@@ -349,7 +349,7 @@ export class GroupClient {
 
   /**
    * Every policy on a group, paginated. Half of the set-valued discovery of
-   * plan §2.1: a program has 1..n policies (the `admin`/`ops` split in
+   * A program has 1..n policies (the `admin`/`ops` split in
    * `contracts/IMPLEMENTATION-STATUS.md` is still open), so nothing may take
    * "the" policy to be the first element of this list.
    */
@@ -431,7 +431,7 @@ export class GroupClient {
   /**
    * The module's own tally for a proposal — `TallyResult`.
    *
-   * WHY THIS EXISTS SEPARATELY FROM `proposal()` (app plan PR 7.2). A proposal's
+   * WHY THIS EXISTS SEPARATELY FROM `proposal()`. A proposal's
    * `final_tally_result` is written by the module only when it TALLIES: it is
    * zeros for the whole voting period, whatever has been voted. So the state
    * plane — which is what both the indexer's sweep and `proposal()` read — cannot

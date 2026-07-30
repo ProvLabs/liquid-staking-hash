@@ -1,4 +1,4 @@
-// The notifier worker (ADR-001 Decision 3; plan 6.2 §2.5). A SEPARATE
+// The notifier worker (ADR-001 Decision 3). A SEPARATE
 // entrypoint OUTSIDE `app/`, so the React Router build never bundles it — it
 // shares the web tier's models layer (AlertStore) and services layer
 // (the pure evaluation core) but is its own process (`pnpm notifier`).

@@ -1,4 +1,4 @@
-// POST/DELETE /push/subscription (plan 6.3 §2.2): per-browser Web Push
+// POST/DELETE /push/subscription: per-browser Web Push
 // subscription management. Session-gated (the standing session-scope gate):
 // the acting address AND the deletion-chain session id come ONLY from the
 // session (requireSession + the HttpOnly cookie), never a body field. The body

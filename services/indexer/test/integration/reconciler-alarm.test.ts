@@ -1,4 +1,4 @@
-// Reconciler alarm — the M2.5 acceptance gate (app-spec §9.6/§12.1, plan §2):
+// Reconciler alarm — the acceptance gate (app-spec §9.6/§12.1):
 // feed a deliberately corrupted indexed row and observe the incident open,
 // end-to-end against real Postgres. Seeds an `epoch_snapshots` row whose
 // `total_shares` diverges from what the (faked) live chain reports for the same

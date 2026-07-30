@@ -1,4 +1,4 @@
-// Portfolio loader degradation matrix (M6.1 §2.6; SECURITY.md "never lie about
+// Portfolio loader degradation matrix (SECURITY.md "never lie about
 // state", app-spec §12.1): live plane down falls back to the indexed plane
 // with an honest plane label; the API down (or no minting key) leaves a
 // live-only summary with personalReadsAvailable false; has_transfers /

@@ -5,7 +5,7 @@
 // - estimate_swap_out serves over REST (string params); estimate_swap_in does
 //   NOT — grpc-gateway rejects Coin/math.Int query parameters — so it throws
 //   UnsupportedTransportError here until a gRPC path exists (or the formal
-//   vault release fixes the annotation; re-checked at PR 8.0).
+// vault release fixes the annotation; re-checked).
 // All shapes are decoded against @nvhash/fixtures in test/.
 
 import {
@@ -214,14 +214,14 @@ export class VaultClient {
    * `Coin`/`math.Int` query parameters ("field type *types.Coin is not
    * supported"). Callers needing swap-in estimates must use a gRPC path
    * (server-side) or wait for the formal vault release to fix the annotation.
-   * Kept as a method so the call site — the M5 stake flow preview — fails
+   * Kept as a method so the call site — the stake flow preview — fails
    * loudly at the boundary instead of silently estimating client-side.
    */
   estimateSwapIn(_vault: string, _assets: Coin): Promise<SwapEstimate> {
     return Promise.reject(
       new UnsupportedTransportError(
         "vault estimate_swap_in",
-        "grpc-gateway rejects Coin/math.Int query parameters on the feature-probed dev build (fixture corpus pinned fact; re-check at PR 8.0)",
+        "grpc-gateway rejects Coin/math.Int query parameters on the feature-probed dev build (fixture corpus pinned fact; re-check at the formal vault release)",
       ),
     );
   }

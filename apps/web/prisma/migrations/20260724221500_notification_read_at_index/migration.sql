@@ -1,4 +1,4 @@
--- M6.2 PR review (round 1): the retention sweep's read-cutoff arm
+-- PR review (round 1): the retention sweep's read-cutoff arm
 -- (`readAt < cutoff`) scans globally — no address filter — which the
 -- (address, readAt) composite cannot serve (address is its leading column).
 -- Pair the deliveredAt index with a readAt index so the sweep's OR resolves

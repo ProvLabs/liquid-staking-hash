@@ -213,7 +213,7 @@ export async function collectWindow(
   //    return was submitted AND pruned inside this window — the normal outcome for
   //    a promptly executed proposal, since a successful exec prunes in its own
   //    transaction. Without this the row is never created and every event-derived
-  //    UPDATE below silently affects nothing (PR #23 review, P1).
+  // UPDATE below silently affects nothing.
   const present = new Set(sweep.proposals.map((p) => p.proposalId.toString()));
 
   // Which height to pin is the whole correctness of this pass, and the two signals

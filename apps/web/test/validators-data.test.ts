@@ -1,4 +1,4 @@
-// Validators-page gates (plan 4.3 §3, SECURITY.md "never lie about state",
+// Validators-page gates (SECURITY.md "never lie about state",
 // app-spec §8.6/§12.1): the set read degrades honestly, per-field joins
 // degrade only their field, and the client-crossing row is the CLOSED public
 // projection (no operator economics, ever). Chain reads come from the fixture

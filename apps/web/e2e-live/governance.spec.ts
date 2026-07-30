@@ -1,12 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-// e2e-live: the governance center against the REAL devnet stack (M7.2; master
-// plan §4 "e2e (live)" layer). Needs no signer — §8.7 is a public read — so it
+// e2e-live: the governance center against the REAL devnet stack. Needs no signer — §8.7 is a public read — so it
 // runs whenever the stack is up, and skips cleanly otherwise.
 //
 // WHY THIS LAYER EXISTS FOR THIS PAGE, when the offline suite already covers the
-// rendering: the offline corpus is UNGOVERNED (M7.2 §3.4 R1 — its contract was
-// deployed before the group existed, and there is no admin-rotation message).
+// rendering: the offline corpus is UNGOVERNED — its contract was deployed
+// before the group existed, and there is no admin-rotation message.
 // So the GOVERNED live plane — set-valued policy discovery, the member set, and
 // the module's own tally for an open proposal — is exercised offline only
 // through MSW overrides. This spec is where it meets a real chain.
@@ -25,7 +24,7 @@ test("the governance page renders against the real chain, with no session", asyn
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Governance");
   await expect(page.getByRole("heading", { name: "Open" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Outcome history" })).toBeVisible();
-  // Read-only through M7.2, on a live chain as much as against mocks.
+  // Read-only, on a live chain as much as against mocks.
   await expect(page.getByText("This page is read-only", { exact: false })).toBeVisible();
 });
 

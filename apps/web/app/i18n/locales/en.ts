@@ -234,7 +234,7 @@ export default {
   "alerts.kind.operator-arrears": "Commission arrears",
   "alerts.kind.operator-arrears-desc": "When one of your validators still has commission owed at epoch close.",
 
-  // Web Push, per-browser opt-in (M6.3 §2.2). Every honest permission state has
+  // Web Push, per-browser opt-in. Every honest permission state has
   // its own copy — no silent no-ops.
   "alerts.push.title": "Push notifications on this device",
   "alerts.push.lede":
@@ -364,7 +364,7 @@ export default {
   "tx.reason-amount-invalid": "Enter a valid amount.",
   "tx.reason-account-missing": "This account has no on-chain activity yet. Receive some HASH first.",
   "tx.reason-chain-unavailable": "The chain could not be reached to check this. Try again shortly.",
-  // M6.4 operator predicates. Each restates a rule the CONTRACT enforces —
+  // Operator predicates. Each restates a rule the CONTRACT enforces —
   // these explain in advance, they do not decide (§12.1).
   "tx.reason-not-validator-operator":
     "Only the validator's own operator account can do this, and this wallet is not it.",
@@ -484,7 +484,7 @@ export default {
   "validators.status-tombstoned": "Tombstoned",
   "validators.uptime-vs-threshold": "{uptime}% / {threshold}% required",
   "validators.uptime-na": "n/a (no capture yet)",
-  // Operator view (M6.4, app-spec §8.6). Copy restates the CONTRACT's own
+  // Operator view (app-spec §8.6). Copy restates the CONTRACT's own
   // mechanics (contracts/src/msg.rs + validators.rs doc comments), not an
   // invented product story — in particular the commission/TIP asymmetry, which
   // is the thing an operator most easily gets wrong.
@@ -653,7 +653,7 @@ export default {
   "operator.accrued-header": "Accrued (HASH)",
   "operator.due-header": "Due (HASH)",
 
-  // Governance center (§8.7, PR 7.2). Read-only in this milestone: voting and
+  // Governance center (§8.7). Read-only in this milestone: voting and
   // execution arrive with 7.3–7.4, so nothing here offers an action.
   "governance.title": "Governance",
   "governance.lede":

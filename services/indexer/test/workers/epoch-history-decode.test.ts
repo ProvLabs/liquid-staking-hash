@@ -1,7 +1,7 @@
 // Fixture-decode: the epoch snapshot / APR smart-query shapes and the run_epoch
 // crank detection match the captured corpus (packages/fixtures). A contract
 // interface change breaks THIS test, not production (app-spec §9.2). Corpus is
-// provisional against the pre-release vault, re-vetted at PR 8.0.
+// provisional against the pre-release vault, re-vetted.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

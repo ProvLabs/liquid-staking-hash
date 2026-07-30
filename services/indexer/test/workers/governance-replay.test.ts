@@ -1,4 +1,4 @@
-// The governance mirror's three load-bearing claims, made executable. Per M7.1
+// The governance mirror's three load-bearing claims, made executable. Per
 // §9 these are where the PR review should spend its effort, so they are asserted
 // here rather than left to inspection:
 //
@@ -342,9 +342,9 @@ describe("invariant 3 — the voting-period-end transition is OBSERVED, not infe
 });
 
 describe("invariant 4 — the mirror outlives chain state and never claims otherwise", () => {
-  // THE PR #23 P1 REGRESSION. The case below it ("from EVENTS ALONE") seeded the
+  // THE ONE-WINDOW-LIFECYCLE REGRESSION. The case below it ("from EVENTS ALONE") seeded the
   // row in a PRIOR window and only then applied the prune — so it verified the
-  // easy variant and never the real one, which is precisely the M6.4 failure the
+  // easy variant and never the real one, which is precisely the failure the
   // §4b apparatus was built to prevent: a named, gated invariant that passes while
   // the defect it names is live.
   //
@@ -645,7 +645,7 @@ describe("votes — the durable per-voter record", () => {
       }),
     );
     // Same voter, same transaction, different proposals. A txhash-keyed store
-    // would have kept one — the M6.4 defect.
+    // would have kept one.
     expect(store.votes.size).toBe(2);
   });
 });

@@ -1,5 +1,5 @@
 // e2e-live: session establishment against the REAL devnet stack (plan 5.2
-// §2.4; master plan §4 "e2e (live)" layer). Requires `stack.sh up` with the
+// §2.4). Requires `stack.sh up` with the
 // web tier reachable at E2E_LIVE_BASE_URL and a funded devnet key in
 // E2E_LIVE_SIGNER_KEY (throwaway material; SECURITY.md devnet rules).
 //

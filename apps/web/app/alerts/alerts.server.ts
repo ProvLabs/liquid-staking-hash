@@ -1,9 +1,9 @@
-// Alerts feature-server module (plan 6.2 §2.6): the seam the two `/alerts/*`
+// Alerts feature-server module: the seam the two `/alerts/*`
 // resource routes and the root loader's unread count use. Wraps the AlertStore
 // (models layer) with the pure effective-settings merge (services layer) and
 // the route boundary schemas. The acting address is ALWAYS the session address
 // (the routes pass `session.address`); nothing here reads an address from user
-// input (the standing session-scope gate, plan §4.6).
+// input (standing session-scope gate).
 
 import { z } from "zod";
 import type { WebConfig } from "~/config/config.server";

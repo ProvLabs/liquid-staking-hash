@@ -3,7 +3,7 @@ import { t, type Locale } from "~/i18n";
 import { bpsToPercent } from "~/learn/amounts";
 import type { YieldPointVM } from "~/portfolio/types";
 
-// §8.2 effective-yield panel (plan §2.2): the single highest-trust view,
+// §8.2 effective-yield panel: the single highest-trust view,
 // "am I getting what the headline says?". Headline effective APR is §14.12
 // cold-gated (null renders "first epoch not yet settled", never a zero). The
 // chart pairs the holder's per-settlement APR against the program's net APR

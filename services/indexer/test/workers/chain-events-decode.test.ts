@@ -2,7 +2,7 @@
 // decodes matches the captured devnet corpus (packages/fixtures). A contract
 // event-shape change breaks THIS test, not production (app-spec §9.2). Reads the
 // fixtures by path (no cross-package dependency); the corpus is provisional
-// against the pre-release vault and re-vetted at PR 8.0.
+// against the pre-release vault and re-vetted.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -132,7 +132,7 @@ describe("chain-events decode against the fixture corpus", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Operator payments (M6.4 §2.1). These decode from a PAIR — the contract's wasm
+// Operator payments. These decode from a PAIR — the contract's wasm
 // event plus the same-msg_index funds transfer — because `pay_tip` publishes
 // only the epoch-cumulative `tip_epoch`, never the payment's own nhash.
 
@@ -265,7 +265,7 @@ describe("operator-payment decode against the fixture corpus", () => {
     expect(undecodable).toMatchObject([{ reason: /found 2 for 1 payment/ }]);
   });
 
-  // ── Batched payments under ONE msg_index (PR #22 review) ──────────────────
+  // ── Batched payments under ONE msg_index ──────────────────
   // A contract that sub-executes two payments in a single message legally
   // produces two wasm events and two transfers at the same msg_index. These
   // must DECODE — dropping them loses real payments from the operator's
@@ -281,7 +281,7 @@ describe("operator-payment decode against the fixture corpus", () => {
       { paymentType: "tip", amount: 111n, msgIndex: 0, ordinal: 0 },
       { paymentType: "tip", amount: 222n, msgIndex: 0, ordinal: 1 },
     ]);
-    // THE KEY PROPERTY (PR #22 review, third P1): siblings share
+    // THE KEY PROPERTY: siblings share
     // (txhash, msgIndex), so the ordinal is the only thing that keeps them
     // distinct rows. Without it every sibling upserts onto the same primary
     // key and all but the last are silently discarded — which is worse than

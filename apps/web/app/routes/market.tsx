@@ -13,7 +13,7 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "Market · nvHASH" }];
 }
 
-// The Market page (plan 4.4, app-spec §8.5): the labeled v1 shell over the
+// The Market page (app-spec §8.5): the labeled v1 shell over the
 // real 3.2 contract, plus the real-data program history views. Every figure
 // degrades independently (market.server.ts); the loader's clock rides along
 // so SSR and hydration agree on sample ages.

@@ -3,7 +3,7 @@
 // never a best-effort continue). Secrets come from the environment only;
 // `.env.example` carries placeholders.
 //
-// Fail-fast rules (plan 6.2 §2.5): DATABASE_URL is REQUIRED — a notifier
+// Fail-fast rules: DATABASE_URL is REQUIRED — a notifier
 // without its store is pointless; API_SERVICE_ASSERTION_KEY is REQUIRED and
 // ≥ 32 chars — without it no internal read can be authorized. A boot misconfig
 // is a loud exit, never a half-running worker.
@@ -22,7 +22,7 @@ export const notifierConfigSchema = z.object({
   /** Fact page size per stream (default 200, ≤ 500 = the API's ceiling). */
   factLimit: z.coerce.number().int().min(1).max(500).default(200),
   /**
-   * Web Push VAPID triple (plan 6.3 §2.3), OPTIONAL and ALL-OR-NONE: with all
+   * Web Push VAPID triple, OPTIONAL and ALL-OR-NONE: with all
    * three set the notifier fans out to push; with none set it records
    * notifications in-app only (the honest "not configured" posture). A PARTIAL
    * VAPID config is a boot error — the imperative check in loadNotifierConfig

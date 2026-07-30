@@ -1,6 +1,6 @@
 // Security-executable gate (b): the indexer source never logs (or otherwise
 // references) IP/device identifiers alongside addresses. Standing in CI from
-// PR 1.1 on (runs under `pnpm -r test`). Planting a log line such as
+// On (runs under `pnpm -r test`). Planting a log line such as
 // `logger.info("tx", { address, ip })` makes this suite — and CI — fail.
 
 import { describe, expect, it } from "vitest";

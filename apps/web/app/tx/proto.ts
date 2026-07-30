@@ -1,4 +1,4 @@
-// Minimal protobuf wire primitives (app plan PR 5.2). Deliberately
+// Minimal protobuf wire primitives. Deliberately
 // dependency-free and tiny: the App encodes exactly four message shapes
 // (TxBody, AuthInfo, SignDoc, TxRaw over the two vault msgs) and decodes one
 // (TxRaw, for the broadcast-relay guards) — a proto toolchain would be a

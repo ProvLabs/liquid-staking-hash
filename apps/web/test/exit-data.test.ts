@@ -1,4 +1,4 @@
-// Exit-context loader gate (plan 5.4; app-spec §8.4, §12.1 never-lie): the
+// Exit-context loader gate (app-spec §8.4, §12.1 never-lie): the
 // comparison stat, native-flow context, and the tracker composed from three
 // reads (live queue + /portfolio active + /transactions terminal), each
 // degrading independently. Chain reads from the fixture corpus via MSW; API

@@ -1,16 +1,16 @@
-// nvHASH Web Push service worker (app plan 6.3 §2.2). Static, framework-free,
+// nvHASH Web Push service worker. Static, framework-free,
 // served straight from `public/` with NO bundler involvement — auditable as
 // one small file. It holds NO keys, performs NO fetches (no `fetch` handler),
 // and caches NOTHING. Its only jobs:
 //   * `push`             → render a notification from the minimal push payload
 //   * `notificationclick` → focus an existing App tab or open the deep link
 //
-// The push payload is the closed `{ kind, url }` shape (plan §2.3, invariant 3
+// The push payload is the closed `{ kind, url }` shape (invariant 3
 // — no amounts, no addresses, no identifiers beyond the kind). Title/body are
 // GENERIC per-kind copy derived HERE, so the third-party push service never
 // carries user-identifying text. v1 is `en`-only (app-spec §14.9); when a
 // locale is added, this map is revisited alongside the deep-link locale-root
-// note (the M6.2 precedent).
+// note (precedent).
 
 "use strict";
 
@@ -45,7 +45,7 @@ self.addEventListener("push", function (event) {
   event.waitUntil(
     self.registration.showNotification(copy.title, {
       body: copy.body,
-      // The click target; nothing identifying rides here (plan §2.3).
+      // The click target; nothing identifying rides here.
       data: { url: url },
       tag: kind || "nvhash",
     }),

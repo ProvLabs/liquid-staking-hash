@@ -1,4 +1,4 @@
-// The wallet adapter boundary (app-spec §10.1; plan 5.1 §3). Signing exists
+// The wallet adapter boundary (app-spec §10.1). Signing exists
 // ONLY behind this closed registry: the §14.1-decided v1 vendor set — Figure
 // (WC v2 mobile + injected extension) and Arculus (WC v2 mobile) — as a
 // typed union with a compile-time totality assertion (the verify-link
@@ -27,7 +27,7 @@ export interface SignArbitraryResult {
   pubkeyBase64: string;
 }
 
-/** SIGN_MODE_DIRECT sign doc as base64 fields (PR 5.2, §10.2 step 5). */
+/** SIGN_MODE_DIRECT sign doc as base64 fields (§10.2 step 5). */
 export interface DirectSignDoc {
   bodyBytesBase64: string;
   authInfoBytesBase64: string;
@@ -37,8 +37,8 @@ export interface DirectSignDoc {
 }
 
 /**
- * What a vendor adapter provides. `signDirect` (PR 5.2) signs the §10.2
- * transaction sign doc; `signArbitrary` (PR 5.1) signs the ADR-36 session
+ * What a vendor adapter provides. `signDirect` signs the §10.2
+ * transaction sign doc; `signArbitrary` signs the ADR-36 session
  * challenge. Nothing else — no key material ever crosses this boundary.
  */
 export interface WalletAdapter {

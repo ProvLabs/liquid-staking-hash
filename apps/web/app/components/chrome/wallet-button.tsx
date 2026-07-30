@@ -1,4 +1,4 @@
-// The chrome wallet slot (fills the M4.1 recorded deferred delta; plan 5.1
+// The chrome wallet slot (fills the recorded deferred delta
 // §3): connect entry point, vendor picker (the closed §14.1 registry — the
 // UI renders the registry, it cannot invent a vendor), WC pairing QR, and
 // the connected state (truncated address in Geist Mono + vendor badge +

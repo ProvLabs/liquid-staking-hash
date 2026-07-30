@@ -4,7 +4,7 @@
 //
 // Scaffold scope: process-local counting is correct for a single instance and
 // for CI. A shared store (e.g. Redis) for multi-instance deployments is a
-// deployment-time concern (PR 8.2 load-test + tuning), not a scaffold decision;
+// deployment-time concern (load-test + tuning), not a scaffold decision;
 // the interface here does not change when that lands.
 
 /** Injectable clock so tests advance time deterministically (no wall-clock). */

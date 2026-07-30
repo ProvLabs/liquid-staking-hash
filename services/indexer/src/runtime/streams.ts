@@ -7,7 +7,7 @@
 //
 // The identity marker is stored as a reserved row in `indexer_checkpoints` (a
 // `meta:` stream, never a worker cursor) so no schema change is needed — the
-// model already carries a nullable `cursorPage` string. Lag accounting (PR 2.5)
+// model already carries a nullable `cursorPage` string. Lag accounting
 // excludes `meta:`-prefixed rows from the per-stream height exposure.
 
 import type { PrismaClient } from "@prisma/client";

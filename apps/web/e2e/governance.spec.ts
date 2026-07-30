@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-// Governance center (M7.2, app-spec §8.7) against the fixture-backed server.
+// Governance center (app-spec §8.7) against the fixture-backed server.
 //
-// What this layer can and cannot see, stated rather than assumed (M7.2 §3.4 R1):
+// What this layer can and cannot see, stated rather than assumed (R1):
 // the corpus's contract admin is a PLAIN ACCOUNT — the contract was deployed
 // before the group existed and there is no admin-rotation message (M7 overview
 // F2) — so offline the live plane correctly resolves to "no group behind this

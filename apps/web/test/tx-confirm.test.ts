@@ -1,4 +1,4 @@
-// Exact-JSON disclosure gate (plan 5.2 §4.2; §10.2 step 4): the user signs
+// Exact-JSON disclosure gate (§10.2 step 4): the user signs
 // exactly what they saw. The confirm step renders `plan.disclosureJson`;
 // the wallet signs `plan.signDocBytes`. This suite DECODES the sign-doc
 // bytes and proves the disclosure is a faithful rendering of them — same
@@ -75,7 +75,7 @@ describe("the disclosure equals the signed bytes (single serialization site)", (
   });
 });
 
-// ── M6.4: the same rigor over the operator execute messages ──────────────
+// ── The same rigor over the operator execute messages ──────────────
 //
 // §17.1 says graduating privileged writes to the consumer surface must not
 // soften the confirmation contract. The risk here is specific: an execute

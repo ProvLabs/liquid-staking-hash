@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { LIVE_DOWN_ORIGIN } from "../playwright.config";
 
-// Validators public page (plan 4.3, app-spec §8.6) against the fixture-backed
+// Validators public page (app-spec §8.6) against the fixture-backed
 // server: the consumer table with the corpus values, honest cold-start set
 // history, environment-locked verify links, and per-surface degradation.
 

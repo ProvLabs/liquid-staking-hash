@@ -1,4 +1,4 @@
-// Alert resource-route behavior (plan 6.2 §3 commit C, §4.6). Exercises the
+// Alert resource-route behavior (§4.6). Exercises the
 // alerts feature-server (the seam the `/alerts/*` routes call after
 // requireSession) over the in-memory store singleton: mark-read is
 // address-scoped (never crosses addresses), the body/query schemas reject

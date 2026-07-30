@@ -1,4 +1,4 @@
-// The guarded broadcast relay (app plan PR 5.2 §2.3; app-spec §12.3
+// The guarded broadcast relay (app-spec §12.3
 // amendment, decided 2026-07-23): the web tier relays a FULLY-SIGNED
 // transaction to the chain, and nothing else. The server cannot alter a
 // signed tx without invalidating its signature — the relay adds no signing
@@ -9,7 +9,7 @@
 //   2. size cap (SIZE_CAP_BYTES)               → 413
 //   3. decodes as TxRaw, one signature         → 400
 //   4. every msg type ∈ the closed allowlist   → 400
-//  4b. MsgExecuteContract ONLY: the M6.4 §2.5 deep guard — configured
+// 4b. MsgExecuteContract ONLY: the deep guard — configured
 //      contract, one of six operator variants, per-variant body, funds
 //      discipline, canonical bytes → 400
 //   5. every vault msg's vault == configured vault → 400
@@ -95,7 +95,7 @@ export function guardSignedTx(
       return { ok: false, status: 400, reason: "message type not allowed" };
     }
     if (msg.typeUrl === MSG_EXECUTE_CONTRACT) {
-      // Guard 4b — the M6.4 §2.5 DEEP guard. `MsgExecuteContract` is in the
+      // Guard 4b — the DEEP guard. `MsgExecuteContract` is in the
       // allowlist only because this runs: on its own the type URL would carry
       // any call to any contract. It replaces the vault check (field 2 is the
       // CONTRACT here, not the vault) and is never skipped for it.

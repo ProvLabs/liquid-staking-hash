@@ -1,9 +1,9 @@
-// Byte-golden message-builder gate (plan 5.2 §4; app-spec §14.2 stage 1).
+// Byte-golden message-builder gate (app-spec §14.2 stage 1).
 // The encoder must reproduce the EXACT bytes the chain accepted for the
 // captured corpus transactions: TxRaw re-encoded from the fixture's
 // proto-JSON must hash to the fixture's txhash (sha256, the chain's tx id).
 // This pins every assumed field number and canonical-encoding rule — a
-// wrong assumption cannot produce the right hash. PR 8.0 re-vets the corpus
+// wrong assumption cannot produce the right hash. The corpus is re-vetted
 // against the formal vault release.
 
 import { describe, expect, it } from "vitest";
@@ -138,7 +138,7 @@ describe("builder ↔ decoder round trip (the relay guard reads what we write)",
   });
 
   it("the allowlist holds the two vault messages (M6.4 adds ONE guarded entry)", () => {
-    // `MsgExecuteContract` joined in M6.4 and is safe only because the relay
+    // `MsgExecuteContract` joined and is safe only because the relay
     // runs a second-level guard for it; the closed-set assertions for that
     // entry live in test/tx-operator-build.test.ts and its rejection matrix in
     // test/broadcast-guard.test.ts. Here we only pin that the VAULT pair is

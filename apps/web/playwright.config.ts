@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 import { manifest } from "./e2e/fixture-manifest";
 
-// Offline e2e (plan §4): the production build served with NVHASH_MOCK=1 —
+// Offline e2e: the production build served with NVHASH_MOCK=1 —
 // chain reads come from the @nvhash/fixtures corpus via MSW, no devnet needed.
 // Runs in the official Playwright image on the ADR-002 compose file
 // (`./dev pw …`); the @playwright/test pin and the image tag move together.
@@ -11,7 +11,7 @@ const PORT = 43117;
 // A second server instance with NVHASH_MOCK_LIVE_DOWN=1: the chrome's two
 // live reads fail while the boot check still passes, so the suite can assert
 // the honest degradation ("program status unavailable", no banner) end to
-// end (plan 4.1 §3).
+// end.
 const LIVE_DOWN_PORT = 43118;
 export const LIVE_DOWN_ORIGIN = `http://127.0.0.1:${LIVE_DOWN_PORT}`;
 

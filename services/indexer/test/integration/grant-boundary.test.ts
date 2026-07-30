@@ -1,5 +1,5 @@
-// Grant-boundary integration test (ADR-001 Decision 1, action item 4; app plan
-// PR 1.5). This is the mechanism — not a caller/topology assumption — that
+// Grant-boundary integration test (ADR-001 Decision 1, action item 4).
+// This is the mechanism — not a caller/topology assumption — that
 // makes the two-domain ownership split a control SECURITY.md can rely on. It
 // runs against a live Postgres that infra/dev/postgres/roles.sql has bootstrapped
 // and the indexer's Prisma migration has populated, then asserts the exact
