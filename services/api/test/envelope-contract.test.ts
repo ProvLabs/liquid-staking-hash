@@ -36,8 +36,33 @@ const ADDRESS_ROUTE_QUERY = new URLSearchParams({
  * params. Registry-driven like the harness itself — a future route with a new
  * auth kind fails here loudly instead of being silently skipped.
  */
+/**
+ * Public routes that REQUIRE a query param, with a valid value. Declared rather
+ * than inferred, for the reason M6.4 learned on the operator routes: a route with
+ * a required param 400s under the bare harness, and a 400 satisfies "not a 200"
+ * assertions by accident — so a missing declaration would let a route slip past
+ * the very gate that is supposed to cover it. The coverage assertion below is what
+ * makes forgetting one a CI failure.
+ */
+const PUBLIC_REQUIRED_QUERY: Record<string, string> = {
+  [`${API_BASE}/governance/proposal`]: "id=1",
+};
+
+/**
+ * Public routes that look up a SINGLE resource and answer 404 when the mirror
+ * holds no record of it. They are still enveloped — on a populated reader they
+ * return the envelope like everything else — but on the default (dataless) reader
+ * a 404 is the honest answer: "we hold no record of this id" is a different
+ * statement from "this proposal exists and is blank", and collapsing the two would
+ * let a mistyped id render as a real, empty proposal.
+ */
+const RESOURCE_LOOKUP_PATHS = new Set<string>([`${API_BASE}/governance/proposal`]);
+
 function validRequest(route: Route, baseUrl: string): { url: string; init: RequestInit } {
-  if (route.auth === "public") return { url: `${baseUrl}${route.path}`, init: {} };
+  if (route.auth === "public") {
+    const query = PUBLIC_REQUIRED_QUERY[route.path];
+    return { url: `${baseUrl}${route.path}${query === undefined ? "" : `?${query}`}`, init: {} };
+  }
   if (route.auth === "address") {
     return {
       url: `${baseUrl}${route.path}?${ADDRESS_ROUTE_QUERY}`,
@@ -78,6 +103,22 @@ describe("route registry invariants", () => {
     expect(nonGet, `non-GET routes are forbidden: ${nonGet.join(", ")}`).toEqual([]);
   });
 
+  it("declares a valid query for every public route whose schema requires one", () => {
+    // The gate's own blind spot, closed: a public route with a required param that
+    // is NOT in PUBLIC_REQUIRED_QUERY would 400 under every harness above, and a
+    // 400 can masquerade as a deliberate rejection. So the requirement is derived
+    // from the schema itself rather than trusted to a reviewer noticing.
+    for (const route of routes.filter((r) => r.auth === "public" && r.querySchema !== null)) {
+      const parsed = route.querySchema!.safeParse({});
+      if (!parsed.success) {
+        expect(
+          PUBLIC_REQUIRED_QUERY[route.path],
+          `${route.path} requires query params but declares none in PUBLIC_REQUIRED_QUERY`,
+        ).toBeDefined();
+      }
+    }
+  });
+
   it("registers at least the scaffold routes under the versioned base", () => {
     expect(routes.length).toBeGreaterThanOrEqual(3);
     for (const route of routes) expect(route.path.startsWith(`${API_BASE}/`)).toBe(true);
@@ -91,6 +132,12 @@ describe("envelope + method contract on every route", () => {
       for (const route of routes) {
         const { url, init } = validRequest(route, server.baseUrl);
         const res = await fetch(url, init);
+        if (RESOURCE_LOOKUP_PATHS.has(route.path)) {
+          // The dataless reader holds no such resource, so 404 is correct here and
+          // the envelope is asserted against a populated reader instead (below).
+          expect(res.status, `${route.path} should 404 on the empty reader`).toBe(404);
+          continue;
+        }
         expect(res.status, `${route.path} should 200`).toBe(200);
         expect(res.headers.get("content-type")).toMatch(/application\/json/);
         // Rate-limit headers are present on every response (defensive posture).

@@ -27,6 +27,9 @@ import {
   toTransactionRow,
   type AlertIncidentFacts,
   type BridgedSupplyFacts,
+  type GovPolicyFacts,
+  type GovProposalFacts,
+  type GovVoteFacts,
   type EpochSnapshotFacts,
   type IncidentFacts,
   type MarketSampleFacts,
@@ -73,6 +76,16 @@ export interface FakeFacts {
   readonly operatorRegistry?: readonly OperatorRegistryFacts[] | undefined;
   readonly operatorEpochs?: readonly OperatorEpochFacts[] | undefined;
   readonly operatorPayments?: readonly OperatorPaymentFacts[] | undefined;
+  /**
+   * PR 7.1 governance fixtures. `govIndexedFromHeight` is separate from the
+   * proposals on purpose: the honest-empty case is "rows present, coverage
+   * window unknown", and a fake that derived the field from the rows could not
+   * express it.
+   */
+  readonly govProposals?: readonly GovProposalFacts[] | undefined;
+  readonly govVotes?: readonly GovVoteFacts[] | undefined;
+  readonly govPolicies?: readonly GovPolicyFacts[] | undefined;
+  readonly govIndexedFromHeight?: number | null | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -351,6 +364,39 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         );
       for (let i = 0; i < rows.length; i += CHUNK) yield rows.slice(i, i + CHUNK);
     },
+    // Governance (PR 7.1). The fake mirrors the real reader's HONESTY contract, not
+    // merely its signature: `indexedFromHeight` stays null unless seeded (never 0,
+    // which would claim coverage from genesis), and an unknown proposal id resolves
+    // to null so the route's 404 path is exercised rather than an empty 200.
+    listGovProposals: (page, filter) => {
+      const all = (facts.govProposals ?? []).filter(
+        (p) =>
+          (filter.policy === undefined || p.groupPolicyAddress === filter.policy) &&
+          (filter.status === undefined || p.status.toUpperCase() === filter.status.toUpperCase()),
+      );
+      // Newest first by id, matching reader-prisma: x/group ids are monotonic
+      // chain-global, so id order IS submission order.
+      const sorted = [...all].sort((a, b) => (a.proposalId < b.proposalId ? 1 : -1));
+      return Promise.resolve({
+        proposals: sorted.slice(page.offset, page.offset + page.limit),
+        indexedFromHeight: facts.govIndexedFromHeight ?? null,
+      });
+    },
+    govProposal: (proposalId) => {
+      const proposal = (facts.govProposals ?? []).find((p) => p.proposalId === proposalId);
+      if (proposal === undefined) return Promise.resolve(null);
+      return Promise.resolve({
+        proposal,
+        votes: [...(facts.govVotes ?? [])]
+          .filter((v) => v.proposalId === proposalId)
+          .sort((a, b) =>
+            a.submitTime.getTime() === b.submitTime.getTime()
+              ? a.voter.localeCompare(b.voter)
+              : a.submitTime.getTime() - b.submitTime.getTime(),
+          ),
+      });
+    },
+    listGovPolicies: () => Promise.resolve([...(facts.govPolicies ?? [])]),
     epochBoundariesAsc: () =>
       Promise.resolve(
         [...(facts.epochs ?? [])]

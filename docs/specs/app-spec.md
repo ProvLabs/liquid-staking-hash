@@ -1142,6 +1142,63 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > is untouched, so the closed public key set gated by
 > `apps/web/test/validators-data.test.ts` cannot widen by accident.
 
+> **Revision 2026-07-29 (PR 7.1 commit C): the §8.7 governance read surface, and
+> one mechanism that outlives it.**
+>
+> Three PUBLIC enveloped routes join `services/api`: `/governance/proposals`
+> (paginated, newest first, optional policy and status filters),
+> `/governance/proposal?id=` and `/governance/policies`. Public is structural
+> rather than a policy choice — proposals and votes are public chain facts with no
+> address keying, so there is nothing to scope and no `PERSONAL_PATHS` entry
+> exists.
+>
+> Four shape facts are pinned here because each is a place a later change would
+> plausibly get it wrong:
+>
+> - **The proposal detail takes a QUERY PARAM, not a path segment.**
+>   `services/api` has no path-parameter support: `findRoute` is an exact string
+>   match. `/governance/proposal?id=` is therefore the surface, and the web tier's
+>   own `/governance/:proposalId` URL is unrelated to it.
+> - **`id` is a decimal STRING on the wire, in both directions.** x/group proposal
+>   ids are uint64 and JSON numbers stop at 2^53, so a coerced number would
+>   silently accept a corrupted id. Tally counts and member weights are decimal
+>   strings for the adjacent reason: they are unbounded weight SUMS with no
+>   protocol ceiling, so `Uint128` would be an invented bound.
+> - **`indexed_from_height` rides the list payload.** `x/group` prunes, so a
+>   proposal that closed before the indexer existed is unrecoverable; without this
+>   field the list would imply a completeness it lacks. Null, never 0, when no
+>   height certifies the window.
+> - **The API serves the MIRROR, not the chain.** It has no chain client by design,
+>   so `/governance/policies` is the HISTORICAL policy set observed in
+>   `gov_proposals` — a policy that exists on chain but has never carried a
+>   proposal is legitimately absent — and every figure is AS OF `observed_height`.
+>   The live policy set, current membership and live tallies are web-tier reads at
+>   7.2, the same division `/market` and `/portfolio` already use.
+>
+> **The mechanism that outlives this PR: wire bounds are one declaration.**
+> `@nvhash/api-types/bounds.ts` now holds every bound that exists on both sides of
+> the API↔web boundary, imported by both, with `test/bounds.test.ts` asserting
+> producer ⊆ consumer for each registered pair. This closes the **PR #19 defect
+> class** rather than another instance of it: that fix added a constant, while
+> §9.1's row types went on coupling the two sides in a COMMENT with nothing
+> importing or testing the pairing. The three M6.1 portfolio caps are adopted into
+> the registry in the same change; the pre-7.1 collection bounds on `/validators`,
+> `/portfolio.active_redemptions` and `/market` remain web-only and are named as
+> not-yet-covered in that file rather than left to be discovered.
+>
+> Two truncations are FLAGGED rather than silent (`votes_truncated`,
+> `messages_truncated`). The vote list is not page-controlled by the caller — the
+> detail endpoint serves a proposal's whole vote set, whose size is a property of
+> the group, and x/group puts no ceiling on membership — and a governance payload
+> that quietly dropped a message would misstate what is being voted on.
+>
+> **Tally-vs-threshold is a shared pure helper** (`tally.ts`), not a per-consumer
+> derivation: this is the `navHashPerShare` precedent recorded in this section's
+> revision (d), which exists because a duplicated amount formula drifted once. It
+> is BigInt-only and returns **null for undecidable** — an unrecognized policy
+> type, a malformed count, or a percentage rule with no electorate weight. A
+> boolean there would look authoritative while resting on a guess.
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.

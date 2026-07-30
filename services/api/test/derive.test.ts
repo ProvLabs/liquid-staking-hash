@@ -6,7 +6,15 @@
 // un-indexed metrics).
 
 import { describe, expect, it } from "vitest";
+import { MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
 import {
+  toGovDecisionPolicy,
+  toGovPolicyRow,
+  toGovProposalDetail,
+  toGovProposalRow,
+  toGovVoteRow,
+  type GovProposalFacts,
+  type GovVoteFacts,
   deriveHeads,
   deriveMetrics,
   derivePayoutStats,
@@ -333,5 +341,158 @@ describe("payout statistics (§9.5.3, §14.12)", () => {
     expect(stats.band_ceiling_seconds).toBe(REDEMPTION_BAND_CEILING_SECONDS);
     expect(REDEMPTION_BAND_FLOOR_SECONDS).toBe(21 * DAY);
     expect(REDEMPTION_BAND_CEILING_SECONDS).toBe(60 * DAY);
+  });
+});
+
+// --- governance mappers (PR 7.1 commit C) -----------------------------------
+
+describe("governance derive", () => {
+  const facts: GovProposalFacts = {
+    proposalId: 7n,
+    groupPolicyAddress: "tp1policy",
+    groupId: 1n,
+    proposers: ["tp1a", "tp1b"],
+    status: "ACCEPTED",
+    executorResult: "SUCCESS",
+    metadata: null,
+    title: "t",
+    summary: "s",
+    messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend" }],
+    submitTime: new Date("2026-07-29T00:00:00Z"),
+    votingPeriodEnd: new Date("2026-07-29T00:05:00Z"),
+    yesCount: 2n,
+    noCount: 0n,
+    abstainCount: 1n,
+    noWithVetoCount: 0n,
+    groupVersion: 1n,
+    groupPolicyVersion: 2n,
+    decisionPolicy: {
+      "@type": "/cosmos.group.v1.ThresholdDecisionPolicy",
+      threshold: "2",
+      windows: { voting_period: "300s", min_execution_period: "0s" },
+    },
+    observedHeight: 500n,
+    observedAt: new Date("2026-07-29T00:06:00Z"),
+    height: 480n,
+    txhash: "AB",
+    prunedAtHeight: 496n,
+  };
+
+  it("lower-cases the stored enums into the wire unions", () => {
+    const row = toGovProposalRow(facts);
+    expect(row.status).toBe("accepted");
+    expect(row.executor_result).toBe("success");
+  });
+
+  it("maps an unrecognized enum to `unspecified` instead of throwing", () => {
+    // A status a later chain upgrade adds must render honestly, not 500 a page.
+    const row = toGovProposalRow({ ...facts, status: "PROPOSAL_STATUS_FUTURE", executorResult: "WAT" });
+    expect(row.status).toBe("unspecified");
+    expect(row.executor_result).toBe("unspecified");
+  });
+
+  it("keeps u64 ids and unbounded weights as STRINGS", () => {
+    const huge = 2n ** 70n;
+    const row = toGovProposalRow({ ...facts, proposalId: huge, yesCount: huge });
+    expect(row.proposal_id).toBe(huge.toString());
+    expect(row.tally.yes).toBe(huge.toString());
+  });
+
+  it("preserves multiple proposers", () => {
+    // x/group permits several, so a scalar would be a lie for two.
+    expect(toGovProposalRow(facts).proposers).toEqual(["tp1a", "tp1b"]);
+  });
+
+  it("surfaces prunedAtHeight and keeps submit provenance", () => {
+    const row = toGovProposalRow(facts);
+    expect(row.pruned_at_height).toBe(496);
+    expect(row.height).toBe(480);
+    expect(row.txhash).toBe("AB");
+  });
+
+  it("keeps null submit provenance null", () => {
+    // A proposal first seen by the height-pinned sweep has no submit tx. Null is
+    // honest; a fabricated height is not.
+    const row = toGovProposalRow({ ...facts, height: null, txhash: null, prunedAtHeight: null });
+    expect(row.height).toBeNull();
+    expect(row.txhash).toBeNull();
+    expect(row.pruned_at_height).toBeNull();
+  });
+
+  it("throws loudly on a height outside the safe-integer range", () => {
+    // The [R7a] guard: a corrupt height fails the request rather than reaching a
+    // consumer as a rounded number.
+    expect(() => toGovProposalRow({ ...facts, observedHeight: 2n ** 60n })).toThrow(RangeError);
+  });
+
+  it("decodes threshold, percentage and unknown decision policies", () => {
+    expect(toGovDecisionPolicy(facts.decisionPolicy)).toEqual({
+      kind: "threshold",
+      threshold: "2",
+      voting_period: "300s",
+      min_execution_period: "0s",
+    });
+    expect(
+      toGovDecisionPolicy({
+        "@type": "/cosmos.group.v1.PercentageDecisionPolicy",
+        percentage: "0.5",
+        windows: { voting_period: "1h", min_execution_period: "0s" },
+      }),
+    ).toEqual({ kind: "percentage", percentage: "0.5", voting_period: "1h", min_execution_period: "0s" });
+    // Tagged, with the type URL kept, so a surface can name what it cannot read.
+    expect(toGovDecisionPolicy({ "@type": "/x.Future" })).toEqual({
+      kind: "unknown",
+      type_url: "/x.Future",
+    });
+    expect(toGovDecisionPolicy(null)).toBeNull();
+  });
+
+  it("keeps a vote's null weight null rather than zero", () => {
+    const row = toGovVoteRow({
+      proposalId: 7n,
+      voter: "tp1v",
+      option: "ABSTAIN",
+      metadata: null,
+      weight: null,
+      submitTime: new Date("2026-07-29T00:01:00Z"),
+      height: null,
+      txhash: null,
+    });
+    expect(row.weight).toBeNull();
+    expect(row.option).toBe("abstain");
+  });
+
+  it("flags a truncated vote list rather than shortening it silently", () => {
+    const votes: GovVoteFacts[] = Array.from({ length: MAX_GOV_VOTES_PER_PROPOSAL + 2 }, (_, i) => ({
+      proposalId: 7n,
+      voter: `tp1v${i}`,
+      option: "YES",
+      metadata: null,
+      weight: 1n,
+      submitTime: new Date("2026-07-29T00:01:00Z"),
+      height: null,
+      txhash: null,
+    }));
+    const detail = toGovProposalDetail(facts, votes);
+    expect(detail.votes).toHaveLength(MAX_GOV_VOTES_PER_PROPOSAL);
+    expect(detail.votes_truncated).toBe(true);
+  });
+
+  it("maps a policy row, and a missing snapshot to a null policy", () => {
+    expect(
+      toGovPolicyRow({
+        address: "tp1policy",
+        groupId: 1n,
+        proposalCount: 3,
+        lastSeenHeight: 900n,
+        decisionPolicy: null,
+      }),
+    ).toEqual({
+      address: "tp1policy",
+      group_id: "1",
+      proposal_count: 3,
+      last_seen_height: 900,
+      decision_policy: null,
+    });
   });
 });

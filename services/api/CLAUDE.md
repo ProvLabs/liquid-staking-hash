@@ -155,6 +155,65 @@ Query API over the indexer's data store.
     codebase bound rather than a per-route one — a lower bound here would be the
     kind of per-route divergence the consistency lens flags. **ACCEPTED as-is
     (Ira, 2026-07-28).** The CSV export is keyset and unaffected.
+- **Governance surface (PR 7.1 commit C, app-spec §8.7/§9.1/§9.4)** — three
+  **public** enveloped routes under `/api/v1/governance/`: `proposals`
+  (paginated newest-first, optional `?policy=` bech32 + `?status=` closed enum),
+  `proposal?id=` and `policies`. Public is structural, not a choice: proposals and
+  votes are public chain facts with **no address keying**, so nothing is scoped and
+  no `PERSONAL_PATHS` entry exists — the registry-derived cross-address suite keeps
+  it that way. `proposal` is a **query param, not a path segment**, because
+  `findRoute` is an exact string match and this service has no path-parameter
+  support at all (M7 finding F3); the web tier is free to use
+  `/governance/:proposalId` for its own URL.
+  **`?id=` is a STRING schema, deliberately.** x/group proposal ids are uint64 and
+  the JSON number domain stops at 2^53, so `z.coerce.number()` would silently
+  accept a corrupted id; the schema validates a canonical decimal string (no
+  leading zeros, so one proposal cannot be addressed by two spellings).
+  **The API serves the durable MIRROR only** (D12/D16) — it has no chain client by
+  design, so the live policy set, current membership and live tallies are web-tier
+  reads at 7.2, exactly the `/market` and `/portfolio` division. Two consequences
+  worth knowing: `/governance/policies` is the **historical** set observed in
+  `gov_proposals`, so a policy that exists on chain but has never had a proposal is
+  legitimately absent; and every figure is AS OF `observed_height`, never "now".
+  **`indexed_from_height` on the list payload is load-bearing** (invariant 5):
+  `x/group` prunes, so a proposal that closed before the indexer existed is
+  unrecoverable, and a list that omitted it silently would imply a completeness it
+  lacks. Null — never 0 — when no height certifies the window.
+  **An unknown id is a 404**, not an empty 200: "we hold no record of this id" and
+  "it exists and is blank" are different answers, and conflating them would render
+  a mistyped id as a real, empty proposal.
+  **Truncation is always FLAGGED.** `votes[]` is not page-controlled by the caller
+  (the detail endpoint serves a proposal's whole vote set, whose size is a property
+  of the group, and x/group caps group membership at nothing), and a governance
+  payload that quietly dropped a message would misstate what is being voted on — so
+  both trims carry `votes_truncated` / `messages_truncated`.
+  **Wire bounds live in `@nvhash/api-types/bounds.ts`** — one declaration imported
+  by both tiers, with `packages/api-types/test/bounds.test.ts` asserting producer ⊆
+  consumer for every registered pair. This closes the **PR #19 defect class**: that
+  fix added a constant while `rows.ts` went on coupling the two sides in a COMMENT,
+  so nothing imported or tested the pairing. The three M6.1 portfolio pairs were
+  adopted into the registry in the same change; the pre-7.1 collection bounds on
+  `/validators`, `/portfolio.active_redemptions` and `/market` are still web-only
+  and are named as not-yet-covered in that file.
+  **Passage is decided by the shared `meetsThreshold`** (`@nvhash/api-types/tally.ts`,
+  decision D17) — BigInt-only over unbounded member weights, with **null for
+  undecidable** (unknown policy type, malformed count, percentage rule with no
+  electorate). This is the `navHashPerShare` precedent: a duplicated formula
+  drifted once already, and two implementations of "has this passed?" would
+  eventually disagree about the same proposal. Threshold compares YES weight
+  ALONE — writing it as `yes - no` reimplements a different module's rule.
+  Reader methods `listGovProposals`/`govProposal`/`listGovPolicies`; pure mappers
+  `toGovProposalRow`/`toGovVoteRow`/`toGovProposalDetail`/`toGovPolicyRow`/
+  `toGovDecisionPolicy` in `derive.ts`. Deliberately **no keyset machinery**:
+  proposals per policy number in the tens, not the 300 000 `operator_payments` rows
+  that forced `$queryRaw` row comparison, so cargo-culting it onto a structurally
+  tiny table would add raw SQL for nothing. New standing gates:
+  `test/governance-endpoints.test.ts` (22) and the governance cases in
+  `test/derive.test.ts` + `test/integration/reader.test.ts`. Both registry
+  harnesses gained a **`PUBLIC_REQUIRED_QUERY`** declaration for
+  `/governance/proposal`, with a schema-derived coverage assertion: a public route
+  with a required param 400s under the bare harness, and a 400 can masquerade as a
+  deliberate rejection — the M6.4 `VALOPER_PATHS` lesson applied to public routes.
 - Every response carries the freshness envelope from `@nvhash/api-types`
   (spec §9.4); public endpoints stay unauthenticated, read-only, rate-limited.
 - Version the public API surface; `apps/web/` is the primary consumer.

@@ -60,6 +60,8 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     await writer.marketSample.deleteMany();
     await writer.bridgeSupplySample.deleteMany();
     await writer.operatorPayment.deleteMany();
+    await writer.govVote.deleteMany();
+    await writer.govProposal.deleteMany();
     await writer.indexerCheckpoint.deleteMany();
 
     await writer.indexerCheckpoint.createMany({
@@ -525,6 +527,146 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     expect(boundaries).toEqual([{ epochIndex: 12n, endHeight: 4100n }]);
     expect(paymentEpochIndex(3000n, boundaries)).toBe(12n);
     expect(paymentEpochIndex(5000n, boundaries)).toBeNull();
+  });
+
+
+  // --- governance (PR 7.1 commit C) -----------------------------------------
+  //
+  // The route suite exercises these payloads over an in-memory fake. What only
+  // real Postgres can prove is that the SELECTs themselves are right as
+  // `api_reader`: the group-by aggregate, the newest-first id order, the
+  // Decimal(39,0) tally counts surviving as bigints, and the read-one-past-the-cap
+  // trick the truncation flag depends on.
+
+  it("lists mirrored proposals newest-first with filters, as api_reader", async () => {
+    const base = {
+      groupId: 1n,
+      proposers: ["pb1proposer"],
+      status: "SUBMITTED",
+      executorResult: "NOT_RUN",
+      title: "t",
+      summary: "s",
+      messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend" }],
+      submitTime: new Date("2026-07-29T00:00:00Z"),
+      votingPeriodEnd: new Date("2026-07-29T00:05:00Z"),
+      yesCount: "0",
+      noCount: "0",
+      abstainCount: "0",
+      noWithVetoCount: "0",
+      groupVersion: 1n,
+      groupPolicyVersion: 1n,
+      decisionPolicy: {
+        "@type": "/cosmos.group.v1.ThresholdDecisionPolicy",
+        threshold: "2",
+        windows: { voting_period: "300s", min_execution_period: "0s" },
+      },
+      observedAt: new Date("2026-07-29T00:06:00Z"),
+    };
+    await writer.govProposal.createMany({
+      data: [
+        { ...base, proposalId: 71n, groupPolicyAddress: "pb1policya", observedHeight: 500n, status: "ACCEPTED" },
+        { ...base, proposalId: 72n, groupPolicyAddress: "pb1policya", observedHeight: 510n },
+        { ...base, proposalId: 73n, groupPolicyAddress: "pb1policyb", observedHeight: 520n, status: "REJECTED" },
+      ],
+    });
+    await writer.indexerCheckpoint.create({ data: { stream: "governance", cursorHeight: 520n } });
+
+    const all = await reader.listGovProposals({ limit: 50, offset: 0 }, {});
+    // Newest first by id — x/group ids are monotonic chain-global, so id order IS
+    // submission order and no tie-break column is needed.
+    expect(all.proposals.map((p) => p.proposalId)).toEqual([73n, 72n, 71n]);
+    // Invariant 5: the window the mirror can vouch for.
+    expect(all.indexedFromHeight).toBe(1);
+
+    const byPolicy = await reader.listGovProposals({ limit: 50, offset: 0 }, { policy: "pb1policyb" });
+    expect(byPolicy.proposals.map((p) => p.proposalId)).toEqual([73n]);
+
+    // The wire union is lower-case; the column stores SCREAMING. The reader owns
+    // that translation, so a caller never has to know.
+    const byStatus = await reader.listGovProposals({ limit: 50, offset: 0 }, { status: "accepted" });
+    expect(byStatus.proposals.map((p) => p.proposalId)).toEqual([71n]);
+
+    const paged = await reader.listGovProposals({ limit: 1, offset: 1 }, {});
+    expect(paged.proposals.map((p) => p.proposalId)).toEqual([72n]);
+  });
+
+  it("reads tally counts and vote weights back as BIGINTS at full precision", async () => {
+    // 39 digits is the column's full precision. x/group weights are unbounded
+    // sums with no protocol ceiling, so a value that survives this cannot have
+    // passed through a double.
+    const big = (10n ** 38n - 1n).toString();
+    await writer.govProposal.update({
+      where: { proposalId: 72n },
+      data: { yesCount: big, noWithVetoCount: "1" },
+    });
+    await writer.govVote.create({
+      data: {
+        proposalId: 72n,
+        voter: "pb1voterbig",
+        option: "YES",
+        weight: big,
+        submitTime: new Date("2026-07-29T00:01:00Z"),
+        height: 495n,
+        txhash: "VOTEBIG",
+      },
+    });
+    const found = await reader.govProposal(72n);
+    expect(found).not.toBeNull();
+    expect(found!.proposal.yesCount).toBe(BigInt(big));
+    expect(found!.proposal.noWithVetoCount).toBe(1n);
+    expect(found!.votes[0]!.weight).toBe(BigInt(big));
+  });
+
+  it("keeps a state-recovered vote's NULL weight and provenance null", async () => {
+    await writer.govVote.create({
+      data: {
+        proposalId: 72n,
+        voter: "pb1voternull",
+        option: "ABSTAIN",
+        submitTime: new Date("2026-07-29T00:02:00Z"),
+      },
+    });
+    const found = await reader.govProposal(72n);
+    const recovered = found!.votes.find((v) => v.voter === "pb1voternull")!;
+    // The module's Vote payload has no weight field, and votes are deleted at the
+    // tally — so null is the common case, and a 0 would misstate the tally line.
+    expect(recovered.weight).toBeNull();
+    expect(recovered.height).toBeNull();
+    expect(recovered.txhash).toBeNull();
+  });
+
+  it("returns null for a proposal id the mirror has never seen", async () => {
+    // Null, not an empty shell: the route turns this into a 404, which is a
+    // different statement from "exists and is blank".
+    expect(await reader.govProposal(999_999n)).toBeNull();
+  });
+
+  it("aggregates the historical policy set, newest activity first", async () => {
+    const policies = await reader.listGovPolicies();
+    expect(policies.map((p) => p.address)).toEqual(["pb1policyb", "pb1policya"]);
+    const a = policies.find((p) => p.address === "pb1policya")!;
+    expect(a.proposalCount).toBe(2);
+    // Highest observedHeight across that policy's proposals.
+    expect(a.lastSeenHeight).toBe(510n);
+    expect(a.groupId).toBe(1n);
+  });
+
+  it("serves honest-empty governance once the mirror is cleared", async () => {
+    await writer.govVote.deleteMany();
+    await writer.govProposal.deleteMany();
+    expect(await reader.listGovPolicies()).toEqual([]);
+    const empty = await reader.listGovProposals({ limit: 50, offset: 0 }, {});
+    expect(empty.proposals).toEqual([]);
+    // The coverage window still holds: the stream committed, so the mirror can
+    // still say WHERE its knowledge starts even with nothing in it.
+    expect(empty.indexedFromHeight).toBe(1);
+  });
+
+  it("reports a null coverage window when the governance stream never committed", async () => {
+    await writer.indexerCheckpoint.deleteMany({ where: { stream: "governance" } });
+    const empty = await reader.listGovProposals({ limit: 50, offset: 0 }, {});
+    // Null, never 0 — a 0 would claim the mirror covers everything from genesis.
+    expect(empty.indexedFromHeight).toBeNull();
   });
 
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {
