@@ -331,7 +331,7 @@ and recorded in `app-spec.md` §14.
 | §14.3 pool/bridge facts | VERIFY — external (NUVA bridge deployment) | 2.4, 3.2 config |
 | §14.4 bridge transit UX | DECIDED 2026-07-15 (deferred to post-launch; DEX/market surfaces ship as labeled "coming soon" shells; v1 exit is native-redemption-only in practice) | 5.4 |
 | §14.5 indexer transport/depth | DECIDE/VERIFY — resolved inside 2.1 (tx-search primary, ws optional) | 2.1 |
-| §14.6 governance composer scope | DECIDED 2026-07-15 (template-scoped creation ships in v1; the App is **not** vote/execute-only; free-form compose stays Console-only). Operator side IMPLEMENTED 2026-07-27 (PR 6.4); governance side **scheduled 2026-07-28** across 7.1–7.4, with admin program-ops reaching the chain only as §8.7 templates at 7.4 | 7.4 (row amended 2026-07-28 — the "may move post-v1" caveat was stale) |
+| §14.6 governance composer scope | DECIDED 2026-07-15 (template-scoped creation ships in v1; the App is **not** vote/execute-only; free-form compose stays Console-only). Operator side IMPLEMENTED 2026-07-27 (PR 6.4); governance side **DELIVERED 2026-07-30** (PRs 7.3–7.4): template-scoped creation ships with four of the five §8.7 surfaces — bridge config is **absent, not stubbed**, since no contract variant backs it while §14.3 is unresolved — and admin program-ops reach the chain only as §8.7 templates, gated by the §12.3 amendment of the same date | DISCHARGED (row amended 2026-07-28 — the "may move post-v1" caveat was stale) |
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
 | §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages); **brand pass DELIVERED 2026-07-17 (PR 1.4): web-local accent/status tokens, both themes validated by `check:palette` + `test/brand-tokens.test.ts`** | 0.3, 1.4 |
 | §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
@@ -772,3 +772,48 @@ every tally count nullable — a non-nullable count would have forced a fabricat
 `0` into exactly the figure that must never be one. C4 was filled and every row
 read "read only", which is the point: 7.3–7.4 inherits it as the state set each
 new affordance must be decided against.*
+
+*2026-07-30 — **PRs 7.3 and 7.4 delivered together**, as one PR per the M7
+consolidation: the governance WRITE path (vote, execute, template composer) and
+the **§12.3 relay amendment** that carries it. Rows 7.3 and 7.4 are both
+complete, and the §14.6 governance-side constraint in §5 is **discharged**.
+
+**The amendment is the substance.** Three `cosmos.group.v1` types are admitted
+under one review — `MsgVote` and `MsgExec` structurally, and
+`MsgSubmitProposal` behind six conditions ending, as M6.4's does, in a
+byte-identical canonical re-encode. Admin program-ops now reach the chain, and
+**only** as template-scoped proposals: the direct-`MsgExecuteContract` admin
+rejection rows are unchanged and re-asserted beside the new matrix, adjacent to
+a case proving the same variant IS carried as a proposal. That pair is where a
+future regression would show.
+
+**Three things the build settled that the plan had not.** (1) **Condition 3
+forced the guard async.** "Is this a program policy" is a live, set-valued read
+(D1), and the alternatives were hardcoding a policy address — the topology
+assumption `SECURITY.md` forbids — or moving the condition out of a guard whose
+order is non-negotiable. An unresolvable policy set now rejects **503**, which
+is a state the plan did not name at all. (2) **Guard 6 had to become
+per-shape.** Every message the relay carried before this PR held its signer in
+field 1; `MsgVote` field 1 is a varint proposal id and `MsgSubmitProposal`
+field 1 is the policy address, so the single outer check would have bound a
+vote to a proposal id and rejected everything — a failure that reads as
+"working" from the outside. (3) **The affordance plane is not the display
+plane.** §4b C5 said actions come from the live plane; the build showed that
+`plane` cannot be that signal, because a closed proposal's honest display plane
+is the mirror, so execute would have been permanently hidden. `liveState` is a
+separate nullable field, and accepted proposals are now live-read — which pays
+for itself, since x/group prunes a successful exec in its own transaction and a
+failed read on an accepted proposal is therefore itself evidence.
+
+**§4b's verdict this time, against the overview's §7.5 predictions.** C1 changed
+the implementation again and in the way it was supposed to: the "every entry of
+`proposers`, not just the first" row and the zero-element row are guard
+conditions that exist because the table demanded them, and both are matrix cases.
+C2 produced `WRITE_READ_BOUNDS` — the write side of the pairing the 7.1 mechanism
+only covered on the read side. **C4 came off probation and earned it here**,
+which is the outcome 7.2 deferred: filled as a table, it became a pure function
+and a case-per-row suite instead of conditions in JSX, and two of its rows
+(membership-unknown as distinct from not-a-member; disabled-with-an-unknown-time
+for an unparseable waiting period) are cells that would not have been written
+otherwise. C3's "not idempotent" row is the reason the confirm step says signing
+twice creates two proposals rather than the flow trying to deduplicate one.*

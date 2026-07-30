@@ -18,6 +18,7 @@ import { loadStakeContext } from "~/stake/stake.server";
 import { previewSharesOut } from "~/stake/preview";
 import { TxConfirm } from "~/tx/confirm";
 import { FlowStatus, feeDisplay } from "~/tx/flow-status";
+import { intentAmount } from "~/tx/build";
 import { useTxFlow } from "~/tx/use-tx-flow";
 import { useWallet } from "~/wallet/provider";
 import { useLocale } from "~/root";
@@ -182,7 +183,7 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
           tier="info"
           summaryLines={[
             t(locale, "stake.confirm-deposit", {
-              amount: formatBaseAmount(flow.state.plan.intent.amount, HASH_EXPONENT, 4),
+              amount: formatBaseAmount(intentAmount(flow.state.plan.intent), HASH_EXPONENT, 4),
             }),
             t(locale, "stake.confirm-rate-note"),
           ]}

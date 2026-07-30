@@ -74,6 +74,61 @@ export const MAX_GOV_TITLE_LENGTH = 512;
 export const MAX_GOV_SUMMARY_LENGTH = 4_096;
 export const MAX_GOV_METADATA_LENGTH = 4_096;
 
+// --- governance WRITE path (PR 7.3–7.4) ------------------------------------
+//
+// The bounds above bound what `services/api` SERIALIZES and what `apps/web`
+// ACCEPTS. These bound what the App will COMPOSE and what its relay guard will
+// CARRY — the other half of the same pairing, and the half that decides whether
+// a proposal the App submits can be read back by the App at all.
+//
+// The rule is `write <= read`, asserted by `WRITE_READ_BOUNDS` in
+// `test/bounds.test.ts`. A composed proposal that exceeded a read bound would
+// be mirrored TRUNCATED-and-flagged, so the App would have submitted something
+// it can only render incompletely — the same class of defect as PR #19's, one
+// boundary further along.
+//
+// §4b C2 is explicit that a guard bound written as a literal in `build.ts` is a
+// review failure: the composer, the guard and the reader must not be able to
+// disagree about the same limit, so each of these has exactly one declaration.
+
+/**
+ * `MsgSubmitProposal.messages[]` — the relay guard's PER-PROPOSAL element cap.
+ *
+ * x/group itself puts NO ceiling here (§4b C1), so this is the App's, and an
+ * over-cap proposal is REJECTED, never truncated: a governance payload quietly
+ * shortened on its way to the chain would be a lie about what is being voted
+ * on. v1 composes exactly one template per proposal (§7 Q4, confirmed
+ * 2026-07-30); the cap is above one so a multi-message proposal built elsewhere
+ * is still relayable and still validated element-wise.
+ */
+export const MAX_PROPOSAL_MESSAGES = 8;
+
+/** `MsgSubmitProposal.metadata` — the composer's optional public rationale
+ * (§7 Q3, confirmed 2026-07-30: offered on proposals, ABSENT on votes). */
+export const MAX_PROPOSAL_METADATA_LEN = 1_024;
+
+/** `MsgSubmitProposal.title` / `.summary` — the SDK ≥ 0.50 proposal fields
+ * 7.2 renders. Written narrower than the read caps so a proposal composed here
+ * always round-trips through `GET /governance/proposal` intact. */
+export const MAX_PROPOSAL_TITLE_LEN = 256;
+export const MAX_PROPOSAL_SUMMARY_LEN = 2_048;
+
+/** A write bound and the read bound it must fit inside. */
+export interface WriteReadBound {
+  readonly field: string;
+  /** Max the App will compose / its relay will carry. */
+  readonly write: number;
+  /** Max `services/api` will serialize back / `apps/web` will accept. */
+  readonly read: number;
+}
+
+export const WRITE_READ_BOUNDS: readonly WriteReadBound[] = [
+  { field: "MsgSubmitProposal.messages", write: MAX_PROPOSAL_MESSAGES, read: MAX_GOV_PROPOSAL_MESSAGES },
+  { field: "MsgSubmitProposal.metadata", write: MAX_PROPOSAL_METADATA_LEN, read: MAX_GOV_METADATA_LENGTH },
+  { field: "MsgSubmitProposal.title", write: MAX_PROPOSAL_TITLE_LEN, read: MAX_GOV_TITLE_LENGTH },
+  { field: "MsgSubmitProposal.summary", write: MAX_PROPOSAL_SUMMARY_LEN, read: MAX_GOV_SUMMARY_LENGTH },
+];
+
 // --- adopted from M6.1 (the pairs PR #19's fix left coupled by comment) ----
 //
 // These were already correct, but only by inspection. Registering them here is

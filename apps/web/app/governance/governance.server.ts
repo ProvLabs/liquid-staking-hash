@@ -575,6 +575,7 @@ export async function loadGovernanceProposalData(
   const deps = { fetchImpl: doFetch };
   const nowMs = (options.now ?? Date.now)();
   const apiBase = apiBaseOf(config);
+  const sessionAddress = options.sessionAddress ?? null;
 
   const [live, detailEnv] = await Promise.all([
     loadLiveGovernance(config, deps),
@@ -594,9 +595,20 @@ export async function loadGovernanceProposalData(
 
   // A pruned proposal is never live-read: the chain answers 500 for a pruned id,
   // a never-existing id and an outage alike, so the read could only add noise.
-  const shouldReadLive =
-    live.state === "governed" &&
-    (indexed === null || (indexed.status === "submitted" && indexed.pruned_at_height === null));
+  //
+  // M7.3–7.4 WIDENS THIS to ACCEPTED proposals as well, and the widening is
+  // load-bearing rather than incidental. Actions are decided from the live plane
+  // alone (§4b C5), and execute is offered on accepted proposals — so without a
+  // live read, execute could never be offered at all, and offering it from the
+  // mirror would be exactly the stale-row hazard C5 names. The read also carries
+  // its own answer for free: a SUCCESSFULLY executed proposal is pruned by the
+  // module in its own transaction (F4), so a failed read on an accepted proposal
+  // is itself evidence not to offer the button.
+  const liveWorthReading =
+    indexed === null ||
+    (indexed.pruned_at_height === null &&
+      (indexed.status === "submitted" || indexed.status === "accepted"));
+  const shouldReadLive = live.state === "governed" && liveWorthReading;
 
   const [liveProposal, liveTally, liveVotes] = shouldReadLive
     ? await Promise.all([
@@ -648,7 +660,7 @@ export async function loadGovernanceProposalData(
       votes,
       proposalGroupVersion: source.group_version,
       currentGroupVersion,
-      sessionAddress: options.sessionAddress ?? null,
+      sessionAddress,
     }),
     votingPeriod:
       decisionPolicy === null || decisionPolicy.kind === "unknown" ? null : decisionPolicy.voting_period,
@@ -656,6 +668,27 @@ export async function loadGovernanceProposalData(
       decisionPolicy === null || decisionPolicy.kind === "unknown"
         ? null
         : decisionPolicy.min_execution_period,
+    // The affordance plane (§4b C5). Present ONLY when the chain itself served
+    // this proposal on this request; a mirrored row never fills it in.
+    liveState:
+      liveProposal === null
+        ? null
+        : {
+            status: toWireStatus(liveProposal.status),
+            executorResult: toWireExecutorResult(liveProposal.executorResult),
+            submitTime: liveProposal.submitTime,
+            votingPeriodEnd: liveProposal.votingPeriodEnd,
+            groupVersion: liveProposal.groupVersion.toString(),
+          },
+    // Membership is `null` — not `false` — when the live member read failed:
+    // "we could not check" and "you are not a member" are different sentences,
+    // and only one of them should be shown to an actual member.
+    sessionIsMember:
+      sessionAddress === null || members === null
+        ? null
+        : members.some((member) => member.address === sessionAddress),
+    sessionVote:
+      sessionAddress === null ? null : (votes.find((v) => v.voter === sessionAddress) ?? null),
   };
 
   return {

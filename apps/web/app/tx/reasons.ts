@@ -63,6 +63,31 @@ export function reasonText(
       return t(locale, "tx.reason-program-halted");
     case "too-many-validators":
       return t(locale, "tx.reason-too-many-validators", { max: String(reason.max) });
+    // M7.3–7.4 governance predicates (§2.5).
+    case "proposal-not-found":
+      return t(locale, "tx.reason-proposal-not-found");
+    case "proposal-pruned":
+      return t(locale, "tx.reason-proposal-pruned");
+    case "proposal-not-open":
+      return t(locale, "tx.reason-proposal-not-open");
+    case "already-voted":
+      return t(locale, "tx.reason-already-voted", { option: reason.option });
+    case "not-group-member":
+      return t(locale, "tx.reason-not-group-member");
+    case "proposal-not-passed":
+      return t(locale, "tx.reason-proposal-not-passed");
+    case "voting-period-open":
+      return t(locale, "tx.reason-voting-period-open", { endsAt: reason.endsAtIso });
+    case "min-execution-pending":
+      return t(locale, "tx.reason-min-execution-pending", { readyAt: reason.readyAtIso });
+    case "already-executed":
+      return t(locale, "tx.reason-already-executed");
+    case "policy-not-found":
+      return t(locale, "tx.reason-policy-not-found");
+    case "template-invalid":
+      return t(locale, "tx.reason-template-invalid", { detail: reason.detail });
+    case "governance-unavailable":
+      return t(locale, "tx.reason-governance-unavailable");
   }
 }
 

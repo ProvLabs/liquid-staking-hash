@@ -733,6 +733,70 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 > offline `e2e/governance.spec.ts`, skip-clean `e2e-live/governance.spec.ts`, and
 > both governance routes in the axe route list.
 
+> **Revision 2026-07-30 (PRs 7.3–7.4 delivered): the write path — vote, execute,
+> and template-scoped creation.**
+>
+> The three member actions above ship through the **unmodified** §10.2
+> lifecycle. The relay amendment that carries them is recorded in §12.3 and is
+> the whole of what makes them safe; this note records what the SURFACE does.
+>
+> **Which control appears is decided from the LIVE plane alone**, in the loader,
+> as a value with a reason — never as a condition in JSX. `plane` (which read
+> produced the figures) and the affordance plane (did the chain, just now,
+> confirm the state we are about to act on) are **separate fields**, because for
+> a closed proposal the honest display plane is the mirror while no action may
+> be offered from it. A stale "accepted" that has since been executed would
+> otherwise offer an execute button that always fails. When the live read is
+> down, actions are **hidden with the reason stated**, never rendered
+> optimistically. To make that possible, accepted-and-not-yet-executed proposals
+> are now live-read as well as open ones.
+>
+> **Every hidden control says why**, and the one state that is *disabled* rather
+> than hidden is the pending execution window — the user needs to know it is
+> coming, with the eligible-at time, computed from `submit_time +
+> min_execution_period` as x/group's own `Exec` computes it. A waiting period
+> this build cannot parse leaves the control disabled with "we cannot say when",
+> never offered.
+>
+> **Voting is member-only; execution is permissionless** (x/group's rule once a
+> proposal has passed), and the page says so plainly rather than implying a
+> permission the module does not enforce. A member who has already voted is told
+> so: the 2026-07-29 drill measured that x/group records one vote per member and
+> refuses a change.
+>
+> **Creation is template-scoped, and the templates are total against the
+> contract**: one per admin-gated `ExecuteMsg` variant, each parameter bounded by
+> the bound `Config::validate` enforces, **reject-never-clamp** on every numeric
+> entry. `UpdateConfig` gets the **diff view** this section names: all ten fields
+> on every render, current → proposed, untouched fields visibly untouched, and a
+> third state distinguishing "not supplied" from "supplied as the current value"
+> — different messages on the wire even though the contract's merge makes them
+> equivalent. A current value that could not be read renders as "could not be
+> read", never `0`. **Bridge config has no template and is absent, not stubbed**
+> (§14.3 unresolved; an absent template is honest, a disabled one invites
+> "when").
+>
+> **The composer, the guard and 7.2's reader share ONE vocabulary.** A proposal
+> built here and read back on its own detail page yields the same summary, gated
+> by a round-trip case rather than by two tables that happen to agree.
+>
+> **Confirmation rigor** (§17.1): `MsgExec` discloses **what the proposal will
+> execute**, message by message, not "execute proposal 12" — and a message this
+> build cannot summarize is named as such rather than dropped from the list.
+> Submission is framed accurately: proposing is not itself the dangerous act,
+> passage and execution are, and the confirmation says so without using that
+> framing to soften the disclosure. It also states that submission is **not
+> idempotent** — signing twice creates two proposals — and re-submit is disabled
+> after broadcast.
+>
+> Standing gates added: `apps/web/test/governance-templates.test.ts` (the
+> both-directions totality against the committed `cargo schema` output, bounds,
+> canonical output, and the compose↔decode round trip),
+> `governance-flows.test.ts` (one case per state×affordance row plus the
+> live-down cells), the governance blocks in `broadcast-guard.test.ts`,
+> `tx-preflight.test.ts` and `tx-confirm.test.ts`, `/governance/new` in the axe
+> route list, and skip-clean `e2e-live/governance-write.spec.ts`.
+
 ### 8.8 Admin Analytics (route `/admin`, admin only)
 
 The cohort-satisfaction dashboard the no-backend console cannot render (register A4), fed by the indexer and the first-party aggregate analytics (§3 decision 14):
@@ -1621,6 +1685,70 @@ This section encodes boundary §5 as build requirements.
   > (`test/tx-operator-build.test.ts`). **Extending either level is a
   > design-review event**, and the rejection matrix in
   > `test/broadcast-guard.test.ts` is the standing gate.
+  >
+  > **Amendment 2026-07-30 (PRs 7.3–7.4): the governance types are admitted,
+  > all three at once, under this one amendment.** This is the design-review
+  > event the 6.4 note anticipated, and it is what the M7 milestone means when
+  > it says admin program-ops reach the chain **only** through governance.
+  >
+  > **The admitted set is exactly three:** `/cosmos.group.v1.MsgVote`,
+  > `/cosmos.group.v1.MsgExec`, `/cosmos.group.v1.MsgSubmitProposal`. Every
+  > other `cosmos.group.v1` type stays rejected — `MsgUpdateGroupMembers` in
+  > particular, which changes **who governs** — as does `authz`'s own `MsgExec`.
+  > The allowlist is asserted as an exact six-entry set, so a seventh is an edit
+  > to a named test line.
+  >
+  > **Two guard classes, because the payloads differ in kind.** `MsgVote`
+  > (`{proposal_id, voter, option, metadata, exec}`) and `MsgExec`
+  > (`{proposal_id, signer}`) carry closed scalar payloads embedding no other
+  > message; their guard is structural — type URL → signer ↔ session binding →
+  > closed field set with bounded values → **canonical re-encode**.
+  >
+  > `MsgSubmitProposal` carries **`messages []Any`**. A plain type-URL entry
+  > would let the relay carry arbitrary messages destined for the **group policy
+  > account, which is the contract's admin** — strictly worse than the
+  > `MsgExecuteContract` hole 6.4 closed. Its guard has **six conditions**:
+  > **(1)** the type URL; **(2)** **every** entry in `proposers` equals the
+  > session address (the field is repeated on the wire, and checking only the
+  > first is the cardinality failure this milestone's §4b C1 exists to prevent);
+  > **(3)** `group_policy_address` is one of the **discovered** program policies
+  > — set-valued discovery per M7 D1, never a hardcoded "the admin policy", and
+  > a policy set that could not be resolved **rejects with 503 rather than
+  > passing**; **(4)** each inner `Any` is matched against the **closed template
+  > set** — its type URL, its sender (the policy, since x/group executes a
+  > proposal's messages as the policy account), its target contract, its variant
+  > and its full field set, with no funds, since no admin variant is payable;
+  > **(5)** **byte-identical canonical re-encode per inner message**, because a
+  > proposal is only as safe as its least-checked element; **(6)** `exec` is
+  > **pinned**.
+  >
+  > **The `exec` pin, on both messages.** `EXEC_TRY` attempts execution in the
+  > same transaction, which silently turns a vote — or a submission — into a
+  > vote **plus** execution of whatever the proposal contains, which after this
+  > PR includes admin program-ops. `exec` is pinned to the unspecified/no-try
+  > value and anything else is rejected; because proto3 omits a zero varint, the
+  > pin is enforced as "the field is absent", and the canonical re-encode
+  > enforces it a second time. Execution is always a separate, separately
+  > confirmed `MsgExec` with its own decoded-payload disclosure (§17.1).
+  >
+  > **The template set is closed and total against the contract.** Templates
+  > cover exactly the admin-gated `ExecuteMsg` variants in
+  > `contracts/src/msg.rs` — `UpdateConfig`, `SetHalted`, `PauseVault`,
+  > `UnpauseVault`, `ClearPendingDelegations` — with each parameter bounded by
+  > the bound `Config::validate` enforces. The mapping is asserted **total in
+  > both directions** against the committed `cargo schema` output, so a contract
+  > that gains an admin capability fails CI rather than leaving it unreachable.
+  > Bridge config has no template because no contract variant backs it (§14.3);
+  > it is **absent, not stubbed**.
+  >
+  > **The direct-admin path stays closed.** After this amendment a *direct*
+  > `MsgExecuteContract` carrying an admin variant is **still rejected** — the
+  > 6.4 rejection rows are unchanged and re-asserted alongside the new matrix,
+  > adjacent to the case proving the same variant is carried successfully as a
+  > template-scoped proposal. Admin ops reach the chain only through governance,
+  > and losing that would look exactly like relaxing the older matrix while
+  > extending the newer one. **Extending the admitted set, the template set, or
+  > any parameter bound past the contract's remains a design-review event.**
 - **Personal data minimization (`SECURITY.md` is normative):** wallet address (public by nature), first/last-seen timestamps (minimal operational metadata, retained deliberately for transparent and minimally intrusive usage measurement), locale/theme, alert rules, and — when opted in — an opaque Web Push subscription token (revocable, deleted on opt-out). No email or other off-chain identity, no KYC, and no IP-or-device linkage to addresses in persisted logs (scrub or aggregate). Data deletion on request removes the user row, rules, and push subscriptions; indexed *chain* history is public information and remains.
 - **Sessions:** nonce-signature login, `HttpOnly`/`SameSite` cookies, address-scoped authorization on every personal endpoint; admin endpoints re-verify group membership on-chain per session refresh, not per cached role.
 - **API hygiene:** rate limiting on public endpoints, zod-validated inputs at every route boundary (nuva convention), winston structured logging in services, no secrets in the client bundle (server config never serializes past the §7 client-safe subset).
@@ -1680,6 +1808,7 @@ Protocol and platform facts this design must respect (chain constraints identica
    - **Register B2 (validator-elected admins):** unchanged — this decision takes no position; if B2 resolves toward validator voting, that surface is the §8.7 page.
    - **[SCHEDULED 2026-07-28, M7 plan] Governance side sequenced across three PRs.** [7.1](../plans/2026-07-28-app-m7.1-governance-indexing.md) mirrors `x/group` proposals and votes durably and serves them read-only (no signing path; the relay is unchanged and a governance message is still provably rejected). [7.2](../plans/2026-07-28-app-m7.2-governance-read-ui.md) is the §8.7 read surface, also read-only. [**7.3–7.4**](../plans/2026-07-28-app-m7.3-7.4-governance-write-path.md) is the whole write path in one PR — `MsgVote`, `MsgExec` and `MsgSubmitProposal` admitted together under a **single** §12.3 amendment, because they are one guard and staging the third across an intervening PR bought nothing. Vote and exec are guarded structurally (closed scalar payloads); `MsgSubmitProposal` carries `messages []Any` and is guarded by **six** conditions — type URL → proposer↔session binding → program-policy check → each inner `Any` against a closed template set → **byte-identical canonical re-encode per inner message** → `exec` pinned so a submission cannot execute in the same transaction. That PR is the design-review event this item's 6.4 note anticipated. **Admin program-ops reach the chain only as §8.7 templates**: the direct-`MsgExecuteContract` admin variants stay rejected afterwards, and that rejection matrix is a standing gate, not a transitional state.
    - **[IMPLEMENTED 2026-07-27, PR 6.4 commit D] Validator chain-ops delivered.** All five operator flows ship as first-class App transaction flows through the unmodified §10.2 lifecycle: pay commission, pay TIP, enroll, unregister, and the two-phase jailed purge (report → cooldown → purge) — see the §10.3 revision for tiers and copy, and the §12.3 amendment for the two-level relay allowlist that makes carrying them safe. **Admin program-ops remain outstanding** (halt/resume, pause/unpause, config, bridge config, originating as §8.7 governance templates); they are NOT in the relay's variant set and are provably rejected by its rejection matrix, so delivering them later is a deliberate design-review event rather than a config change.
+   - **[IMPLEMENTED 2026-07-30, PRs 7.3–7.4] Admin program-ops delivered, as governance templates and nothing else — and the constraint above is DISCHARGED.** That constraint scheduled a design-review event; the §12.3 amendment of the same date IS that event, and it admits `MsgVote`, `MsgExec` and `MsgSubmitProposal` together under one review. Four of the five named surfaces ship (halt/resume, pause/unpause, config change with the §8.7 diff view, and abort-a-stuck-continuation); **bridge config does not**, because no contract variant backs it while §14.3 is unresolved, and its template is **absent rather than stubbed**. The load-bearing half of the sentence above survives verbatim: the admin variants are still NOT carried as direct `MsgExecuteContract` calls and are still provably rejected by the 6.4 rejection matrix, which is re-asserted alongside the new one. What changed is that they now have a route to the chain at all — a template-scoped governance proposal, guarded element-wise and canonically re-encoded — not that the direct path opened.
 7. **[DECIDED 2026-07-13, Ira] Notification channels:** Web Push is confirmed as the external channel — meaningful application functionality with minimal intersection with the security rules, acceptable given per-browser opt-in, available opt-out, and the opaque revocable token handling of §10.4. `SECURITY.md` records this accepted exception. Email remains excluded and is not an option.
    **[DECIDED 2026-07-24, Ira] Default-on alert kinds = the R2 minimal set (PR 6.2 commit B).** Holders: `redemption_update` (matured | expedited | refunded — one settings row, §8.2/§8.4) is **on by default, opt-out** (§10.3). Operators: `operator_arrears` is **on by default** for sessions the live role read reports as operator (§8.6). Everything else — `nav_step_posted`, `vault_status`, `validator_set_incident` — is **opt-in** (off by default). The mechanism is **absence-means-default** (§9.1): no `alert_rules` row means the kind's default, so a user who never touches settings has zero rows and the default-on set costs no stored subscription (data minimization by construction). The market-spread kind is **deferred with §14.4** (no market data in v1) — enabling it later is an enum migration + allowlist review + a `thresholdBps` column, a spec-recorded amendment, not a config toggle.
 8. **[DECIDED 2026-07-14, ADR-001 Decision 4]** Design-system packaging (boundary §7.4): design tokens are **web-local** (`apps/web`) for v1, not a shared package — the two surfaces deliberately wear different registers and the console is mid-migration. Family coherence is enforced where it matters: both surfaces run the same dataviz palette validation (`validate_palette.js`) in CI on every token change, both themes. Shared TypeScript code (fixtures, chain client, API types, read-only indexed DB client) lives in a root pnpm workspace under `packages/` (`@nvhash/*`); the console may join the workspace with its own migration. Revisit shared token packaging post-v1 if drift is observed. **Brand pass delivered (PR 1.4, 2026-07-17):** program-specific accent and status tokens set web-local in `apps/web/app/theme/tokens.css` over the nuva base — NUVA mint-green primary CTA / focus ring (dark green-black label, WCAG AA both themes) and the fixed good/warning/serious/critical status set (icon + label; `warning`/`serious` are sub-3:1 on the light surface only under that relief rule). Both theme token sets pass the shared validation method in CI: the categorical chart palette via `check:palette`, the accent/status contrast via `test/brand-tokens.test.ts` (both computed by `validate_palette.js`, never eyeballed). §14.8 is now fully resolved.

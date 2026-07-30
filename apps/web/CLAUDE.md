@@ -220,6 +220,59 @@ End-user web interface. Production quality.
   standing gates: `test/governance-{decode,tally,data,compose}.test.ts`, offline
   `e2e/governance.spec.ts`, skip-clean `e2e-live/governance.spec.ts`, both
   routes in the axe list, and the governance case in `session-scope`.
+- **Governance write path + the three-level broadcast allowlist** (PRs 7.3–7.4,
+  app-spec §8.7/§12.3 amendment/§14.6): vote, execute and the template composer
+  run through the **unmodified** 5.2 lifecycle. **THE convention to know:
+  `ALLOWED_MSG_TYPE_URLS` is now THREE-LEVEL.** `MsgVote` and `MsgExec` are
+  guarded structurally by `guardGovernanceMsg`; `MsgSubmitProposal` carries
+  `messages []Any` and is guarded by `guardSubmitProposal`'s **six** conditions
+  (type URL → **every** entry of `proposers` == session → policy ∈ the
+  **discovered** set → each inner `Any` matched against the closed template set
+  → **byte-identical canonical re-encode per inner message** → `exec` pinned),
+  then a whole-message re-encode. **`guardSignedTx` IS ASYNC** as of this PR:
+  condition 3 needs the live policy sweep, and hardcoding a policy address would
+  be the topology assumption SECURITY.md forbids. An unresolvable policy set
+  **rejects 503**, never passes. **Guard 6 (session binding) is now per-shape**
+  — the governance messages do not carry their signer in field 1, so each guard
+  does its own binding and the old field-1 check runs only for the shapes it is
+  about.
+  **The `exec` pin is the subtlety to preserve** (`EXEC_UNSPECIFIED`, enforced
+  as "field 5 absent" since proto3 omits a zero): `EXEC_TRY` would turn a vote —
+  or a submission — into a vote PLUS execution of admin program-ops. Executing
+  is always a separate, separately-confirmed `MsgExec`. The confirm disclosure
+  shows `exec: EXEC_UNSPECIFIED` even though the bytes omit it, deliberately.
+  **`app/governance/templates.ts` is the closed template registry and the one
+  vocabulary three consumers share** (7.2's decoder reads, the confirm step
+  discloses, the composer builds). Its imports are **TYPE-ONLY and that is
+  load-bearing**: `app/tx/build.ts` imports it at runtime for the guard, so a
+  value import of `ADMIN_VARIANTS` or of `t` would either cycle or drag the i18n
+  catalogs into the guard's graph — hence `templateSummaryKey` returns a KEY
+  plus its params rather than a string. Templates are **total in both
+  directions** against the committed `cargo schema` output; a contract that
+  gains an admin variant fails CI here. Bridge config is **absent, not stubbed**.
+  Every bound crossing the write/read boundary (`MAX_PROPOSAL_MESSAGES`,
+  `MAX_PROPOSAL_METADATA_LEN`, title/summary) is ONE declaration in
+  `packages/api-types/src/bounds.ts` — **a guard bound written as a literal in
+  `build.ts` is a review failure**.
+  **Affordances come from the LIVE plane alone** (`app/governance/actions.ts`,
+  decided in the LOADER, never in JSX). `ProposalDetailVM.liveState` is
+  SEPARATE from `plane`: `plane` says which read produced the figures (the
+  mirror, honestly, for anything closed), `liveState` says whether the chain
+  just confirmed the state an action would operate on. That is why
+  `loadGovernanceProposalData` now live-reads **accepted** proposals too — and
+  why a failed read on an accepted proposal is itself evidence not to offer
+  execute (x/group prunes a successful exec in its own transaction). The
+  execution window is `submit_time + min_execution_period`, x/group's own rule —
+  NOT the voting-period end. Voting is member-only; **execution is
+  permissionless** and the UI says so. New standing gates:
+  `test/governance-templates.test.ts`, `test/governance-flows.test.ts` (one case
+  per C4 row), the governance blocks in `broadcast-guard.test.ts` /
+  `tx-preflight.test.ts` / `tx-confirm.test.ts`, `/governance/new` in the axe
+  list, offline `e2e/governance.spec.ts` affordance sweep, skip-clean
+  `e2e-live/governance-write.spec.ts` (needs `E2E_LIVE_GOV_MEMBER_KEY` — a
+  funded throwaway devnet key that is ALSO a group member, since proposing and
+  voting are membership-gated; the generic signer key cannot cover them, the
+  `E2E_LIVE_OPERATOR_KEY` precedent).
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

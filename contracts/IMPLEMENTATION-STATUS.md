@@ -174,6 +174,24 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       assumed away. The devnet voting periods (300s / 40s) and the
       two-policies-on-one-group shape are **devnet-only drill affordances**,
       labeled as such in the manifest.
+      **ENUMERATION CONFIRMED EXHAUSTIVE 2026-07-30 (App PRs 7.3–7.4).** The
+      App's governance write path composes proposals from a closed template set
+      covering the admin-gated `ExecuteMsg` variants, so `SECURITY.md`'s
+      "every admin capability is a spec-level event" now has a mechanical
+      consequence in the App: `apps/web/test/governance-templates.test.ts`
+      asserts the template ↔ admin-variant mapping is **total in both
+      directions** against the committed `cargo schema` output
+      (`contracts/schema/raw/execute.json`), reading authority from each
+      variant's own `Admin-gated:` doc comment rather than from a list restated
+      in TypeScript. **The admin-capability surface is unchanged by that PR** —
+      it remains exactly `PauseVault`, `UnpauseVault`, `UpdateConfig`,
+      `SetHalted`, `ClearPendingDelegations`, plus `UnregisterParticipation`
+      which the contract accepts from the operator OR the admin. What is new is
+      that adding a sixth admin variant here now **fails App CI** until it is
+      given a template, rather than shipping an admin capability governance
+      cannot reach. This item's dual-policy split still needs no App change:
+      policy discovery stays set-valued, and the relay guard checks a proposal's
+      policy against the **discovered** set (App §12.3 amendment 2026-07-30).
 - [ ] **ReceiptAccounting query (spec §11.3)** [TRIVIAL] (partially served by
       `EpochStatus.receipt_minted` today)
 - [ ] **Capture-signal incentive (spec §10.4 [DECIDE])** [OPTIONAL, post-v1

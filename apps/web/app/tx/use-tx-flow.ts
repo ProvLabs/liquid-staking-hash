@@ -11,12 +11,14 @@
 
 import { useCallback, useReducer } from "react";
 
+import { toWireTemplateValues, type TemplateValues } from "~/governance/templates";
 import { useWallet } from "~/wallet/provider";
 import {
   buildTxPlan,
   encodeTxRaw,
   intentSigner,
   type Fee,
+  type GovernanceVoteOption,
   type OperatorVariant,
   type SignerContext,
   type TxIntent,
@@ -45,6 +47,24 @@ export type FlowIntentInput =
       claimantValoper: string | null;
       amount: bigint;
       denom: string;
+    }
+  /**
+   * M7.3–7.4 governance actions. The client names the proposal, the option and
+   * the template; the VOTER / SIGNER / PROPOSER and the CONTRACT are supplied
+   * by the caller from session + config and re-checked server-side on every hop
+   * — by preflight, by simulate, and finally by the relay guard over the signed
+   * bytes.
+   */
+  | { kind: "gov_vote"; proposalId: bigint; option: GovernanceVoteOption }
+  | { kind: "gov_exec"; proposalId: bigint }
+  | {
+      kind: "gov_submit";
+      policyAddress: string;
+      templateId: string;
+      values: TemplateValues;
+      title: string;
+      summary: string;
+      metadata: string;
     };
 
 interface PreflightResponse {
@@ -66,6 +86,106 @@ async function postJson(path: string, body: unknown): Promise<Response> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * The THREE derivations of one input, written adjacently on purpose.
+ *
+ * A flow's input is used three times — to build the intent the wallet signs, to
+ * ask preflight about it, and to ask the node to simulate it — and the failure
+ * mode when they drift is that the user is shown a preflight for one action and
+ * signs another. Keeping them in one place makes a drift a visible edit rather
+ * than three inline ternaries nobody compares (the M6.4 lesson about
+ * disagreements only discovered AFTER the user has signed).
+ */
+function toIntent(input: FlowIntentInput, owner: string, target: string): TxIntent {
+  switch (input.kind) {
+    case "operator":
+      return {
+        kind: "operator",
+        variant: input.variant,
+        sender: owner,
+        contractAddress: target,
+        valoper: input.valoper,
+        claimantValoper: input.claimantValoper,
+        amount: input.amount,
+        denom: input.denom,
+      };
+    case "gov_vote":
+      return { kind: "gov_vote", voter: owner, proposalId: input.proposalId, option: input.option };
+    case "gov_exec":
+      return { kind: "gov_exec", signer: owner, proposalId: input.proposalId };
+    case "gov_submit":
+      return {
+        kind: "gov_submit",
+        proposer: owner,
+        policyAddress: input.policyAddress,
+        contractAddress: target,
+        templates: [{ id: input.templateId, values: input.values }],
+        title: input.title,
+        summary: input.summary,
+        metadata: input.metadata,
+      };
+    default:
+      return { ...input, owner, vaultAddress: target } as TxIntent;
+  }
+}
+
+function toPreflightBody(input: FlowIntentInput): unknown {
+  switch (input.kind) {
+    case "operator":
+      return {
+        kind: "operator",
+        variant: input.variant,
+        valoper: input.valoper,
+        claimantValoper: input.claimantValoper,
+        amount: input.amount.toString(),
+      };
+    case "gov_vote":
+      return { kind: "gov_vote", proposalId: input.proposalId.toString(), option: input.option };
+    case "gov_exec":
+      return { kind: "gov_exec", proposalId: input.proposalId.toString() };
+    case "gov_submit":
+      return {
+        kind: "gov_submit",
+        policyAddress: input.policyAddress,
+        templateId: input.templateId,
+        // bigint does not survive JSON; the registry owns the conversion.
+        values: toWireTemplateValues(input.values),
+        title: input.title,
+        summary: input.summary,
+        metadata: input.metadata,
+      };
+    default:
+      return { kind: input.kind, amount: input.amount.toString() };
+  }
+}
+
+function toSimulateBody(input: FlowIntentInput, pubkey: string): unknown {
+  switch (input.kind) {
+    case "operator":
+      return {
+        kind: "operator",
+        variant: input.variant,
+        valoper: input.valoper,
+        claimantValoper: input.claimantValoper,
+        amount: input.amount.toString(),
+        denom: input.denom,
+        pubkey,
+      };
+    case "gov_vote":
+    case "gov_exec":
+    case "gov_submit":
+      return { ...(toPreflightBody(input) as Record<string, unknown>), pubkey };
+    default:
+      return {
+        kind: input.kind,
+        amount: input.amount.toString(),
+        denom: input.denom,
+        pubkey,
+        redeemDenom: input.kind === "swap_out" ? input.redeemDenom : "",
+      };
+  }
 }
 
 export interface TxFlow {
@@ -90,19 +210,7 @@ export function useTxFlow(): TxFlow {
   const begin = useCallback(
     async (input: FlowIntentInput, owner: string, target: string) => {
       dispatch({ type: "RESET" });
-      const intent: TxIntent =
-        input.kind === "operator"
-          ? {
-              kind: "operator",
-              variant: input.variant,
-              sender: owner,
-              contractAddress: target,
-              valoper: input.valoper,
-              claimantValoper: input.claimantValoper,
-              amount: input.amount,
-              denom: input.denom,
-            }
-          : ({ ...input, owner, vaultAddress: target } as TxIntent);
+      const intent = toIntent(input, owner, target);
       dispatch({ type: "START", intent });
 
       // Preflight (server, session-scoped). Reasons block the flow with a
@@ -111,18 +219,7 @@ export function useTxFlow(): TxFlow {
       // always land in a state the user can restart from, never strand.
       let pf: PreflightResponse;
       try {
-        const pfRes = await postJson(
-          "/tx/preflight",
-          input.kind === "operator"
-            ? {
-                kind: "operator",
-                variant: input.variant,
-                valoper: input.valoper,
-                claimantValoper: input.claimantValoper,
-                amount: input.amount.toString(),
-              }
-            : { kind: input.kind, amount: input.amount.toString() },
-        );
+        const pfRes = await postJson("/tx/preflight", toPreflightBody(input));
         if (!pfRes.ok) {
           dispatch({ type: "PREFLIGHT_BLOCKED", reasons: [{ code: "chain-unavailable" }] });
           return;
@@ -154,26 +251,7 @@ export function useTxFlow(): TxFlow {
       dispatch({ type: "SIMULATE" });
       let sim: SimulateResponse;
       try {
-        const simRes = await postJson(
-          "/tx/simulate",
-          input.kind === "operator"
-            ? {
-                kind: "operator",
-                variant: input.variant,
-                valoper: input.valoper,
-                claimantValoper: input.claimantValoper,
-                amount: input.amount.toString(),
-                denom: input.denom,
-                pubkey: pubkeyBase64,
-              }
-            : {
-                kind: input.kind,
-                amount: input.amount.toString(),
-                denom: input.denom,
-                pubkey: pubkeyBase64,
-                redeemDenom: input.kind === "swap_out" ? input.redeemDenom : "",
-              },
-        );
+        const simRes = await postJson("/tx/simulate", toSimulateBody(input, pubkeyBase64));
         if (!simRes.ok) {
           const detail = await simRes.text().catch(() => "simulation failed");
           dispatch({ type: "SIMULATE_FAILED", detail });

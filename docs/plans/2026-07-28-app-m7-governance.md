@@ -440,3 +440,35 @@ live plane would have rendered "nobody has voted". It was found by building
 against the corpus, which is the same lesson 7.1 closed with — the app side's
 missing discovery phase is the real gap, and §4b's contribution is telling the
 discovery where to aim.*
+
+*2026-07-30: PRs 7.3 and 7.4 delivered together, closing branch 3. §4's D7 is
+discharged — the three-level guard shape it fixed at M7.0 shipped unchanged, and
+the app-spec §12.3 amendment admitting all three `cosmos.group.v1` types under
+one review is the design-review event §6's "no custody, no signing in services"
+row scheduled. D19 is discharged in the
+[7.3–7.4 plan](2026-07-28-app-m7.3-7.4-governance-write-path.md) §7 Q1 and §2.3.
+§2's F2 gains a consequence rather than a correction: because there is no
+admin-rotation path, the policy the guard checks against must be DISCOVERED at
+request time, which is what forced the relay guard async (that plan §10.1).*
+
+*__C4 comes off probation with a verdict, and it is the opposite of 7.2's.__ 7.2
+filled C4, every row read "read only", and it changed nothing — the honest
+reading recorded above was that its value was a forward obligation on 7.3–7.4.
+That obligation paid: the table became `app/governance/actions.ts`, a pure
+function over a closed input with a case-per-row suite, instead of conditions in
+JSX where the M6.4 P1 was originally made. Two cells exist only because the table
+was walked — membership-__unknown__ as distinct from not-a-member, and
+disabled-with-an-unknown-time for an unparseable waiting period. So the format's
+value is now measured at two points: worthless in a read-only PR, load-bearing in
+the PR that adds affordances. That is a sharper claim than "C4 is useful" and it
+is the one the evidence supports.*
+
+*__C5 changed the implementation a third time, and in a way its own wording did
+not anticipate.__ "Affordances are decided from the live plane only" turned out
+to be unanswerable from the `plane` field C5 itself had produced at 7.2: for a
+closed proposal the honest display plane is the mirror, so deriving affordances
+from it would have hidden execute permanently. The remedy is a SECOND field —
+`liveState` — separating "which read produced these figures" from "did the chain
+just confirm the state we are about to act on". Worth recording because it is an
+instance of §7.5's own warning in a new form: a filled cell can be right about
+the rule and still leave the mechanism to be discovered by building.*
