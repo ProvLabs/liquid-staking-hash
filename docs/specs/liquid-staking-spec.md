@@ -495,6 +495,38 @@ Every administrative and operations function in the system is gated behind **`x/
 
 **As built:** the contract accepts a single `admin` authority address, deployed as an `x/group` policy account so membership is rotatable and approvals are threshold-gated without redeployment. Splitting fund-administration from operations into two distinct policies (`admin` vs `ops`, with `UpdateConfig` moved to the ops policy and a tighter threshold on admin) is the one remaining v1.x hardening item; membership and thresholds for each are launch-operations parameters, not design questions.
 
+> **Revision 2026-07-29 (App PR 7.1 commit A): the described topology is now
+> EXERCISED, and two of its properties are not what "as built" implied.**
+>
+> Until this change, "deployed as an `x/group` policy account" had never been
+> run anywhere: the devnet deployed `Config.admin` as a plain account, so no
+> proposal had ever gated a privileged call and the App's group-policy role
+> branch had never executed. `infra/devnet/bootstrap/nvhash-group-bootstrap.sh`
+> creates the group and policy, and `contracts/drills/gov-drill.sh` drives the
+> full proposal lifecycle against it (result and date recorded in
+> [`contracts/IMPLEMENTATION-STATUS.md`](../../contracts/IMPLEMENTATION-STATUS.md)).
+> The enumeration of admin capabilities above was re-checked in the same pass and
+> is unchanged — the drill added no privileged surface, only proposals that
+> exercise the existing one.
+>
+> Two properties the drill established, both of which bear on this section's
+> "full proposal/vote audit trail" benefit claim:
+>
+> - **The audit trail is not on chain.** `x/group` prunes a proposal the moment
+>   it executes successfully, and DELETES its votes at voting-period end even
+>   when the proposal passes. A closed proposal's per-voter record therefore
+>   exists only in transaction history and in whatever mirrors it. The benefit
+>   is real but it is a property of an INDEXER, not of the module — which is why
+>   app-spec §9.1's `gov_proposals`/`gov_votes` are load-bearing rather than a
+>   convenience.
+> - **The policy set is 1..n, and nothing may assume 1.** Because the `admin`/
+>   `ops` split above is still open, every consumer discovers the set
+>   (`Config.admin` → policy → group → all policies on that group). Performing
+>   the split needs a redeploy or a new message: `ExecuteMsg` has no
+>   admin-rotation variant and `InstantiateMsg.admin` is set once, so this is a
+>   spec-level event under the enumerated-trust-surfaces rule, not a config
+>   change.
+
 ### 12.2 Bridge trust model (NUVA Labs, in scope)
 
 Enabling cross-chain nvHASH (§11.5) accepts the vault module's documented bridge trust assumption, scoped here:
@@ -537,7 +569,7 @@ Every design question RC1 and RC2 left open has been resolved and, where it touc
 7. **Uptime source (§10.3/§10.4)** — on-chain SigningInfo with the permissionless capture aggregation; cons-address derivation verified on chain. Amended 2026-07-09 after a devnet finding: the ratio is vacuous for non-bonded validators (counter frozen outside the active set, reset on jail), so capture now REQUIRES the §10.4 validity filter (sample only bonded, non-jailed, non-tombstoned validators; as-built contract fix tracked in `contracts/IMPLEMENTATION-STATUS.md` §2), and the capture cadence is DEFINED as daily (half the ~2-day signing window; derivation in §10.4).
 8. **Jail response (§9.8)** — two-phase report/purge with an 8h default cooldown, eligible-claimant redelegation bounded by headroom, pure-unbond fallback; drilled against real downtime jailing and slashing.
 9. **Slash recognition (§9.9)** — write-down the epoch of detection via the NAV-authority sandwich; drilled: TVV marked down by exactly the unbacked amount, invariant restored to equality.
-10. **Governance (§12.1)** — single admin `x/group` policy as built; the admin/ops policy split is the remaining v1.x hardening item.
+10. **Governance (§12.1)** — single admin `x/group` policy as built; the admin/ops policy split is the remaining v1.x hardening item. **Amended 2026-07-29 (App PR 7.1 commit A):** the policy topology was previously described but never exercised — the devnet ran a plain-account `Config.admin`, so no privileged call had ever passed through a proposal. A group + threshold policy is now bootstrapped before deploy (`infra/devnet/bootstrap/nvhash-group-bootstrap.sh`; it must run first because `ExecuteMsg` has no admin-rotation variant) and the full lifecycle is drilled (`contracts/drills/gov-drill.sh`, 30 assertions, result dated in `contracts/IMPLEMENTATION-STATUS.md`). The drill also established that the §12.1 "full proposal/vote audit trail" is **not** a chain property: a successfully executed proposal is pruned in its own transaction and votes are deleted at voting-period end, so the trail lives in transaction history and the App's mirror. One state remains unproduced — `PROPOSAL_STATUS_ABORTED` was not reachable on the drilled build (a mid-vote group change did not abort an open proposal), recorded in the fixture manifest rather than assumed away.
 11. **Cross-chain (§11.5)** — in scope via the NUVA Labs adapter and the vault’s bridge accounting; transit flow out of scope here; adapter audit required before enabling.
 
 12. **Calendar-month epoch alignment (§9)** — resolved 2026-07-22 (milestone E-CAL, [`docs/plans/2026-07-22-e-cal-calendar-month-implementation.md`](../plans/2026-07-22-e-cal-calendar-month-implementation.md); design in [`docs/plans/2026-07-15-calendar-month-epoch-alignment.md`](../plans/2026-07-15-calendar-month-epoch-alignment.md)). Per the App spec's §14.12 decision, `RunEpoch` eligibility was **retired** from the fixed-duration `min_run_interval_secs` interval and re-based on a calendar-month rollover of consensus block time (`civil_month(env.block.time) > civil_month(last_run)`; block time is the consensus-agreed BFT timestamp, the only deterministic clock in contract execution, and the civil `(year, month)` is a pure function of it). The boundary is deterministic and caller-independent — no `RunEpoch` caller can choose the epoch's duration — and the gate remains an eligibility floor, not a trigger (the epoch still ends only when a permissionless caller cranks after the rollover). `min_run_interval_secs` is removed from `config`/`InstantiateMsg`/`UpdateConfig` (schema regenerated) and the deploy-budget fee horizon re-based on a nominal-month constant. Run spacing is nominally 28–31 days; a late crank followed by a prompt one can compress the following gap below the unbonding period, held safe by the §9.3 plan-time deferral guards (a compressed gap adds deferrals, never an illegal move). Same change per `SECURITY.md`: the `month.rs` conversion carries a unit + proptest (no-panic over the full `u64` nanosecond domain) suite; the simulation gained a real block-time clock with keeper-promptness jitter, and compressed-gap / skipped-month / leap-February scenarios with per-epoch assertions for the never-rejected move under compression, skipped-month settlement, and redemption mobilization vs the withdrawal-delay ceiling. The `withdrawal_delay_seconds` re-pin against the calendar cadence and the keeper-runbook / launch-checklist rows land alongside as E-CAL.3.

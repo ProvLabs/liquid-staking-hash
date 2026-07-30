@@ -16,6 +16,7 @@ import {
   buildTxPlan,
   encodeTxBody,
   encodeTxRaw,
+  ALLOWED_MSG_TYPE_URLS,
   MSG_EXECUTE_CONTRACT,
   type OperatorIntent,
   type TxIntent,
@@ -122,6 +123,53 @@ describe("relay guards (each an enforced mechanism)", () => {
     );
     const tx = encodeTxRaw(body, plan.authInfoBytes, [new Uint8Array(64)]);
     expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
+  });
+
+  // M7.1 §2.5 / §4 invariant 13: the governance indexing PR adds NO signing path.
+  // `ALLOWED_MSG_TYPE_URLS` is unchanged by it, and this row is what makes that a
+  // gated fact rather than a claim in a plan — the governance amendment is
+  // 7.3–7.4's focused review, and until it lands a vote must be refused.
+  it("a governance MsgVote → 400 (the relay stays closed through PR 7.1)", () => {
+    // Hand-encode `cosmos.group.v1.MsgVote` (proposal_id, voter, option) inside a
+    // TxBody signed by the session key: everything about it is legitimate EXCEPT
+    // that its type URL is not on the allowlist.
+    const msgVote = new ProtoWriter()
+      .uint(1, 1n)
+      .string(2, SESSION_ADDRESS)
+      .uint(3, 1n)
+      .finish();
+    const anyMsg = new ProtoWriter()
+      .string(1, "/cosmos.group.v1.MsgVote")
+      .bytes(2, msgVote)
+      .finish();
+    const body = new ProtoWriter().message(1, anyMsg, true).finish();
+    const plan = buildTxPlan(
+      {
+        kind: "swap_in",
+        owner: SESSION_ADDRESS,
+        vaultAddress: config.vaultAddress,
+        amount: 1n,
+        denom: "nhash",
+      },
+      { gasLimit: 1n, amount: 1n, denom: "nhash" },
+      {
+        chainId: config.chainId,
+        accountNumber: 1n,
+        sequence: 0n,
+        pubkeyBase64: Buffer.from(PUB).toString("base64"),
+      },
+    );
+    const tx = encodeTxRaw(body, plan.authInfoBytes, [new Uint8Array(64)]);
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it("the allowlist itself carries no x/group type URL", () => {
+    // Asserted on the CONSTANT, not just on a rejection path: a future edit that
+    // admitted a governance message would have to change this line, which is
+    // exactly the review event 7.3–7.4 is scheduled to be.
+    for (const url of ALLOWED_MSG_TYPE_URLS) {
+      expect(url).not.toMatch(/^\/cosmos\.group\./);
+    }
   });
 
   it("unexpected vault address → 400", () => {

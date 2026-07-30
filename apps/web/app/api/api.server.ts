@@ -39,6 +39,16 @@ import type {
   ValidatorSetHealth,
   ValidatorsPayload,
 } from "@nvhash/api-types";
+// The CONSUMER half of the wire bounds, imported rather than restated. Before
+// PR 7.1 these were literals here and the producer's caps were literals in
+// services/api, coupled only by a comment in the row types — which is precisely
+// how PR #19's `yield_by_epoch` mismatch nulled a whole derived read. The pairing
+// is now asserted in packages/api-types/test/bounds.test.ts.
+import {
+  MARKER_CAP_WIRE,
+  MAX_ACCRUAL_POINTS_WIRE,
+  MAX_YIELD_POINTS_WIRE,
+} from "@nvhash/api-types";
 import type { FetchLike } from "@nvhash/chain-client";
 import { z } from "zod";
 
@@ -260,11 +270,11 @@ export const portfolioMetricsSchema = z.object({
   escrowed_basis_nhash: baseUnitString.nullable(),
   realized_gain_nhash: signedBaseUnitString.nullable(),
   effective_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
-  yield_by_epoch: z.array(effectiveYieldPointSchema).max(20_000),
+  yield_by_epoch: z.array(effectiveYieldPointSchema).max(MAX_YIELD_POINTS_WIRE),
   yield_truncated: z.boolean(),
-  accrual: z.array(accrualPointSchema).max(20_000),
+  accrual: z.array(accrualPointSchema).max(MAX_ACCRUAL_POINTS_WIRE),
   accrual_truncated: z.boolean(),
-  accrual_markers: z.array(accrualMarkerSchema).max(2_000),
+  accrual_markers: z.array(accrualMarkerSchema).max(MARKER_CAP_WIRE),
   markers_truncated: z.boolean(),
 }) satisfies z.ZodType<PortfolioMetrics>;
 

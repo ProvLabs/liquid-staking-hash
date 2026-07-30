@@ -11,16 +11,30 @@
   "vault": "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad",
   "contract": "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8",
   "pinned_facts": [
-    "vault msg type URLs carry a Request suffix (MsgSwapInRequest, MsgSwapOutRequest)",
-    "vault event attribute values are JSON-encoded strings (one extra quoting layer)",
-    "payout and refund are EndBlocker events (finalize_block_events via RPC block_results); they never appear in tx-search",
+    "a SUCCESSFULLY executed proposal is pruned in the SAME transaction that executes it, so ACCEPTED+SUCCESS is a pair no state read can ever observe; EventExec.result and EventProposalPruned (status + full tally_result) are its only record",
+    "a multi-proposer proposal needs a signature from every proposer, so one CLI-signed tx cannot create one: `proposers` multiplicity comes from the proto (repeated string), not from this corpus",
+    "a second MsgVote from the same voter on the same proposal is REJECTED by the chain, so (proposalId, voter) is a sound natural key (measured, not assumed)",
+    "an exec FAILURE leaves the proposal in state as ACCEPTED + FAILURE; a proposal that passes and is not executed sits at ACCEPTED + NOT_RUN",
+    "an operator payment's nhash and payer are read from the same-msg_index bank transfer event (recipient = the contract): the msg's attached funds, which cw_utils::must_pay bounds to exactly one coin in the underlying denom",
     "block_search indexes EndBlocker events on this build (kv indexer)",
-    "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
-    "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
     "contract cranks emit plain wasm events with action attributes; epoch snapshot/APR data is read by smart query, not events",
     "contract wasm attribute values are NOT JSON-quoted (unlike vault event values): action/valoper/amount arrive bare — dequote tolerates both, so decoding stays uniform",
+    "cosmos.group.v1.EventVote carries ONLY proposal_id and msg_index: the voter and the option come from the MsgVote BODY, never from the event",
+    "estimate_swap_in is gRPC/CLI-only: grpc-gateway rejects Coin/math.Int query parameters; estimate_swap_out (string fields) serves over REST",
+    "group_policy_info carries decision_policy INLINE (@type + threshold + windows), so the policy threshold needs no second read",
     "pay_commission's wasm event carries the per-payment amount plus outstanding; pay_tip's carries only the epoch-CUMULATIVE tip_epoch — a tip payment's own nhash is NOT in the wasm event",
-    "an operator payment's nhash and payer are read from the same-msg_index bank transfer event (recipient = the contract): the msg's attached funds, which cw_utils::must_pay bounds to exactly one coin in the underlying denom"
+    "payout and refund are EndBlocker events (finalize_block_events via RPC block_results); they never appear in tx-search",
+    "the LCD answers a missing proposal with HTTP 500 (NOT 404) and a body identical for a pruned and a never-existing id, so prune must be inferred from absence in the paginated sweep or from EventProposalPruned — never from a status code",
+    "the devnet voting periods (300s admin / 40s ops-fast) and the two-policies-on-one-group topology are DEVNET-ONLY drill affordances, never mainnet facts",
+    "the x/group Vote payload has NO weight field: a voter weight must come from group_members at the vote height, or be null",
+    "two proposals submitted in one transaction share a submit_time and therefore a voting_period_end, and transition in the SAME block",
+    "vault LCD REST paths live under /vault/v1 (NOT /provlabs/vault/v1)",
+    "vault event attribute values are JSON-encoded strings (one extra quoting layer)",
+    "vault msg type URLs carry a Request suffix (MsgSwapInRequest, MsgSwapOutRequest)",
+    "votes are DELETED at the voting-period-end tally even for an ACCEPTED proposal (only final_tally_result survives), so per-voter provenance for any closed proposal exists ONLY in the tx plane",
+    "voting-period-end transitions are EVENTLESS: no tally event appears in finalize_block_events; EventProposalPruned is the only x/group EndBlocker event observed",
+    "x/group IS served on this build (LCD /cosmos/group/v1/*); the 2026-07-14 empty groups.json reflected an unbootstrapped devnet, not a missing module",
+    "x/group typed-event attribute values are JSON-quoted (proposal_id: \"6\", status, result, logs) while msg_index arrives BARE — the same mixed shape dequote already tolerates"
   ],
   "sources": {
     "swap_in_tx": "6FA31385639A253B1F5FB999A6B9D4E9E7AA792D1DAF749381F6F98AE5DBFF0F",
@@ -32,7 +46,13 @@
     "refund_block": 392,
     "register_participation_tx": "FF94903AA1F21B72118017A677C81610DC3E7AD740619EA064103CEA36524E7E",
     "pay_commission_tx": "9A7F438B54196332CB59F1A940A170BCDD1DF56AA4D6CC664527C7D362DDE38E",
-    "pay_tip_tx": "2D2F591E0820634497F18EF617296AE5D68CE3464D877D680D423E416EF83B69"
+    "pay_tip_tx": "2D2F591E0820634497F18EF617296AE5D68CE3464D877D680D423E416EF83B69",
+    "gov_submit_proposal_tx": "4ED083AAF13EA10D669C57EB37BD4CEF7BC112A3EE36DEA4788172B8951FC7D6",
+    "gov_vote_tx": "1645814D5AFB30B9755E89D12F9179D5794B53F838F93C52B4DD60EA54BFE37A",
+    "gov_vote_batched_tx": "34DE3090665B62960C78124C342E867DDA610340D221125F3B380268BAAA6258",
+    "gov_exec_success_tx": "F1095062749E69AB449881F17292851EB9D2B5E011A35932B6DD6A859D42E12F",
+    "gov_exec_failure_tx": "002C2CC089CD4AD5576FD8F4E41168CDB9D7C7C97BF26C4D0AF4A588CAAE2035",
+    "gov_proposal_pruned_block": 288
   },
   "partial_captures": [
     {
@@ -47,6 +67,52 @@
       "chain_id": "chain-dev",
       "node_image": "sha256:d7e307a66501fb6b1054cfeee55f8cee89377ab6614504053378c09554214d66",
       "chain_instance": "a LATER devnet bootstrap than the 2026-07-14 corpus capture, on a NEWER dev-node image; vault and contract addresses are identical because the bootstrap is deterministic. The next full run of scripts/generate-corpus.sh + capture-fixtures.sh captures all of these in one chain and this block goes away."
+    },
+    {
+      "files": [
+        "queries/group/*.json",
+        "governance/*.json"
+      ],
+      "reason": "App M7.1 commit A: the x/group substrate was bootstrapped onto the devnet the milestone is being driven against, and a full corpus regeneration would have required resetting that chain (the same tradeoff recorded for the M6.4 operator captures).",
+      "captured_at": "2026-07-29T23:32:10Z",
+      "head_height": 302,
+      "chain_id": "chain-dev",
+      "node_image": "sha256:d7e307a66501fb6b1054cfeee55f8cee89377ab6614504053378c09554214d66",
+      "chain_instance": "the same devnet instance as the 2026-07-27 operator captures, with a group + two policies added by infra/devnet/bootstrap/nvhash-group-bootstrap.sh and proposals driven by contracts/drills/gov-drill.sh. The contract's admin is NOT yet the policy (there is no admin-rotation message — M7 overview F2); a bootstrap with CONTRACT_ADMIN set makes the discovery path live and is the next full-reset capture."
     }
-  ]
+  ],
+  "governance": {
+    "group_id": "1",
+    "policies": [
+      "tp1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzserjkkf",
+      "tp1dlszg2sst9r69my4f84l3mj66zxcf3umcgujys30t84srg95dgvst74vwc"
+    ],
+    "drill_observations": {
+      "endblocker_event_types": [
+        "cosmos.group.v1.EventProposalPruned"
+      ],
+      "votes_readable_while_open": "2",
+      "votes_readable_after_tally": "0",
+      "vote_change": "rejected",
+      "two_proposers_in_one_signature": "refused-single-signature",
+      "two_votes_in_one_tx": true,
+      "prune_observed": true,
+      "endblocker_prune_observed": true,
+      "exec_success_prunes_immediately": true,
+      "missing_proposal_http_status": "500 (NOT 404), body identical for pruned and never-existing",
+      "abort_outcome": "not-reachable-on-this-build:ACCEPTED",
+      "contract_admin_is_policy": true
+    },
+    "drill_proposals": {
+      "success": "2",
+      "exec_failure": "3",
+      "vpe_reject": "5",
+      "accepted_not_run": "4",
+      "abort": "6",
+      "withdraw": "7",
+      "twin_a": "8",
+      "twin_b": "9",
+      "vote_change": "10"
+    }
+  }
 }

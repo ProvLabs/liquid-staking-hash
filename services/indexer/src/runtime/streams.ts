@@ -18,6 +18,7 @@ export const STREAMS = {
   epochHistory: "epoch-history",
   validatorSampler: "validator-sampler",
   marketSampler: "market-sampler",
+  governance: "governance",
   reconciler: "reconciler",
 } as const;
 

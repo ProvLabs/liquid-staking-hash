@@ -43,6 +43,13 @@ const PERSONAL_PATHS = routes.filter((r) => r.auth === "address").map((r) => r.p
 
 // Routes whose zod schema requires a `valoper` alongside `address`; the
 // cross-address matrix must send one or a 400 would mask the 403 it is testing.
+/** Public routes requiring a query param — same declaration as the envelope
+ * harness, for the same reason: an undeclared required param 400s, and a 400
+ * would pass a "not refused" assertion for the wrong reason. */
+const PUBLIC_REQUIRED_QUERY: Record<string, string> = {
+  "/api/v1/governance/proposal": "id=1",
+};
+
 const VALOPER_PATHS = new Set<string>([
   `${API_BASE}/operator/epochs`,
   `${API_BASE}/operator/payments`,
@@ -174,8 +181,15 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
     const server = await startAuthServer();
     try {
       for (const route of routes.filter((r) => r.auth === "public")) {
-        const res = await fetch(`${server.baseUrl}${route.path}`);
-        expect(res.status, route.path).toBe(200);
+        const query = PUBLIC_REQUIRED_QUERY[route.path];
+        const res = await fetch(
+          `${server.baseUrl}${route.path}${query === undefined ? "" : `?${query}`}`,
+        );
+        // What this asserts is that no credential is NEEDED. A single-resource
+        // lookup the dataless reader cannot satisfy answers 404 — still proof the
+        // request was not refused for lack of a credential, which is the property
+        // under test here.
+        expect([200, 404], route.path).toContain(res.status);
       }
     } finally {
       await server.close();

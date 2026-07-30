@@ -35,9 +35,13 @@ import {
 } from "./derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Heads, IndexedReader } from "./reader.ts";
+import { MAX_GOV_POLICIES, MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
 import type { Pagination } from "./query.ts";
 import type {
   EpochBoundary,
+  GovPolicyFacts,
+  GovProposalFacts,
+  GovVoteFacts,
   OperatorEpochFacts,
   OperatorPaymentFacts,
   OperatorPaymentTotalFacts,
@@ -255,6 +259,62 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     );
   }
 
+  /** Prisma row -> the pure mappers' fact shape. Decimal(39,0) tally counts and
+   * weights cross as BIGINT, never through a JS number: they are unbounded member
+   * weight sums with no protocol ceiling. */
+  function toGovProposalFacts(r: {
+    proposalId: bigint;
+    groupPolicyAddress: string;
+    groupId: bigint;
+    proposers: string[];
+    status: string;
+    executorResult: string;
+    metadata: string | null;
+    title: string;
+    summary: string;
+    messages: unknown;
+    submitTime: Date;
+    votingPeriodEnd: Date;
+    yesCount: Prisma.Decimal;
+    noCount: Prisma.Decimal;
+    abstainCount: Prisma.Decimal;
+    noWithVetoCount: Prisma.Decimal;
+    groupVersion: bigint;
+    groupPolicyVersion: bigint;
+    decisionPolicy: unknown;
+    observedHeight: bigint;
+    observedAt: Date;
+    height: bigint | null;
+    txhash: string | null;
+    prunedAtHeight: bigint | null;
+  }): GovProposalFacts {
+    return {
+      ...r,
+      yesCount: toBigint(r.yesCount),
+      noCount: toBigint(r.noCount),
+      abstainCount: toBigint(r.abstainCount),
+      noWithVetoCount: toBigint(r.noWithVetoCount),
+    };
+  }
+
+  function toGovVoteFacts(r: {
+    proposalId: bigint;
+    voter: string;
+    option: string;
+    metadata: string | null;
+    weight: Prisma.Decimal | null;
+    submitTime: Date;
+    height: bigint | null;
+    txhash: string | null;
+  }): GovVoteFacts {
+    return {
+      ...r,
+      // Null stays null. A weight the indexer could not recover must never arrive
+      // as a 0 that reads as "this member's vote counted for nothing".
+      weight: r.weight === null ? null : toBigint(r.weight),
+    };
+  }
+
   async function maxWorkerCheckpoint(): Promise<bigint | null> {
     const rows = await prisma.indexerCheckpoint.findMany({
       select: { stream: true, cursorHeight: true },
@@ -267,7 +327,101 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     return max;
   }
 
+  /**
+   * First height the governance stream ingested. Read from the stream's own
+   * configured start rather than guessed: `indexed_from_height` exists so a page
+   * cannot imply completeness it lacks, and a wrong value there is worse than a
+   * null. Null when the stream has never committed a window.
+   */
+  async function governanceStreamStart(): Promise<number | null> {
+    const row = await prisma.indexerCheckpoint.findUnique({ where: { stream: "governance" } });
+    if (row === null) return null;
+    // The worker's start height is 1 (D13). A committed cursor therefore certifies
+    // coverage from 1 up to that cursor; anything pruned before the stream existed
+    // is unrecoverable, which is exactly what this field warns a reader about.
+    return 1;
+  }
+
   return {
+    // --- governance (PR 7.1) ------------------------------------------------
+
+    async listGovProposals(page, filter) {
+      // Newest first by id: x/group assigns ids monotonically chain-global, so id
+      // order IS submission order and no tie-break is needed. Deliberately NOT
+      // keyset-paged: proposals per policy number in the tens, not the 300 000
+      // `operator_payments` rows that forced row-comparison streaming, and
+      // cargo-culting that machinery onto a structurally tiny table would add
+      // `$queryRaw` for nothing.
+      const where = {
+        ...(filter.policy === undefined ? {} : { groupPolicyAddress: filter.policy }),
+        // Stored SCREAMING, filtered lower-case on the wire.
+        ...(filter.status === undefined ? {} : { status: filter.status.toUpperCase() }),
+      };
+      const [rows, indexedFrom] = await Promise.all([
+        prisma.govProposal.findMany({
+          where,
+          orderBy: { proposalId: "desc" },
+          skip: page.offset,
+          take: page.limit,
+        }),
+        governanceStreamStart(),
+      ]);
+      return {
+        proposals: rows.map(toGovProposalFacts),
+        indexedFromHeight: indexedFrom,
+      };
+    },
+
+    async govProposal(proposalId) {
+      const row = await prisma.govProposal.findUnique({ where: { proposalId } });
+      // Null, never a fabricated shell: "the mirror never saw this id" is a
+      // different answer from "it exists with no votes", and the route turns this
+      // into a 404 rather than an empty 200.
+      if (row === null) return null;
+      const votes = await prisma.govVote.findMany({
+        where: { proposalId },
+        // Deterministic order so a trimmed list is trimmed reproducibly.
+        orderBy: [{ submitTime: "asc" }, { voter: "asc" }],
+        // Read ONE past the wire bound so the route can flag truncation without a
+        // second COUNT query — the flag has to be honest, so it needs evidence
+        // that a further row exists.
+        take: MAX_GOV_VOTES_PER_PROPOSAL + 1,
+      });
+      return { proposal: toGovProposalFacts(row), votes: votes.map(toGovVoteFacts) };
+    },
+
+    async listGovPolicies() {
+      // Aggregated in SQL rather than by folding rows in JS: the group-by is over
+      // the whole mirror, and materializing every proposal to count them would
+      // scale with history for a payload bounded at a few dozen rows.
+      const grouped = await prisma.govProposal.groupBy({
+        by: ["groupPolicyAddress"],
+        _count: { proposalId: true },
+        _max: { observedHeight: true, proposalId: true },
+        orderBy: { _max: { observedHeight: "desc" } },
+        take: MAX_GOV_POLICIES,
+      });
+      const facts: GovPolicyFacts[] = [];
+      for (const g of grouped) {
+        const newestId = g._max.proposalId;
+        if (newestId === null) continue;
+        // The decision policy is a SNAPSHOT off the newest proposal, not a live
+        // read: the API has no chain client, and the live rule is 7.2's to fetch.
+        const newest = await prisma.govProposal.findUnique({
+          where: { proposalId: newestId },
+          select: { groupId: true, decisionPolicy: true },
+        });
+        facts.push({
+          address: g.groupPolicyAddress,
+          groupId: newest?.groupId ?? 0n,
+          proposalCount: g._count.proposalId,
+          lastSeenHeight: g._max.observedHeight ?? 0n,
+          decisionPolicy: newest?.decisionPolicy ?? null,
+        });
+      }
+      return facts;
+    },
+
     async heads(): Promise<Heads> {
       const run = await prisma.reconcilerRun.findFirst({
         orderBy: { ranAt: "desc" },

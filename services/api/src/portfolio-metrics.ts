@@ -20,12 +20,14 @@ import type {
 } from "@nvhash/api-types";
 import { toSafeInt, toSafeSignedInt, type TransactionFacts } from "./derive.ts";
 
-export const MARKER_CAP = 200;
+// Re-exported from the shared bounds registry (PR 7.1 §4b C2): the PRODUCER half
+// of a pair whose consumer half lives in apps/web, now one declaration rather
+// than two numbers that happen to agree.
+import { MARKER_CAP, MAX_ACCRUAL_POINTS, MAX_YIELD_POINTS } from "@nvhash/api-types";
+export { MARKER_CAP, MAX_ACCRUAL_POINTS, MAX_YIELD_POINTS };
 /** Series caps: trim earlier history server-side and flag it (keep the most
  * recent) so responses stay bounded well under the web wire limits (which
  * carry 10x slack above these caps). */
-export const MAX_ACCRUAL_POINTS = 2000;
-export const MAX_YIELD_POINTS = 2000;
 const SECONDS_PER_YEAR = 31_536_000n;
 
 /** Minimal epoch-step input (the endpoint task maps epoch_snapshots + the

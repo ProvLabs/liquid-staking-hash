@@ -1,0 +1,136 @@
+{
+  "height": "288",
+  "txs_results": null,
+  "finalize_block_events": [
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp1m3h30wlvsf8llruxtpukdvsy0km2kum8j5f3gk",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "mint",
+      "attributes": [
+        {
+          "key": "bonded_ratio",
+          "value": "0.000000120497500000",
+          "index": true
+        },
+        {
+          "key": "inflation",
+          "value": "0.000000000000000000",
+          "index": true
+        },
+        {
+          "key": "annual_provisions",
+          "value": "0.000000000000000000",
+          "index": true
+        },
+        {
+          "key": "amount",
+          "value": "0",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "attributes": [
+        {
+          "key": "sender",
+          "value": "tp17xpfvakm2amg962yls6f84z3kell8c5l2udfyt",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "liveness",
+      "attributes": [
+        {
+          "key": "address",
+          "value": "tpvalcons1z9m43kpwuvjllx0z48yadhxzj43us58w7qzupd",
+          "index": true
+        },
+        {
+          "key": "missed_blocks",
+          "value": "235",
+          "index": true
+        },
+        {
+          "key": "height",
+          "value": "288",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "BeginBlock",
+          "index": true
+        }
+      ]
+    },
+    {
+      "type": "cosmos.group.v1.EventProposalPruned",
+      "attributes": [
+        {
+          "key": "proposal_id",
+          "value": "\"7\"",
+          "index": true
+        },
+        {
+          "key": "status",
+          "value": "\"PROPOSAL_STATUS_WITHDRAWN\"",
+          "index": true
+        },
+        {
+          "key": "tally_result",
+          "value": "null",
+          "index": true
+        },
+        {
+          "key": "mode",
+          "value": "EndBlock",
+          "index": true
+        }
+      ]
+    }
+  ],
+  "validator_updates": null,
+  "consensus_param_updates": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "60000000"
+    },
+    "evidence": {
+      "max_age_num_blocks": "100000",
+      "max_age_duration": "172800000000000",
+      "max_bytes": "1048576"
+    },
+    "validator": {
+      "pub_key_types": [
+        "ed25519"
+      ]
+    },
+    "version": {},
+    "abci": {}
+  },
+  "app_hash": "ixxCYVPiolrRnrxumNTp6Qg1offq7+xODH/03H5gJT4="
+}

@@ -16,6 +16,24 @@ against is stood up from [`infra/devnet/`](../../infra/devnet/).
 - `jail-drill.sh` — jail report/purge and slash write-down against real
   downtime jailing: two never-signing validators, real slashes, NAV marked
   down by exactly the unbacked amount in the detection epoch.
+- `gov-drill.sh` — the `x/group` governance lifecycle, and the App's governance
+  state generator (App PR 7.1). Needs
+  `infra/devnet/bootstrap/nvhash-group-bootstrap.sh` first. Produces every
+  proposal state the §8.7 surfaces render — accepted+executed, accepted with a
+  FAILED execution, accepted-but-unexecuted, rejected at voting-period end in a
+  txless block, withdrawn, and both prune routes — **plus the multiplicity cases
+  that can falsify this PR's natural keys**: two messages in one proposal, two
+  proposals in one transaction (sharing a `voting_period_end`, so they transition
+  in one block), two `MsgVote`s in one transaction at distinct `msg_index`es, a
+  real two-page paginated read, and an attempted vote change. That last one is
+  the measurement `(proposalId, voter)` rests on — the M6.4 review found a
+  plan-level natural key that was wrong, named, and gated by a passing test, so
+  the assumption is drilled rather than believed. Writes an observation record
+  (`.gov-drill.json`, gitignored) that
+  `packages/fixtures/scripts/capture-fixtures.sh --governance` folds into the
+  corpus manifest's pinned facts. One state it CANNOT produce on the drilled
+  build: `PROPOSAL_STATUS_ABORTED`, recorded as such rather than skipped
+  silently.
 - `calendar-drill.sh` — calendar-month cadence gate (E-CAL): an eligible
   `RunEpoch` runs a full epoch end-to-end, then a second crank in the same
   calendar month is rejected with `too soon`, with the reported next-eligible

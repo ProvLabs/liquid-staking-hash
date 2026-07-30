@@ -53,13 +53,27 @@ export {
   type StakingValidator,
 } from "./staking.ts";
 export {
+  GROUP_EXECUTOR_RESULTS,
+  GROUP_PROPOSAL_STATUSES,
+  GROUP_VOTE_OPTIONS,
   GroupClient,
+  parseDecisionPolicy,
   parseGroupInfo,
   parseGroupMember,
   parseGroupPolicyInfo,
+  parseProposal,
+  parseTallyResult,
+  parseVote,
+  type GroupDecisionPolicy,
+  type GroupExecutorResult,
   type GroupInfo,
   type GroupMember,
   type GroupPolicyInfo,
+  type GroupProposal,
+  type GroupProposalStatus,
+  type GroupTallyResult,
+  type GroupVote,
+  type GroupVoteOption,
 } from "./group.ts";
 export { TxClient, type BroadcastResult, type GasInfo, type TxInclusion } from "./tx.ts";
 export { AuthClient, type AccountInfo } from "./auth.ts";

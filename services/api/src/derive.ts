@@ -40,6 +40,20 @@ import {
   type ValidatorRow,
   type ValidatorSetHealth,
   type ValidatorsPayload,
+  MAX_GOV_METADATA_LENGTH,
+  MAX_GOV_PROPOSAL_MESSAGES,
+  MAX_GOV_PROPOSERS,
+  MAX_GOV_SUMMARY_LENGTH,
+  MAX_GOV_TITLE_LENGTH,
+  MAX_GOV_VOTES_PER_PROPOSAL,
+  type GovDecisionPolicy,
+  type GovExecutorResult,
+  type GovPolicyRow,
+  type GovProposalDetail,
+  type GovProposalRow,
+  type GovProposalStatus,
+  type GovVoteOption,
+  type GovVoteRow,
 } from "@nvhash/api-types";
 import { z } from "zod";
 
@@ -524,19 +538,27 @@ export function resolveOwnedValoper(
  * the indexer has not reached it. Null is the honest answer — never the latest
  * epoch, which would misattribute every recent payment.
  *
- * **Known boundary ambiguity (2026-07-28 review), decided rather than
- * accidental.** When `height == endHeight` — a payment in the SAME BLOCK as the
- * crank that closed the epoch — intra-block ordering decides the truth: a
- * payment executed before the crank is swept by it, one executed after belongs
- * to the next epoch. `operator_payments` stores no intra-block ordinal (the tx
- * position within the block is not indexed), so that ordering is not
- * recoverable from stored data and no amount of arithmetic here can settle it.
- * The `>=` boundary deliberately resolves the tie to the epoch closing AT that
- * height — the more common case, since the crank is typically the block's
- * reason for existing and payments cluster before it rather than after.
- * Exactness would require indexing a tx ordinal, which is a schema decision,
- * not a fix to this function. Pinned by the boundary cases in
- * `test/derive.test.ts` so the choice cannot drift silently.
+ * **Same-block boundary: ACCEPTED as-is (Ira, 2026-07-28), not merely
+ * tolerated.** When `height == endHeight` — a payment in the SAME BLOCK as the
+ * crank that closed the epoch — intra-block ordering decides which epoch truly
+ * swept it, and `operator_payments` stores no intra-block ordinal, so that
+ * ordering is not recoverable from stored data. `>=` resolves the tie to the
+ * epoch closing AT that height.
+ *
+ * The reason this needs no further precision is ECONOMIC, not statistical:
+ * program commission ROLLS OVER (`contracts/src/validators.rs`; the same
+ * cumulative-overpayment fact the `prepaid` banner state rests on). So both
+ * directions of a misattribution are harmless — if the payment is credited to
+ * the earlier epoch and commission WAS due, it settles a real obligation; if
+ * nothing was due, it becomes a prepaid credit that carries forward to the next
+ * bill. Either way the operator is credited exactly once for exactly what they
+ * paid. The boundary can only shift which row of the §14.11 CSV a payment
+ * appears against, never whether it counts.
+ *
+ * That is why a tx-ordinal column was considered and NOT added: it would buy
+ * presentational precision on a figure that is already economically exact.
+ * Pinned by the boundary cases in `test/operator-endpoints.test.ts` so the
+ * choice cannot drift silently.
  *
  * `boundariesAsc` MUST be ascending by height; the walk relies on it.
  */
@@ -726,5 +748,234 @@ export function derivePortfolio(
     transaction_count: transactionCount,
     escrowed_shares: escrowed.toString(),
     active_redemptions: activeRedemptions.map(toRedemptionRow),
+  };
+}
+
+// --- governance (PR 7.1 commit C) -------------------------------------------
+//
+// Pure mappers from the indexer's row facts to the frozen wire shapes. The
+// division of labour is the same as everywhere else in this file: derivation
+// happens here, the reader adds only SELECTs, and the route adds only the
+// envelope.
+//
+// Two things these mappers deliberately do NOT do:
+//   * decode a proposal's `messages` — they are carried verbatim, because 7.2
+//     owns the decode (a closed typed union with a tagged `unknown`) and 7.4's
+//     relay guard re-encodes them canonically byte-for-byte;
+//   * decide passage — that is `meetsThreshold` in @nvhash/api-types, shared
+//     with the web tier so the two cannot disagree about whether a proposal
+//     passed (D17, the `navHashPerShare` precedent).
+
+/** Row facts as the indexer stores a proposal (bigints already widened). */
+export interface GovProposalFacts {
+  readonly proposalId: bigint;
+  readonly groupPolicyAddress: string;
+  readonly groupId: bigint;
+  readonly proposers: string[];
+  readonly status: string;
+  readonly executorResult: string;
+  readonly metadata: string | null;
+  readonly title: string;
+  readonly summary: string;
+  readonly messages: unknown;
+  readonly submitTime: Date;
+  readonly votingPeriodEnd: Date;
+  readonly yesCount: bigint;
+  readonly noCount: bigint;
+  readonly abstainCount: bigint;
+  readonly noWithVetoCount: bigint;
+  readonly groupVersion: bigint;
+  readonly groupPolicyVersion: bigint;
+  readonly decisionPolicy: unknown;
+  readonly observedHeight: bigint;
+  readonly observedAt: Date;
+  readonly height: bigint | null;
+  readonly txhash: string | null;
+  readonly prunedAtHeight: bigint | null;
+}
+
+export interface GovVoteFacts {
+  readonly proposalId: bigint;
+  readonly voter: string;
+  readonly option: string;
+  readonly metadata: string | null;
+  readonly weight: bigint | null;
+  readonly submitTime: Date;
+  readonly height: bigint | null;
+  readonly txhash: string | null;
+}
+
+/** Lower-case the stored SCREAMING enum into the wire union, falling back to
+ * `unspecified` for anything unrecognized. Never throws: a status a later chain
+ * upgrade adds must render honestly rather than 500 a page. */
+function toStatus(stored: string): GovProposalStatus {
+  const lower = stored.toLowerCase();
+  return (GOV_STATUS_WIRE as readonly string[]).includes(lower)
+    ? (lower as GovProposalStatus)
+    : "unspecified";
+}
+const GOV_STATUS_WIRE = [
+  "submitted",
+  "accepted",
+  "rejected",
+  "aborted",
+  "withdrawn",
+  "unspecified",
+] as const;
+
+function toExecutorResult(stored: string): GovExecutorResult {
+  const lower = stored.toLowerCase();
+  return lower === "success" || lower === "failure" || lower === "not_run"
+    ? (lower as GovExecutorResult)
+    : "unspecified";
+}
+
+function toVoteOption(stored: string): GovVoteOption {
+  const lower = stored.toLowerCase();
+  return lower === "yes" || lower === "no" || lower === "abstain" || lower === "no_with_veto"
+    ? (lower as GovVoteOption)
+    : "unspecified";
+}
+
+/**
+ * The stored decision-policy JSON → the wire union. An unrecognized `@type`
+ * becomes a tagged `unknown` carrying the type URL: a surface can then say which
+ * policy type it does not understand, and `meetsThreshold` returns null for it
+ * rather than scoring against a guessed rule.
+ */
+export function toGovDecisionPolicy(stored: unknown): GovDecisionPolicy | null {
+  if (typeof stored !== "object" || stored === null || Array.isArray(stored)) return null;
+  const o = stored as Record<string, unknown>;
+  const typeUrl = typeof o["@type"] === "string" ? o["@type"] : "";
+  const windows = (o["windows"] ?? {}) as Record<string, unknown>;
+  const votingPeriod = typeof windows["voting_period"] === "string" ? windows["voting_period"] : "";
+  const minExecution =
+    typeof windows["min_execution_period"] === "string" ? windows["min_execution_period"] : "";
+
+  if (typeUrl === "/cosmos.group.v1.ThresholdDecisionPolicy" && typeof o["threshold"] === "string") {
+    return {
+      kind: "threshold",
+      threshold: o["threshold"],
+      voting_period: votingPeriod,
+      min_execution_period: minExecution,
+    };
+  }
+  if (typeUrl === "/cosmos.group.v1.PercentageDecisionPolicy" && typeof o["percentage"] === "string") {
+    return {
+      kind: "percentage",
+      percentage: o["percentage"],
+      voting_period: votingPeriod,
+      min_execution_period: minExecution,
+    };
+  }
+  return { kind: "unknown", type_url: typeUrl };
+}
+
+/**
+ * One proposal row.
+ *
+ * `messages` is TRIMMED to its wire bound with an explicit `messages_truncated`
+ * flag rather than silently shortened: a governance payload that quietly loses a
+ * message would misstate what is being voted on. Same posture as the vote list in
+ * `toGovProposalDetail`.
+ *
+ * `proposers` is trimmed the same way, and the trim is on the PRODUCER side of a
+ * bound the consumer also imports (§4b C2) — the pairing is asserted in
+ * `packages/api-types/test/bounds.test.ts`, not agreed by eye.
+ */
+export function toGovProposalRow(f: GovProposalFacts): GovProposalRow {
+  const messages = Array.isArray(f.messages) ? f.messages : [];
+  const truncated = messages.length > MAX_GOV_PROPOSAL_MESSAGES;
+  // Flagged for the same reason `messages` is, and it is NOT covered by that flag:
+  // `proposers` is identity data, so a silent trim leaves a consumer unable to tell
+  // a full list from a shortened one (PR #23 review, P2).
+  const proposersTruncated = f.proposers.length > MAX_GOV_PROPOSERS;
+  return {
+    // u64 ids stay STRINGS on the wire: the JSON number domain stops at 2^53.
+    proposal_id: f.proposalId.toString(),
+    group_policy_address: f.groupPolicyAddress,
+    group_id: f.groupId.toString(),
+    proposers: f.proposers.slice(0, MAX_GOV_PROPOSERS),
+    status: toStatus(f.status),
+    executor_result: toExecutorResult(f.executorResult),
+    title: f.title.slice(0, MAX_GOV_TITLE_LENGTH),
+    summary: f.summary.slice(0, MAX_GOV_SUMMARY_LENGTH),
+    metadata: f.metadata === null ? null : f.metadata.slice(0, MAX_GOV_METADATA_LENGTH),
+    tally: {
+      // Unbounded weight sums: decimal strings, never numbers.
+      yes: f.yesCount.toString(),
+      no: f.noCount.toString(),
+      abstain: f.abstainCount.toString(),
+      no_with_veto: f.noWithVetoCount.toString(),
+    },
+    decision_policy: toGovDecisionPolicy(f.decisionPolicy) ?? { kind: "unknown", type_url: "" },
+    submit_time: f.submitTime.toISOString(),
+    voting_period_end: f.votingPeriodEnd.toISOString(),
+    group_version: f.groupVersion.toString(),
+    group_policy_version: f.groupPolicyVersion.toString(),
+    observed_height: toSafeInt(f.observedHeight, "gov_proposals.observedHeight"),
+    observed_at: f.observedAt.toISOString(),
+    height: f.height === null ? null : toSafeInt(f.height, "gov_proposals.height"),
+    txhash: f.txhash,
+    pruned_at_height:
+      f.prunedAtHeight === null ? null : toSafeInt(f.prunedAtHeight, "gov_proposals.prunedAtHeight"),
+    messages_truncated: truncated,
+    proposers_truncated: proposersTruncated,
+    messages: truncated ? messages.slice(0, MAX_GOV_PROPOSAL_MESSAGES) : messages,
+  };
+}
+
+export function toGovVoteRow(f: GovVoteFacts): GovVoteRow {
+  return {
+    proposal_id: f.proposalId.toString(),
+    voter: f.voter,
+    option: toVoteOption(f.option),
+    metadata: f.metadata,
+    // Null stays NULL. A vote whose weight could not be recovered must not read
+    // as a vote that counted for zero.
+    weight: f.weight === null ? null : f.weight.toString(),
+    submit_time: f.submitTime.toISOString(),
+    height: f.height === null ? null : toSafeInt(f.height, "gov_votes.height"),
+    txhash: f.txhash,
+  };
+}
+
+/**
+ * A proposal plus its votes.
+ *
+ * The vote list is NOT page-controlled by the caller — the detail endpoint serves
+ * a proposal's whole vote set, whose size is a property of the group rather than
+ * of the request — so it is trimmed to its wire bound and FLAGGED. x/group puts no
+ * ceiling on group membership, so "the group is obviously small" is precisely the
+ * assumption §4b C2 says not to rely on.
+ */
+export function toGovProposalDetail(
+  proposal: GovProposalFacts,
+  votes: readonly GovVoteFacts[],
+): GovProposalDetail {
+  const truncated = votes.length > MAX_GOV_VOTES_PER_PROPOSAL;
+  return {
+    proposal: toGovProposalRow(proposal),
+    votes: (truncated ? votes.slice(0, MAX_GOV_VOTES_PER_PROPOSAL) : votes).map(toGovVoteRow),
+    votes_truncated: truncated,
+  };
+}
+
+/** Aggregated per-policy facts, as the reader groups them out of the mirror. */
+export interface GovPolicyFacts {
+  readonly address: string;
+  readonly groupId: bigint;
+  readonly proposalCount: number;
+  readonly lastSeenHeight: bigint;
+  readonly decisionPolicy: unknown;
+}
+
+export function toGovPolicyRow(f: GovPolicyFacts): GovPolicyRow {
+  return {
+    address: f.address,
+    group_id: f.groupId.toString(),
+    proposal_count: f.proposalCount,
+    last_seen_height: toSafeInt(f.lastSeenHeight, "gov_policies.lastSeenHeight"),
+    decision_policy: toGovDecisionPolicy(f.decisionPolicy),
   };
 }

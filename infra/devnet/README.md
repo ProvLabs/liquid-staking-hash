@@ -23,6 +23,17 @@ verifies against: the contract drills, the console's devnet profile, and
   receipt), asset-manager and NAV-authority rotation, grants. Builds the
   contract artifact on demand (`contracts/scripts/build-artifact.sh`) when
   it is missing.
+  Plus `nvhash-group-bootstrap.sh` (App PR 7.1) — the `x/group` governance
+  substrate: a 3-member group and **two** threshold policies, printing the
+  primary policy address for `nvhash-deploy-p2p.sh`'s `CONTRACT_ADMIN` hook.
+  **It must run BEFORE the deploy, and adopting it requires a full chain
+  reset.** The contract has no admin-rotation message — `ExecuteMsg` has no
+  variant that changes `Config.admin` and `InstantiateMsg.admin` is set once —
+  so there is no way to point an already-deployed contract at a policy created
+  afterwards. Two policies rather than one on purpose: the App discovers the
+  policy SET (the `admin`/`ops` split in `contracts/IMPLEMENTATION-STATUS.md` is
+  still open), and a one-policy devnet cannot tell "handles the set" apart from
+  "takes the first element".
 - `actions/` — every contract operation wrapped as a one-shot script against
   the running node (shared plumbing in `_common.sh`: auto-resolves vault +
   contract, commit-polls txs). Catalog: `status.sh` (full engine, validator,
@@ -55,9 +66,21 @@ drill pacing (short unbonding, tx indexing on).
                                         # window patch keeps the p2p drill's
                                         # anchor validator bonded; omit it for
                                         # jail-drill sessions)
-    infra/devnet/dev-node.sh bootstrap  # vault/contract bootstrap
+    POLICY="$(infra/devnet/bootstrap/nvhash-group-bootstrap.sh --quiet)"
+    CONTRACT_ADMIN="$POLICY" \
+      infra/devnet/bootstrap/nvhash-deploy-p2p.sh   # vault/contract bootstrap,
+                                        # governed: Config.admin IS the policy
     contracts/drills/p2p-drill.sh       # full money path with per-phase assertions
+    contracts/drills/gov-drill.sh       # x/group lifecycle + multiplicity cases
     infra/devnet/dev-node.sh down       # stop
+
+`dev-node.sh bootstrap` still works and is fine for money-path work; it leaves
+`Config.admin` a plain account, which is the pre-7.1 shape. With a plain-account
+admin the App's policy discovery resolves to the empty set — the honest
+no-governance state, not an error — and `GOV_GROUP_POLICIES` can point the
+indexer at a policy explicitly. **Only the two-step form above makes the
+governed topology real**, which is what `roles.server.ts`'s group-policy branch
+and the §8.7 surfaces read.
 
 The App's fixture corpus is generated and captured from this same environment:
 `packages/fixtures/scripts/generate-corpus.sh` (reset + bootstrap + drill +

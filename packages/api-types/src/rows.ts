@@ -614,3 +614,182 @@ export interface EpochRow {
   net_apr_bps: number | null;
 }
 
+
+// --- governance (app plan PR 7.1 commit C, app-spec §8.7/§9.1/§9.4) --------
+//
+// The durable MIRROR's shapes, not the live chain's. `services/api` has no chain
+// client by design (ADR-001 Decision 1), so these carry what the indexer stored
+// and the web tier owns the live plane at 7.2 — the `/market` and `/portfolio`
+// division. Consequences visible in the field set below:
+//
+//   * every figure is AS OF `observed_height`, not "now";
+//   * `pruned_at_height` says the chain no longer holds the proposal, so no
+//     verify affordance is offered for it (§12.2 revision: a verify link must
+//     never be dead, and there is nothing on chain left to link to);
+//   * `decision_policy` is the rule snapshotted AT SUBMIT, because the live
+//     policy can change and a historical tally-vs-threshold would otherwise be
+//     unrenderable.
+//
+// Weights are DECIMAL STRINGS with no ceiling: they are sums of member weights,
+// not token amounts, so `Uint128` would be an invented bound and a JS number
+// would corrupt them past 2^53. Passage is decided by the shared
+// `meetsThreshold` (tally.ts), never re-derived per consumer.
+
+/** Proposal status. Closed union mirroring x/group's proto. `aborted` is in it
+ * because the module defines it, NOT because the devnet corpus reaches it — the
+ * 2026-07-29 drill could not produce an abort on that build, which is recorded in
+ * the fixture manifest. `unspecified` is the honest landing place for a status a
+ * later chain upgrade adds. */
+export type GovProposalStatus =
+  | "submitted"
+  | "accepted"
+  | "rejected"
+  | "aborted"
+  | "withdrawn"
+  | "unspecified";
+
+/** Execution outcome, INDEPENDENT of `status`. `accepted` + `failure` — "it
+ * passed and then the messages failed" — is a real pair that `status` alone
+ * cannot express, and it is what an administrator needs to see. */
+export type GovExecutorResult = "not_run" | "success" | "failure" | "unspecified";
+
+export type GovVoteOption = "yes" | "no" | "abstain" | "no_with_veto" | "unspecified";
+
+/** The four tally counts, decimal strings (unbounded member weights). */
+export interface GovTally {
+  yes: string;
+  no: string;
+  abstain: string;
+  no_with_veto: string;
+}
+
+/** The decision rule in force at submit. `unknown` preserves the raw payload so a
+ * surface can say what it does not understand instead of summarizing it. */
+export type GovDecisionPolicy =
+  | { kind: "threshold"; threshold: string; voting_period: string; min_execution_period: string }
+  | { kind: "percentage"; percentage: string; voting_period: string; min_execution_period: string }
+  | { kind: "unknown"; type_url: string };
+
+/**
+ * One row of `GET /api/v1/governance/proposals` (newest first).
+ *
+ * `height`/`txhash` are SUBMIT provenance and are NULLABLE: a proposal first seen
+ * by the indexer's height-pinned sweep — one submitted before the stream's start
+ * height — has no submit transaction to point at, and null is honest where a
+ * fabricated height is not. `observed_height` is the separate AS-OF stamp of the
+ * status and tally.
+ */
+export interface GovProposalRow {
+  proposal_id: string;
+  group_policy_address: string;
+  group_id: string;
+  /** x/group permits several proposers; one scalar would be a lie for two. */
+  proposers: string[];
+  status: GovProposalStatus;
+  executor_result: GovExecutorResult;
+  /** Author-supplied title/summary (public chain text). Empty string when unset —
+   * these are the only human-readable label a proposal has, and for a pruned
+   * proposal that label exists nowhere else. */
+  title: string;
+  summary: string;
+  /** The chain's free-form proposal metadata string, or null. */
+  metadata: string | null;
+  tally: GovTally;
+  decision_policy: GovDecisionPolicy;
+  /** ISO-8601. */
+  submit_time: string;
+  /** ISO-8601 — the §8.7 countdown, and the only thing that explains a status
+   * change that arrived with no transaction. */
+  voting_period_end: string;
+  /** x/group ABORTs on a group/policy change; without these a UI can assert an
+   * abort but not explain it. */
+  group_version: string;
+  group_policy_version: string;
+  /** AS-OF of `status` and `tally` (§12.1 freshness). */
+  observed_height: number;
+  /** ISO-8601 AS-OF. */
+  observed_at: string;
+  /** Submit provenance, null when the proposal was never seen in a transaction. */
+  height: number | null;
+  txhash: string | null;
+  /** Set when the chain no longer holds this proposal. The row survives; the
+   * surfaces say so rather than offer a verify path that resolves to nothing. */
+  pruned_at_height: number | null;
+  /** True when `messages` was trimmed to its wire bound. An over-limit proposal is
+   * served FLAGGED, never silently shortened — quietly truncating the payload
+   * would misstate what is being voted on. */
+  messages_truncated: boolean;
+  /** True when `proposers` was trimmed to its wire bound. Same rule, and it needs
+   * stating separately because WHO proposed something is identity data: a trimmed
+   * list that carried no flag would be indistinguishable from the complete one, so
+   * a consumer could not tell a 32-proposer proposal from a 40-proposer one
+   * (PR #23 review, P2). */
+  proposers_truncated: boolean;
+  /** The proposal's messages, VERBATIM and undecoded. 7.2 decodes them against a
+   * closed typed union with a tagged `unknown`; no summary is invented here. */
+  messages: unknown[];
+}
+
+/** One row of a proposal's vote list.
+ *
+ * `weight` is nullable because x/group's `Vote` payload carries NO weight field:
+ * it has to be resolved from the member set at the vote height, and null means
+ * "not recoverable", never 0 — a fabricated weight would misstate how a proposal
+ * passed. `height`/`txhash` are nullable for the same reason as on the proposal,
+ * and it is the COMMON case here: the module deletes votes at the
+ * voting-period-end tally, so a closed proposal's votes survive only in the
+ * mirror. */
+export interface GovVoteRow {
+  proposal_id: string;
+  voter: string;
+  option: GovVoteOption;
+  metadata: string | null;
+  weight: string | null;
+  /** ISO-8601. */
+  submit_time: string;
+  height: number | null;
+  txhash: string | null;
+}
+
+/**
+ * `GET /api/v1/governance/proposal?id=` — a query param, not a path segment:
+ * `services/api`'s `findRoute` is an exact string match with no path parameters
+ * (M7 overview finding F3). The web tier is React Router and may use
+ * `/governance/:proposalId` for its own URL.
+ */
+export interface GovProposalDetail {
+  proposal: GovProposalRow;
+  votes: GovVoteRow[];
+  /** True when the vote list was trimmed to its wire bound. NOT page-controlled
+   * by the caller — the detail endpoint returns the whole vote set, whose size is
+   * a property of the group — so the server trims and flags rather than assuming
+   * groups are small. */
+  votes_truncated: boolean;
+}
+
+/** The list payload. `indexed_from_height` is the load-bearing field: proposals
+ * pruned before the indexer existed are unrecoverable, so the page must never
+ * imply a completeness it lacks (§12.1). */
+export interface GovProposalsPayload {
+  proposals: GovProposalRow[];
+  /** First height the governance stream ingested. */
+  indexed_from_height: number | null;
+}
+
+/**
+ * One row of `GET /api/v1/governance/policies` — the HISTORICAL policy set as
+ * observed in the mirror, plus each policy's last-seen height. Historical, not
+ * live: the API is DB-only (D12/D16), and the live policy set with its current
+ * membership is a web-tier read.
+ */
+export interface GovPolicyRow {
+  address: string;
+  group_id: string;
+  /** Proposals mirrored against this policy. */
+  proposal_count: number;
+  /** Highest `observed_height` across this policy's proposals. */
+  last_seen_height: number;
+  /** The most recently observed decision rule for this policy — a snapshot off
+   * its newest proposal, never a live read. */
+  decision_policy: GovDecisionPolicy | null;
+}

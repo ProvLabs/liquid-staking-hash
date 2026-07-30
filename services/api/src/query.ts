@@ -148,3 +148,49 @@ export function searchParamsToRecord(params: URLSearchParams): Record<string, st
   for (const [key, value] of params) record[key] = value;
   return record;
 }
+
+/**
+ * Governance query schemas (PR 7.1 commit C). Every param bounded at the entry
+ * boundary — out-of-range input is REJECTED with 400, never clamped
+ * (SECURITY.md: a value that cannot be bounded safely is an error).
+ *
+ * `id` is a u64 DECIMAL STRING, not a coerced number: x/group proposal ids are
+ * uint64 and the JSON number domain stops at 2^53, so coercing here would
+ * silently accept a corrupted id. Bounded to 20 digits (uint64's decimal width)
+ * and validated as canonical — no leading zeros, so one proposal cannot be
+ * addressed by two spellings.
+ */
+export const govProposalQuerySchema = z.object({
+  id: z
+    .string()
+    .max(20)
+    .regex(/^(0|[1-9][0-9]*)$/, "must be a canonical u64 decimal string"),
+});
+
+export type GovProposalQuery = z.infer<typeof govProposalQuerySchema>;
+
+/** Proposal statuses accepted as a `?status=` filter — the closed wire union.
+ * `unspecified` is filterable too: a proposal whose status this build does not
+ * recognize is still a row someone may need to find. */
+export const GOV_STATUS_FILTERS = [
+  "submitted",
+  "accepted",
+  "rejected",
+  "aborted",
+  "withdrawn",
+  "unspecified",
+] as const;
+
+/**
+ * `GET /governance/proposals` — pagination plus two optional filters. Both are
+ * shape-bounded only: a well-formed policy address that matches no rows resolves
+ * to honest-empty, while malformed input is rejected before any read runs.
+ */
+export const govProposalsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  offset: z.coerce.number().int().min(0).max(MAX_PAGE_OFFSET).default(0),
+  policy: bech32AddressSchema.optional(),
+  status: z.enum(GOV_STATUS_FILTERS).optional(),
+});
+
+export type GovProposalsQuery = z.infer<typeof govProposalsQuerySchema>;

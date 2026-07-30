@@ -115,20 +115,50 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   MarketSample: ["id", "venue", "pool", "price", "depthBands", "sampledAt"],
   // Remote-chain supply readings.
   BridgeSupplySample: ["id", "chain", "remoteSupply", "sampledAt"],
-  // x/group proposal mirror; proposer/metadata/messages are the public payload.
+  // x/group proposal mirror (App PR 7.1 commit B). Every column is public chain
+  // data: a proposal payload, a tally of member WEIGHTS, a height, a status.
+  // Nothing is identity-, device- or IP-shaped.
+  //
+  // DESIGN-REVIEW EVENT, approved in advance — M7 overview decision D3 and the
+  // app-spec §9.1 forward note, which enumerate these columns and why each one
+  // has to exist. Two additions go BEYOND that enumeration and are recorded
+  // here rather than slipped in:
+  //   - `title` / `summary`: SDK >= 0.50 proposal fields observed on the devnet
+  //     payload 2026-07-29. Author-supplied public text, and the only
+  //     human-readable label a proposal has — a pruned proposal's title exists
+  //     nowhere else. Approved by direction (Ira, 2026-07-29).
+  //   - `proposer` REMOVED in favour of `proposers`: x/group permits several
+  //     proposers, so the scalar was a lie whenever there were two.
   GovProposal: [
     "proposalId",
     "groupPolicyAddress",
-    "proposer",
+    "groupId",
+    "proposers",
     "status",
+    "executorResult",
     "metadata",
+    "title",
+    "summary",
     "messages",
     "submitTime",
+    "votingPeriodEnd",
+    "yesCount",
+    "noCount",
+    "abstainCount",
+    "noWithVetoCount",
+    "groupVersion",
+    "groupPolicyVersion",
+    "decisionPolicy",
+    "observedHeight",
+    "observedAt",
     "height",
     "txhash",
+    "prunedAtHeight",
   ],
-  // x/group vote mirror; voter is a public member address.
-  GovVote: ["proposalId", "voter", "option", "submitTime", "height", "txhash"],
+  // x/group vote mirror; `voter` is a public member address and `metadata` is the
+  // vote's own public on-chain text. `weight` is a member weight, not an amount
+  // of anything owned.
+  GovVote: ["proposalId", "voter", "option", "metadata", "weight", "submitTime", "height", "txhash"],
   // Worker cursors (operational).
   IndexerCheckpoint: ["stream", "cursorHeight", "cursorPage", "updatedAt"],
   // Reconciler run records (operational reconciliation facts).
@@ -187,4 +217,10 @@ export const AMOUNT_FIELDS: Record<string, readonly string[]> = {
   OperatorPayment: ["amount"],
   MarketSample: ["price"],
   BridgeSupplySample: ["remoteSupply"],
+  // x/group tally counts and voter weights (App PR 7.1). Not token amounts —
+  // they are sums of member weights — but they join the same discipline for the
+  // same reason: they are unbounded chain integers with no protocol ceiling, so a
+  // JS-number-backed column would corrupt them silently past 2^53.
+  GovProposal: ["yesCount", "noCount", "abstainCount", "noWithVetoCount"],
+  GovVote: ["weight"],
 };

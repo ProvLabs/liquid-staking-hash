@@ -23,6 +23,9 @@ import type {
   IncidentRow,
   OperatorEpochRow,
   OperatorPaymentRow,
+  GovPolicyRow,
+  GovProposalDetail,
+  GovProposalsPayload,
   OperatorSummary,
   ProgramMetrics,
   EpochRow,
@@ -36,6 +39,9 @@ import {
 } from "./csv.ts";
 import {
   deriveOperatorSummary,
+  toGovPolicyRow,
+  toGovProposalDetail,
+  toGovProposalRow,
   resolveOwnedValoper,
   toOperatorEpochRow,
   toOperatorPaymentRow,
@@ -47,6 +53,10 @@ import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
 import {
   alertIncidentsQuerySchema,
   alertRedemptionsQuerySchema,
+  govProposalQuerySchema,
+  govProposalsQuerySchema,
+  type GovProposalQuery,
+  type GovProposalsQuery,
   operatorEpochsQuerySchema,
   operatorPaymentsQuerySchema,
   operatorSummaryQuerySchema,
@@ -741,6 +751,126 @@ const alertArrearsRoute = defineEnveloped<unknown>({
   },
 });
 
+
+/**
+ * `GET /api/v1/governance/proposals` — the §8.7 proposal list, newest first,
+ * optionally filtered by `?policy=` (bech32) and `?status=` (closed enum).
+ *
+ * PUBLIC, and that is structural rather than a choice: proposals and votes are
+ * public chain facts with NO address keying, so there is nothing to scope and no
+ * `PERSONAL_PATHS` entry is created. The registry-derived cross-address suite
+ * confirms it stays that way.
+ *
+ * `indexed_from_height` rides the payload and is the field to understand:
+ * `x/group` prunes, so a proposal that closed before the indexer existed is
+ * unrecoverable, and a list that omitted it silently would imply a completeness it
+ * does not have (§12.1 — never lie about state). Null means no height certifies
+ * the window yet.
+ */
+const governanceProposalsRoute = defineEnveloped({
+  method: "GET",
+  path: `${API_BASE}/governance/proposals`,
+  auth: "public",
+  enveloped: true,
+  querySchema: govProposalsQuerySchema,
+  summary: "Mirrored x/group proposals (paginated, newest first)",
+  handle: async (ctx) => {
+    const query = ctx.query as GovProposalsQuery;
+    const [heads, result] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.listGovProposals(
+        { limit: query.limit, offset: query.offset },
+        {
+          ...(query.policy === undefined ? {} : { policy: query.policy }),
+          ...(query.status === undefined ? {} : { status: query.status }),
+        },
+      ),
+    ]);
+    return {
+      data: {
+        proposals: result.proposals.map(toGovProposalRow),
+        indexed_from_height: result.indexedFromHeight,
+      } satisfies GovProposalsPayload,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/governance/proposal?id=` — one proposal with its votes.
+ *
+ * A QUERY PARAM, not a path segment: `findRoute` is an exact string match and
+ * this service has no path-parameter support at all (M7 overview finding F3).
+ * The web tier is React Router and may use `/governance/:proposalId` for its own
+ * URL — the two need not match.
+ *
+ * A proposal the mirror has never seen is a 404. Not an empty 200: "we hold no
+ * record of this id" and "this proposal exists and is empty" are different
+ * answers, and conflating them would let a mistyped id look like a real, blank
+ * proposal.
+ */
+const governanceProposalRoute = defineEnveloped({
+  method: "GET",
+  path: `${API_BASE}/governance/proposal`,
+  auth: "public",
+  enveloped: true,
+  querySchema: govProposalQuerySchema,
+  summary: "One mirrored x/group proposal with its votes",
+  handle: async (ctx) => {
+    const query = ctx.query as GovProposalQuery;
+    const [heads, found] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.govProposal(BigInt(query.id)),
+    ]);
+    if (found === null) {
+      return new Response(JSON.stringify({ error: "not_found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return {
+      data: toGovProposalDetail(found.proposal, found.votes) satisfies GovProposalDetail,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/governance/policies` — the HISTORICAL policy set observed in the
+ * mirror, with each policy's proposal count and last-seen height.
+ *
+ * Historical, not live, and the distinction is load-bearing: this service has no
+ * chain client by design (ADR-001 Decision 1), so it cannot enumerate the policy
+ * set the chain holds right now, nor current membership. Those are web-tier live
+ * reads at 7.2 — the same division `/market` and `/portfolio` already use. A
+ * policy that exists on chain but has never had a proposal is therefore ABSENT
+ * here, which is correct for a mirror and would be wrong for a live set.
+ */
+const governancePoliciesRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/governance/policies`,
+  auth: "public",
+  enveloped: true,
+  querySchema: null,
+  summary: "Historical x/group policy set observed in the mirror",
+  handle: async (ctx) => {
+    const [heads, policies] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.listGovPolicies(),
+    ]);
+    return {
+      data: policies.map(toGovPolicyRow) satisfies GovPolicyRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
 /**
  * `GET /api/v1/health` — operational liveness for load balancers. Deliberately
  * NOT enveloped: it is not chain-derived data, so forcing a freshness envelope
@@ -775,6 +905,9 @@ export const routes: readonly Route[] = [
   alertRedemptionsRoute,
   alertIncidentsRoute,
   alertArrearsRoute,
+  governanceProposalsRoute,
+  governanceProposalRoute,
+  governancePoliciesRoute,
   healthRoute,
 ];
 

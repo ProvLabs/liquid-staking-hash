@@ -36,6 +36,9 @@ import {
   type OperatorPaymentFacts,
   type OperatorPaymentTotalFacts,
   type OperatorRegistryFacts,
+  type GovPolicyFacts,
+  type GovProposalFacts,
+  type GovVoteFacts,
   type TransactionFacts,
 } from "./derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
@@ -139,6 +142,26 @@ export interface IndexedReader {
   operatorPaymentsAscStream(valoper: string): AsyncIterable<readonly OperatorPaymentFacts[]>;
   /** Epoch closing heights ascending — how a payment's epoch is derived. */
   epochBoundariesAsc(): Promise<EpochBoundary[]>;
+  /**
+   * Governance reads (PR 7.1). PUBLIC: proposals and votes are public chain facts
+   * with no address keying, so these carry no scope and create no
+   * `PERSONAL_PATHS` entry.
+   *
+   * The API serves the durable MIRROR only — it has no chain client by design
+   * (D12/D16), so the live policy set, current membership and live tallies are
+   * web-tier reads at 7.2. That is the `/market` and `/portfolio` division, and it
+   * is why `listGovProposals` reports `indexedFromHeight` alongside the rows: a
+   * proposal pruned before the indexer existed is unrecoverable, and the page must
+   * never imply a completeness it lacks.
+   */
+  listGovProposals(
+    page: Pagination,
+    filter: { policy?: string; status?: string },
+  ): Promise<{ proposals: GovProposalFacts[]; indexedFromHeight: number | null }>;
+  /** One proposal with its votes, or null when the mirror has never seen the id. */
+  govProposal(proposalId: bigint): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
+  /** The HISTORICAL policy set observed in the mirror, newest activity first. */
+  listGovPolicies(): Promise<GovPolicyFacts[]>;
 }
 
 /**
@@ -194,4 +217,12 @@ export const emptyReader: IndexedReader = {
   // An unwired process has no rows, so the stream yields nothing at all.
   async *operatorPaymentsAscStream() {},
   epochBoundariesAsc: () => Promise.resolve([]),
+  // A dataless process has mirrored no governance. `indexedFromHeight: null` is
+  // the honest "no height certifies this list" state — never 0, which would claim
+  // the mirror starts at genesis and is simply empty.
+  listGovProposals: () => Promise.resolve({ proposals: [], indexedFromHeight: null }),
+  // Null, not a fabricated row: "the mirror has never seen this id" and "the id
+  // exists but is empty" are different answers.
+  govProposal: () => Promise.resolve(null),
+  listGovPolicies: () => Promise.resolve([]),
 };
