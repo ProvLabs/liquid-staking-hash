@@ -42,6 +42,37 @@ export interface LiveProposalState {
   submitTime: string;
   votingPeriodEnd: string;
   groupVersion: string;
+  /**
+   * The policy's `min_execution_period`, read from the LIVE policy account.
+   *
+   * IT LIVES IN HERE, AND THAT IS THE FIX FOR A REAL DEFECT (PR #25 review,
+   * 2026-07-30). It was previously a separate `AffordanceInput` field, and the
+   * detail loader filled it from the MIRROR'S SNAPSHOT of the decision policy
+   * while `runGovernancePreflight` read the LIVE policy — so the button and the
+   * check that gates it could disagree after any policy change.
+   *
+   * The live read is the correct one, and the reason is structural: the chain's
+   * `Proposal` carries NO decision policy (see `GroupProposal` in
+   * `packages/chain-client/src/group.ts`), so at execution time x/group has
+   * only one place to obtain `min_execution_period` — the policy account, as it
+   * stands then. The snapshot in `gov_proposals.decision_policy` is the App
+   * indexer's own column (M7 D3), added so a historical proposal's THRESHOLD
+   * stays renderable; it is not what the module consults.
+   *
+   * WATCH THE ASYMMETRY, which is what made this subtle: `votingPeriodEnd` IS
+   * snapshotted on the proposal (an absolute instant fixed at submit), while
+   * `min_execution_period` is not. The two windows have different provenance,
+   * so "use the snapshot for both" and "use live for both" are each wrong.
+   *
+   * Placing it inside `liveState` makes the mistake unrepresentable: the
+   * affordance now takes everything it needs from the one field that is by
+   * definition "what the chain confirmed just now" (§4b C5).
+   *
+   * Null when the policy could not be read or its rule is one this build does
+   * not understand — which yields "not yet, and we cannot say when", never an
+   * offered button.
+   */
+  minExecutionPeriod: string | null;
 }
 
 export interface AffordanceInput {
@@ -59,10 +90,10 @@ export interface AffordanceInput {
   hasVoted: boolean;
   /** The recorded option, for the "you voted X" copy. */
   votedOption: string | null;
-  /** The policy's `min_execution_period` as x/group serializes it (e.g. "600s").
-   * Null when the policy snapshot did not carry one. */
-  minExecutionPeriod: string | null;
   nowMs: number;
+  // NOTE: there is deliberately no `minExecutionPeriod` here. It lives on
+  // `live` so a caller cannot supply the mirror's snapshot by mistake — see
+  // `LiveProposalState.minExecutionPeriod`.
 }
 
 export type VoteHiddenReason =
@@ -197,11 +228,13 @@ export function executeAffordance(input: AffordanceInput): ExecuteAffordance {
   if (input.live.executorResult === "failure") {
     return { state: "hidden", reason: "execution-failed" };
   }
-  const readyAtIso = executableAtIso(input.live.submitTime, input.minExecutionPeriod);
+  // Both inputs come from `live`: the submit time the chain reports and the
+  // waiting period the chain will actually compare against.
+  const readyAtIso = executableAtIso(input.live.submitTime, input.live.minExecutionPeriod);
   if (readyAtIso !== null && input.nowMs < Date.parse(readyAtIso)) {
     return { state: "disabled", reason: "min-execution-pending", readyAtIso };
   }
-  if (readyAtIso === null && input.minExecutionPeriod !== null) {
+  if (readyAtIso === null && input.live.minExecutionPeriod !== null) {
     // The policy declares a waiting period this build could not parse. Disabled
     // with an unknown eligible-at is honest; offering it would invite a
     // transaction the chain may reject with "must wait until …".

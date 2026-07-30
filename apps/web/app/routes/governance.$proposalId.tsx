@@ -52,7 +52,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     isMember: data.proposal.sessionIsMember,
     hasVoted: data.proposal.sessionVote !== null,
     votedOption: data.proposal.sessionVote?.option ?? null,
-    minExecutionPeriod: data.proposal.minExecutionPeriod,
     nowMs: Date.now(),
   };
   return {
@@ -89,7 +88,6 @@ export default function GovernanceProposal({ loaderData }: Route.ComponentProps)
         vote={vote}
         execute={execute}
         messages={proposal.messages}
-        minExecutionPeriod={proposal.minExecutionPeriod}
         contractAddress={contractAddress}
       />
 

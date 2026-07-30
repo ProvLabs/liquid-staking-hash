@@ -37,6 +37,7 @@ const liveOpen: LiveProposalState = {
   submitTime: SUBMITTED_AT,
   votingPeriodEnd: OPEN_UNTIL,
   groupVersion: "3",
+  minExecutionPeriod: "0s",
 };
 const liveAccepted: LiveProposalState = { ...liveOpen, status: "accepted" };
 
@@ -49,7 +50,6 @@ function input(overrides: Partial<AffordanceInput> = {}): AffordanceInput {
     isMember: true,
     hasVoted: false,
     votedOption: null,
-    minExecutionPeriod: "0s",
     nowMs: NOW,
     ...overrides,
   };
@@ -141,10 +141,8 @@ describe("C4 — the execute column, one case per row", () => {
   it("accepted, min_execution_period PENDING → SHOWN, DISABLED, with the eligible-at time", () => {
     // Disabled-with-reason, never hidden: the user needs to know it is coming.
     const verdict = executeAffordance(
-      input({
-        live: liveAccepted,
-        minExecutionPeriod: "172800s", // 48h from a submit 24h ago
-      }),
+      // 48h from a submit 24h ago.
+      input({ live: { ...liveAccepted, minExecutionPeriod: "172800s" } }),
     );
     expect(verdict).toEqual({
       state: "disabled",
@@ -222,14 +220,75 @@ describe("C4 — the execute column, one case per row", () => {
     // button would invite the chain's own "must wait until …" rejection; saying
     // "not yet, and we cannot say when" is the honest degradation.
     expect(
-      executeAffordance(input({ live: liveAccepted, minExecutionPeriod: "P2D" })),
+      executeAffordance(input({ live: { ...liveAccepted, minExecutionPeriod: "P2D" } })),
     ).toEqual({ state: "disabled", reason: "min-execution-pending", readyAtIso: null });
   });
 
   it("NO declared min_execution_period → offered (there is no window to wait out)", () => {
-    expect(executeAffordance(input({ live: liveAccepted, minExecutionPeriod: null }))).toEqual({
+    expect(
+      executeAffordance(input({ live: { ...liveAccepted, minExecutionPeriod: null } })),
+    ).toEqual({ state: "offered" });
+  });
+});
+
+describe("the execution window comes from the LIVE policy (PR #25 review)", () => {
+  // THE DEFECT THIS PINS. The affordance previously took
+  // `min_execution_period` from the MIRROR'S SNAPSHOT of the decision policy
+  // while `runGovernancePreflight` read the LIVE policy, so after any policy
+  // change the button and the check gating it disagreed: a proposal the chain
+  // would execute showed as pending, or one it would refuse advanced to
+  // simulation.
+  //
+  // Live is the correct source, structurally: x/group's `Proposal` carries NO
+  // decision policy, so at execution time the module can only read the policy
+  // account as it stands then. `minExecutionPeriod` therefore lives INSIDE
+  // `LiveProposalState`, which makes supplying the snapshot unrepresentable.
+  //
+  // NOT YET DRILLED — the devnet policy runs `min_execution_period: 0`, so the
+  // window never bit and `manifest.json`'s drill observations do not cover it.
+  // Recorded as a gap rather than asserted as measured (7.1's lesson: four plan
+  // assumptions about x/group were contradicted by the drill).
+  const accepted: LiveProposalState = {
+    status: "accepted",
+    executorResult: "not_run",
+    submitTime: SUBMITTED_AT,
+    votingPeriodEnd: OPEN_UNTIL,
+    groupVersion: "3",
+    minExecutionPeriod: "0s",
+  };
+
+  it("a policy LENGTHENING its window after submission makes an offered proposal pending", () => {
+    expect(executeAffordance(input({ live: accepted }))).toEqual({ state: "offered" });
+    // The policy is updated to a 48h window; the same proposal is now pending,
+    // which is what the chain will say too.
+    expect(
+      executeAffordance(input({ live: { ...accepted, minExecutionPeriod: "172800s" } })),
+    ).toEqual({
+      state: "disabled",
+      reason: "min-execution-pending",
+      readyAtIso: "2026-07-31T12:00:00.000Z",
+    });
+  });
+
+  it("a policy SHORTENING its window after submission makes a pending proposal offered", () => {
+    expect(
+      executeAffordance(input({ live: { ...accepted, minExecutionPeriod: "172800s" } })).state,
+    ).toBe("disabled");
+    expect(executeAffordance(input({ live: { ...accepted, minExecutionPeriod: "60s" } }))).toEqual({
       state: "offered",
     });
+  });
+
+  it("the window is not readable from anywhere but `live`", () => {
+    // A type-level property with a runtime witness: the affordance decides from
+    // `live` alone, so a caller holding a stale snapshot has no way to inject
+    // it. If `AffordanceInput` ever regains a `minExecutionPeriod` field, this
+    // spread would silently take effect and the first case above would fail.
+    const withStaleSnapshot = {
+      ...input({ live: { ...accepted, minExecutionPeriod: "172800s" } }),
+      minExecutionPeriod: "0s",
+    } as AffordanceInput;
+    expect(executeAffordance(withStaleSnapshot).state).toBe("disabled");
   });
 });
 

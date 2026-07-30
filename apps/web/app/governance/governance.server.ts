@@ -189,6 +189,24 @@ export function liveProposalToRow(live: GroupProposal, tally: GovTally | null): 
   };
 }
 
+/**
+ * The `min_execution_period` of a proposal's OWN policy, from the live plane.
+ *
+ * Null when the live plane is unresolved, when that policy is not in the
+ * discovered set, or when its decision rule is one this build does not
+ * understand — all of which render as "not yet, and we cannot say when" rather
+ * than as an offered execute button.
+ */
+export function livePolicyMinExecutionPeriod(
+  live: LiveGovernance,
+  policyAddress: string,
+): string | null {
+  if (live.state !== "governed") return null;
+  const policy = live.policies.find((entry) => entry.address === policyAddress) ?? null;
+  if (policy === null || policy.decisionPolicy.kind === "unknown") return null;
+  return policy.decisionPolicy.minExecutionPeriod;
+}
+
 export interface ProposalMergeInput {
   /** The mirrored row, or null when the mirror has never seen this proposal. */
   indexed: GovProposalRow | null;
@@ -679,6 +697,18 @@ export async function loadGovernanceProposalData(
             submitTime: liveProposal.submitTime,
             votingPeriodEnd: liveProposal.votingPeriodEnd,
             groupVersion: liveProposal.groupVersion.toString(),
+            // THE LIVE POLICY, not `decisionPolicy` (the mirror's snapshot two
+            // fields above). x/group's `Proposal` carries no decision policy, so
+            // the module reads `min_execution_period` from the policy account at
+            // execution time — and `runGovernancePreflight` reads it the same
+            // way. Sourcing the affordance from the snapshot let the button and
+            // the check that gates it disagree after a policy change (PR #25
+            // review, 2026-07-30). Resolved for THIS proposal's own policy;
+            // "the first policy" would be D1's topology assumption in miniature.
+            minExecutionPeriod: livePolicyMinExecutionPeriod(
+              live,
+              liveProposal.groupPolicyAddress,
+            ),
           },
     // Membership is `null` — not `false` — when the live member read failed:
     // "we could not check" and "you are not a member" are different sentences,

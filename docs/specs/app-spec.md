@@ -758,6 +758,17 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 > this build cannot parse leaves the control disabled with "we cannot say when",
 > never offered.
 >
+> **That period is read from the LIVE policy, and the UI and the preflight read
+> it the same way** (corrected 2026-07-30 after a PR-review finding that they
+> did not). The chain's `Proposal` carries **no decision policy**, so at
+> execution time x/group has only the policy account to read it from — as it
+> stands then, not as it stood at submit. **Note the asymmetry:**
+> `voting_period_end` IS snapshotted on the proposal as an absolute instant,
+> while the execution window is not, so neither "snapshot for both" nor "live
+> for both" is correct. The §9.1 `decision_policy` snapshot exists to keep a
+> historical proposal's THRESHOLD renderable once the live policy moves; it is
+> never the source of the execution window.
+>
 > **Voting is member-only; execution is permissionless** (x/group's rule once a
 > proposal has passed), and the page says so plainly rather than implying a
 > permission the module does not enforce. A member who has already voted is told

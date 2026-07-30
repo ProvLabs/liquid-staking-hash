@@ -269,7 +269,15 @@ End-user web interface. Production quality.
   failed read on an accepted proposal is itself evidence not to offer execute
   (x/group prunes a successful exec in its own transaction). The execution
   window is `submit_time + min_execution_period`, x/group's own rule — NOT the
-  voting-period end. Voting is member-only; **execution is permissionless** and
+  voting-period end — and `min_execution_period` comes from the **LIVE policy**,
+  which is why it sits inside `liveState` rather than beside it. **The
+  asymmetry to hold in your head:** `voting_period_end` IS snapshotted on the
+  chain's `Proposal`; `min_execution_period` is NOT, so the module reads the
+  policy account at exec time. Using the mirror's `decision_policy` snapshot for
+  the window let the button and the preflight gating it disagree after a policy
+  change (PR #25 review) — the snapshot is for rendering a historical
+  THRESHOLD (D3), never the execution window. Not yet drilled: devnet runs
+  `min_execution_period: 0`. Voting is member-only; **execution is permissionless** and
   the UI says so. New standing gates: `test/governance-templates.test.ts`,
   `test/governance-flows.test.ts` (one case per C4 row), the governance blocks
   in `broadcast-guard.test.ts` / `tx-preflight.test.ts` / `tx-confirm.test.ts`,

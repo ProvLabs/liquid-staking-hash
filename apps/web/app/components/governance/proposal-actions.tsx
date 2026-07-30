@@ -67,8 +67,6 @@ export interface ProposalActionsProps {
   execute: ExecuteAffordance;
   /** The proposal's decoded messages — what `MsgExec` will actually run. */
   messages: DecodedMessage[];
-  /** The policy's voting-period / min-execution windows, for the confirm copy. */
-  minExecutionPeriod: string | null;
   /** The program contract, passed through to the flow (re-checked server-side). */
   contractAddress: string;
 }
