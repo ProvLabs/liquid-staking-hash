@@ -115,16 +115,16 @@ function signedTx(overrides?: {
 
 describe("relay guards (each an enforced mechanism)", () => {
   it("accepts the session's own vault tx", async () => {
-    expect(await guardSignedTx(config, SESSION_ADDRESS, signedTx())).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx())).toEqual({ ok: true });
   });
 
   it("SIGNER pubkey not deriving the session address → 403", async () => {
-    const verdict = await guardSignedTx(config, SESSION_ADDRESS, signedTx({ pubkey: OTHER_PUB }));
+    const verdict = guardSignedTx(config, SESSION_ADDRESS, signedTx({ pubkey: OTHER_PUB }));
     expect(verdict).toMatchObject({ ok: false, status: 403 });
   });
 
   it("message owner differing from the session address → 403", async () => {
-    const verdict = await guardSignedTx(
+    const verdict = guardSignedTx(
       config,
       SESSION_ADDRESS,
       signedTx({ owner: "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad" }),
@@ -160,7 +160,7 @@ describe("relay guards (each an enforced mechanism)", () => {
       },
     );
     const tx = encodeTxRaw(body, plan.authInfoBytes, [new Uint8Array(64)]);
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
   });
 
   // ── The §12.3 amendment, asserted on the CONSTANT ─────────────────────
@@ -200,14 +200,14 @@ describe("relay guards (each an enforced mechanism)", () => {
       const body = new ProtoWriter().message(1, anyMsg, true).finish();
       const tx = encodeTxRaw(body, authInfoBytes(), [new Uint8Array(64)]);
       expect(
-        await guardSignedTx(config, SESSION_ADDRESS, tx, { nowMs: freshClock() }),
+        guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
         typeUrl,
       ).toMatchObject({ ok: false, status: 400 });
     }
   });
 
   it("unexpected vault address → 400", async () => {
-    const verdict = await guardSignedTx(
+    const verdict = guardSignedTx(
       config,
       SESSION_ADDRESS,
       signedTx({ vault: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0" }),
@@ -216,18 +216,18 @@ describe("relay guards (each an enforced mechanism)", () => {
   });
 
   it("oversize → 413", async () => {
-    const verdict = await guardSignedTx(config, SESSION_ADDRESS, new Uint8Array(SIZE_CAP_BYTES + 1));
+    const verdict = guardSignedTx(config, SESSION_ADDRESS, new Uint8Array(SIZE_CAP_BYTES + 1));
     expect(verdict).toMatchObject({ ok: false, status: 413 });
   });
 
   it("malformed bytes → 400", async () => {
-    expect(await guardSignedTx(config, SESSION_ADDRESS, new Uint8Array([0xff, 0x01, 0x02]))).toMatchObject(
+    expect(guardSignedTx(config, SESSION_ADDRESS, new Uint8Array([0xff, 0x01, 0x02]))).toMatchObject(
       { ok: false, status: 400 },
     );
   });
 
   it("multiple signatures → 400 (sole-signer rule)", async () => {
-    const verdict = await guardSignedTx(config, SESSION_ADDRESS, signedTx({ signatures: 2 }));
+    const verdict = guardSignedTx(config, SESSION_ADDRESS, signedTx({ signatures: 2 }));
     expect(verdict).toMatchObject({ ok: false, status: 400 });
   });
 
@@ -250,19 +250,19 @@ describe("relay guards (each an enforced mechanism)", () => {
     );
     const emptyBody = encodeTxBody([]);
     const tx = encodeTxRaw(emptyBody, plan.authInfoBytes, [new Uint8Array(64)]);
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 400 });
   });
 
   it("rate limit: request N+1 in a minute → 429; a new window admits again", async () => {
     const nowMs = 1_750_000_000_000;
     for (let i = 0; i < RATE_LIMIT_PER_MINUTE; i += 1) {
-      expect(await guardSignedTx(config, SESSION_ADDRESS, signedTx(), { nowMs: nowMs + i })).toEqual({ ok: true });
+      expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + i)).toEqual({ ok: true });
     }
-    expect(await guardSignedTx(config, SESSION_ADDRESS, signedTx(), { nowMs: nowMs + 10 })).toMatchObject({
+    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 10)).toMatchObject({
       ok: false,
       status: 429,
     });
-    expect(await guardSignedTx(config, SESSION_ADDRESS, signedTx(), { nowMs: nowMs + 61_000 })).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 61_000)).toEqual({ ok: true });
   });
 });
 
@@ -359,7 +359,7 @@ function operatorTx(overrides: Partial<OperatorIntent> = {}): Uint8Array {
 describe("operator execute — the six allowed variants are accepted", () => {
   it("accepts each funded payment variant", async () => {
     for (const variant of ["pay_commission", "pay_tip"] as const) {
-      expect(await guardSignedTx(config, SESSION_ADDRESS, operatorTx({ variant })), variant).toEqual({
+      expect(guardSignedTx(config, SESSION_ADDRESS, operatorTx({ variant })), variant).toEqual({
         ok: true,
       });
     }
@@ -373,7 +373,7 @@ describe("operator execute — the six allowed variants are accepted", () => {
       "purge_jailed_validator",
     ] as const) {
       expect(
-        await guardSignedTx(config, SESSION_ADDRESS, operatorTx({ variant, amount: 0n })),
+        guardSignedTx(config, SESSION_ADDRESS, operatorTx({ variant, amount: 0n })),
         variant,
       ).toEqual({ ok: true });
     }
@@ -381,7 +381,7 @@ describe("operator execute — the six allowed variants are accepted", () => {
 
   it("accepts a purge carrying an optional claimant valoper", async () => {
     expect(
-      await guardSignedTx(
+      guardSignedTx(
         config,
         SESSION_ADDRESS,
         operatorTx({
@@ -395,7 +395,7 @@ describe("operator execute — the six allowed variants are accepted", () => {
 
   it("still binds the sender to the session address (403, like a swap owner)", async () => {
     const tx = operatorTx({ sender: "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad" });
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 403 });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx)).toMatchObject({ ok: false, status: 403 });
   });
 });
 
@@ -405,7 +405,7 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
   let clock = 1_750_000_000_000;
   const reject = async (tx: Uint8Array, label: string) => {
     clock += 61_000;
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, { nowMs: clock }), label).toMatchObject({
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, clock), label).toMatchObject({
       ok: false,
       status: 400,
     });
@@ -676,13 +676,6 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
 const POLICY = "tp1qgvqctd47dqe9ryqkzc0zpu3wkqjr3sndkldpwfjfcqz0f4tqzsq7wshjm";
 const OTHER_POLICY = "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0";
 
-/** Guard deps for a governance case: a discovered policy set and a fresh
- * rate-limit window. `resolvePolicies` stands in for the live sweep. */
-const govDeps = (policies: readonly string[] = [POLICY]) => ({
-  nowMs: freshClock(),
-  resolvePolicies: async () => policies,
-});
-
 const SIGNER_CONTEXT = {
   chainId: config.chainId,
   accountNumber: 1n,
@@ -849,7 +842,7 @@ describe("governance — the three admitted types are accepted in canonical form
   it("accepts a vote for each of the four options", async () => {
     for (const option of Object.keys(GOVERNANCE_VOTE_OPTIONS) as (keyof typeof GOVERNANCE_VOTE_OPTIONS)[]) {
       const tx = govTx({ kind: "gov_vote", voter: SESSION_ADDRESS, proposalId: 12n, option });
-      expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps()), option).toEqual({
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), option).toEqual({
         ok: true,
       });
     }
@@ -857,7 +850,7 @@ describe("governance — the three admitted types are accepted in canonical form
 
   it("accepts an exec of a passed proposal", async () => {
     const tx = govTx({ kind: "gov_exec", signer: SESSION_ADDRESS, proposalId: 12n });
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps())).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 
   it("accepts a proposal carrying EACH of the five admin templates", async () => {
@@ -873,7 +866,7 @@ describe("governance — the three admitted types are accepted in canonical form
     ];
     for (const instance of instances) {
       const tx = govTx(submitIntent({ templates: [instance] }));
-      expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps()), instance.id).toEqual({
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), instance.id).toEqual({
         ok: true,
       });
     }
@@ -906,12 +899,12 @@ describe("governance — the three admitted types are accepted in canonical form
         summary: "Adjust every configurable parameter.",
       }),
     );
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps())).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 
   it("accepts a proposal carrying the optional public rationale", async () => {
     const tx = govTx(submitIntent({ metadata: "Discussed in the operator call on 2026-07-29." }));
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps())).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 
   it("accepts a proposal for ANY discovered policy, not just the first", async () => {
@@ -921,7 +914,7 @@ describe("governance — the three admitted types are accepted in canonical form
     // exercised by data rather than by belief.
     const tx = govTx(submitIntent({ policyAddress: OTHER_POLICY }));
     expect(
-      await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps([POLICY, OTHER_POLICY])),
+      guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
     ).toEqual({ ok: true });
   });
 });
@@ -929,7 +922,7 @@ describe("governance — the three admitted types are accepted in canonical form
 describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   const reject = async (tx: Uint8Array, label: string, policies?: readonly string[]) => {
     expect(
-      await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps(policies)),
+      guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
       label,
     ).toMatchObject({ ok: false, status: 400 });
   };
@@ -971,20 +964,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   it("a proposal whose SECOND proposer is not the session → 400", async () => {
     // §4b C1's disproof, made executable: a verdict decided by ONE element of a
     // collection while another rides along unchecked. Checking only
-    // `proposers[0]` would admit this.
+    // `proposers[0]` would admit this; the count pin refuses it outright.
     await reject(
       signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, OTHER_POLICY] })),
       "second proposer is foreign",
-    );
-  });
-
-  it("a proposal with the session address duplicated in proposers → 400", async () => {
-    // Every entry passes the binding check; the CANONICAL form emits exactly
-    // one, so the closing re-encode refuses it. That division of labour is
-    // pinned here so a future edit cannot open a second accepted encoding.
-    await reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, SESSION_ADDRESS] })),
-      "duplicate proposer",
     );
   });
 
@@ -992,222 +975,105 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [] })), "no proposer");
   });
 
-  // ── invariant 5: the policy must be a DISCOVERED program policy ────────
-  it("a proposal for a policy that is not a program policy → 400", async () => {
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ policy: OTHER_POLICY })), "foreign policy");
+  // ── WHAT THE GUARD DELIBERATELY NO LONGER CHECKS ──────────────────────
+  //
+  // These cases assert ACCEPTANCE, and they are the load-bearing half of the
+  // 2026-07-30 revision. The original guard rejected each of them; the
+  // rationale for doing so did not survive review (a proposal executes nothing
+  // until the group's threshold is met, so restricting what may be PROPOSED
+  // reduced no authority). They are asserted rather than merely deleted so
+  // that re-tightening the guard is a deliberate edit to a named case, not a
+  // silent regression — the same reason the pre-7.3 suite asserted the
+  // allowlist carried no x/group type at all.
+  it("a proposal to a policy this program did not discover → ACCEPTED", () => {
+    // The relay no longer resolves the program's policy set. A proposal to
+    // another group's policy is that group's business; it grants its proposer
+    // nothing, and it still needs that group's members to pass it.
+    const tx = govTx(submitIntent({ policyAddress: OTHER_POLICY }));
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 
-  it("a proposal when the policy set could NOT be resolved → 503, never admitted", async () => {
-    // The conservative direction. "The chain was slow" is not a reason to relay
-    // an admin proposal to an account nobody verified.
-    const tx = govTx(submitIntent());
-    for (const resolver of [
-      async () => null,
-      async () => [] as readonly string[],
-      async () => {
-        throw new Error("lcd down");
+  it("a proposal carrying a message OUTSIDE the template set → ACCEPTED", () => {
+    // Including an operator variant, a keeper variant, a message to another
+    // contract, and a bare bank send. Each still requires the group to vote it
+    // through, and members read it before voting (`app/governance/decode.ts`
+    // renders an unrecognized message as such, with its exact JSON).
+    for (const [label, msg] of [
+      ["operator variant", `{"pay_commission":{"valoper":"${VALOPER}"}}`],
+      ["keeper variant", `{"run_epoch":{}}`],
+      ["unknown variant", `{"not_a_variant":{}}`],
+    ] as const) {
+      const tx = signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ messages: [innerAny({ msg })] }),
+      );
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), label).toEqual({ ok: true });
+    }
+  });
+
+  it("a proposal whose inner message targets another contract or sender → ACCEPTED", () => {
+    const cases: { label: string; opts: Parameters<typeof innerAny>[0] }[] = [
+      {
+        label: "other contract",
+        opts: { contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0", msg: `{"unpause_vault":{}}` },
       },
-    ]) {
-      expect(
-        await guardSignedTx(config, SESSION_ADDRESS, tx, {
-          nowMs: freshClock(),
-          resolvePolicies: resolver,
-        }),
-      ).toMatchObject({ ok: false, status: 503 });
-    }
-  });
-
-  // ── invariant 2: only exact template instances ─────────────────────────
-  it("a proposal with ZERO inner messages → 400", async () => {
-    // Legal on the wire, and explicitly refused: an empty proposal is not a
-    // template instance, and it would still consume a voting period.
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [] })), "zero messages");
-  });
-
-  it("a proposal MIXING one valid template with one arbitrary message → 400", async () => {
-    // Per-element enforcement, not first-element enforcement. This is the M6.4
-    // batched-payment failure shape transposed into a guard, where the cost is
-    // an arbitrary message executed by the contract's admin.
-    await reject(
-      signedGovTx(
-        MSG_GOV_SUBMIT_PROPOSAL,
-        rawSubmit({
-          messages: [
-            innerAny({ msg: `{"unpause_vault":{}}` }),
-            innerAny({ msg: `{"pay_commission":{"valoper":"${VALOPER}"}}` }),
-          ],
-        }),
-      ),
-      "valid + operator variant",
-    );
-  });
-
-  it("a proposal whose inner message targets a DIFFERENT contract → 400", async () => {
-    await reject(
-      signedGovTx(
-        MSG_GOV_SUBMIT_PROPOSAL,
-        rawSubmit({
-          messages: [
-            innerAny({ contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0", msg: `{"unpause_vault":{}}` }),
-          ],
-        }),
-      ),
-      "other contract",
-    );
-  });
-
-  it("a proposal whose inner sender is not the group policy → 400", async () => {
-    // x/group executes a proposal's messages AS the policy. A different sender
-    // is either a message that cannot execute or one aimed somewhere the guard
-    // does not reason about; neither is relayed.
-    await reject(
-      signedGovTx(
-        MSG_GOV_SUBMIT_PROPOSAL,
-        rawSubmit({ messages: [innerAny({ sender: SESSION_ADDRESS, msg: `{"unpause_vault":{}}` })] }),
-      ),
-      "sender is the proposer",
-    );
-  });
-
-  it("the THREE alternate routes to the same authority → 400 (invariant 8 disproof)", async () => {
-    // Each reaches the contract's admin — or decides who holds it — by a path
-    // the M6.4 matrix does not model at all.
-    const cases: { label: string; typeUrl: string }[] = [
-      // Governance NESTING: a proposal whose inner message is a proposal.
-      { label: "nested MsgSubmitProposal", typeUrl: MSG_GOV_SUBMIT_PROPOSAL },
-      // The GROUP MODULE rather than the contract: this one changes WHO GOVERNS.
-      { label: "MsgUpdateGroupMembers", typeUrl: "/cosmos.group.v1.MsgUpdateGroupMembers" },
-      // An authz-wrapped admin message.
-      { label: "authz MsgExec", typeUrl: "/cosmos.authz.v1beta1.MsgExec" },
+      { label: "sender is the proposer", opts: { sender: SESSION_ADDRESS, msg: `{"unpause_vault":{}}` } },
+      {
+        label: "funds attached",
+        opts: { msg: `{"unpause_vault":{}}`, funds: [{ denom: "nhash", amount: "1000" }] },
+      },
     ];
-    for (const { label, typeUrl } of cases) {
-      await reject(
-        signedGovTx(
-          MSG_GOV_SUBMIT_PROPOSAL,
-          rawSubmit({ messages: [innerAny({ typeUrl, msg: `{"unpause_vault":{}}` })] }),
-        ),
-        label,
-      );
+    for (const { label, opts } of cases) {
+      const tx = signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [innerAny(opts)] }));
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), label).toEqual({ ok: true });
     }
   });
 
-  it("a proposal carrying an OPERATOR or KEEPER variant → 400 (templates are ADMIN only)", async () => {
-    for (const variant of [...OPERATOR_VARIANTS, ...KEEPER_VARIANTS]) {
-      const body = (OPERATOR_VARIANTS as readonly string[]).includes(variant)
-        ? `{"${variant}":{"valoper":"${VALOPER}"}}`
-        : `{"${variant}":{}}`;
-      await reject(
-        signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [innerAny({ msg: body })] })),
-        variant,
-      );
-    }
-  });
-
-  it("a template MUTATED byte-for-byte after canonical encoding → 400", async () => {
-    // Start from bytes the builder itself produced, tamper INSIDE the encoded
-    // payload, then re-frame so every proto length prefix is valid and the
-    // message decodes cleanly. The second mutation is the one that makes
-    // condition 5 load-bearing rather than belt-and-braces: it parses to
-    // exactly the object the guard would accept, and differs only in bytes.
-    const canonical = templateExecuteAny(POLICY, config.contractAddress, {
-      id: "update_config",
-      values: { aum_fee_bps: 25n },
-    });
-    const text = new TextDecoder().decode(canonical.value);
-    const mutations: { label: string; from: string; to: string }[] = [
-      // A parameter name this variant does not declare (same length → condition 4).
-      { label: "unknown parameter", from: "aum_fee_bps", to: "aum_fee_bpz" },
-      // A payload that parses to EXACTLY the object the guard accepts and
-      // differs only in bytes: one space of padding. Every structural check
-      // passes; only the re-encode comparison refuses it.
-      { label: "padded payload", from: `{"update_config"`, to: `{"update_config" ` },
-    ];
-    for (const { label, from, to } of mutations) {
-      expect(text).toContain(from);
-      const mutated = text.replace(from, to);
-      const value = new ProtoWriter()
-        .string(1, POLICY)
-        .string(2, config.contractAddress)
-        .bytes(3, new TextEncoder().encode(mutated))
-        .finish();
-      // Rebuilt as a raw execute so the tamper is what differs, not the framing.
-      const tamperedAny = new ProtoWriter()
-        .string(1, MSG_EXECUTE_CONTRACT)
-        .bytes(2, value)
-        .finish();
-      await reject(
-        signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [tamperedAny] })),
-        label,
-      );
-    }
-  });
-
-  it("a template re-encoded with a DIFFERENT value is accepted, and that is correct", async () => {
-    // The counterpart the case above must not be confused with. Changing 25 to
-    // 26 and re-encoding canonically yields a DIFFERENT, VALID proposal — and
-    // the user signs those bytes with that number in the disclosure. The guard
-    // refuses payloads that differ from what it validated, not payloads whose
-    // values someone chose. Asserting this keeps a future "tighten the guard"
-    // edit from quietly making legitimate proposals unsubmittable.
-    const tx = govTx(
-      submitIntent({ templates: [{ id: "update_config", values: { aum_fee_bps: 26n } }] }),
-    );
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps())).toEqual({ ok: true });
-  });
-
-  it("a NON-CANONICAL encoding of an otherwise-valid template → 400", async () => {
-    // Each parses to a payload the structural checks accept. Only the canonical
-    // bytes check refuses them — the same property that keeps the M6.4 guard
-    // out of a parser arms race, applied per inner message.
-    for (const msg of [
-      `{ "unpause_vault" : { } }`, // whitespace
-      `{"unpause_vault":{}}\n`, // trailing newline
-      `{"\\u0075npause_vault":{}}`, // escaped variant name
-      `{"update_config":{"aum_fee_bps":25,"aum_fee_bps":25}}`, // duplicate key
-      `{"update_config":{"commission_bps":1000,"aum_fee_bps":25}}`, // wrong key order
+  it("a proposal whose inner message is a NESTED proposal or a group-module message → ACCEPTED", () => {
+    // The three routes the original guard's invariant-8 disproof line named.
+    // As INNER messages they are now carried — they are proposals to do those
+    // things, and the group decides. As TOP-LEVEL messages they remain
+    // rejected by the allowlist, which is the case that actually mattered and
+    // is asserted separately above.
+    for (const typeUrl of [
+      MSG_GOV_SUBMIT_PROPOSAL,
+      "/cosmos.group.v1.MsgUpdateGroupMembers",
+      "/cosmos.authz.v1beta1.MsgExec",
     ]) {
-      await reject(
-        signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [innerAny({ msg })] })),
-        msg,
-      );
-    }
-  });
-
-  it("a template parameter OUTSIDE its contract bound → 400 (reject, never clamp)", async () => {
-    for (const msg of [
-      `{"update_config":{"aum_fee_bps":10001}}`, // > 10000
-      `{"update_config":{"concentration_safety_offset_bps":10000}}`, // must be < 10000
-      `{"update_config":{"max_bonded_cap_bps":0}}`, // must be >= 1
-      `{"update_config":{"max_concentration_multiple_bps":0}}`, // must be > 0
-      `{"update_config":{"aum_fee_bps":-1}}`, // negative
-      `{"update_config":{"aum_fee_bps":25.5}}`, // fractional
-      `{"update_config":{"aum_fee_bps":"25"}}`, // string-wrapped
-      `{"update_config":{}}`, // supplies nothing: a vote on no change
-      `{"update_config":{"admin":"tp1..."}}`, // a field the variant does not have
-      `{"set_halted":{"halted":"true"}}`, // wrong type
-      `{"set_halted":{}}`, // missing required field
-      `{"pause_vault":{"reason":""}}`, // empty reason
-      `{"unpause_vault":{"reason":"x"}}`, // extra field on a fieldless variant
-    ]) {
-      await reject(
-        signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [innerAny({ msg })] })),
-        msg,
-      );
-    }
-  });
-
-  it("FUNDS on an inner admin message → 400 (no admin variant is payable)", async () => {
-    await reject(
-      signedGovTx(
+      const tx = signedGovTx(
         MSG_GOV_SUBMIT_PROPOSAL,
-        rawSubmit({
-          messages: [
-            innerAny({ msg: `{"unpause_vault":{}}`, funds: [{ denom: "nhash", amount: "1000" }] }),
-          ],
-        }),
-      ),
-      "funds on unpause",
+        rawSubmit({ messages: [innerAny({ typeUrl, msg: `{"unpause_vault":{}}` })] }),
+      );
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toEqual({ ok: true });
+    }
+  });
+
+  it("a proposal carrying a non-canonical inner payload → ACCEPTED", () => {
+    // The inner bytes ride verbatim, so their JSON shape is not this guard's
+    // business. The ENVELOPE is still canonical-checked (see below).
+    const tx = signedGovTx(
+      MSG_GOV_SUBMIT_PROPOSAL,
+      rawSubmit({ messages: [innerAny({ msg: `{ "unpause_vault" : { } }` })] }),
     );
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
+  });
+
+  // ── What the guard still enforces on a proposal ───────────────────────
+  it("a proposal with ZERO inner messages → 400", () => {
+    // Legal on the wire, and still refused: a proposal to do nothing would
+    // consume the group's voting period regardless (§4b C1).
+    reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [] })), "zero messages");
+  });
+
+  it("the ENVELOPE is still canonical — reordered, duplicated or padded fields → 400", () => {
+    // The inner bytes ride verbatim, but the envelope around them does not.
+    // These are the shapes the whole-message re-encode still refuses.
+    reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ reorder: true })), "reordered fields");
+    reject(
+      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, SESSION_ADDRESS] })),
+      "duplicated proposer (a second spelling of one intent)",
+    );
+    reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })), "unknown field 9");
   });
 
   it("a proposal ABOVE the per-proposal message cap → 400, never truncated", async () => {
@@ -1268,12 +1134,6 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })), "submit field 9");
   });
 
-  it("a proposal whose fields are REORDERED → 400", async () => {
-    // Every field is individually valid; only the closing whole-message
-    // re-encode refuses the arrangement.
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ reorder: true })), "reordered");
-  });
-
   it("a MsgSubmitProposal SHAPED to look like a vote → 400", async () => {
     // Field 1 as a varint proposal id and field 2 as the voter — the vote's
     // shape under the submission's type URL. Field 1 is the POLICY here, so a
@@ -1307,7 +1167,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
 
   it("a signer pubkey that does not derive the session address → 403", async () => {
     const tx = signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n }), OTHER_PUB);
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps())).toMatchObject({
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toMatchObject({
       ok: false,
       status: 403,
     });
@@ -1337,11 +1197,11 @@ describe("invariant 8 — the direct-admin path stays closed after the amendment
       const anyMsg = new ProtoWriter().string(1, MSG_EXECUTE_CONTRACT).bytes(2, value).finish();
       const body = new ProtoWriter().message(1, anyMsg, true).finish();
       expect(
-        await guardSignedTx(
+        guardSignedTx(
           config,
           SESSION_ADDRESS,
           encodeTxRaw(body, authInfoBytes(), [new Uint8Array(64)]),
-          { nowMs: freshClock() },
+          freshClock(),
         ),
         variant,
       ).toMatchObject({ ok: false, status: 400 });
@@ -1353,6 +1213,6 @@ describe("invariant 8 — the direct-admin path stays closed after the amendment
     // template-scoped proposal. If a future edit ever made the first pass, this
     // pair is where the contradiction shows.
     const tx = govTx(submitIntent({ templates: [{ id: "set_halted", values: { halted: true } }] }));
-    expect(await guardSignedTx(config, SESSION_ADDRESS, tx, govDeps())).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 });

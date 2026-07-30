@@ -32,10 +32,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const txRawBytes = Uint8Array.from(Buffer.from(body.tx_raw, "base64"));
 
-  // Async as of M7.3–7.4: `MsgSubmitProposal`'s condition 3 verifies the group
-  // policy against the DISCOVERED policy set, which is a live read. It happens
-  // only for a tx that carries a submission.
-  const verdict = await guardSignedTx(config, session.address, txRawBytes);
+  const verdict = guardSignedTx(config, session.address, txRawBytes);
   if (!verdict.ok) {
     return Response.json({ error: verdict.reason }, { status: verdict.status });
   }

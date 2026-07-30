@@ -20,14 +20,15 @@ import { describe, expect, it } from "vitest";
 import { decodeMessage, summarizeMessage } from "~/governance/decode";
 import {
   configDiffRows,
-  matchTemplateInstance,
   MAX_JSON_SAFE_UINT,
   MAX_PAUSE_REASON_LEN,
   PROPOSAL_TEMPLATES,
   templateById,
   templateFieldLines,
   templateInnerJson,
+  parseTemplateValues,
   templateSummaryKey,
+  toWireTemplateValues,
   TEMPLATE_IDS,
   validateTemplateValues,
   type TemplateValues,
@@ -201,7 +202,7 @@ describe("templateInnerJson — the one canonical serialization site", () => {
     );
   });
 
-  it("round-trips every instance through matchTemplateInstance byte-for-byte", () => {
+  it("round-trips every instance through parseTemplateValues byte-for-byte", () => {
     const instances: { id: string; values: TemplateValues }[] = [
       { id: "unpause_vault", values: {} },
       { id: "clear_pending_delegations", values: {} },
@@ -225,12 +226,14 @@ describe("templateInnerJson — the one canonical serialization site", () => {
       },
     ];
     for (const instance of instances) {
+      // Wire shape → domain values → canonical JSON must land back on the same
+      // bytes. This is the composer's own path: the form holds wire values, the
+      // registry parses them, and the encoder serializes them.
       const json = templateInnerJson(instance.id, instance.values);
-      const match = matchTemplateInstance(JSON.parse(json));
-      expect(match.ok, json).toBe(true);
-      if (!match.ok) continue;
-      expect(match.id).toBe(instance.id);
-      expect(match.canonicalJson).toBe(json);
+      const parsed = parseTemplateValues(instance.id, toWireTemplateValues(instance.values));
+      expect(parsed.ok, json).toBe(true);
+      if (!parsed.ok) continue;
+      expect(templateInnerJson(instance.id, parsed.values)).toBe(json);
     }
   });
 
@@ -291,23 +294,21 @@ describe("invariant 9 — reject-never-clamp on every parameter", () => {
   });
 
   it("refuses a float, a negative and a string where a uint is declared", () => {
-    for (const raw of [25.5, -1, "25", null, true, {}]) {
-      const match = matchTemplateInstance({ update_config: { aum_fee_bps: raw } });
-      expect(match.ok, String(raw)).toBe(false);
+    for (const raw of ["25.5", "-1", "007", " 25", "1e3", "", true]) {
+      const parsed = parseTemplateValues("update_config", {
+        aum_fee_bps: raw as string | boolean,
+      });
+      expect(parsed.ok, String(raw)).toBe(false);
     }
   });
 
-  it("refuses a payload that is not a single-variant object", () => {
-    for (const payload of [
-      null,
-      42,
-      "update_config",
-      ["update_config"],
-      {},
-      { update_config: {}, set_halted: { halted: true } },
-      { update_config: "not an object" },
-    ]) {
-      expect(matchTemplateInstance(payload).ok, JSON.stringify(payload)).toBe(false);
+  it("refuses an unknown template id and unknown parameter keys", () => {
+    expect(parseTemplateValues("no_such_variant", {}).ok).toBe(false);
+    // Prototype-shaped keys land on `unknown-param` via the declared-params
+    // Map, never on `Object.prototype`.
+    for (const key of ["__proto__", "constructor", "toString", "admin"]) {
+      const parsed = parseTemplateValues("update_config", { [key]: "1" });
+      expect(parsed.ok, key).toBe(false);
     }
   });
 });

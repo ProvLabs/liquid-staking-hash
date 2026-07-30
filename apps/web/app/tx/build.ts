@@ -30,11 +30,7 @@ import {
   MAX_PROPOSAL_TITLE_LEN,
 } from "@nvhash/api-types";
 
-import {
-  matchTemplateInstance,
-  templateInnerJson,
-  type TemplateValues,
-} from "~/governance/templates";
+import { templateInnerJson, type TemplateValues } from "~/governance/templates";
 import { VALOPER_RE } from "~/lib/bech32";
 import {
   bytesEqual,
@@ -79,13 +75,15 @@ export const MSG_EXECUTE_CONTRACT = "/cosmwasm.wasm.v1.MsgExecuteContract";
 //     message. Their guard is structural — type URL → signer ↔ session binding
 //     → closed field set with bounded values → canonical re-encode.
 //
-//   * `MsgSubmitProposal` carries `messages []Any`. On its own its type URL
-//     would let the relay carry arbitrary messages destined for the GROUP
-//     POLICY ACCOUNT, WHICH IS THE CONTRACT'S ADMIN — strictly worse than the
-//     `MsgExecuteContract` hole M6.4 closed. Its membership here is valid only
-//     together with `guardSubmitProposal`'s six conditions below.
+//   * `MsgSubmitProposal` carries `messages []Any`, and its guard is structural
+//     TOO — see `guardSubmitProposal` for why, at length. The short version:
+//     a proposal EXECUTES NOTHING until the group's decision policy is
+//     satisfied by members voting, so the threshold is the enforcement
+//     boundary, and what protects members is being able to READ a proposal
+//     before voting (`app/governance/decode.ts`). The relay reasons about the
+//     envelope it can reproduce and carries the inner messages unexamined.
 //
-// Extending EITHER level is a design-review event, never an edit
+// Extending the admitted set is a design-review event, never an edit
 // (`test/broadcast-guard.test.ts` holds the rejection matrix that proves the
 // set closed).
 export const MSG_GOV_VOTE = "/cosmos.group.v1.MsgVote";
@@ -483,8 +481,40 @@ export function templateExecuteAny(
   return { typeUrl: MSG_EXECUTE_CONTRACT, value };
 }
 
-/** `MsgSubmitProposal` (policy=1, proposers=2, metadata=3, messages=4, exec=5,
- * title=6, summary=7). Field 5 is never written — the `exec` pin again. */
+/**
+ * The canonical `MsgSubmitProposal` ENVELOPE (policy=1, proposers=2,
+ * metadata=3, messages=4, exec=5, title=6, summary=7). Field 5 is never
+ * written — the `exec` pin.
+ *
+ * `messages` are already-encoded `Any` bytes and ride VERBATIM. That is the
+ * whole shape of the simplified guard (§12.3 amendment, revised 2026-07-30):
+ * the relay reasons about the envelope, which it can reproduce, and carries the
+ * inner messages without inspecting them — because a proposal executes nothing
+ * until the group's decision policy is satisfied by members voting, and that
+ * threshold, not this relay, is the enforcement boundary.
+ *
+ * Shared by the builder and the guard, so the guard's re-encode has exactly one
+ * definition of canonical to compare against.
+ */
+function encodeSubmitProposalEnvelope(parts: {
+  policyAddress: string;
+  proposers: readonly string[];
+  metadata: string;
+  /** Encoded `Any` bytes, in order. Passed through unmodified. */
+  messages: readonly Uint8Array[];
+  title: string;
+  summary: string;
+}): Uint8Array {
+  const writer = new ProtoWriter().string(SUBMIT_FIELD.policyAddress, parts.policyAddress);
+  for (const proposer of parts.proposers) writer.string(SUBMIT_FIELD.proposers, proposer);
+  writer.string(SUBMIT_FIELD.metadata, parts.metadata);
+  for (const message of parts.messages) writer.message(SUBMIT_FIELD.messages, message, true);
+  return writer
+    .string(SUBMIT_FIELD.title, parts.title)
+    .string(SUBMIT_FIELD.summary, parts.summary)
+    .finish();
+}
+
 function encodeGovSubmitProposal(intent: GovSubmitProposalIntent): Uint8Array {
   // THE INVARIANT, as `encodeExecuteContract` states it: this encoder never
   // produces a message `guardSubmitProposal` would refuse. Preflight and the
@@ -504,21 +534,19 @@ function encodeGovSubmitProposal(intent: GovSubmitProposalIntent): Uint8Array {
     throw new Error("proposal metadata is out of range");
   }
 
-  const writer = new ProtoWriter()
-    .string(SUBMIT_FIELD.policyAddress, intent.policyAddress)
+  return encodeSubmitProposalEnvelope({
+    policyAddress: intent.policyAddress,
     // Exactly one proposer: the relay is sole-signer, and x/group counts every
-    // proposer as a required signer. The field is repeated on the wire, so the
-    // guard still checks EVERY entry rather than only the first (§4b C1).
-    .string(SUBMIT_FIELD.proposers, intent.proposer)
-    .string(SUBMIT_FIELD.metadata, intent.metadata);
-  for (const instance of intent.templates) {
-    const inner = templateExecuteAny(intent.policyAddress, intent.contractAddress, instance);
-    writer.message(SUBMIT_FIELD.messages, encodeAny(inner.typeUrl, inner.value), true);
-  }
-  return writer
-    .string(SUBMIT_FIELD.title, intent.title)
-    .string(SUBMIT_FIELD.summary, intent.summary)
-    .finish();
+    // proposer as a required signer.
+    proposers: [intent.proposer],
+    metadata: intent.metadata,
+    messages: intent.templates.map((instance) => {
+      const inner = templateExecuteAny(intent.policyAddress, intent.contractAddress, instance);
+      return encodeAny(inner.typeUrl, inner.value);
+    }),
+    title: intent.title,
+    summary: intent.summary,
+  });
 }
 
 /** Encode the intent's message (the two vault msgs, an operator execute, or one
@@ -1017,11 +1045,12 @@ function singleString(fields: WireField[], field: number): string | null {
 }
 
 /**
- * `MsgVote` / `MsgExec` — the structural guard (§2.2).
+ * The governance guard — ONE entry point for all three admitted types.
  *
- * These carry closed scalar payloads embedding no other message, so there is no
- * template set to match: type URL → signer ↔ session binding → closed field set
- * with bounded values → canonical re-encode.
+ * Each is structural: type URL → signer ↔ session binding → closed field set
+ * with bounded values → the `exec` pin where the message has one → canonical
+ * re-encode. Nothing here inspects a proposal's inner messages or resolves a
+ * proposal id; see `guardSubmitProposal` for why that is deliberate.
  */
 export function guardGovernanceMsg(
   msg: DecodedMsg,
@@ -1029,6 +1058,7 @@ export function guardGovernanceMsg(
 ): GovernanceGuardResult {
   if (msg.typeUrl === MSG_GOV_VOTE) return guardVote(msg, expected);
   if (msg.typeUrl === MSG_GOV_EXEC) return guardExec(msg, expected);
+  if (msg.typeUrl === MSG_GOV_SUBMIT_PROPOSAL) return guardSubmitProposal(msg, expected);
   return { ok: false, reason: "not a guarded governance message" };
 }
 
@@ -1115,64 +1145,74 @@ function guardExec(
 }
 
 /**
- * `MsgSubmitProposal` — the SIX-condition guard (§2.2).
+ * `MsgSubmitProposal` — the STRUCTURAL guard (§12.3 amendment, revised
+ * 2026-07-30).
  *
- * This is the message the whole design exists for. It carries `messages []Any`
- * destined for the group policy account, which is the contract's admin, so a
- * plain type-URL entry would open the relay to arbitrary admin calls. The six
- * conditions, in order:
+ * WHAT THIS GUARD IS FOR, stated precisely, because it shipped once with a
+ * rationale that was wrong. The original design guarded this message with six
+ * conditions — including matching every inner `Any` against a closed template
+ * set and re-encoding each one — on the argument that a plain allowlist entry
+ * would let the relay carry "arbitrary messages destined for the policy account,
+ * which is the contract's admin, strictly worse than the `MsgExecuteContract`
+ * hole M6.4 closed."
+ *
+ * That comparison was backwards. An unguarded `MsgExecuteContract` EXECUTES ON
+ * INCLUSION under the signer's own authority — nothing else has to happen. An
+ * unguarded `MsgSubmitProposal` EXECUTES NOTHING: it is a request that does
+ * nothing at all until the group's decision policy is satisfied by other
+ * members voting. **The group's threshold is the enforcement boundary here**,
+ * exactly as the contract is for `MsgExecuteContract`, and what protects
+ * members from a hostile proposal is their ability to READ it before voting —
+ * which `app/governance/decode.ts` delivers, summarizing a closed union and
+ * tagging everything else `unknown` with the exact JSON.
+ *
+ * So this guard keeps only what is cheap and true:
  *
  *   1. type URL is `/cosmos.group.v1.MsgSubmitProposal`;
- *   2. EVERY entry in `proposers` equals the session address;
- *   3. `group_policy_address` is one of the DISCOVERED program policies —
- *      never an arbitrary account, and never a hardcoded "the admin policy"
- *      (D1: policy discovery is set-valued);
- *   4. each inner `Any` is matched against the CLOSED template set — its type
- *      URL, its sender, its target contract, its variant and its full field set;
- *   5. BYTE-IDENTICAL canonical re-encode PER INNER MESSAGE — a proposal is
- *      only as safe as its least-checked element (§4 invariant 3);
- *   6. `exec` is pinned to the no-try value (§2.4).
+ *   2. EVERY entry in `proposers` equals the session address — the relay
+ *      carries the session's own transactions and nobody else's. (x/group
+ *      declares `proposers` its required signer, so the chain enforces this too
+ *      given the sole-signer guard; it is restated because the relay's scope
+ *      should be legible here rather than inferred from another module's rules.)
+ *   3. a closed FIELD SET with bounded text — the envelope's shape is known;
+ *   4. `exec` is PINNED to the no-try value (§2.4), so a submission cannot
+ *      submit-and-execute under one signature;
+ *   5. a canonical re-encode of the ENVELOPE, with the inner `Any` bytes
+ *      passed through verbatim.
  *
- * …then a whole-message canonical re-encode as the closing backstop, which is
- * what refuses field reordering, a duplicated proposer, and anything appended
- * after a payload that individually passed.
+ * The inner messages are NOT inspected, and that is the deliberate change. They
+ * ride to a vote the group must win.
  */
 export function guardSubmitProposal(
   msg: DecodedMsg,
-  expected: {
-    signerAddress: string;
-    contractAddress: string;
-    /** The live, DISCOVERED program policy set. Never a literal. */
-    policyAddresses: readonly string[];
-  },
+  expected: { signerAddress: string },
 ): GovernanceGuardResult {
   // 1 — type URL.
   if (msg.typeUrl !== MSG_GOV_SUBMIT_PROPOSAL) {
     return { ok: false, reason: "not a proposal submission" };
   }
 
-  // 2 — proposer ↔ session binding, over EVERY entry. x/group permits several
-  // proposers and counts each as a required signer, so checking only the first
-  // is the §4b C1 failure shape: a verdict decided by one element of a
-  // collection while another rides along unchecked.
+  // 2 — proposer ↔ session binding. x/group permits SEVERAL proposers and
+  // counts each as a required signer (§4b C1), but the relay accepts exactly
+  // one signature, so exactly one proposer is the only shape that can ever be
+  // valid here. Pinning the COUNT is both simpler and stricter than checking
+  // every entry: it closes the "one element decides the verdict while another
+  // rides along" failure outright, and it leaves one accepted encoding rather
+  // than admitting `[addr, addr]` as a second spelling of the same intent.
   const proposers = stringFields(msg.fields, SUBMIT_FIELD.proposers);
-  if (proposers.length === 0) {
-    return { ok: false, reason: "a proposal must name its proposer" };
+  if (proposers.length !== 1) {
+    return { ok: false, reason: "a proposal must name exactly one proposer" };
   }
-  if (proposers.some((proposer) => proposer !== expected.signerAddress)) {
+  if (proposers[0] !== expected.signerAddress) {
     return { ok: false, reason: "proposer is not the session address" };
   }
 
-  // 3 — a discovered program policy, not an arbitrary account.
   const policyAddress = singleString(msg.fields, SUBMIT_FIELD.policyAddress);
   if (policyAddress === null) {
     return { ok: false, reason: "a proposal must name exactly one group policy" };
   }
-  if (!expected.policyAddresses.includes(policyAddress)) {
-    return { ok: false, reason: "group policy is not a program policy" };
-  }
 
-  // The closed field set and the text bounds, before any payload is read.
+  // 3 — the closed field set and the text bounds.
   if (
     !fieldSetWithin(msg.fields, [
       SUBMIT_FIELD.policyAddress,
@@ -1201,158 +1241,39 @@ export function guardSubmitProposal(
     return { ok: false, reason: "proposal summary is missing or too long" };
   }
 
-  // 4 + 5 — every inner message, individually.
   const innerAnys = bytesFields(msg.fields, SUBMIT_FIELD.messages);
   if (innerAnys.length === 0) {
-    // Legal on the wire; explicitly refused. An empty proposal is not a
-    // template instance, and it is a proposal to do nothing that would still
-    // consume the group's voting period (§4b C1).
+    // Legal on the wire; refused because a proposal to do nothing still
+    // consumes the group's voting period (§4b C1).
     return { ok: false, reason: "a proposal must carry at least one message" };
   }
   if (innerAnys.length > MAX_PROPOSAL_MESSAGES) {
-    // REJECTED, never truncated: a governance payload quietly shortened on its
-    // way to the chain would be a lie about what is being voted on.
+    // The write side of the C2 pairing: a proposal above this cap would be
+    // mirrored truncated-and-flagged, so the App would have submitted something
+    // it can only ever render incompletely. Rejected, never truncated.
     return { ok: false, reason: "a proposal carries too many messages" };
   }
 
-  const templates: ProposalTemplateInstance[] = [];
-  for (const anyBytes of innerAnys) {
-    const verdict = guardInnerTemplateMessage(anyBytes, {
-      policyAddress,
-      contractAddress: expected.contractAddress,
-    });
-    if (!verdict.ok) return { ok: false, reason: verdict.reason };
-    templates.push(verdict.instance);
-  }
-
-  // 6 — the `exec` pin (§2.4). A submission with EXEC_TRY would submit AND
-  // execute in one transaction, which for a single-member or already-satisfied
-  // policy means an admin program-op reaching the chain under one signature the
-  // user was shown as "propose".
+  // 4 — the `exec` pin (§2.4). Execution is always a separate, separately
+  // confirmed `MsgExec` with its own decoded-payload disclosure.
   if (hasField(msg.fields, SUBMIT_FIELD.exec)) {
     return { ok: false, reason: "a proposal must not attempt execution in the same transaction" };
   }
 
-  // The closing backstop: the whole message, re-encoded from what was just
-  // validated, must equal the submitted bytes. Individually-valid parts in a
-  // non-canonical arrangement — a duplicated proposer, reordered fields, a
-  // trailing unknown region — die here.
-  const canonical = encodeGovSubmitProposal({
-    kind: "gov_submit",
-    proposer: expected.signerAddress,
+  // 5 — the envelope, re-encoded from what was just validated with the inner
+  // `Any` bytes passed through verbatim, must equal the submitted bytes. Field
+  // reordering, a duplicated proposer, an explicitly-empty metadata and any
+  // trailing region die here; the inner payloads are carried unexamined.
+  const canonical = encodeSubmitProposalEnvelope({
     policyAddress,
-    contractAddress: expected.contractAddress,
-    templates,
+    proposers,
+    metadata,
+    messages: innerAnys,
     title,
     summary,
-    metadata,
   });
   if (!bytesEqual(canonical, msg.value)) {
     return { ok: false, reason: "proposal is not in canonical form" };
   }
   return { ok: true, kind: "submit" };
-}
-
-type InnerVerdict =
-  | { ok: true; instance: ProposalTemplateInstance }
-  | { ok: false; reason: string };
-
-/**
- * One inner `Any`: condition 4 (structure) and condition 5 (canonical bytes).
- *
- * THE THREE ROUTES THIS EXISTS TO REFUSE (§4 invariant 8's disproof line), each
- * of which reaches the contract's admin authority by a different path and none
- * of which the M6.4 matrix models:
- *
- *   * an inner message that is itself a `MsgSubmitProposal` (governance
- *     nesting) — refused by the type-URL check;
- *   * an inner message targeting the GROUP MODULE rather than the contract
- *     (`MsgUpdateGroupMembers`, which changes WHO GOVERNS) — same check;
- *   * an `authz`/`MsgExec`-wrapped admin message — same check.
- *
- * The type-URL check admits `MsgExecuteContract` and nothing else, which is why
- * all three land on one line rather than three special cases.
- */
-function guardInnerTemplateMessage(
-  anyBytes: Uint8Array,
-  expected: { policyAddress: string; contractAddress: string },
-): InnerVerdict {
-  let anyFields: WireField[];
-  try {
-    anyFields = readFields(anyBytes);
-  } catch {
-    return { ok: false, reason: "malformed inner message" };
-  }
-  if (!fieldSetWithin(anyFields, [1, 2])) {
-    return { ok: false, reason: "malformed inner message" };
-  }
-  const innerTypeUrl = singleString(anyFields, 1);
-  const innerValue = bytesField(anyFields, 2);
-  if (innerTypeUrl === null || innerValue === null) {
-    return { ok: false, reason: "malformed inner message" };
-  }
-  if (innerTypeUrl !== MSG_EXECUTE_CONTRACT) {
-    return { ok: false, reason: "inner message type is not in the template set" };
-  }
-
-  let execFields: WireField[];
-  try {
-    execFields = readFields(innerValue);
-  } catch {
-    return { ok: false, reason: "malformed inner message" };
-  }
-  if (
-    !fieldSetWithin(execFields, [
-      WASM_EXEC_FIELD.sender,
-      WASM_EXEC_FIELD.contract,
-      WASM_EXEC_FIELD.msg,
-      WASM_EXEC_FIELD.funds,
-    ])
-  ) {
-    return { ok: false, reason: "unexpected field in inner message" };
-  }
-  // The sender is the POLICY account: x/group executes a proposal's messages as
-  // the policy, and the policy is the contract's admin. Anything else is either
-  // a message that cannot execute or one aimed somewhere this guard does not
-  // reason about.
-  if (singleString(execFields, WASM_EXEC_FIELD.sender) !== expected.policyAddress) {
-    return { ok: false, reason: "inner message sender is not the group policy" };
-  }
-  if (singleString(execFields, WASM_EXEC_FIELD.contract) !== expected.contractAddress) {
-    return { ok: false, reason: "inner message targets a different contract" };
-  }
-  // No admin variant is payable. Funds here would move value under a
-  // confirmation that said nothing about an amount.
-  if (bytesFields(execFields, WASM_EXEC_FIELD.funds).length !== 0) {
-    return { ok: false, reason: "an admin action must not carry funds" };
-  }
-
-  const payloadBytes = bytesField(execFields, WASM_EXEC_FIELD.msg);
-  if (payloadBytes === null) {
-    return { ok: false, reason: "inner message has no execute payload" };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payloadBytes));
-  } catch {
-    return { ok: false, reason: "inner execute payload is not JSON" };
-  }
-  const match = matchTemplateInstance(parsed);
-  if (!match.ok) {
-    return { ok: false, reason: "inner message is not an admin-action template instance" };
-  }
-
-  // 5 — canonical byte equality, PER ELEMENT. `matchTemplateInstance` believes
-  // it validated a template; this proves the bytes are the ones this module
-  // would have produced for what it believes.
-  const instance: ProposalTemplateInstance = { id: match.id, values: match.values };
-  const canonical = templateExecuteAny(
-    expected.policyAddress,
-    expected.contractAddress,
-    instance,
-  );
-  if (!bytesEqual(canonical.value, innerValue)) {
-    return { ok: false, reason: "inner message is not in canonical form" };
-  }
-  return { ok: true, instance };
 }

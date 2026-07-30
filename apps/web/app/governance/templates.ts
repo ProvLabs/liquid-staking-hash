@@ -2,17 +2,23 @@
 // PURE — no I/O, no clock, no config. Runs unchanged in the browser bundle
 // (the composer form imports it) AND on the server (the relay guard does).
 //
-// WHAT THIS FILE IS. `MsgSubmitProposal` carries `messages []Any`. A plain
-// type-URL allowlist entry for it would let the relay carry ARBITRARY messages
-// destined for the group policy account — which IS the contract's admin — and
-// that is strictly worse than the `MsgExecuteContract` hole M6.4 closed. This
-// registry is the closed set the relay's condition 4 matches every inner
-// message against, and `templateInnerJson` is the ONE place a template's inner
-// payload is serialized, so condition 5 (byte-identical canonical re-encode)
-// has something to compare to.
+// WHAT THIS FILE IS — AND IS NOT, since it briefly was something else. This is
+// the COMPOSER'S vocabulary: it is what makes proposal creation
+// "template-scoped" per app-spec §8.7, which asks the App to offer decoded
+// templates of the program's admin actions rather than free-form message
+// building (free-form stays a Console strength).
 //
-// ONE VOCABULARY, THREE CONSUMERS (§2.3, invariant 6). The registry is the
-// single source of admin-action semantics:
+// It is NOT a relay guard input. The 2026-07-30 revision of the §12.3
+// amendment removed the guard's per-inner-message template matching: a proposal
+// executes nothing until the group's decision policy is satisfied by members
+// voting, so restricting what may be PROPOSED reduced no authority while
+// costing a live chain read and a registry the relay had to keep in lockstep
+// with the contract. What protects members from a hostile proposal is being
+// able to READ it before voting — `app/governance/decode.ts`, which summarizes
+// a closed union and tags everything else `unknown` with the exact JSON.
+//
+// ONE VOCABULARY, THREE CONSUMERS (§2.3, invariant 6) — still true, and still
+// the reason this is one file:
 //
 //   * `app/governance/decode.ts` (7.2) READS proposals containing these
 //     messages — through `ADMIN_VARIANTS`, which this file keys off, so a
@@ -24,23 +30,23 @@
 // A template exists for EVERY admin variant in `contracts/src/msg.rs` and for
 // no other variant. `test/governance-templates.test.ts` asserts that mapping is
 // total in BOTH directions against the committed `cargo schema` output
-// (`contracts/schema/raw/execute.json`), so a contract that gains an admin
-// capability fails CI here rather than becoming quietly unreachable
-// (invariant 7 and its disproof line).
+// (`contracts/schema/raw/execute.json`). That gate is now a PRODUCT
+// completeness property rather than a security one: a contract that gains an
+// admin capability fails CI here rather than leaving it unreachable from the
+// App's composer.
 //
 // BRIDGE CONFIG IS ABSENT, NOT STUBBED (§7 Q1, confirmed 2026-07-30). App-spec
 // §8.7 names it, but it depends on §14.3 (external, NUVA) and no contract
 // variant backs it. An absent template is honest; a disabled one invites "when".
 
-// IMPORTS ARE TYPE-ONLY, AND THAT IS LOAD-BEARING. `app/tx/build.ts` imports
-// this module at runtime (its `guardSubmitProposal` matches against the
-// registry), and build.ts keeps a deliberately narrow import surface because
-// the relay decodes UNTRUSTED bytes through it. A value import here — of
-// `ADMIN_VARIANTS`, or of `t` and its catalogs — would either create a cycle or
-// drag the i18n catalogs into the guard's dependency graph. So templates carry
-// i18n KEYS, never translated strings, and the totality of the
-// template ↔ `ADMIN_VARIANTS` mapping is asserted in
-// `test/governance-templates.test.ts` (invariant 7) rather than here.
+// IMPORTS ARE TYPE-ONLY. `app/tx/build.ts` imports `templateInnerJson` from
+// here at runtime to encode a composed proposal's inner messages, and build.ts
+// keeps a deliberately narrow import surface because the relay decodes
+// UNTRUSTED bytes through it — so a value import of `t` and its catalogs would
+// drag the i18n catalogs into that graph, and one of `ADMIN_VARIANTS` would
+// cycle. Templates therefore carry i18n KEYS, never translated strings, and the
+// totality of the template ↔ `ADMIN_VARIANTS` mapping is asserted in
+// `test/governance-templates.test.ts` rather than here.
 import type { AdminVariant } from "~/tx/build";
 import type { MessageKey } from "~/i18n";
 
@@ -528,86 +534,6 @@ export function describeTemplateError(error: TemplateParamError): string {
     case "no-fields-supplied":
       return "no setting was selected to change";
   }
-}
-
-/**
- * Match an arbitrary parsed payload against the closed template set.
- *
- * Returns the recovered instance, or the reasons it is not one. This is the
- * relay guard's condition 4 in a form the composer can also call, so "what the
- * App will build" and "what the App will carry" are decided by one function.
- *
- * It deliberately does NOT trust its own verdict: the guard still compares
- * `canonicalJson`'s bytes against the submitted bytes (condition 5), because a
- * payload can satisfy every structural check here and still differ on the wire.
- */
-export type TemplateMatch =
-  | { ok: true; id: AdminVariant; values: TemplateValues; canonicalJson: string }
-  | { ok: false; errors: TemplateParamError[] };
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function matchTemplateInstance(payload: unknown): TemplateMatch {
-  if (!isPlainObject(payload)) {
-    return { ok: false, errors: [{ code: "unknown-template", id: "" }] };
-  }
-  const keys = Object.keys(payload);
-  if (keys.length !== 1) {
-    return { ok: false, errors: [{ code: "unknown-template", id: keys.join("+") }] };
-  }
-  const id = keys[0]!;
-  const template = templateById(id);
-  if (template === null) return { ok: false, errors: [{ code: "unknown-template", id }] };
-
-  const body = payload[id];
-  if (!isPlainObject(body)) return { ok: false, errors: [{ code: "unknown-template", id }] };
-
-  // Recover values in the JS types the specs declare. A JSON number that is not
-  // a non-negative safe integer is NOT coerced — it is a wrong-type error, so a
-  // float, a negative, or a string-wrapped integer can never round-trip into a
-  // uint parameter.
-  const values: Record<string, TemplateValue> = {};
-  const declared = new Map(template.params.map((p) => [p.key, p] as const));
-  const errors: TemplateParamError[] = [];
-  for (const [key, raw] of Object.entries(body)) {
-    const param = declared.get(key);
-    if (param === undefined) {
-      errors.push({ code: "unknown-param", key });
-      continue;
-    }
-    if (param.kind === "uint") {
-      if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 0) {
-        errors.push({ code: "wrong-type", key });
-        continue;
-      }
-      values[key] = BigInt(raw);
-    } else if (param.kind === "bool") {
-      if (typeof raw !== "boolean") {
-        errors.push({ code: "wrong-type", key });
-        continue;
-      }
-      values[key] = raw;
-    } else {
-      if (typeof raw !== "string") {
-        errors.push({ code: "wrong-type", key });
-        continue;
-      }
-      values[key] = raw;
-    }
-  }
-  if (errors.length > 0) return { ok: false, errors };
-
-  const bounds = validateTemplateValues(id, values);
-  if (bounds.length > 0) return { ok: false, errors: bounds };
-
-  return {
-    ok: true,
-    id: template.id,
-    values,
-    canonicalJson: templateInnerJson(template.id, values),
-  };
 }
 
 // ── Presentation helpers (pure; the composer and the confirm step share them) ──

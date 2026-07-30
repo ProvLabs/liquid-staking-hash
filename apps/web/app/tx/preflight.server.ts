@@ -562,6 +562,12 @@ export function governancePreflightReasons(
     if (facts.policyAddresses === null || facts.memberAddresses === null) {
       return governanceUnavailable();
     }
+    // CONVENIENCE ONLY, and this is the one place worth saying so twice: the
+    // RELAY does not check this (§12.3 amendment, revised 2026-07-30 — a
+    // proposal to another group's policy grants its proposer nothing and still
+    // needs that group to pass it). Telling a composer that they picked an
+    // address this program does not govern is a courtesy that costs nothing,
+    // because the member read below already loaded the policy set.
     if (!facts.policyAddresses.includes(request.policyAddress)) {
       reasons.push({ code: "policy-not-found" });
     }

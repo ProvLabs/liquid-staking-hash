@@ -188,10 +188,14 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       `SetHalted`, `ClearPendingDelegations`, plus `UnregisterParticipation`
       which the contract accepts from the operator OR the admin. What is new is
       that adding a sixth admin variant here now **fails App CI** until it is
-      given a template, rather than shipping an admin capability governance
-      cannot reach. This item's dual-policy split still needs no App change:
-      policy discovery stays set-valued, and the relay guard checks a proposal's
-      policy against the **discovered** set (App §12.3 amendment 2026-07-30).
+      given a template, rather than shipping an admin capability the App's
+      composer cannot reach. *(Amended the same day: that gate is a PRODUCT
+      completeness property, not a security one — the App's relay guard does not
+      restrict a proposal's contents, because a proposal executes nothing until
+      this group's threshold is met. See the App §12.3 correction of
+      2026-07-30.)* This item's dual-policy split still needs no App change:
+      policy discovery stays set-valued and is used for display and composer
+      convenience.
 - [ ] **ReceiptAccounting query (spec §11.3)** [TRIVIAL] (partially served by
       `EpochStatus.receipt_minted` today)
 - [ ] **Capture-signal incentive (spec §10.4 [DECIDE])** [OPTIONAL, post-v1

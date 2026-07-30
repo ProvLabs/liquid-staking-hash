@@ -787,7 +787,28 @@ rejection rows are unchanged and re-asserted beside the new matrix, adjacent to
 a case proving the same variant IS carried as a proposal. That pair is where a
 future regression would show.
 
-**Three things the build settled that the plan had not.** (1) **Condition 3
+**And then the guard was CUT, which is the milestone's sharpest result.** A
+security review of the finished branch found overview D7's rationale backwards:
+it justified template-matching every inner message by calling an unguarded
+`MsgSubmitProposal` "strictly worse than the `MsgExecuteContract` hole M6.4
+closed", but an unguarded `MsgExecuteContract` **executes on inclusion under the
+signer's own authority** while a proposal **executes nothing** until the group's
+decision policy is satisfied by other members voting. The threshold is the
+enforcement boundary; restricting what may be *proposed* reduced no authority
+available to anyone. Conditions 3, 4 and 5 are gone — with them the async relay
+guard, the per-submission chain read, the 503 failure mode, and the registry the
+relay had to keep in lockstep with the contract. The template set survives as the
+**composer's** vocabulary, which is what §8.7 asked for. Retained: the
+allowlist closure, the session binding, the closed field set, the `exec` pin
+(re-labelled a confirmation-rigor control, not an authorization one) and an
+envelope re-encode. Recorded in the 7.3–7.4 plan §10.4, D7's superseded row, and
+the app-spec §12.3 correction. **The generalizable lesson: §4 requires every
+invariant to name its gating test, and every one of these had a passing one — so
+§4 should also require each invariant to name WHAT AN ATTACKER GAINS IF IT DOES
+NOT HOLD.** That question collapsed three conditions in a sentence, and no §4b
+cell asks it. Proposed for M8's plan review.
+
+**Three things the build settled before that.** (1) **Condition 3
 forced the guard async.** "Is this a program policy" is a live, set-valued read
 (D1), and the alternatives were hardcoding a policy address — the topology
 assumption `SECURITY.md` forbids — or moving the condition out of a guard whose
