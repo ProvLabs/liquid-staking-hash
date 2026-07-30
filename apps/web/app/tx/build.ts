@@ -48,10 +48,8 @@ export const ALLOWED_MSG_TYPE_URLS = [MSG_SWAP_IN, MSG_SWAP_OUT, MSG_EXECUTE_CON
 
 /**
  * The CLOSED set of contract execute variants the relay will carry — the
- * operator actions of §14.6, and nothing else. Every admin/keeper variant
- * (`set_halted`, `update_config`, `pause_vault`, `unpause_vault`,
- * `clear_pending_delegations`, `run_epoch`, `claim_rewards`,
- * `service_redemptions`, `capture_uptime_signal`) is deliberately ABSENT and
+ * operator actions of §14.6, and nothing else. Every admin and keeper variant
+ * (`ADMIN_VARIANTS` / `KEEPER_VARIANTS` below) is deliberately ABSENT and
  * provably rejected. Adding one is a design-review event, not an edit.
  */
 export const OPERATOR_VARIANTS = [
@@ -63,6 +61,39 @@ export const OPERATOR_VARIANTS = [
   "purge_jailed_validator",
 ] as const;
 export type OperatorVariant = (typeof OPERATOR_VARIANTS)[number];
+
+/**
+ * The contract's ADMIN-gated variants (`contracts/src/msg.rs`), and the
+ * permissionless KEEPER cranks. Neither list is an allowlist — nothing here is
+ * carried by the relay, and `guardOperatorExecute` rejects every one of them.
+ *
+ * They are NAMED here, rather than left as prose, for two consumers that must
+ * not describe the same action differently (M7.2 §2.2, "one vocabulary for one
+ * action"): `test/broadcast-guard.test.ts`'s rejection matrix iterates them, so
+ * it can no longer drift from the variant set; and `app/governance/decode.ts`
+ * summarizes a `MsgExecuteContract` inside a governance proposal against them,
+ * so the reader and 7.4's composer share one vocabulary. Naming a rejected set
+ * is not admitting it — `ALLOWED_MSG_TYPE_URLS` and the guard are unchanged.
+ *
+ * `unregister_participation` is deliberately NOT here: the contract accepts it
+ * from the operator OR the admin, and it is already in `OPERATOR_VARIANTS`.
+ */
+export const ADMIN_VARIANTS = [
+  "set_halted",
+  "update_config",
+  "pause_vault",
+  "unpause_vault",
+  "clear_pending_delegations",
+] as const;
+export type AdminVariant = (typeof ADMIN_VARIANTS)[number];
+
+export const KEEPER_VARIANTS = [
+  "run_epoch",
+  "claim_rewards",
+  "service_redemptions",
+  "capture_uptime_signal",
+] as const;
+export type KeeperVariant = (typeof KEEPER_VARIANTS)[number];
 
 /** The two variants that carry funds. Every other variant MUST be fundless. */
 export const FUNDED_VARIANTS: ReadonlySet<string> = new Set<OperatorVariant>([

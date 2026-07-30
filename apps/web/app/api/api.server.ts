@@ -16,6 +16,16 @@ import type {
   EffectiveYieldPoint,
   EpochRow,
   FreshnessMeta,
+  GovDecisionPolicy,
+  GovExecutorResult,
+  GovPolicyRow,
+  GovProposalDetail,
+  GovProposalRow,
+  GovProposalsPayload,
+  GovProposalStatus,
+  GovTally,
+  GovVoteOption,
+  GovVoteRow,
   IncidentKind,
   IncidentRow,
   IncidentSeverity,
@@ -47,6 +57,16 @@ import type {
 import {
   MARKER_CAP_WIRE,
   MAX_ACCRUAL_POINTS_WIRE,
+  MAX_BECH32_LENGTH,
+  MAX_GOV_METADATA_LENGTH,
+  MAX_GOV_POLICIES_WIRE,
+  MAX_GOV_PROPOSAL_MESSAGES_WIRE,
+  MAX_GOV_PROPOSALS_PAGE_WIRE,
+  MAX_GOV_PROPOSERS_WIRE,
+  MAX_GOV_SUMMARY_LENGTH,
+  MAX_GOV_TITLE_LENGTH,
+  MAX_GOV_VOTES_PER_PROPOSAL_WIRE,
+  MAX_TXHASH_LENGTH,
   MAX_YIELD_POINTS_WIRE,
 } from "@nvhash/api-types";
 import type { FetchLike } from "@nvhash/chain-client";
@@ -370,6 +390,153 @@ export const alertArrearsFactSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
   commission_due: baseUnitString,
 }) satisfies z.ZodType<AlertArrearsFact>;
+
+// M7.1 governance mirror (public /governance/{proposals,proposal,policies}).
+// Every array cap here IMPORTS its bound from `@nvhash/api-types/bounds.ts`
+// rather than restating a number — a locally-written `.max(N)` on a governance
+// array is the literal shape of the PR #19 defect, and the pairing is asserted
+// by `packages/api-types/test/bounds.test.ts` rather than by eye (M7.2 §4b C2).
+//
+// Weights and tally counts are UNBOUNDED integers in the protocol (sums of
+// member weights, not token amounts), so they stay decimal strings and are never
+// coerced to a number. The length cap below is a bound on the WIRE ENCODING —
+// this tier will not accept an arbitrarily long string from the network — and is
+// deliberately far past anything a real group can produce, so it is not a claim
+// about the protocol's ceiling.
+const weightString = z
+  .string()
+  .max(78)
+  .regex(/^(0|[1-9][0-9]*)$/, "expected a canonical unsigned integer string");
+
+/** A `voting_period` / `min_execution_period` duration as x/group serves it. */
+const durationString = z.string().max(32);
+
+export const govProposalStatusSchema = z.enum([
+  "submitted",
+  "accepted",
+  "rejected",
+  "aborted",
+  "withdrawn",
+  "unspecified",
+]) satisfies z.ZodType<GovProposalStatus>;
+
+export const govExecutorResultSchema = z.enum([
+  "not_run",
+  "success",
+  "failure",
+  "unspecified",
+]) satisfies z.ZodType<GovExecutorResult>;
+
+export const govVoteOptionSchema = z.enum([
+  "yes",
+  "no",
+  "abstain",
+  "no_with_veto",
+  "unspecified",
+]) satisfies z.ZodType<GovVoteOption>;
+
+export const govTallySchema = z.object({
+  yes: weightString,
+  no: weightString,
+  abstain: weightString,
+  no_with_veto: weightString,
+}) satisfies z.ZodType<GovTally>;
+
+/** The decision rule, closed on `kind`. The `unknown` arm is not defensive
+ * padding: a policy type this build does not recognize must survive the
+ * boundary so the page can say so, rather than nulling the whole read. */
+export const govDecisionPolicySchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("threshold"),
+    threshold: weightString,
+    voting_period: durationString,
+    min_execution_period: durationString,
+  }),
+  z.object({
+    kind: z.literal("percentage"),
+    // A decimal FRACTION ("0.5"), not bps and not an integer.
+    percentage: z.string().max(32),
+    voting_period: durationString,
+    min_execution_period: durationString,
+  }),
+  z.object({ kind: z.literal("unknown"), type_url: z.string().max(256) }),
+]) satisfies z.ZodType<GovDecisionPolicy>;
+
+/** u64 proposal id as a DECIMAL STRING — the JSON number domain stops at 2^53,
+ * so a coerced number would silently accept a corrupted id. */
+const proposalIdString = z
+  .string()
+  .max(20)
+  .regex(/^(0|[1-9][0-9]*)$/, "expected a canonical u64 decimal string");
+
+export const govProposalRowSchema = z.object({
+  proposal_id: proposalIdString,
+  group_policy_address: z.string().max(MAX_BECH32_LENGTH),
+  group_id: z.string().max(20),
+  proposers: z.array(z.string().max(MAX_BECH32_LENGTH)).max(MAX_GOV_PROPOSERS_WIRE),
+  status: govProposalStatusSchema,
+  executor_result: govExecutorResultSchema,
+  title: z.string().max(MAX_GOV_TITLE_LENGTH),
+  summary: z.string().max(MAX_GOV_SUMMARY_LENGTH),
+  metadata: z.string().max(MAX_GOV_METADATA_LENGTH).nullable(),
+  tally: govTallySchema,
+  decision_policy: govDecisionPolicySchema,
+  submit_time: isoTimestamp,
+  voting_period_end: isoTimestamp,
+  group_version: z.string().max(20),
+  group_policy_version: z.string().max(20),
+  observed_height: z.number().int().nonnegative(),
+  observed_at: isoTimestamp,
+  height: z.number().int().nonnegative().nullable(),
+  txhash: z.string().max(MAX_TXHASH_LENGTH).nullable(),
+  pruned_at_height: z.number().int().nonnegative().nullable(),
+  messages_truncated: z.boolean(),
+  proposers_truncated: z.boolean(),
+  // Messages stay `unknown` on purpose: they are decoded against a closed union
+  // in `app/governance/decode.ts`, and a schema that shaped them here would have
+  // to either reject an unrecognized message (losing the proposal) or describe
+  // it (inventing a meaning). Both are forbidden; carrying it verbatim is not.
+  messages: z.array(z.unknown()).max(MAX_GOV_PROPOSAL_MESSAGES_WIRE),
+}) satisfies z.ZodType<GovProposalRow>;
+
+export const govVoteRowSchema = z.object({
+  proposal_id: proposalIdString,
+  voter: z.string().max(MAX_BECH32_LENGTH),
+  option: govVoteOptionSchema,
+  metadata: z.string().max(MAX_GOV_METADATA_LENGTH).nullable(),
+  // Nullable because x/group's `Vote` carries NO weight field. Null survives the
+  // boundary as null — a vote whose weight could not be recovered must never
+  // read as a vote that counted for zero.
+  weight: weightString.nullable(),
+  submit_time: isoTimestamp,
+  height: z.number().int().nonnegative().nullable(),
+  txhash: z.string().max(MAX_TXHASH_LENGTH).nullable(),
+}) satisfies z.ZodType<GovVoteRow>;
+
+export const govProposalsPayloadSchema = z.object({
+  proposals: z.array(govProposalRowSchema).max(MAX_GOV_PROPOSALS_PAGE_WIRE),
+  indexed_from_height: z.number().int().nonnegative().nullable(),
+}) satisfies z.ZodType<GovProposalsPayload>;
+
+export const govProposalDetailSchema = z.object({
+  proposal: govProposalRowSchema,
+  votes: z.array(govVoteRowSchema).max(MAX_GOV_VOTES_PER_PROPOSAL_WIRE),
+  votes_truncated: z.boolean(),
+}) satisfies z.ZodType<GovProposalDetail>;
+
+export const govPolicyRowSchema = z.object({
+  address: z.string().max(MAX_BECH32_LENGTH),
+  group_id: z.string().max(20),
+  proposal_count: z.number().int().nonnegative(),
+  last_seen_height: z.number().int().nonnegative(),
+  decision_policy: govDecisionPolicySchema.nullable(),
+}) satisfies z.ZodType<GovPolicyRow>;
+
+export const govProposalsEnvelopeSchema = envelopeSchema(govProposalsPayloadSchema);
+export const govProposalEnvelopeSchema = envelopeSchema(govProposalDetailSchema);
+export const govPoliciesEnvelopeSchema = envelopeSchema(
+  z.array(govPolicyRowSchema).max(MAX_GOV_POLICIES_WIRE),
+);
 
 /** The notifier caps its fact page at 500 (MAX_ALERT_FACT_LIMIT); bound here. */
 export const alertRedemptionsEnvelopeSchema = envelopeSchema(z.array(alertRedemptionFactSchema).max(500));

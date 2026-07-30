@@ -16,8 +16,11 @@ import {
   buildTxPlan,
   encodeTxBody,
   encodeTxRaw,
+  ADMIN_VARIANTS,
   ALLOWED_MSG_TYPE_URLS,
+  KEEPER_VARIANTS,
   MSG_EXECUTE_CONTRACT,
+  OPERATOR_VARIANTS,
   type OperatorIntent,
   type TxIntent,
 } from "~/tx/build";
@@ -390,21 +393,40 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
     );
   });
 
+  // The variants that halt the program, rewrite its config, pause the vault, or
+  // drive the cranks. None is in the relay's set; each must be refused. The
+  // bodies are a TOTAL map over `ADMIN_VARIANTS ∪ KEEPER_VARIANTS` (M7.2 §3.4
+  // R4), so a variant added to either list without a case here is a type error
+  // rather than a silently unrejected message — before this the matrix was
+  // string literals that could drift from the vocabulary it was proving closed.
+  const REJECTED_VARIANT_BODIES = {
+    set_halted: `{"set_halted":{"halted":true}}`,
+    update_config: `{"update_config":{"aum_fee_bps":9999}}`,
+    pause_vault: `{"pause_vault":{"reason":"x"}}`,
+    unpause_vault: `{"unpause_vault":{}}`,
+    clear_pending_delegations: `{"clear_pending_delegations":{}}`,
+    run_epoch: `{"run_epoch":{}}`,
+    claim_rewards: `{"claim_rewards":{}}`,
+    service_redemptions: `{"service_redemptions":{}}`,
+    capture_uptime_signal: `{"capture_uptime_signal":{}}`,
+  } as const satisfies Record<
+    (typeof ADMIN_VARIANTS)[number] | (typeof KEEPER_VARIANTS)[number],
+    string
+  >;
+
   it("every ADMIN / KEEPER variant → 400", () => {
-    // The variants that halt the program, rewrite its config, pause the vault,
-    // or drive the cranks. None is in the set; each must be refused.
-    for (const msg of [
-      `{"set_halted":{"halted":true}}`,
-      `{"update_config":{"aum_fee_bps":9999}}`,
-      `{"pause_vault":{"reason":"x"}}`,
-      `{"unpause_vault":{}}`,
-      `{"clear_pending_delegations":{}}`,
-      `{"run_epoch":{}}`,
-      `{"claim_rewards":{}}`,
-      `{"service_redemptions":{}}`,
-      `{"capture_uptime_signal":{}}`,
-    ]) {
+    for (const variant of [...ADMIN_VARIANTS, ...KEEPER_VARIANTS]) {
+      const msg = REJECTED_VARIANT_BODIES[variant];
       reject(signedExecuteTx(rawExecute({ msg })), msg);
+    }
+  });
+
+  it("the admin/keeper vocabulary is disjoint from the relay's operator set", () => {
+    // The lists exist so the decoder and the composer share one vocabulary; an
+    // overlap would mean naming an action twice with different authority.
+    const operators = new Set<string>(OPERATOR_VARIANTS);
+    for (const variant of [...ADMIN_VARIANTS, ...KEEPER_VARIANTS]) {
+      expect(operators.has(variant)).toBe(false);
     }
   });
 

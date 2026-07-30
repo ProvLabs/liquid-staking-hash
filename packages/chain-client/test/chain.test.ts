@@ -211,6 +211,50 @@ describe("group decoders against the devnet corpus", () => {
     expect(Object.keys(v)).not.toContain("weight");
   });
 
+  // The live tally read (app plan PR 7.2). It exists because a proposal's
+  // `final_tally_result` is zeros for the whole voting period — the module writes
+  // it only when it tallies — so the state plane cannot say where an OPEN
+  // proposal stands, and rendering those zeros would assert "nobody has voted".
+  // The corpus predates this read, so BOTH response envelopes are accepted; the
+  // tally shape itself is the corpus-pinned `TallyResult`.
+  it("reads the module's tally through either response envelope", async () => {
+    const counts = {
+      yes_count: "2",
+      abstain_count: "0",
+      no_count: "1",
+      no_with_veto_count: "0",
+    };
+    for (const body of [{ tally: counts }, counts]) {
+      const r = await new GroupClient(lcdServing(body)).tallyResult(8n);
+      expect(r.yesCount).toBe("2");
+      expect(r.noCount).toBe("1");
+      // Strings, not numbers: unbounded weight sums (2^53 corrupts silently).
+      expect(typeof r.yesCount).toBe("string");
+    }
+  });
+
+  it("the open proposals in the corpus carry a ZERO final tally", () => {
+    // The fact the read above exists for. Every SUBMITTED proposal the drill
+    // captured has an all-zero `final_tally_result`; if a later build starts
+    // maintaining a running tally in state, this test fails and the live tally
+    // read becomes redundant rather than silently duplicated.
+    const sweep = fixture("queries/group/proposals-by-group-policy.json") as {
+      proposals: Record<string, unknown>[];
+    };
+    const open = sweep.proposals
+      .map((raw) => parseProposal(raw))
+      .filter((p) => p.status === "SUBMITTED");
+    expect(open.length).toBeGreaterThan(0);
+    for (const p of open) {
+      expect(p.finalTallyResult).toEqual({
+        yesCount: "0",
+        abstainCount: "0",
+        noCount: "0",
+        noWithVetoCount: "0",
+      });
+    }
+  });
+
   it("tags an unrecognized decision policy instead of throwing", () => {
     // An enum or policy type a later chain upgrade adds must not stall an
     // indexer window mid-sweep (plan §4 invariant 8). The raw payload is kept so

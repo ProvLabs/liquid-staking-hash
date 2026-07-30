@@ -755,3 +755,20 @@ while the defect it named was live. That is the M6.4 failure mode reproduced ins
 the PR piloting the fix for it, and it strengthens §7.5's own prediction that a
 leaking-but-filled table should be answered by generating the matrix from the drill
 corpus rather than by hand.*
+
+*2026-07-30 — **PR 7.2 delivered**: the §8.7 governance read UI (`/governance` +
+`/governance/:proposalId`), public read, still no signing path. Two things are
+worth carrying forward. **First, the plan was wrong about where a live tally
+comes from, and only the build could find it:** a proposal's
+`final_tally_result` is zeros for the whole voting period, so the state read the
+plan named would have rendered "nobody has voted" on an open proposal with
+votes. The fix is x/group's own `TallyResult` query, plus a chain-client test
+asserting that every SUBMITTED proposal in the captured sweep does carry an
+all-zero final tally — the assumption is now falsifiable rather than believed.
+**Second, §4b's C4 and C5 finally got exercised**, having been n/a for 7.1 and
+left "on probation" by the overview. C5's stale-versus-down distinction is what
+produced the `plane` field and its badge, and C5's both-down cell is what made
+every tally count nullable — a non-nullable count would have forced a fabricated
+`0` into exactly the figure that must never be one. C4 was filled and every row
+read "read only", which is the point: 7.3–7.4 inherits it as the state set each
+new affordance must be decided against.*

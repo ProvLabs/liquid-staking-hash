@@ -410,3 +410,33 @@ obligations pass to 7.2: `PROPOSAL_STATUS_ABORTED` is renderable but unreachable
 on the drilled build, so its UI is unexercised by real data; and per-voter history
 for any CLOSED proposal exists only in the mirror, since the module deletes votes
 at the tally.*
+
+*2026-07-30: PR 7.2 delivered, closing branch 2. §4's D5, D6, D8 and D15 are
+discharged in the [7.2 plan](2026-07-28-app-m7.2-governance-read-ui.md) §2.1,
+§2.2, §2.4 and invariant 10.*
+
+*__C4 and C5 come off probation, and the verdict is split.__ §7.5 predicted both
+were at risk of being ceremony — prose tables bounded by the author's
+imagination — and left them untested after 7.1 had no UI. 7.2 exercised both.*
+
+*__C5 changed the implementation, twice, and neither change was in the plan's
+prose.__ Its stale-versus-down column is what produced the `plane` field and the
+badge that renders it, rather than a `liveAvailable` boolean of the kind M6.4
+shipped; and its both-down cell is what made every tally count nullable, because
+that cell has no honest number and a non-nullable field would have forced a
+fabricated `0` into precisely the figure this page must never fabricate. Both
+are mechanisms a reviewer can check, which is the bar §7.5 set.*
+
+*__C4 was filled, every row read "read only", and it changed nothing in this
+PR.__ That is the honest reading, and it is not the same as ceremony: the table's
+value is a forward obligation on 7.3–7.4, which inherits it as the state set each
+new affordance must be decided against — the M6.4 "inactive validators retain
+actions" P1 in its preventable form. Judge C4 there, not here.*
+
+*__One assumption was contradicted by the module rather than by a table__, and
+neither C4 nor C5 could have caught it: an open proposal's `final_tally_result`
+is zeros until the module tallies, so the state read the 7.2 plan named as the
+live plane would have rendered "nobody has voted". It was found by building
+against the corpus, which is the same lesson 7.1 closed with — the app side's
+missing discovery phase is the real gap, and §4b's contribution is telling the
+discovery where to aim.*

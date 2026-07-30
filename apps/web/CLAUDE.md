@@ -184,6 +184,42 @@ End-user web interface. Production quality.
   `sameBech32Payload` (in `lib/adr36-verify.server.ts`, which holds the app's
   bech32 primitives) restates it locally. `MAX_PROGRAM_VALIDATORS` mirrors the
   contract's `MAX_VALIDATORS` and moves with it in the same change.
+- **Governance center** (PR 7.2, app-spec §8.7): `/governance` +
+  `/governance/:proposalId` under `:lang?` (detail registered AFTER the list),
+  over `app/governance/` — `governance.server.ts` is the composition seam,
+  `types.ts` the view models, `decode.ts` + `tally.ts` + `format.ts` +
+  `labels.ts` + `params.ts` pure, and `app/lib/services/governance.server.ts`
+  the live `x/group` reads. Components under `app/components/governance/` are
+  presentation-only. **PUBLIC READ — and it must stay one:** proposals and votes
+  are public chain facts with no address keying, so these routes do NOT join the
+  personal-route list; they use `getSessionContext` (null for anonymous) purely
+  to highlight the connected member's own row, never `requireSession`. Gated by
+  the governance block in `test/session-scope.test.ts`.
+  **The load-bearing fact** (measured, not assumed): a proposal's
+  `final_tally_result` is ZEROS until the module tallies it, so an OPEN
+  proposal's live tally comes from x/group's own `TallyResult` query
+  (`GroupClient.tallyResult`, added in this PR) and never from the state read —
+  rendering those zeros would assert "nobody has voted". Every proposal carries
+  a `plane` (`live` / `indexed-fallback` / `indexed` / `pruned` / `live-only`)
+  and the `PlaneBadge` renders it wherever a status or tally appears, so a
+  mirrored figure can never be shown as current; `indexed-fallback` carries the
+  `observed_height`. **A live read failure is never a prune** (the LCD answers
+  500 for a pruned id, an unknown id and an outage alike) — `pruned_at_height`
+  from the mirror is the only source, and a pruned proposal is never live-read.
+  **`not-governed` and `unavailable` are different answers** and only an LCD 404
+  decides the first. Decoding is a CLOSED union — `MsgSend` plus
+  `MsgExecuteContract` against the configured contract, whose variant vocabulary
+  is IMPORTED from `app/tx/build.ts` (`OPERATOR_VARIANTS` / `ADMIN_VARIANTS` /
+  `KEEPER_VARIANTS`, the last two named there for this reader and the rejection
+  matrix; naming them admits nothing, the allowlist is unchanged) — and anything
+  else is a tagged `unknown` with the exact JSON, which rides on every message
+  either way. **The offline corpus is UNGOVERNED** (its contract predates its
+  group; M7 F2 has no admin-rotation path), so offline e2e exercises the mirror
+  plus the honest live-unresolved state and the governed plane is covered by
+  MSW overrides in `test/governance-data.test.ts` and by `e2e-live`. New
+  standing gates: `test/governance-{decode,tally,data,compose}.test.ts`, offline
+  `e2e/governance.spec.ts`, skip-clean `e2e-live/governance.spec.ts`, both
+  routes in the axe list, and the governance case in `session-scope`.
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).
