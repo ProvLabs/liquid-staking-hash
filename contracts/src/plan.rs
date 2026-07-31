@@ -123,13 +123,16 @@ pub fn plan_claim(validators: &[String], with_rewards: &[String]) -> Vec<String>
     out
 }
 
+/// Delegation targets as `(valoper, amount)` pairs, in plan order.
+pub type DelegationTargets = Vec<(String, Uint128)>;
+
 /// Split delegation targets into (this-run, remainder) for chunked execution.
 /// `max == 0` means unlimited. Keeps the per-validator delegate loop inside the
 /// per-tx gas budget; the remainder is persisted and drained by continuation cranks.
 pub fn take_chunk(
-    mut targets: Vec<(String, Uint128)>,
+    mut targets: DelegationTargets,
     max: u32,
-) -> (Vec<(String, Uint128)>, Vec<(String, Uint128)>) {
+) -> (DelegationTargets, DelegationTargets) {
     if max == 0 || targets.len() <= max as usize {
         return (targets, vec![]);
     }

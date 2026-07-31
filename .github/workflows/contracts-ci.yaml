@@ -1,0 +1,152 @@
+# Contract-side PR quality gates.
+#
+# The contract custodies staked funds, so its suite is the one gate that must
+# never be developer discipline alone: `SECURITY.md` requires the invariants to
+# be machine-checked, the simulation to stay seed-reproducible, and the
+# committed schema to be the shipped interface. Each of those is a job here.
+#
+# The toolchain is pinned by `contracts/rust-toolchain.toml` — rustup reads it
+# automatically, which is why no toolchain action appears below. Bump the pin
+# there, not here.
+#
+# Deliberately NOT here: the live devnet drills under `contracts/drills/`. They
+# need the ghcr.io/provlabs/vault-dev-node image with the pre-release vault
+# module, so they stay local/scheduled until PR 8.0 pins a released vault — the
+# same boundary app-ci draws.
+#
+# No `paths:` filter: every job runs on every PR. Filtering to `contracts/**`
+# would skip these on app-only changes, but a skipped job reports as skipped
+# rather than successful, which blocks merges wherever the check is required.
+# Add filters only together with the branch-protection change that expects them.
+name: contracts-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: contracts-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # provwasm-test-tube bundles Go dependencies that do not build on Go >= 1.26
+  # (contracts/CLAUDE.md). Pinning the Go toolchain makes the runner's
+  # preinstalled Go version irrelevant to whether the suite compiles.
+  GOTOOLCHAIN: go1.24.5
+
+defaults:
+  run:
+    working-directory: contracts
+
+jobs:
+  # Fast gates: no Docker, no chain, no artifact. These are the ones that catch
+  # a stale committed interface or unformatted source before the slow jobs run.
+  static:
+    name: contracts · fmt · clippy · schema freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        run: rustup show
+      - name: Restore cargo registry + target cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: cargo-static-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/rust-toolchain.toml') }}
+          restore-keys: cargo-static-${{ runner.os }}-
+
+      - name: Formatting (cargo fmt --check)
+        run: cargo fmt --check
+
+      # Warnings are denied: the crate is warning-clean as of this workflow
+      # landing, so a new warning is a new defect rather than accumulated noise.
+      - name: Lints (cargo clippy, warnings denied)
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # SECURITY.md audit readiness: "cargo schema output is regenerated and
+      # committed with interface changes, so the reviewed interface is the
+      # shipped one". This is the enforcement of that sentence. It matters
+      # beyond staleness: apps/web/test/governance-templates.test.ts asserts
+      # template totality AGAINST the committed JSON, so a stale schema does not
+      # fail that test — it makes it assert against the wrong interface.
+      - name: Committed schema is current (cargo schema → no diff)
+        run: |
+          cargo run --bin schema --locked
+          git diff --exit-code -- schema \
+            || { echo "::error::contracts/schema is stale — run 'cargo run --bin schema' and commit the result"; exit 1; }
+
+  # The full suite, including the provwasm-test-tube tests that execute against
+  # a real embedded chain. Those load artifacts/nvhash_staking.wasm and refuse
+  # to run against a binary older than the source, so the artifact is built
+  # first — it is never committed (repo policy: no binary artifacts in git).
+  test:
+    name: contracts · cargo test (artifact-backed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        run: rustup show
+      - name: Restore cargo registry + target cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/rust-toolchain.toml') }}
+          restore-keys: cargo-test-${{ runner.os }}-
+
+      # Runs the pinned cosmwasm/optimizer image (amd64 on the runner) and
+      # gates the per-function locals limit, so a wasm the chain would statically
+      # reject fails here rather than at deploy.
+      - name: Build the optimized wasm artifact
+        run: ./scripts/build-artifact.sh
+
+      - name: Test (unit, property, and embedded-chain integration)
+        run: cargo test --locked
+
+  # The chain-free simulation soak. Bounded and fixed-seed so it terminates and
+  # reproduces: SECURITY.md requires simulation failures to stay
+  # seed-reproducible, and the binary exits non-zero when any scenario fails.
+  # Reproduce a CI failure locally with the scenario seed it prints:
+  #   cargo run --release --bin simulate -- --seed <scenario_seed> --scenarios 1
+  soak:
+    name: contracts · simulation soak (bounded, fixed seed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        run: rustup show
+      - name: Restore cargo registry + target cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: cargo-soak-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/rust-toolchain.toml') }}
+          restore-keys: cargo-soak-${{ runner.os }}-
+
+      - name: Soak (500 scenarios × 240 epochs, halt on first failure)
+        run: |
+          cargo run --release --bin simulate --locked -- \
+            --seed 20260730 --scenarios 500 --epochs 240 --halt-on-failure
+
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-failures
+          path: contracts/sim-failures.log
+          if-no-files-found: ignore

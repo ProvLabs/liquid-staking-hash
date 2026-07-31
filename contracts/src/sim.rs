@@ -36,6 +36,9 @@ impl Rng {
     pub fn new(seed: u64) -> Self {
         Rng(seed)
     }
+    // Not `Iterator::next`: an RNG stream is unbounded and infallible, so the
+    // Option-returning contract would force an `unwrap` at every call site.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
         let mut z = self.0;
@@ -566,7 +569,7 @@ impl Sim {
             // late→prompt pair squeezes the next inter-crank gap below the
             // unbonding period, exercising the never-rejected guards live.
             Timing::Compressed => {
-                if self.stats.epochs % 2 == 0 {
+                if self.stats.epochs.is_multiple_of(2) {
                     26 * DAY_SECS
                 } else {
                     DAY_SECS

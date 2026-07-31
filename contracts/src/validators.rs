@@ -1040,7 +1040,6 @@ mod jail_episode_tests {
         Binary, Coin as CwCoin, ContractResult, Decimal, FullDelegation, SystemResult,
         Validator as CwValidator,
     };
-    use prost::Message as _;
     use provwasm_common::MockableQuerier;
     use provwasm_mocks::{mock_provenance_dependencies, MockProvenanceQuerier};
     use provwasm_std::types::cosmos::staking::v1beta1::{

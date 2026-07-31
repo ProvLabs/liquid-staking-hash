@@ -482,9 +482,12 @@ mod unit {
         }
     }
 
+    /// A named out-of-range mutation of one `InstantiateMsg` field.
+    type BoundsCase<'a> = (&'a str, Box<dyn Fn(&mut InstantiateMsg)>);
+
     #[test]
     fn instantiate_bounds_every_config_input() {
-        let cases: Vec<(&str, Box<dyn Fn(&mut InstantiateMsg)>)> = vec![
+        let cases: Vec<BoundsCase> = vec![
             (
                 "aum_fee_bps over 100%",
                 Box::new(|m| m.aum_fee_bps = 10_001),

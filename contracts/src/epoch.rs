@@ -97,15 +97,17 @@ pub fn unbonding_state(deps: Deps, env: &Env) -> StdResult<(Uint128, Vec<String>
     Ok((total, at_capacity))
 }
 
+/// Rebalance constraints derived from in-flight redelegations: the validators
+/// that may not be redelegated FROM, and the `(src, dst)` routes that may not
+/// carry another entry.
+pub type RedelegationConstraints = (BTreeSet<String>, BTreeSet<(String, String)>);
+
 /// The contract's active redelegations, reduced to the rebalance constraints
 /// (RC1 §9.3): validators that are DESTINATIONS of in-flight entries cannot be
 /// redelegated FROM (the no-transitive-redelegation rule), and (src, dst)
 /// routes already at MAX_UNBOND_ENTRIES cannot carry another entry. Paginated:
 /// a truncated read could emit a move the chain rejects, reverting the crank.
-pub fn redelegation_state(
-    deps: Deps,
-    env: &Env,
-) -> StdResult<(BTreeSet<String>, BTreeSet<(String, String)>)> {
+pub fn redelegation_state(deps: Deps, env: &Env) -> StdResult<RedelegationConstraints> {
     let sq = StakingQuerier::new(&deps.querier);
     let mut blocked_sources = BTreeSet::new();
     let mut blocked_pairs = BTreeSet::new();
@@ -1246,7 +1248,6 @@ mod sequence_tests {
                     denom: "nhash".to_string(),
                     amount: (vault_liquid + 1_500).to_string(),
                 }),
-                ..Default::default()
             },
         );
         grpc(
