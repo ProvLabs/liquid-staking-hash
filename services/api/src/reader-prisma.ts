@@ -92,9 +92,11 @@ function toBigint(value: { toFixed(dp: number): string }): bigint {
 //
 // Tagged templates throughout — every value is a bound parameter, no string
 // interpolation reaches the query (SECURITY.md input handling), the
-// `programMetrics` precedent. The matching composite indexes ship in
-// `20260728000000_keyset_indexes`; without them the row comparison is correct
-// but unindexed.
+// `programMetrics` precedent. The row comparison is correct but unindexed
+// unless the walked sort key is covered to its tie-break column — the
+// `@@index([valoper, height, msgIndex, ordinal])` and
+// `@@index([address, height, msgIndex])` declared in the indexer's
+// `operator_payments.prisma` and `transactions.prisma`.
 
 /**
  * A cursor on an export's sort key. `ordinal` completes it for

@@ -24,6 +24,16 @@ Read both before changing a worker, a cursor, or an idempotency guard.
   its Prisma schema and migrations live here and run as the `indexer_writer`
   role, the only role with write access. This service never touches the `app`
   schema. Migrations must run cleanly on an empty database.
+- **The schema is ONE baseline migration, not a history.** Nothing runs this
+  schema outside dev and CI, so there is no deployed database whose state a
+  migration has to reach: a schema change edits the models and is regenerated
+  into `prisma/migrations/20260715013707_init`, and every environment is rebuilt
+  (`./dev pg reset`, `migrate:deploy`) — indexed data is rebuildable from chain
+  by definition. Add an incremental migration only once a database exists whose
+  contents cannot be recreated. Regenerate with `prisma migrate diff
+  --from-empty --to-schema-datamodel prisma --script`, keeping the file's
+  hand-written header and its trailing constraints (which the datamodel cannot
+  express).
 - **Adding a column is a design-review event**, not a migration — edit the
   allowlist and record the rationale in the design notes.
 - Amount columns are `Decimal(39,0)`, never `Float`. Weight sums are also

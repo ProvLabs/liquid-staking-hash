@@ -181,9 +181,9 @@ at runtime for the same reason.
 The schema-field allowlist gate treats adding a column as a design-review event.
 Each extension is recorded here, per the gate's own contract.
 
-**`GovProposal` / `GovVote` (`20260729000000_governance_state`).** The tables had
-existed since the init migration with nine and six columns and nothing had ever
-written them — the devnet had no `x/group` substrate at all until it was
+**`GovProposal` / `GovVote` (reviewed 2026-07-29).** The tables had existed with
+nine and six columns and nothing had ever written them — the devnet had no
+`x/group` substrate at all until it was
 bootstrapped. The column set and rationale were approved in advance (M7 overview
 D3 + the app-spec §9.1 forward note), with two deltas recorded rather than
 slipped in:
@@ -201,7 +201,7 @@ honest where a fabricated height is not. Tally counts and `weight` are
 `Decimal(39,0)` unbounded weight sums, not token amounts
 (chain-facts §x/group 10).
 
-**`OperatorPayment.ordinal` (`20260728010000_operator_payment_ordinal`).** The
+**`OperatorPayment.ordinal` (reviewed 2026-07-28).** The
 payment's position within its `(txhash, msgIndex)`, derived from event order in
 the tx. It is part of the row's natural key: a message may batch several
 payments, and a two-part key made every sibling upsert onto the same row,
@@ -215,19 +215,33 @@ txhash). `payer` is a bech32 account already public in the tx body, kept because
 payment is permissionless and an operator auditing "who paid on my behalf" needs
 it (decided, Ira 2026-07-27).
 
-**Index-only migrations may ride another lane's branch** (one-PR-per-milestone
-precedent), since they add no column and leave the allowlist unaffected:
+**Index-only changes may ride another lane's branch** (one-PR-per-milestone
+precedent), since they add no column and leave the allowlist unaffected. Two
+carry rationale a reader would otherwise be tempted to simplify away:
 
-- `20260724010000_redemption_last_height_index` — `@@index([lastHeight])` on
-  `redemption_requests` for the notifier's cursor read.
-- `20260728000000_keyset_indexes` — `operator_payments` and `transactions` each
-  gain the `msgIndex` tie-break column on their existing index
-  (`(valoper, height, msgIndex)`, `(address, height, msgIndex)`), replacing the
-  narrower one. That column is what lets the §14.11 exports' keyset predicate
+- `redemption_requests.@@index([lastHeight])` serves the notifier's cursor read,
+  which selects `lastHeight > since_height` ascending each tick.
+- `operator_payments` and `transactions` each carry the `msgIndex` tie-break
+  column on their walk index (`(valoper, height, msgIndex, ordinal)`,
+  `(address, height, msgIndex)`) rather than the leading column alone. That
+  column is what lets the §14.11 exports' keyset predicate
   `(height, msgIndex) > (?, ?)` become a real index range bound instead of a
-  post-scan filter.
+  post-scan filter. Measured 2026-07-28 at 300 000 rows for one valoper: without
+  it, 9 564 buffers / 25 ms per chunk and rising with depth; with it, ~42
+  buffers / 0.2 ms, flat at every depth.
 
 The `indexed` schema stays indexer-owned; only DDL runs as `indexer_writer`.
+
+## Schema history
+
+The schema is one baseline migration, regenerated from the models, not an
+append-only chain — see `services/indexer/CLAUDE.md`. Indexed data is
+rebuildable from chain by definition, so until a database exists whose contents
+cannot be recreated, a schema change is an edit to the models plus a rebuild.
+One constraint the Prisma datamodel cannot express is therefore hand-written at
+the end of the baseline and must survive a regeneration: `gov_proposals.proposers`
+is `NOT NULL` — a list column's nullability is not a datamodel property, and
+x/group requires at least one proposer.
 
 ## Deliberate nulls
 

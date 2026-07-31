@@ -32,6 +32,16 @@ allowlist, or a live/indexed composition.
   only through `services/api`. `DATABASE_URL` is optional — absent, sessions run
   on a non-durable in-memory store. `test/app-schema-allowlist.test.ts` gates
   additions and forbids any role/identity/device column.
+- **The schema is ONE baseline migration, not a history.** Nothing runs this
+  schema outside dev and CI, so a schema change edits the models and is
+  regenerated into `prisma/migrations/20260723000000_init_sessions` rather than
+  appended to. Regenerate with `prisma migrate diff --from-empty
+  --to-schema-datamodel prisma --script`, keeping the file's hand-written
+  header, and rebuild the database (`./dev pg reset`, `migrate:deploy`).
+  Unlike `indexed`, this schema is NOT rebuildable from chain — a rebuild drops
+  sessions, notifications and push subscriptions — so the first environment
+  whose contents must survive is the point at which incremental migrations
+  start.
 - Accessibility and responsive layout are requirements, not nice-to-haves.
 - Security ([`SECURITY.md`](../../SECURITY.md)): never touch private keys or
   mnemonics — wallet adapters own signing; everything in the client bundle and
