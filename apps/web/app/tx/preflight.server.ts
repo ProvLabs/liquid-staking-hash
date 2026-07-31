@@ -22,10 +22,28 @@ import {
 } from "@nvhash/chain-client";
 import { z } from "zod";
 
+import {
+  MAX_BECH32_LENGTH,
+  MAX_PROPOSAL_METADATA_LEN,
+  MAX_PROPOSAL_SUMMARY_LEN,
+  MAX_PROPOSAL_TITLE_LEN,
+} from "@nvhash/api-types";
+
+import { executableAtIso } from "~/governance/actions";
+import { describeTemplateError, parseTemplateValues } from "~/governance/templates";
+import {
+  loadLiveGovernance,
+  loadLiveProposal,
+  loadLiveVotes,
+} from "~/lib/services/governance.server";
 import { VALOPER_RE } from "~/lib/bech32";
 import { sameBech32Payload } from "~/lib/adr36-verify.server";
 import type { WebConfig } from "~/config/config.server";
-import { OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM } from "./build";
+import {
+  GOVERNANCE_VOTE_OPTION_NAMES,
+  OPERATOR_VARIANTS,
+  PROGRAM_UNDERLYING_DENOM,
+} from "./build";
 import type { PreflightReason } from "./lifecycle";
 
 /**
@@ -72,6 +90,40 @@ export const operatorPreflightRequestSchema = z.object({
   amount: z.string().regex(/^[0-9]{1,39}$/, "expected a base-unit integer string").default("0"),
 });
 export type OperatorPreflightRequest = z.infer<typeof operatorPreflightRequestSchema>;
+
+/**
+ * M7.3–7.4 governance preflight (§2.5). A separate BOUNDED schema, never a
+ * widened one — the M6.4 precedent, and the reason a governance request can
+ * never be parsed as a swap or an operator action by accident.
+ *
+ * The proposal id stays a canonical DECIMAL STRING (`params.ts`'s rule): x/group
+ * ids are u64 and the JSON number domain stops at 2^53, and one proposal must
+ * not be addressable by two spellings.
+ */
+const proposalIdString = z.string().max(20).regex(/^(0|[1-9][0-9]*)$/);
+const bech32String = z.string().max(MAX_BECH32_LENGTH);
+
+export const governancePreflightRequestSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("gov_vote"),
+    proposalId: proposalIdString,
+    option: z.enum(GOVERNANCE_VOTE_OPTION_NAMES),
+  }),
+  z.object({ kind: z.literal("gov_exec"), proposalId: proposalIdString }),
+  z.object({
+    kind: z.literal("gov_submit"),
+    policyAddress: bech32String,
+    templateId: z.string().max(64),
+    // Values are `string | boolean` on the wire and converted by the REGISTRY
+    // (`parseTemplateValues`), not here: the boundary must not become a second
+    // place that decides what a template's parameters are (invariant 6).
+    values: z.record(z.string().max(64), z.union([z.string().max(1_024), z.boolean()])),
+    title: z.string().min(1).max(MAX_PROPOSAL_TITLE_LEN),
+    summary: z.string().min(1).max(MAX_PROPOSAL_SUMMARY_LEN),
+    metadata: z.string().max(MAX_PROPOSAL_METADATA_LEN).default(""),
+  }),
+]);
+export type GovernancePreflightRequest = z.infer<typeof governancePreflightRequestSchema>;
 
 export interface PreflightContext {
   reasons: PreflightReason[];
@@ -396,6 +448,324 @@ export async function runOperatorPreflight(
         ? null
         : (spendable.balances.find((c) => c.denom === PROGRAM_UNDERLYING_DENOM)?.amount ?? 0n),
     nowSeconds: Math.floor(Date.now() / 1000),
+  });
+
+  if (account === null && !reasons.some((r) => r.code === "chain-unavailable")) {
+    reasons.push({ code: "account-missing" });
+  }
+
+  return {
+    reasons,
+    signer:
+      account === null
+        ? null
+        : {
+            accountNumber: account.accountNumber.toString(),
+            sequence: account.sequence.toString(),
+            chainId: config.chainId,
+          },
+    balance: (
+      spendable?.balances.find((c) => c.denom === PROGRAM_UNDERLYING_DENOM)?.amount ?? 0n
+    ).toString(),
+    denom: PROGRAM_UNDERLYING_DENOM,
+  };
+}
+
+// ── M7.3–7.4 governance preflight (§2.5) ─────────────────────────────────
+//
+// Same contract as the operator matrix above, and the same limit. Every
+// predicate RESTATES one the x/group module or the contract already enforces,
+// so preflight is convenience (§12.1, SECURITY.md "UI guards are convenience,
+// the contract is the enforcement boundary"): it explains, in advance, why an
+// action would fail. It never gates safety, a would-fail reason is never an
+// authorization claim, and a PASSING preflight never implies acceptance — the
+// module decides, and `test/tx-preflight.test.ts` holds a
+// preflight-passes-chain-rejects case saying so.
+//
+// A failed read of a fact this branch CONSUMES blocks, rather than returning an
+// empty (green) reason list for an action the chain then rejects.
+
+/** The live facts the governance predicates read. Separated from the I/O so the
+ * matrix is a pure function the tests drive directly. */
+export interface GovernancePreflightFacts {
+  /** The acting address, from the SESSION (never client input). */
+  address: string;
+  /**
+   * The live proposal, or null when the chain could not serve it.
+   *
+   * Null is DELIBERATELY AMBIGUOUS and treated as "we could not read it": the
+   * LCD answers a missing proposal with HTTP 500, byte-identical for a pruned
+   * id, a never-existing id and a node outage (7.2's pinned fact). So the reason
+   * is `proposal-not-found` — "we could not read this proposal" — and never
+   * `proposal-pruned`, which is a claim only the mirror can make.
+   */
+  proposal: {
+    status: string;
+    executorResult: string;
+    submitTime: string;
+    votingPeriodEnd: string;
+  } | null;
+  /** Whether the live plane resolved at all. False → `governance-unavailable`. */
+  governanceResolved: boolean;
+  /** The DISCOVERED program policies; null when the sweep failed. */
+  policyAddresses: readonly string[] | null;
+  /** The live member set, or null when that read failed. */
+  memberAddresses: readonly string[] | null;
+  /** Voters with a recorded vote on this proposal, or null when unread. */
+  voters: readonly { voter: string; option: string }[] | null;
+  /** The proposal's policy `min_execution_period`, as x/group serializes it. */
+  minExecutionPeriod: string | null;
+  /**
+   * The program's live `Config {}`, keyed by parameter name; null when the read
+   * failed. Consumed ONLY by the `update_config` cross-field rule below, so its
+   * absence blocks only there.
+   */
+  currentConfig: Readonly<Record<string, bigint>> | null;
+  /** Spendable nhash for the fee check. */
+  spendableNhash: bigint | null;
+  nowMs: number;
+}
+
+const governanceUnavailable = (): PreflightReason[] => [{ code: "governance-unavailable" }];
+
+/**
+ * The governance predicate matrix — pure over live facts.
+ *
+ * Ordering is deliberate, exactly as the operator matrix's is: an unavailable
+ * read short-circuits before any reason derived from a missing fact could be
+ * produced.
+ */
+export function governancePreflightReasons(
+  request: GovernancePreflightRequest,
+  facts: GovernancePreflightFacts,
+): PreflightReason[] {
+  if (!facts.governanceResolved) return governanceUnavailable();
+  const reasons: PreflightReason[] = [];
+
+  // The fee is owed on every one of the three, and none of them moves value
+  // otherwise — so the balance check is shared and the amount is the provision.
+  const feeReasons = (): PreflightReason[] => {
+    if (facts.spendableNhash === null) return [{ code: "chain-unavailable" }];
+    return facts.spendableNhash < FEE_PROVISION_NHASH
+      ? [
+          {
+            code: "insufficient-balance" as const,
+            balance: facts.spendableNhash.toString(),
+            required: FEE_PROVISION_NHASH.toString(),
+          },
+        ]
+      : [];
+  };
+
+  if (request.kind === "gov_submit") {
+    // Submission consumes the policy set and the member set; both block.
+    if (facts.policyAddresses === null || facts.memberAddresses === null) {
+      return governanceUnavailable();
+    }
+    // CONVENIENCE ONLY, and this is the one place worth saying so twice: the
+    // RELAY does not check this (§12.3 amendment, revised 2026-07-30 — a
+    // proposal to another group's policy grants its proposer nothing and still
+    // needs that group to pass it). Telling a composer that they picked an
+    // address this program does not govern is a courtesy that costs nothing,
+    // because the member read below already loaded the policy set.
+    if (!facts.policyAddresses.includes(request.policyAddress)) {
+      reasons.push({ code: "policy-not-found" });
+    }
+    if (!facts.memberAddresses.includes(facts.address)) {
+      reasons.push({ code: "not-group-member" });
+    }
+    // The template's own bounds, restated from the registry rather than
+    // re-declared here. A failure is a shape error the user must fix.
+    const parsed = parseTemplateValues(request.templateId, request.values);
+    if (!parsed.ok) {
+      reasons.push({
+        code: "template-invalid",
+        detail: parsed.errors.map(describeTemplateError).join("; "),
+      });
+      return [...reasons, ...feeReasons()];
+    }
+    // THE ONE CONTRACT RULE A PER-FIELD BOUND CANNOT EXPRESS.
+    // `Config::validate` requires `min_bonded_cap_bps <= max_bonded_cap_bps`
+    // AFTER the merge, so it depends on the CURRENT config for whichever of the
+    // two the proposal leaves unsupplied. The template registry therefore
+    // cannot carry it (a template bound is per-field and config-free), and it is
+    // restated here — the one place with a live `Config {}` read.
+    //
+    // A proposal violating it would pass every template bound, pass the relay
+    // guard (which checks form, not merged semantics), reach a vote, and fail at
+    // EXECUTION — the worst place to discover it, since the group has already
+    // spent its voting period. Surfacing it before signing is exactly what §2.5
+    // means by a would-fail reason.
+    if (request.templateId === "update_config") {
+      const supplied = parsed.values;
+      const minKey = "min_bonded_cap_bps";
+      const maxKey = "max_bonded_cap_bps";
+      const suppliesEither = minKey in supplied || maxKey in supplied;
+      if (suppliesEither) {
+        if (facts.currentConfig === null) {
+          // The fact is CONSUMED from here on, so its absence blocks rather
+          // than returning a green list for a proposal that may be invalid.
+          return [{ code: "chain-unavailable" }];
+        }
+        const merged = (key: string): bigint =>
+          (supplied[key] as bigint | undefined) ?? facts.currentConfig![key] ?? 0n;
+        if (merged(minKey) > merged(maxKey)) {
+          reasons.push({
+            code: "template-invalid",
+            detail: `"${minKey}" must be <= "${maxKey}" after the change (${merged(minKey)} > ${merged(maxKey)})`,
+          });
+        }
+      }
+    }
+    return [...reasons, ...feeReasons()];
+  }
+
+  // Both vote and exec consume the live proposal.
+  if (facts.proposal === null) {
+    reasons.push({ code: "proposal-not-found" });
+    return reasons;
+  }
+  const { status, executorResult, submitTime, votingPeriodEnd } = facts.proposal;
+
+  if (request.kind === "gov_vote") {
+    // The module rejects a vote outside the voting period and from a non-member,
+    // and records ONE vote per member with no change permitted (7.1's measured
+    // fact, not an assumption from the proto).
+    if (status !== "SUBMITTED") {
+      reasons.push({ code: "proposal-not-open" });
+    } else {
+      const endMs = Date.parse(votingPeriodEnd);
+      if (Number.isFinite(endMs) && facts.nowMs >= endMs) {
+        reasons.push({ code: "proposal-not-open" });
+      }
+    }
+    if (facts.memberAddresses === null || facts.voters === null) return governanceUnavailable();
+    if (!facts.memberAddresses.includes(facts.address)) {
+      reasons.push({ code: "not-group-member" });
+    }
+    const existing = facts.voters.find((v) => v.voter === facts.address) ?? null;
+    if (existing !== null) {
+      reasons.push({ code: "already-voted", option: existing.option });
+    }
+    return [...reasons, ...feeReasons()];
+  }
+
+  // gov_exec.
+  if (status === "SUBMITTED") {
+    reasons.push({ code: "proposal-not-passed" });
+    const endMs = Date.parse(votingPeriodEnd);
+    if (Number.isFinite(endMs) && facts.nowMs < endMs) {
+      reasons.push({ code: "voting-period-open", endsAtIso: new Date(endMs).toISOString() });
+    }
+  } else if (status !== "ACCEPTED") {
+    reasons.push({ code: "proposal-not-passed" });
+  } else if (executorResult === "SUCCESS" || executorResult === "FAILURE") {
+    // FAILURE is terminal too: x/group does not permit a second attempt.
+    reasons.push({ code: "already-executed" });
+  } else {
+    // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW (PR #25 review, 2026-07-30).
+    // `minExecutionPeriod` is null ONLY when it could not be determined — the
+    // proposal's policy is outside the discovered set, or its decision rule is a
+    // kind this build does not model. x/group serializes a Duration for both
+    // recognized kinds, so a policy with no waiting period yields `"0s"`, never
+    // null. Passing null through as "nothing to wait for" returned a green
+    // reason list for an action the chain would reject with "must wait until …"
+    // — the exact "silently hiding it" this module's contract forbids, and the
+    // `min_execution_period` is a fact THIS branch consumes.
+    const readyAtIso = executableAtIso(submitTime, facts.minExecutionPeriod);
+    if (readyAtIso === null) {
+      reasons.push({ code: "min-execution-pending", readyAtIso: null });
+    } else if (facts.nowMs < Date.parse(readyAtIso)) {
+      reasons.push({ code: "min-execution-pending", readyAtIso });
+    }
+  }
+  return [...reasons, ...feeReasons()];
+}
+
+/**
+ * Run the governance preflight for a session-scoped action. Same contract as
+ * `runPreflight` and `runOperatorPreflight`: the acting address comes from the
+ * SESSION, every read is live, and a failed read blocks rather than guessing.
+ */
+export async function runGovernancePreflight(
+  config: WebConfig,
+  address: string,
+  request: GovernancePreflightRequest,
+  deps: PreflightDeps = {},
+): Promise<PreflightContext> {
+  const lcdDeps = deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {};
+  const lcd = new LcdClient(config.lcdUrl, lcdDeps);
+  const bank = new BankClient(lcd);
+  const auth = new AuthClient(lcd);
+
+  const proposalId = request.kind === "gov_submit" ? null : request.proposalId;
+  const [governance, proposal, votes, currentConfig, account, spendable] = await Promise.all([
+    loadLiveGovernance(config, lcdDeps),
+    proposalId === null ? Promise.resolve(null) : loadLiveProposal(config, proposalId, lcdDeps),
+    request.kind === "gov_vote"
+      ? loadLiveVotes(config, request.proposalId, lcdDeps)
+      : Promise.resolve(null),
+    // Read only where it is consumed: the `update_config` cross-field rule.
+    request.kind === "gov_submit" && request.templateId === "update_config"
+      ? new NvhashContractClient(lcd, config.contractAddress).config().catch(() => null)
+      : Promise.resolve(null),
+    auth.account(address).catch(() => null),
+    bank.spendableBalances(address).catch(() => null),
+  ]);
+
+  const governed = governance.state === "governed";
+  // The proposal's own policy decides the execution window. Falling back to
+  // "the first policy" would read another policy's window onto this proposal,
+  // which is the topology assumption D1 forbids in miniature.
+  const policy =
+    governance.state === "governed" && proposal !== null
+      ? (governance.policies.find((p) => p.address === proposal.groupPolicyAddress) ?? null)
+      : null;
+  const minExecutionPeriod =
+    policy === null || policy.decisionPolicy.kind === "unknown"
+      ? null
+      : policy.decisionPolicy.minExecutionPeriod;
+
+  const reasons = governancePreflightReasons(request, {
+    address,
+    proposal:
+      proposal === null
+        ? null
+        : {
+            status: proposal.status,
+            executorResult: proposal.executorResult,
+            submitTime: proposal.submitTime,
+            votingPeriodEnd: proposal.votingPeriodEnd,
+          },
+    governanceResolved: governed,
+    policyAddresses:
+      governance.state === "governed" ? governance.policies.map((p) => p.address) : null,
+    memberAddresses:
+      governance.state === "governed" && governance.members !== null
+        ? governance.members.map((m) => m.address)
+        : null,
+    voters: votes === null ? null : votes.map((v) => ({ voter: v.voter, option: v.option })),
+    minExecutionPeriod,
+    currentConfig:
+      currentConfig === null
+        ? null
+        : {
+            max_delegations_per_run: BigInt(currentConfig.maxDelegationsPerRun),
+            aum_fee_bps: BigInt(currentConfig.aumFeeBps),
+            performance_threshold_bps: BigInt(currentConfig.performanceThresholdBps),
+            min_capture_interval_secs: BigInt(currentConfig.minCaptureIntervalSecs),
+            max_concentration_multiple_bps: BigInt(currentConfig.maxConcentrationMultipleBps),
+            min_bonded_cap_bps: BigInt(currentConfig.minBondedCapBps),
+            max_bonded_cap_bps: BigInt(currentConfig.maxBondedCapBps),
+            concentration_safety_offset_bps: BigInt(currentConfig.concentrationSafetyOffsetBps),
+            commission_bps: BigInt(currentConfig.commissionBps),
+            jail_unbond_delay_secs: BigInt(currentConfig.jailUnbondDelaySecs),
+          },
+    spendableNhash:
+      spendable === null
+        ? null
+        : (spendable.balances.find((c) => c.denom === PROGRAM_UNDERLYING_DENOM)?.amount ?? 0n),
+    nowMs: Date.now(),
   });
 
   if (account === null && !reasons.some((r) => r.code === "chain-unavailable")) {

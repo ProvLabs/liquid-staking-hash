@@ -72,26 +72,49 @@ test("tally, member status and votes all degrade honestly with no live plane", a
   await expect(page.getByText("No votes are recorded", { exact: false })).toBeVisible();
 });
 
-test("the whole page renders ANONYMOUSLY — §8.7 is a public read", async ({ page }) => {
-  // No session exists offline. Nothing may prompt for one, and no section may
-  // be withheld: session-address highlighting is decoration, never a gate.
+test("the READ half of the page renders ANONYMOUSLY — §8.7 is still a public read", async ({ page }) => {
+  // No session exists offline. No READ section may be withheld: session-address
+  // highlighting is decoration, never a gate. M7.3–7.4 adds a WRITE section,
+  // and the distinction this spec now draws is the point — the actions section
+  // may say "connect a wallet", but nothing above it may be gated on one.
   await page.goto("/governance/4");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  // Scoped to the page's own content: the chrome's wallet button is site-wide
-  // and is not this page asking for a session. What must not exist is a
-  // connect prompt IN the governance content, the way `/portfolio` has one.
-  await expect(page.getByRole("main").getByText(/connect/i)).toHaveCount(0);
   for (const heading of ["Tally", "Member status", "Recorded votes", "What this proposal does"]) {
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   }
+  // The only connect prompt is inside the actions section.
+  const prompts = page.getByRole("main").getByText(/connect a wallet/i);
+  await expect(prompts).toHaveCount(1);
 });
 
-test("no vote or execute affordance exists anywhere — this PR adds no signing path", async ({ page }) => {
-  await page.goto("/governance/4");
-  await expect(page.getByText("This page is read-only", { exact: false })).toBeVisible();
-  for (const name of [/^Vote/, /^Execute/, /^Submit proposal/]) {
-    await expect(page.getByRole("button", { name })).toHaveCount(0);
+test("NO action control renders for an anonymous reader, in any state (§4b C4)", async ({ page }) => {
+  // The affordance sweep. Offline the corpus is ungoverned and there is no
+  // session, so EVERY row of the C4 matrix lands on "hidden" — and what must
+  // never appear is a control the reader could press into a certain failure.
+  // The per-row logic is unit-gated in `test/governance-flows.test.ts`; this is
+  // the end-to-end assertion that the loader's verdict actually reaches the DOM.
+  for (const id of ["4", "5", "7"]) {
+    await page.goto(`/governance/${id}`);
+    for (const name of [/^Review and sign$/, /^Execute/, /^Vote/]) {
+      await expect(page.getByRole("button", { name }), `${id} ${String(name)}`).toHaveCount(0);
+    }
   }
+});
+
+test("the composer is member-gated and says which gate stopped you", async ({ page }) => {
+  // Offline there is no session, so `/governance/new` renders the connect
+  // prompt — never a form that would build a transaction nobody can sign, and
+  // never a blank page.
+  await page.goto("/governance/new");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Propose an admin action");
+  await expect(page.getByText("Connect a wallet to compose", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Review and sign$/ })).toHaveCount(0);
+});
+
+test("the list links to the composer and no longer promises a later release", async ({ page }) => {
+  await page.goto("/governance");
+  await expect(page.getByRole("link", { name: "New proposal" })).toBeVisible();
+  await expect(page.getByText("This page is read-only", { exact: false })).toHaveCount(0);
 });
 
 test("the status filter narrows the list and is reflected in the URL", async ({ page }) => {

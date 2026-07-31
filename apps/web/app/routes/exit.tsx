@@ -20,6 +20,7 @@ import { formatBaseAmount, HASH_EXPONENT, SHARE_EXPONENT } from "~/learn/amounts
 import { getSessionContext } from "~/lib/services/session.server";
 import { TxConfirm } from "~/tx/confirm";
 import { FlowStatus, feeDisplay } from "~/tx/flow-status";
+import { intentAmount } from "~/tx/build";
 import { useTxFlow } from "~/tx/use-tx-flow";
 import { useWallet } from "~/wallet/provider";
 import { useLocale } from "~/root";
@@ -151,7 +152,7 @@ export default function Exit({ loaderData }: Route.ComponentProps) {
             summaryLines={[
               // The three timing facts in fixed order (§10.3 SwapOut).
               t(locale, "exit.confirm-escrow", {
-                shares: formatBaseAmount(flow.state.plan.intent.amount, SHARE_EXPONENT, 4),
+                shares: formatBaseAmount(intentAmount(flow.state.plan.intent), SHARE_EXPONENT, 4),
               }),
               t(locale, "exit.confirm-guarantee", { days: typical.guaranteeDays }),
               typical.hasTypical

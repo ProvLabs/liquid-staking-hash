@@ -15,13 +15,18 @@ import { loadConfig } from "~/config/config.server";
 import {
   FEE_PROVISION_NHASH,
   MAX_PROGRAM_VALIDATORS,
+  governancePreflightReasons,
+  governancePreflightRequestSchema,
   operatorPreflightReasons,
   operatorPreflightRequestSchema,
   preflightRequestSchema,
   runPreflight,
+  type GovernancePreflightFacts,
   type OperatorPreflightFacts,
   type OperatorPreflightRequest,
 } from "~/tx/preflight.server";
+import { MAX_PROPOSAL_METADATA_LEN } from "@nvhash/api-types";
+import { executeAffordance } from "~/governance/actions";
 import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
 import { server } from "~/mocks/node";
 
@@ -502,6 +507,434 @@ describe("operator preflight predicates (M6.4 §2.4)", () => {
       { kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "-1" }, // negative
     ]) {
       expect(operatorPreflightRequestSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+});
+
+// ── M7.3–7.4: the governance predicate matrix (§2.5) ─────────────────────
+//
+// Same contract as the operator matrix above, including its two-directional
+// rule: a variant MUST short-circuit on every fact IT consumes, and is equally
+// forbidden from blocking on a fact it does NOT consume. Skipping a check on a
+// null returns an empty (green) reason list for an action the chain then
+// rejects — the "silently hiding it" the module forbids.
+//
+// And the boundary these cases exist to keep visible: PREFLIGHT IS CONVENIENCE.
+// A would-fail reason is never an authorization claim and a PASSING preflight
+// never implies acceptance; the group module and the contract decide. The
+// preflight-passes-chain-rejects case at the end of this block says so
+// executably (invariant 11).
+
+const GOV_POLICY = "tp1qgvqctd47dqe9ryqkzc0zpu3wkqjr3sndkldpwfjfcqz0f4tqzsq7wshjm";
+const GOV_NOW = Date.parse("2026-07-30T12:00:00Z");
+
+function govFacts(overrides: Partial<GovernancePreflightFacts> = {}): GovernancePreflightFacts {
+  return {
+    address: ADDRESS,
+    proposal: {
+      status: "SUBMITTED",
+      executorResult: "NOT_RUN",
+      submitTime: "2026-07-29T12:00:00Z",
+      votingPeriodEnd: "2026-07-31T12:00:00Z",
+    },
+    governanceResolved: true,
+    policyAddresses: [GOV_POLICY],
+    memberAddresses: [ADDRESS],
+    voters: [],
+    minExecutionPeriod: "0s",
+    currentConfig: {
+      max_delegations_per_run: 8n,
+      aum_fee_bps: 25n,
+      performance_threshold_bps: 9_500n,
+      min_capture_interval_secs: 3_600n,
+      max_concentration_multiple_bps: 55_000n,
+      min_bonded_cap_bps: 500n,
+      max_bonded_cap_bps: 3_300n,
+      concentration_safety_offset_bps: 500n,
+      commission_bps: 1_000n,
+      jail_unbond_delay_secs: 28_800n,
+    },
+    spendableNhash: FEE_PROVISION_NHASH * 10n,
+    nowMs: GOV_NOW,
+    ...overrides,
+  };
+}
+
+const govCodes = (reasons: ReturnType<typeof governancePreflightReasons>) =>
+  reasons.map((r) => r.code);
+
+describe("governance preflight — vote", () => {
+  const vote = { kind: "gov_vote", proposalId: "12", option: "yes" } as const;
+
+  it("an open proposal, a member who has not voted → no reasons", () => {
+    expect(govCodes(governancePreflightReasons(vote, govFacts()))).toEqual([]);
+  });
+
+  it("a closed proposal, or one whose voting period elapsed → proposal-not-open", () => {
+    expect(
+      govCodes(
+        governancePreflightReasons(
+          vote,
+          govFacts({ proposal: { ...govFacts().proposal!, status: "ACCEPTED" } }),
+        ),
+      ),
+    ).toContain("proposal-not-open");
+    expect(
+      govCodes(
+        governancePreflightReasons(vote, govFacts({ nowMs: Date.parse("2026-08-02T00:00:00Z") })),
+      ),
+    ).toContain("proposal-not-open");
+  });
+
+  it("a non-member → not-group-member", () => {
+    expect(
+      govCodes(governancePreflightReasons(vote, govFacts({ memberAddresses: ["tp1other"] }))),
+    ).toContain("not-group-member");
+  });
+
+  it("an existing vote → already-voted, carrying the recorded option", () => {
+    const reasons = governancePreflightReasons(
+      vote,
+      govFacts({ voters: [{ voter: ADDRESS, option: "YES" }] }),
+    );
+    expect(reasons).toContainEqual({ code: "already-voted", option: "YES" });
+  });
+
+  it("an unreadable proposal → proposal-not-found, NEVER proposal-pruned", () => {
+    // The LCD answers HTTP 500 byte-identically for a pruned id, an unknown id
+    // and an outage, so "we could not read it" is the only sound claim. Only
+    // the MIRROR's `pruned_at_height` can say pruned.
+    const codes = govCodes(governancePreflightReasons(vote, govFacts({ proposal: null })));
+    expect(codes).toContain("proposal-not-found");
+    expect(codes).not.toContain("proposal-pruned");
+  });
+
+  it("BLOCKS on every fact it consumes, and on no other", () => {
+    // Consumed by the vote branch: the member set and the vote list.
+    for (const missing of [{ memberAddresses: null }, { voters: null }] as const) {
+      expect(govCodes(governancePreflightReasons(vote, govFacts(missing))), JSON.stringify(missing)).toEqual([
+        "governance-unavailable",
+      ]);
+    }
+    // NOT consumed by the vote branch: the policy set. Blocking on it would be
+    // the other half of the two-directional rule.
+    expect(
+      govCodes(governancePreflightReasons(vote, govFacts({ policyAddresses: null }))),
+    ).toEqual([]);
+  });
+});
+
+describe("governance preflight — exec", () => {
+  const exec = { kind: "gov_exec", proposalId: "12" } as const;
+  const accepted = { status: "ACCEPTED", executorResult: "NOT_RUN", submitTime: "2026-07-29T12:00:00Z", votingPeriodEnd: "2026-07-31T12:00:00Z" };
+
+  it("an accepted, elapsed-window proposal → no reasons", () => {
+    expect(govCodes(governancePreflightReasons(exec, govFacts({ proposal: accepted })))).toEqual([]);
+  });
+
+  it("still open → proposal-not-passed AND the voting-period-open detail", () => {
+    const codes = govCodes(governancePreflightReasons(exec, govFacts()));
+    expect(codes).toContain("proposal-not-passed");
+    expect(codes).toContain("voting-period-open");
+  });
+
+  it("min_execution_period not yet elapsed → min-execution-pending with the time", () => {
+    const reasons = governancePreflightReasons(
+      exec,
+      govFacts({ proposal: accepted, minExecutionPeriod: "172800s" }),
+    );
+    expect(reasons).toContainEqual({
+      code: "min-execution-pending",
+      readyAtIso: "2026-07-31T12:00:00.000Z",
+    });
+  });
+
+  it("an UNDETERMINED window BLOCKS — an unresolved window is not a zero window", () => {
+    // The preflight half of the PR #25 review finding. `minExecutionPeriod` is
+    // null only when it could not be determined (policy outside the discovered
+    // set, or a decision rule this build does not model); x/group serializes
+    // `"0s"` for a policy that genuinely has no waiting period. Passing null
+    // through as "nothing to wait for" returned a GREEN reason list for an
+    // action the chain rejects with "must wait until …", which is the exact
+    // "silently hiding it" the module's contract forbids — and this branch
+    // CONSUMES the window, so it must block on it.
+    const reasons = governancePreflightReasons(
+      exec,
+      govFacts({ proposal: accepted, minExecutionPeriod: null }),
+    );
+    expect(reasons).toContainEqual({ code: "min-execution-pending", readyAtIso: null });
+  });
+
+  it("a ZERO window still passes — `\"0s\"` is a value, not an absence", () => {
+    // The fix must not block a legitimately-executable proposal.
+    expect(
+      govCodes(
+        governancePreflightReasons(exec, govFacts({ proposal: accepted, minExecutionPeriod: "0s" })),
+      ),
+    ).toEqual([]);
+  });
+
+  it("preflight and the AFFORDANCE agree on an undetermined window", () => {
+    // These two disagreeing is what the review found twice in this area (first
+    // snapshot-vs-live, then null-vs-zero). Asserting the agreement directly is
+    // cheaper than re-deriving it: the button and the check that gates it must
+    // reach the same verdict from the same facts.
+    const undetermined = govFacts({ proposal: accepted, minExecutionPeriod: null });
+    const blocked = governancePreflightReasons(exec, undetermined).some(
+      (r) => r.code === "min-execution-pending",
+    );
+    const affordance = executeAffordance({
+      live: {
+        status: "accepted",
+        executorResult: "not_run",
+        submitTime: accepted.submitTime,
+        votingPeriodEnd: accepted.votingPeriodEnd,
+        groupVersion: "1",
+        minExecutionPeriod: null,
+      },
+      pruned: false,
+      membershipChanged: false,
+      sessionAddress: ADDRESS,
+      isMember: true,
+      hasVoted: false,
+      votedOption: null,
+      nowMs: GOV_NOW,
+    });
+    expect(blocked).toBe(true);
+    expect(affordance.state).toBe("disabled");
+  });
+
+  it("already executed — SUCCESS or FAILURE — → already-executed", () => {
+    for (const executorResult of ["SUCCESS", "FAILURE"]) {
+      expect(
+        govCodes(
+          governancePreflightReasons(
+            exec,
+            govFacts({ proposal: { ...accepted, executorResult } }),
+          ),
+        ),
+        executorResult,
+      ).toContain("already-executed");
+    }
+  });
+
+  it("rejected / aborted / withdrawn → proposal-not-passed", () => {
+    for (const status of ["REJECTED", "ABORTED", "WITHDRAWN"]) {
+      expect(
+        govCodes(governancePreflightReasons(exec, govFacts({ proposal: { ...accepted, status } }))),
+        status,
+      ).toContain("proposal-not-passed");
+    }
+  });
+
+  it("does NOT require membership — execution is permissionless (§7 Q2)", () => {
+    expect(
+      govCodes(
+        governancePreflightReasons(
+          exec,
+          govFacts({ proposal: accepted, memberAddresses: ["tp1someone-else"] }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("governance preflight — submit", () => {
+  const submit = {
+    kind: "gov_submit",
+    policyAddress: GOV_POLICY,
+    templateId: "update_config",
+    values: { aum_fee_bps: "25" },
+    title: "Lower the AUM fee",
+    summary: "Reduce aum_fee_bps to 25.",
+    metadata: "",
+  } as const;
+
+  it("a member proposing to a discovered policy → no reasons", () => {
+    expect(govCodes(governancePreflightReasons(submit, govFacts()))).toEqual([]);
+  });
+
+  it("a policy outside the discovered set → policy-not-found", () => {
+    expect(
+      govCodes(
+        governancePreflightReasons(
+          { ...submit, policyAddress: "tp1not-a-program-policy" },
+          govFacts(),
+        ),
+      ),
+    ).toContain("policy-not-found");
+  });
+
+  it("a non-member → not-group-member", () => {
+    expect(
+      govCodes(governancePreflightReasons(submit, govFacts({ memberAddresses: ["tp1other"] }))),
+    ).toContain("not-group-member");
+  });
+
+  it("a template value outside its contract bound → template-invalid, never clamped", () => {
+    const reasons = governancePreflightReasons(
+      { ...submit, values: { aum_fee_bps: "10001" } },
+      govFacts(),
+    );
+    const invalid = reasons.find((r) => r.code === "template-invalid");
+    expect(invalid).toBeDefined();
+    expect(invalid && "detail" in invalid ? invalid.detail : "").toContain("aum_fee_bps");
+  });
+
+  it("restates the CROSS-FIELD contract rule a per-field bound cannot express", () => {
+    // `Config::validate` requires min <= max AFTER the merge, so it depends on
+    // the CURRENT config for whichever side the proposal leaves unsupplied.
+    // Current is min 500 / max 3300; proposing min 4000 alone would merge to
+    // 4000 > 3300 and fail at EXECUTION — after the group spent its voting
+    // period, which is the worst place to find out.
+    const reasons = governancePreflightReasons(
+      { ...submit, values: { min_bonded_cap_bps: "4000" } },
+      govFacts(),
+    );
+    const invalid = reasons.find((r) => r.code === "template-invalid");
+    expect(invalid).toBeDefined();
+    expect(invalid && "detail" in invalid ? invalid.detail : "").toContain("min_bonded_cap_bps");
+
+    // Raising BOTH in one proposal is fine, and must not be blocked.
+    expect(
+      govCodes(
+        governancePreflightReasons(
+          { ...submit, values: { min_bonded_cap_bps: "4000", max_bonded_cap_bps: "5000" } },
+          govFacts(),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("BLOCKS on the live config ONLY when the cross-field rule is engaged", () => {
+    // The two-directional rule again: consumed by a proposal that supplies
+    // either bonded-cap field, and by no other.
+    expect(
+      govCodes(
+        governancePreflightReasons(
+          { ...submit, values: { min_bonded_cap_bps: "400" } },
+          govFacts({ currentConfig: null }),
+        ),
+      ),
+    ).toEqual(["chain-unavailable"]);
+    // A proposal touching neither must not block on a read it does not use.
+    expect(
+      govCodes(governancePreflightReasons(submit, govFacts({ currentConfig: null }))),
+    ).toEqual([]);
+  });
+
+  it("BLOCKS on the policy set and the member set — both consumed here", () => {
+    for (const missing of [{ policyAddresses: null }, { memberAddresses: null }] as const) {
+      expect(
+        govCodes(governancePreflightReasons(submit, govFacts(missing))),
+        JSON.stringify(missing),
+      ).toEqual(["governance-unavailable"]);
+    }
+  });
+});
+
+describe("governance preflight — the shared rules", () => {
+  it("an unresolved live plane blocks every action with ONE distinct reason", () => {
+    // `governance-unavailable` is deliberately not `chain-unavailable`: "this
+    // deployment has no group" and "the node did not answer" are different
+    // things to tell someone (§3.4 R2), and the copy differs accordingly.
+    for (const request of [
+      { kind: "gov_vote", proposalId: "12", option: "yes" },
+      { kind: "gov_exec", proposalId: "12" },
+      {
+        kind: "gov_submit",
+        policyAddress: GOV_POLICY,
+        templateId: "unpause_vault",
+        values: {},
+        title: "t",
+        summary: "s",
+        metadata: "",
+      },
+    ] as const) {
+      expect(
+        govCodes(governancePreflightReasons(request, govFacts({ governanceResolved: false }))),
+        request.kind,
+      ).toEqual(["governance-unavailable"]);
+    }
+  });
+
+  it("the fee is checked on all three, and an unreadable balance blocks", () => {
+    const request = { kind: "gov_exec", proposalId: "12" } as const;
+    const accepted = { status: "ACCEPTED", executorResult: "NOT_RUN", submitTime: "2026-07-29T12:00:00Z", votingPeriodEnd: "2026-07-31T12:00:00Z" };
+    expect(
+      govCodes(
+        governancePreflightReasons(request, govFacts({ proposal: accepted, spendableNhash: 0n })),
+      ),
+    ).toContain("insufficient-balance");
+    expect(
+      govCodes(
+        governancePreflightReasons(request, govFacts({ proposal: accepted, spendableNhash: null })),
+      ),
+    ).toContain("chain-unavailable");
+  });
+
+  it("PASSING preflight is not acceptance — the chain still decides (invariant 11)", () => {
+    // The executable form of the boundary. Preflight can only restate what it
+    // could read a moment ago: a proposal that passes every predicate here can
+    // still be rejected on chain because another member voted in the interim,
+    // the voting period closed between the read and the broadcast, or the
+    // contract refused the admin action on its own terms. Nothing in this
+    // module may be read as permission.
+    const passing = governancePreflightReasons(
+      { kind: "gov_vote", proposalId: "12", option: "yes" },
+      govFacts(),
+    );
+    expect(passing).toEqual([]);
+    // …and the same facts one millisecond after the voting period closes now
+    // block, which is the whole of what "convenience only" means: the answer is
+    // a snapshot, and the module is the boundary.
+    expect(
+      govCodes(
+        governancePreflightReasons(
+          { kind: "gov_vote", proposalId: "12", option: "yes" },
+          govFacts({ nowMs: Date.parse("2026-07-31T12:00:00.001Z") }),
+        ),
+      ),
+    ).toContain("proposal-not-open");
+  });
+
+  it("bounds its inputs at the boundary (proposal id, option, text lengths)", () => {
+    expect(
+      governancePreflightRequestSchema.safeParse({
+        kind: "gov_vote",
+        proposalId: "12",
+        option: "yes",
+      }).success,
+    ).toBe(true);
+    for (const bad of [
+      { kind: "gov_vote", proposalId: "012", option: "yes" }, // leading zero: one id, one spelling
+      { kind: "gov_vote", proposalId: "1.5", option: "yes" },
+      { kind: "gov_vote", proposalId: "12", option: "unspecified" }, // not one of the four
+      { kind: "gov_vote", proposalId: "12", option: "YES" },
+      { kind: "gov_vote", proposalId: "1".repeat(21), option: "yes" }, // wider than u64
+      { kind: "gov_exec", proposalId: "-1" },
+      {
+        kind: "gov_submit",
+        policyAddress: GOV_POLICY,
+        templateId: "unpause_vault",
+        values: {},
+        title: "",
+        summary: "s",
+        metadata: "",
+      }, // empty title
+      {
+        kind: "gov_submit",
+        policyAddress: GOV_POLICY,
+        templateId: "unpause_vault",
+        values: {},
+        title: "t",
+        summary: "s",
+        metadata: "x".repeat(MAX_PROPOSAL_METADATA_LEN + 1),
+      },
+    ]) {
+      expect(governancePreflightRequestSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
+        false,
+      );
     }
   });
 });

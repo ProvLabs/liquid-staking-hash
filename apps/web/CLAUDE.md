@@ -92,6 +92,32 @@ admin/keeper variant), the per-variant body, funds discipline, and finally
 **canonical byte equality** with `operatorInnerJson`. **Extending either level —
 a new type URL or a new variant — is a design-review event, never an edit.**
 
+The three `cosmos.group.v1` types are guarded **structurally**: type URL →
+signer ↔ session binding (`voter`, `signer`, the single `proposers` entry) →
+closed field set with bounded values → the `exec` pin → canonical re-encode. For
+`MsgSubmitProposal` the re-encode covers the **envelope**; the inner `Any` bytes
+ride verbatim.
+
+**Read this before re-tightening the `MsgSubmitProposal` guard.** It once
+carried three further conditions — a closed template match per inner message, a
+per-element re-encode, and a live policy sweep that made `guardSignedTx` async
+with a 503 failure mode — and they are deliberately gone. The reasoning they
+rested on is backwards: an unguarded `MsgExecuteContract` executes **on
+inclusion** under the signer's own authority, while a `MsgSubmitProposal`
+executes **nothing** until the group's decision policy is satisfied by other
+members voting. The group's threshold is the enforcement boundary, and what
+protects members from a hostile proposal is **reading** it before voting —
+7.2's decoder. `test/broadcast-guard.test.ts` asserts the permissive cases as
+**acceptances** on purpose, so restoring the conditions means editing named test
+cases rather than sliding them back in.
+
+**The `exec` pin is a confirmation-rigor control, not an authorization one**
+(`EXEC_UNSPECIFIED`, enforced as "field 5 absent" since proto3 omits a zero): it
+makes executing a second, separately confirmed signature. It is not load-bearing
+against an adversary — submit/vote/exec as three relayed txs reaches the same
+state. The confirm disclosure shows `exec: EXEC_UNSPECIFIED` even though the
+bytes omit it, deliberately.
+
 **The preflight fact rule.** Every fact in `OperatorPreflightFacts` is nullable,
 and a variant must short-circuit to `chain-unavailable` on every fact **it
 consumes** — and is equally forbidden from blocking on one it does not. Skipping
@@ -101,6 +127,47 @@ rejects.
 **Governance decoding is a closed union** — `MsgSend` plus `MsgExecuteContract`
 against the configured contract, with the variant vocabulary **imported** from
 `app/tx/build.ts`. Anything else is a tagged `unknown` carrying the exact JSON.
+
+**`app/governance/templates.ts` is the COMPOSER's vocabulary, not a relay-guard
+input** — one vocabulary, three consumers (the 7.2 decoder reads it, the confirm
+step discloses through it, the composer builds from it). It stays **total in
+both directions** against the committed `cargo schema` output, which is a
+**product** completeness gate — a new admin capability must be reachable from
+the composer — not a security one. Bridge config is **absent, not stubbed**
+(§14.3 unresolved, no contract variant backs it). `build.ts` imports
+`templateInnerJson` at runtime and keeps a narrow import surface because the
+relay decodes untrusted bytes through it, so `templateSummaryKey` returns a
+**key plus params**, never a string. Write-side wire bounds
+(`MAX_PROPOSAL_MESSAGES`, `MAX_PROPOSAL_METADATA_LEN`, title/summary) are one
+declaration in `packages/api-types/src/bounds.ts`.
+
+**Governance affordances come from the LIVE plane alone** — decided in the
+loader (`app/governance/actions.ts`), never in JSX. `ProposalDetailVM.liveState`
+is **separate from `plane`**: `plane` says which read produced the figures (the
+mirror, honestly, for anything closed), `liveState` says whether the chain just
+confirmed the state an action would operate on. That is why
+`loadGovernanceProposalData` live-reads **accepted** proposals too, and why a
+failed read on an accepted proposal is itself evidence *not* to offer execute —
+x/group prunes a successful exec in its own transaction.
+
+The execution window is `submit_time + min_execution_period`, x/group's own
+rule — **not** the voting-period end — and `min_execution_period` comes from the
+**live policy**, which is why it sits inside `liveState`. The asymmetry to hold
+in your head: `voting_period_end` **is** snapshotted on the chain's `Proposal`;
+`min_execution_period` is **not**, so the module reads the policy account at exec
+time. Taking the window from the mirror's `decision_policy` snapshot lets the
+button and the preflight gating it disagree after a policy change; that snapshot
+is for rendering a historical **threshold**, never the execution window. Not yet
+drilled — devnet runs `min_execution_period: 0`.
+
+**An unresolved window is not a zero window.** A policy with no waiting period
+serializes `"0s"`, so `null` means only that it could not be determined (a policy
+outside the discovered set, or a decision rule this build does not model). Both
+preflight and the affordance treat null as *disabled, we cannot say when* —
+never as executable. It is reachable: `/governance/:proposalId` accepts any
+proposal id and the live read is unscoped, so another group's proposal resolves a
+`liveState` with no policy in our set. Voting is member-only; **execution is
+permissionless**, and the UI says so.
 
 **Web Push is the one accepted SECURITY.md exception** — opt-in, opaque,
 revocable. `public/push-sw.js` is served straight from `public/` with no bundler
@@ -132,7 +199,11 @@ Playwright runs in the official Playwright image on the same compose file:
   SECURITY.md devnet rules; specs skip cleanly when unset). The test signer
   lives only in the test process (`e2e-live/signer.ts`) and `check:bundle` scans
   for its sentinel so it can never ship. Optional `E2E_LIVE_OPERATOR_KEY`
-  unlocks the enroll/unregister leg. Runs on the stack schedule, not offline CI.
+  unlocks the enroll/unregister leg, and `E2E_LIVE_GOV_MEMBER_KEY` the
+  governance write leg — the latter must be a funded throwaway key that is
+  **also a group member**, since proposing and voting are membership-gated and
+  the generic signer key cannot reach them. Runs on the stack schedule, not
+  offline CI.
   **Restart the compose `web` service before trusting a green live run** — it
   builds at container start, so a long-running stack serves a stale bundle.
 - `check:palette` — the shared dataviz validation method
@@ -172,10 +243,21 @@ All fail CI on violation.
   closed `{ kind, url }` body — never amounts, addresses, or ids.
 - **Broadcast guard** (`test/broadcast-guard.test.ts`) — the rejection matrix
   including every admin variant, mixed batches, duplicate proto fields, and
-  non-canonical encodings. `test/tx-operator-build.test.ts` holds byte-goldens
-  against captured devnet txs; `test/tx-confirm.test.ts` asserts the disclosure
-  equals the signed bytes for every variant; `test/tx-preflight.test.ts` holds
-  the predicate matrix in both directions.
+  non-canonical encodings, plus the governance blocks: the admitted
+  `cosmos.group.v1` set pinned to **exactly** three, every other group type and
+  the authz wrapper rejected by name, and the deliberately permissive
+  `MsgSubmitProposal` cases asserted as acceptances.
+  `test/tx-operator-build.test.ts` holds byte-goldens against captured devnet
+  txs; `test/tx-confirm.test.ts` asserts the disclosure equals the signed bytes
+  for every variant; `test/tx-preflight.test.ts` holds the predicate matrix in
+  both directions.
+- **Governance write path** — `test/governance-templates.test.ts` (totality
+  against the committed `cargo schema` output, both directions) and
+  `test/governance-flows.test.ts` (one case per affordance state, including
+  membership-unknown as distinct from not-a-member, and
+  disabled-with-an-unknown-time for an unresolvable waiting period). Offline
+  `e2e/governance.spec.ts` sweeps affordances; `e2e-live/governance-write.spec.ts`
+  skips clean without `E2E_LIVE_GOV_MEMBER_KEY`.
 - **Assertion vectors** (`test/assertion.test.ts`) — ADR-001 Decision 2 golden
   vectors, cross-pinned with `services/api/test/assertion-vectors.test.ts`.
 - **Wallet registry** (`test/wallet-adapter.test.ts`) — keeps the vendor

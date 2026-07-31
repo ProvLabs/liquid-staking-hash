@@ -135,3 +135,40 @@ export function stringField(fields: WireField[], field: number): string {
   const raw = bytesField(fields, field);
   return raw === null ? "" : new TextDecoder().decode(raw);
 }
+
+// ── Reader helpers the M7.3–7.4 governance guards need ───────────────────
+//
+// The vault/execute guards read one string per field. The `cosmos.group.v1`
+// messages do not fit that shape: `MsgVote.proposal_id`/`option` are VARINTS,
+// and `MsgSubmitProposal.proposers` is a REPEATED string whose multiplicity is
+// unbounded by the module (7.3–7.4 §4b C1). Reading either through
+// `stringField` would silently answer "" for a field that is present — the
+// shape of bug where a guard's verdict is decided by a value it never saw.
+
+/** Every UTF-8 string value of a repeated length-delimited `field`, in order. */
+export function stringFields(fields: WireField[], field: number): string[] {
+  return bytesFields(fields, field).map((raw) => new TextDecoder().decode(raw));
+}
+
+/**
+ * The single varint value of `field`, or null when absent OR repeated.
+ *
+ * Absent is `null` rather than `0n` on purpose: proto3 canonical encoding
+ * OMITS a zero varint, so "absent" and "zero" are the same wire fact, and a
+ * guard that needs to tell an unset enum from `…_UNSPECIFIED` must decide that
+ * from the canonical re-encode rather than from a fabricated default here.
+ */
+export function uintField(fields: WireField[], field: number): bigint | null {
+  const all = fields.filter((f) => f.field === field && f.value.wire === 0);
+  return all.length === 1 ? (all[0]!.value as { varint: bigint }).varint : null;
+}
+
+/** True when `field` appears at all, at any wire type. */
+export function hasField(fields: WireField[], field: number): boolean {
+  return fields.some((f) => f.field === field);
+}
+
+/** Byte equality, written once so no guard re-implements it subtly wrong. */
+export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, i) => byte === b[i]);
+}

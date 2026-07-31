@@ -10,12 +10,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildTxPlan,
   FUNDED_VARIANTS,
+  GOVERNANCE_VOTE_OPTIONS,
+  GOVERNANCE_VOTE_OPTION_NAMES,
   MSG_SWAP_OUT,
   OPERATOR_VARIANTS,
   type OperatorIntent,
   type TxIntent,
 } from "~/tx/build";
-import { bytesField, bytesFields, readFields, stringField } from "~/tx/proto";
+import { bytesField, bytesFields, readFields, stringField, uintField } from "~/tx/proto";
 
 const intent: TxIntent = {
   kind: "swap_out",
@@ -181,5 +183,163 @@ describe("operator execute: the disclosure equals the signed bytes", () => {
       ] as Record<string, Record<string, string>>
     )["purge_jailed_validator"]!;
     expect("claimant_valoper" in withoutBody).toBe(false);
+  });
+});
+
+// ── M7.3–7.4: the governance disclosures (§2.6, §4 invariant 12) ─────────
+//
+// The same property, on the three messages where it matters most: the user
+// signs exactly what they saw. For a governance write that is not a nicety —
+// §2.6 is explicit that `MsgExec`'s disclosure must show WHAT THE PROPOSAL WILL
+// EXECUTE rather than "execute proposal 12", because that is the difference
+// between an informed signature and a blind one.
+//
+// Two facts these cases pin that the swap/operator cases cannot:
+//
+//   * `exec` is DISCLOSED as `EXEC_UNSPECIFIED` even though it is ABSENT from
+//     the signed bytes (proto3 omits a zero). That is deliberate: "this will not
+//     also execute" is the single most consequential fact about a vote signature
+//     (§2.4), and a reader cannot infer it from a missing key. The disclosure is
+//     therefore a faithful rendering of the message's SEMANTICS, and this suite
+//     proves the two agree rather than assuming it.
+//   * every inner message of a submission appears DECODED, not as a count.
+
+const govSigner = {
+  chainId: "chain-dev",
+  accountNumber: 12n,
+  sequence: 4n,
+  pubkeyBase64: Buffer.alloc(33, 3).toString("base64"),
+};
+const govFee = { gasLimit: 1n, amount: 1n, denom: "nhash" };
+const VOTER = "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0";
+const GOV_POLICY = "tp1qgvqctd47dqe9ryqkzc0zpu3wkqjr3sndkldpwfjfcqz0f4tqzsq7wshjm";
+const GOV_CONTRACT = "tp14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s96lrg8";
+
+/** The single `Any` inside a plan's sign doc, decoded. */
+function signedAny(built: ReturnType<typeof buildTxPlan>) {
+  const signDoc = readFields(built.signDocBytes);
+  const body = readFields(bytesField(signDoc, 1)!);
+  const anys = bytesFields(body, 1);
+  expect(anys).toHaveLength(1);
+  const any = readFields(anys[0]!);
+  return { typeUrl: stringField(any, 1), fields: readFields(bytesField(any, 2)!) };
+}
+
+function disclosureOf(built: ReturnType<typeof buildTxPlan>): Record<string, unknown> {
+  return (JSON.parse(built.disclosureJson) as Array<Record<string, unknown>>)[0]!;
+}
+
+describe("governance disclosures equal the signed bytes", () => {
+  it("a vote discloses the proposal, voter and option that are actually signed", () => {
+    for (const option of GOVERNANCE_VOTE_OPTION_NAMES) {
+      const built = buildTxPlan(
+        { kind: "gov_vote", voter: VOTER, proposalId: 12n, option },
+        govFee,
+        govSigner,
+      );
+      const signed = signedAny(built);
+      const disclosed = disclosureOf(built);
+      expect(disclosed["@type"], option).toBe(signed.typeUrl);
+      expect(disclosed["proposal_id"], option).toBe(
+        uintField(signed.fields, 1)!.toString(),
+      );
+      expect(disclosed["voter"], option).toBe(stringField(signed.fields, 2));
+      expect(disclosed["option"], option).toBe(`VOTE_OPTION_${option.toUpperCase()}`);
+      expect(uintField(signed.fields, 3), option).toBe(GOVERNANCE_VOTE_OPTIONS[option]);
+    }
+  });
+
+  it("a vote discloses the exec PIN, and the signed bytes carry no exec field", () => {
+    const built = buildTxPlan(
+      { kind: "gov_vote", voter: VOTER, proposalId: 12n, option: "yes" },
+      govFee,
+      govSigner,
+    );
+    expect(disclosureOf(built)["exec"]).toBe("EXEC_UNSPECIFIED");
+    expect(disclosureOf(built)["metadata"]).toBe("");
+    // Absent on the wire IS the pin — and the guard enforces it as absence.
+    expect(signedAny(built).fields.some((f) => f.field === 5)).toBe(false);
+    expect(signedAny(built).fields.some((f) => f.field === 4)).toBe(false);
+  });
+
+  it("an exec discloses the proposal and signer that are actually signed", () => {
+    const built = buildTxPlan(
+      { kind: "gov_exec", signer: VOTER, proposalId: 12n },
+      govFee,
+      govSigner,
+    );
+    const signed = signedAny(built);
+    const disclosed = disclosureOf(built);
+    expect(disclosed["@type"]).toBe(signed.typeUrl);
+    expect(disclosed["proposal_id"]).toBe(uintField(signed.fields, 1)!.toString());
+    expect(disclosed["signer"]).toBe(stringField(signed.fields, 2));
+  });
+
+  it("a submission discloses EVERY inner message, decoded, not a count", () => {
+    const built = buildTxPlan(
+      {
+        kind: "gov_submit",
+        proposer: VOTER,
+        policyAddress: GOV_POLICY,
+        contractAddress: GOV_CONTRACT,
+        templates: [{ id: "update_config", values: { aum_fee_bps: 25n } }],
+        title: "Lower the AUM fee",
+        summary: "Reduce aum_fee_bps from 50 to 25.",
+        metadata: "",
+      },
+      govFee,
+      govSigner,
+    );
+    const signed = signedAny(built);
+    const disclosed = disclosureOf(built);
+    expect(disclosed["@type"]).toBe(signed.typeUrl);
+    expect(disclosed["group_policy_address"]).toBe(stringField(signed.fields, 1));
+    expect(disclosed["proposers"]).toEqual([stringField(signed.fields, 2)]);
+    expect(disclosed["title"]).toBe(stringField(signed.fields, 6));
+    expect(disclosed["summary"]).toBe(stringField(signed.fields, 7));
+    expect(disclosed["exec"]).toBe("EXEC_UNSPECIFIED");
+    expect(signed.fields.some((f) => f.field === 5)).toBe(false);
+
+    // The inner message, decoded on BOTH sides and compared byte-for-byte.
+    const innerAnys = bytesFields(signed.fields, 4);
+    expect(innerAnys).toHaveLength(1);
+    const innerAny = readFields(innerAnys[0]!);
+    const exec = readFields(bytesField(innerAny, 2)!);
+    const disclosedMessages = disclosed["messages"] as Array<Record<string, unknown>>;
+    expect(disclosedMessages).toHaveLength(1);
+    expect(disclosedMessages[0]!["@type"]).toBe(stringField(innerAny, 1));
+    expect(disclosedMessages[0]!["sender"]).toBe(stringField(exec, 1));
+    expect(disclosedMessages[0]!["contract"]).toBe(stringField(exec, 2));
+    expect(JSON.stringify(disclosedMessages[0]!["msg"])).toBe(
+      new TextDecoder().decode(bytesField(exec, 3)!),
+    );
+    // No admin variant is payable, and the disclosure says so rather than
+    // omitting the field.
+    expect(disclosedMessages[0]!["funds"]).toEqual([]);
+    expect(bytesFields(exec, 5)).toHaveLength(0);
+  });
+
+  it("the inner sender is the POLICY, not the proposer — as disclosed and as signed", () => {
+    // x/group executes a proposal's messages AS the policy account, which is the
+    // contract's admin. A disclosure showing the proposer here would describe a
+    // message that could never execute.
+    const built = buildTxPlan(
+      {
+        kind: "gov_submit",
+        proposer: VOTER,
+        policyAddress: GOV_POLICY,
+        contractAddress: GOV_CONTRACT,
+        templates: [{ id: "unpause_vault", values: {} }],
+        title: "Unpause",
+        summary: "Restore deposits and redemptions.",
+        metadata: "",
+      },
+      govFee,
+      govSigner,
+    );
+    const disclosed = disclosureOf(built);
+    const message = (disclosed["messages"] as Array<Record<string, unknown>>)[0]!;
+    expect(message["sender"]).toBe(GOV_POLICY);
+    expect(message["sender"]).not.toBe(VOTER);
   });
 });
