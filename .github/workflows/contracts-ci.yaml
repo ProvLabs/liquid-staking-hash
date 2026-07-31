@@ -153,16 +153,26 @@ jobs:
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         if: needs.changes.outputs.contracts == 'true'
         run: rustup show
-      - name: Restore cargo registry + target cache
-        if: needs.changes.outputs.contracts == 'true'
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            contracts/target
-          key: cargo-test-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: cargo-test-${{ runner.os }}-
+      # THIS JOB CACHES NO CARGO STATE, DELIBERATELY. Do not add a cache step
+      # here without reproducing the failure below first.
+      #
+      # `provwasm-test-tube`'s build script emits a Go-built shared library into
+      # a per-build-hash `OUT_DIR`, and the test binaries locate it — and the
+      # `libwasmvm.x86_64.so` it depends on — through paths fixed at link time.
+      # Restoring cargo state makes cargo relink against fresh build hashes
+      # while the runtime libraries stay where the restore put them, so every
+      # test binary dies at startup with "cannot open shared object file"
+      # (exit 127).
+      #
+      # This is measured, not theorised, and the A/B is exact: the two runs that
+      # restored NOTHING both passed, and the first run to restore a cargo cache
+      # failed this way on an unchanged commit range. Running with no cargo
+      # cache is therefore the only configuration this job has ever passed in.
+      #
+      # The time is bought back where it is safe: the artifact and optimizer
+      # caches below remove the ~5 minute wasm build. `static` and `soak` keep
+      # their target caches — they compile test-tube but never execute a binary
+      # that loads its shared library.
 
       # The artifact itself, keyed on everything that decides its bytes. On a hit
       # the Docker build below skips its own work entirely (~5 min).
