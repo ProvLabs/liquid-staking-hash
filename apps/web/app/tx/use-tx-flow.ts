@@ -37,7 +37,7 @@ import { trackTransaction } from "./track";
 export type FlowIntentInput =
   | { kind: "swap_in"; amount: bigint; denom: string }
   | { kind: "swap_out"; amount: bigint; denom: string; redeemDenom: string }
-  /** M6.4 operator actions. The client names the variant, its validator and
+  /** Operator actions. The client names the variant, its validator and
    * the amount; the SENDER and the CONTRACT are supplied by the caller from
    * session + config, and re-checked server-side on every hop. */
   | {
@@ -49,7 +49,7 @@ export type FlowIntentInput =
       denom: string;
     }
   /**
-   * M7.3–7.4 governance actions. The client names the proposal, the option and
+   * Governance actions. The client names the proposal, the option and
    * the template; the VOTER / SIGNER / PROPOSER and the CONTRACT are supplied
    * by the caller from session + config and re-checked server-side on every hop
    * — by preflight, by simulate, and finally by the relay guard over the signed
@@ -95,8 +95,8 @@ async function postJson(path: string, body: unknown): Promise<Response> {
  * ask preflight about it, and to ask the node to simulate it — and the failure
  * mode when they drift is that the user is shown a preflight for one action and
  * signs another. Keeping them in one place makes a drift a visible edit rather
- * than three inline ternaries nobody compares (the M6.4 lesson about
- * disagreements only discovered AFTER the user has signed).
+ * than three inline ternaries nobody compares — a disagreement discovered
+ * only AFTER the user has signed).
  */
 function toIntent(input: FlowIntentInput, owner: string, target: string): TxIntent {
   switch (input.kind) {

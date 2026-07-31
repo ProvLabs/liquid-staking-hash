@@ -136,12 +136,12 @@ export function stringField(fields: WireField[], field: number): string {
   return raw === null ? "" : new TextDecoder().decode(raw);
 }
 
-// ── Reader helpers the M7.3–7.4 governance guards need ───────────────────
+// ── Reader helpers the governance guards need ────────────────────────────
 //
 // The vault/execute guards read one string per field. The `cosmos.group.v1`
 // messages do not fit that shape: `MsgVote.proposal_id`/`option` are VARINTS,
 // and `MsgSubmitProposal.proposers` is a REPEATED string whose multiplicity is
-// unbounded by the module (7.3–7.4 §4b C1). Reading either through
+// unbounded by the module. Reading either through
 // `stringField` would silently answer "" for a field that is present — the
 // shape of bug where a guard's verdict is decided by a value it never saw.
 

@@ -73,7 +73,7 @@ export const MAX_GOV_TITLE_LENGTH = 512;
 export const MAX_GOV_SUMMARY_LENGTH = 4_096;
 export const MAX_GOV_METADATA_LENGTH = 4_096;
 
-// --- governance WRITE path (PR 7.3–7.4) ------------------------------------
+// --- governance WRITE path ------------------------------------------------
 //
 // The bounds above bound what `services/api` SERIALIZES and what `apps/web`
 // ACCEPTS. These bound what the App will COMPOSE and what its relay guard will
@@ -83,27 +83,27 @@ export const MAX_GOV_METADATA_LENGTH = 4_096;
 // The rule is `write <= read`, asserted by `WRITE_READ_BOUNDS` in
 // `test/bounds.test.ts`. A composed proposal that exceeded a read bound would
 // be mirrored TRUNCATED-and-flagged, so the App would have submitted something
-// it can only render incompletely — the same class of defect as PR #19's, one
-// boundary further along.
+// it can only render incompletely — the same class of defect the read pairs
+// exist to prevent, one boundary further along.
 //
-// §4b C2 is explicit that a guard bound written as a literal in `build.ts` is a
-// review failure: the composer, the guard and the reader must not be able to
-// disagree about the same limit, so each of these has exactly one declaration.
+// A guard bound written as a literal in `build.ts` is a defect: the composer,
+// the guard and the reader must not be able to disagree about the same limit,
+// so each of these has exactly one declaration.
 
 /**
  * `MsgSubmitProposal.messages[]` — the relay guard's PER-PROPOSAL element cap.
  *
- * x/group itself puts NO ceiling here (§4b C1), so this is the App's, and an
+ * x/group itself puts NO ceiling here, so this is the App's, and an
  * over-cap proposal is REJECTED, never truncated: a governance payload quietly
  * shortened on its way to the chain would be a lie about what is being voted
- * on. v1 composes exactly one template per proposal (§7 Q4, confirmed
- * 2026-07-30); the cap is above one so a multi-message proposal built elsewhere
- * is still relayable and still validated element-wise.
+ * on. v1 composes exactly one template per proposal; the cap is above one so a
+ * multi-message proposal built elsewhere is still relayable and still validated
+ * element-wise.
  */
 export const MAX_PROPOSAL_MESSAGES = 8;
 
 /** `MsgSubmitProposal.metadata` — the composer's optional public rationale
- * (§7 Q3, confirmed 2026-07-30: offered on proposals, ABSENT on votes). */
+ * (offered on proposals, ABSENT on votes). */
 export const MAX_PROPOSAL_METADATA_LEN = 1_024;
 
 /** `MsgSubmitProposal.title` / `.summary` — the SDK ≥ 0.50 proposal fields
@@ -151,8 +151,8 @@ export const MARKER_CAP_WIRE = 2_000;
  * so the test also asserts that every governance payload field it knows about is
  * represented.
  *
- * NOT YET COVERED, and recorded rather than implied: the pre-7.1 collection
- * bounds on `/validators` (500), `/portfolio.active_redemptions` (500),
+ * NOT YET COVERED, and recorded rather than implied: the collection bounds on
+ * `/validators` (500), `/portfolio.active_redemptions` (500),
  * `/market.depth_bands` (32) and `.bridged_supply` (64), plus
  * `ValidatorRow.failing_reasons` (32), still live only in the web Zod schema with
  * no declared producer cap. Adopting them means giving each a producer-side

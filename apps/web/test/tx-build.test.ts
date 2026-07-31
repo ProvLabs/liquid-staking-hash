@@ -139,10 +139,10 @@ describe("builder ↔ decoder round trip (the relay guard reads what we write)",
     expect(() => decodeTxRaw(new Uint8Array([]))).toThrow(); // no body/auth
   });
 
-  it("the allowlist holds the two vault messages (M6.4 + M7.3–7.4 add guarded entries)", () => {
-    // `MsgExecuteContract` joined in M6.4 and the three `cosmos.group.v1` types
-    // in M7.3–7.4; each is safe only because the relay runs a second-level
-    // guard for it. The closed-set assertions live in
+  it("the allowlist holds the two vault messages, plus guarded entries", () => {
+    // `MsgExecuteContract` and the three `cosmos.group.v1` types are each safe
+    // only because the relay runs a second-level guard for them. The closed-set
+    // assertions live in
     // test/tx-operator-build.test.ts and the rejection matrices in
     // test/broadcast-guard.test.ts. Here we only pin that the VAULT pair is
     // unchanged and that the total has not grown beyond the amended set.
@@ -164,7 +164,7 @@ describe("disclosure JSON mirrors the encoded message (single site)", () => {
   });
 });
 
-// ── M7.3–7.4: canonical-encoding goldens for the three governance messages ──
+// ── Canonical-encoding goldens for the three governance messages ──────────
 //
 // WHY HEX RATHER THAN A ROUND TRIP. The operator messages have byte-goldens
 // against CAPTURED DEVNET TRANSACTIONS (`tx-operator-build.test.ts`) — the

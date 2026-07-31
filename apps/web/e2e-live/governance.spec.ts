@@ -24,8 +24,8 @@ test("the governance page renders against the real chain, with no session", asyn
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Governance");
   await expect(page.getByRole("heading", { name: "Open" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Outcome history" })).toBeVisible();
-  // M7.3–7.4: the page is no longer read-only, and the note says what the
-  // write path is rather than promising it for a later release.
+  // The page is not read-only, and the note says what the write path is
+  // rather than promising it for a later release.
   await expect(page.getByText("Members vote and execute", { exact: false })).toBeVisible();
 });
 

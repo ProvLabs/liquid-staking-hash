@@ -20,9 +20,9 @@
 import { sha256 } from "@noble/hashes/sha256";
 // `@nvhash/api-types` is a zero-runtime-dependency constants/types package, so
 // importing it does not widen what the relay pulls in. The bounds MUST come
-// from there rather than be literals here: M7.3–7.4 §4b C2 makes a guard bound
-// written inline a review failure, because the composer, the guard and the
-// reader must not be able to disagree about the same limit.
+// from there rather than be literals here: a guard bound written inline is a
+// defect, because the composer, the guard and the reader must not be able to
+// disagree about the same limit.
 import {
   MAX_PROPOSAL_MESSAGES,
   MAX_PROPOSAL_METADATA_LEN,
@@ -61,7 +61,7 @@ export const MSG_SWAP_OUT = "/provlabs.vault.v1.MsgSwapOutRequest";
  */
 export const MSG_EXECUTE_CONTRACT = "/cosmwasm.wasm.v1.MsgExecuteContract";
 
-// ── The M7.3–7.4 governance types (app-spec §12.3 amendment) ─────────────
+// ── The governance types (app-spec §12.3 amendment) ──────────────────────
 //
 // THREE types join, and no others. Every other `cosmos.group.v1` message —
 // `MsgUpdateGroupMembers`, `MsgUpdateGroupPolicyDecisionPolicy`,
@@ -97,7 +97,7 @@ export const GOVERNANCE_MSG_TYPE_URLS = [
   MSG_GOV_SUBMIT_PROPOSAL,
 ] as const;
 
-/** The §10.2 v1 message set, plus the M7.3–7.4 governance types (spec §12.3). */
+/** The §10.2 v1 message set, plus the governance types (spec §12.3). */
 export const ALLOWED_MSG_TYPE_URLS = [
   MSG_SWAP_IN,
   MSG_SWAP_OUT,
@@ -127,7 +127,7 @@ export const GOVERNANCE_VOTE_OPTIONS: Record<GovernanceVoteOption, bigint> = {
  *
  * `EXEC_TRY` (1) attempts execution in the SAME transaction, which silently
  * turns a vote — or a submission — into a vote PLUS execution of whatever the
- * proposal contains, which after this PR includes admin program-ops. The guard
+ * proposal contains, which includes admin program-ops. The guard
  * PINS `exec` to `EXEC_UNSPECIFIED` (0) on both messages and rejects anything
  * else; because proto3 omits a zero varint, the pin is enforced as "field 5 is
  * absent", and the canonical re-encode enforces it a second time.
@@ -274,7 +274,7 @@ export interface OperatorIntent {
   denom: string;
 }
 
-/** A member's vote on a proposal (M7.3 §2.2). Closed scalar payload. */
+/** A member's vote on a proposal. Closed scalar payload. */
 export interface GovVoteIntent {
   kind: "gov_vote";
   /** The acting account; the relay binds this to the session address. */
@@ -285,10 +285,10 @@ export interface GovVoteIntent {
 }
 
 /**
- * Execute a proposal that has passed (M7.3 §2.2).
+ * Execute a proposal that has passed.
  *
- * Execution in x/group is PERMISSIONLESS once a proposal has passed (§7 Q2,
- * confirmed 2026-07-30: offered to any connected wallet, and the UI says so).
+ * Execution in x/group is PERMISSIONLESS once a proposal has passed — offered
+ * to any connected wallet, and the UI says so.
  * The relay still binds `signer` to the session address — the relay carries the
  * session's own transactions, which is a different rule from who the module
  * allows to execute.
@@ -306,12 +306,12 @@ export interface ProposalTemplateInstance {
 }
 
 /**
- * Submit a template-scoped proposal (M7.4 §2.2/§2.3).
+ * Submit a template-scoped proposal.
  *
- * `templates` is a LIST because the wire is a list — v1 composes exactly one
- * (§7 Q4, confirmed 2026-07-30), and modelling it as a scalar here would put
- * the cardinality assumption in the type where the guard could not see it
- * (§4b C1). `proposers` is likewise the wire's repeated field, but the relay is
+ * `templates` is a LIST because the wire is a list — v1 composes exactly one,
+ * and modelling it as a scalar here would put the cardinality assumption in the
+ * type where the guard could not see it.
+ * `proposers` is likewise the wire's repeated field, but the relay is
  * sole-signer, so the encoder emits exactly the one proposer.
  */
 export interface GovSubmitProposalIntent {
@@ -324,7 +324,7 @@ export interface GovSubmitProposalIntent {
   templates: readonly ProposalTemplateInstance[];
   title: string;
   summary: string;
-  /** Optional public rationale (§7 Q3). Empty = omitted from the wire. */
+  /** Optional public rationale. Empty = omitted from the wire. */
   metadata: string;
 }
 
@@ -419,7 +419,7 @@ function encodeExecuteContract(intent: OperatorIntent): Uint8Array {
   return writer.finish();
 }
 
-// ── Governance encoders (M7.3–7.4 §3.1) ─────────────────────────────────
+// ── Governance encoders ─────────────────────────────────────────────────
 //
 // The same discipline as every encoder above: field-number order, omitted
 // defaults, and — the property the whole guard rests on — a form the guard can
@@ -429,8 +429,8 @@ function encodeExecuteContract(intent: OperatorIntent): Uint8Array {
 
 /** `MsgVote` (proposal_id=1, voter=2, option=3, metadata=4, exec=5).
  *
- * Fields 4 and 5 are NEVER WRITTEN: vote metadata is omitted (§7 Q3) and `exec`
- * is pinned to `EXEC_UNSPECIFIED` (§2.4). Because proto3 omits defaults, "pinned
+ * Fields 4 and 5 are NEVER WRITTEN: vote metadata is omitted and `exec`
+ * is pinned to `EXEC_UNSPECIFIED`. Because proto3 omits defaults, "pinned
  * to the no-try value" and "field absent" are the same bytes — so the guard
  * enforces the pin by requiring absence, and the re-encode enforces it again. */
 function encodeGovVote(intent: GovVoteIntent): Uint8Array {
@@ -487,7 +487,7 @@ export function templateExecuteAny(
  * written — the `exec` pin.
  *
  * `messages` are already-encoded `Any` bytes and ride VERBATIM. That is the
- * whole shape of the simplified guard (§12.3 amendment, revised 2026-07-30):
+ * whole shape of the guard (§12.3 amendment):
  * the relay reasons about the envelope, which it can reproduce, and carries the
  * inner messages without inspecting them — because a proposal executes nothing
  * until the group's decision policy is satisfied by members voting, and that
@@ -1002,7 +1002,7 @@ export function guardOperatorExecute(
   return { ok: true, variant: typed };
 }
 
-// ── The governance guards (M7.3–7.4 §2.2) ────────────────────────────────
+// ── The governance guards ────────────────────────────────────────────────
 //
 // Two classes, because the payloads differ in kind. Both end where
 // `guardOperatorExecute` ends — at a BYTE-IDENTICAL CANONICAL RE-ENCODE — for
@@ -1145,20 +1145,19 @@ function guardExec(
 }
 
 /**
- * `MsgSubmitProposal` — the STRUCTURAL guard (§12.3 amendment, revised
- * 2026-07-30).
+ * `MsgSubmitProposal` — the STRUCTURAL guard (§12.3 amendment).
  *
- * WHAT THIS GUARD IS FOR, stated precisely, because it shipped once with a
- * rationale that was wrong. The original design guarded this message with six
- * conditions — including matching every inner `Any` against a closed template
- * set and re-encoding each one — on the argument that a plain allowlist entry
- * would let the relay carry "arbitrary messages destined for the policy account,
- * which is the contract's admin, strictly worse than the `MsgExecuteContract`
- * hole M6.4 closed."
+ * WHAT THIS GUARD IS FOR, stated precisely, because the tempting mistake is to
+ * make it deeper: matching every inner `Any` against a closed template set and
+ * re-encoding each one, on the argument that a plain allowlist entry lets the
+ * relay carry arbitrary messages destined for the policy account, which is the
+ * contract's admin. **Do not add that.** It reduces no authority available to
+ * anyone, and it costs a live policy read on the relay path.
  *
- * That comparison was backwards. An unguarded `MsgExecuteContract` EXECUTES ON
- * INCLUSION under the signer's own authority — nothing else has to happen. An
- * unguarded `MsgSubmitProposal` EXECUTES NOTHING: it is a request that does
+ * The comparison it rests on is backwards. An unguarded `MsgExecuteContract`
+ * EXECUTES ON INCLUSION under the signer's own authority — nothing else has to
+ * happen. An unguarded `MsgSubmitProposal` EXECUTES NOTHING: it is a request
+ * that does
  * nothing at all until the group's decision policy is satisfied by other
  * members voting. **The group's threshold is the enforcement boundary here**,
  * exactly as the contract is for `MsgExecuteContract`, and what protects
@@ -1193,7 +1192,7 @@ export function guardSubmitProposal(
   }
 
   // 2 — proposer ↔ session binding. x/group permits SEVERAL proposers and
-  // counts each as a required signer (§4b C1), but the relay accepts exactly
+  // counts each as a required signer, but the relay accepts exactly
   // one signature, so exactly one proposer is the only shape that can ever be
   // valid here. Pinning the COUNT is both simpler and stricter than checking
   // every entry: it closes the "one element decides the verdict while another
@@ -1244,7 +1243,7 @@ export function guardSubmitProposal(
   const innerAnys = bytesFields(msg.fields, SUBMIT_FIELD.messages);
   if (innerAnys.length === 0) {
     // Legal on the wire; refused because a proposal to do nothing still
-    // consumes the group's voting period (§4b C1).
+    // consumes the group's voting period.
     return { ok: false, reason: "a proposal must carry at least one message" };
   }
   if (innerAnys.length > MAX_PROPOSAL_MESSAGES) {

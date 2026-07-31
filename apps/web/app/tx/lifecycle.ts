@@ -43,7 +43,7 @@ export type PreflightReason =
   | { code: "purge-cooldown"; readyAtIso: string }
   | { code: "program-halted" }
   | { code: "too-many-validators"; max: number }
-  // ── M7.3–7.4 governance flows (§2.5). Same contract as the operator
+  // ── Governance flows. Same contract as the operator
   // predicates above: each RESTATES something the x/group module or the
   // contract enforces, so a would-fail reason is a courtesy shown before the
   // wallet is asked to sign — never an authorization claim, and a passing
@@ -57,7 +57,7 @@ export type PreflightReason =
   | { code: "voting-period-open"; endsAtIso: string }
   /** `readyAtIso` is null when the window could NOT BE DETERMINED — the policy
    * is outside the discovered set, or its decision rule is a kind this build
-   * does not model. An unresolved window is not a zero window (PR #25 review). */
+   * does not model. An unresolved window is not a zero window. */
   | { code: "min-execution-pending"; readyAtIso: string | null }
   | { code: "already-executed" }
   | { code: "policy-not-found" }

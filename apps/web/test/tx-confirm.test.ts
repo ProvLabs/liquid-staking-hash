@@ -186,7 +186,7 @@ describe("operator execute: the disclosure equals the signed bytes", () => {
   });
 });
 
-// ── M7.3–7.4: the governance disclosures (§2.6, §4 invariant 12) ─────────
+// ── The governance disclosures (invariant 12) ────────────────────────────
 //
 // The same property, on the three messages where it matters most: the user
 // signs exactly what they saw. For a governance write that is not a nicety —

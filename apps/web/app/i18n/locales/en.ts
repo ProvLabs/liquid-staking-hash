@@ -380,7 +380,7 @@ export default {
     "The program's fund-moving cranks are halted, so a purge cannot run right now.",
   "tx.reason-too-many-validators":
     "The program is at its limit of {max} enrolled validators, so no new one can enroll right now.",
-  // M7.3–7.4 governance would-fail reasons (§2.5).
+  // Governance would-fail reasons.
   "tx.reason-proposal-not-found": "This proposal could not be read from the chain.",
   "tx.reason-proposal-pruned":
     "The chain no longer holds this proposal, so no action can reference it.",
@@ -679,8 +679,8 @@ export default {
   "governance.title": "Governance",
   "governance.lede":
     "Proposals for the program's group policies, with what each one would do, where its tally stands, and how it ended.",
-  // M7.3–7.4 shipped voting, execution and the template composer, so the
-  // read-only note this page carried since 7.2 would now be false.
+  // Voting, execution and the template composer all ship, so this page must
+  // not carry a read-only note.
   "governance.write-note":
     "Members vote and execute from each proposal's page. Proposals are composed from the program's own admin actions.",
 
@@ -848,7 +848,7 @@ export default {
   "governance.msg-malformed":
     "This message could not be read as its declared type. The exact payload is below.",
 
-  // ── M7.3–7.4 write path: vote, execute, compose ────────────────────────
+  // ── The write path: vote, execute, compose ─────────────────────────────
   "governance.actions-title": "Your actions",
   "governance.actions-live-down":
     "Actions are hidden because the current on-chain state could not be read. What is shown above is the mirrored record, and acting on it could submit a transaction that is certain to fail.",

@@ -39,11 +39,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   });
   if (data === null) throw new Response("proposal not found", { status: 404 });
 
-  // The §4b C4 affordance decision happens HERE, in the loader, over the LIVE
-  // plane — not in JSX. That is what makes it table-drivable
-  // (`test/governance-flows.test.ts` runs one case per row) and what keeps the
-  // M6.4 "actions offered against a state they cannot operate on" P1 from
-  // recurring in its preventable form.
+  // The affordance decision happens HERE, in the loader, over the LIVE plane —
+  // not in JSX. That is what makes it table-drivable
+  // (`test/governance-flows.test.ts` runs one case per row) and what keeps
+  // "actions offered against a state they cannot operate on" from recurring.
   const affordanceInput = {
     live: data.proposal.liveState,
     pruned: data.proposal.pruned,

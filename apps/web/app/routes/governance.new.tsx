@@ -1,4 +1,4 @@
-// `/governance/new` — the template composer (M7.4 §2.3, app-spec §8.7).
+// `/governance/new` — the template composer (app-spec §8.7).
 //
 // MEMBER-GATED, and gated on THREE states before any form renders, the
 // `/validators/mine` pattern: anonymous (connect prompt), the live plane
@@ -244,7 +244,7 @@ function Composer({
     // dangerous act — passage and execution are — and the confirmation says so
     // without using that framing to soften the disclosure.
     t(locale, "governance.confirm-submit-2"),
-    // §4b C3: submission is NOT idempotent. A second signature creates a
+    // Submission is NOT idempotent. A second signature creates a
     // SECOND proposal, which is a real hazard rather than a duplicate row.
     t(locale, "governance.confirm-submit-3"),
   ];
@@ -319,7 +319,7 @@ function Composer({
           {t(locale, "governance.compose-public-note")}
         </p>
         <div>
-          {/* Re-submit is disabled after broadcast (§4b C3): signing twice
+          {/* Re-submit is disabled after broadcast: signing twice
               creates two separate proposals, not one. */}
           <Button onClick={() => void start()} disabled={!ready || submitted}>
             {t(locale, "governance.new-submit")}

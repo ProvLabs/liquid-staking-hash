@@ -81,7 +81,7 @@ export type PreflightRequest = z.infer<typeof preflightRequestSchema>;
 /** Valoper shape, bounded at the route boundary like every other input. */
 const valoperString = z.string().max(90).regex(VALOPER_RE);
 
-/** M6.4 operator preflight (§2.4). `amount` is required only for payments. */
+/** Operator preflight. `amount` is required only for payments. */
 export const operatorPreflightRequestSchema = z.object({
   kind: z.literal("operator"),
   variant: z.enum(OPERATOR_VARIANTS),
@@ -92,9 +92,9 @@ export const operatorPreflightRequestSchema = z.object({
 export type OperatorPreflightRequest = z.infer<typeof operatorPreflightRequestSchema>;
 
 /**
- * M7.3–7.4 governance preflight (§2.5). A separate BOUNDED schema, never a
- * widened one — the M6.4 precedent, and the reason a governance request can
- * never be parsed as a swap or an operator action by accident.
+ * Governance preflight. A separate BOUNDED schema, never a widened one — the
+ * operator precedent, and the reason a governance request can never be parsed
+ * as a swap or an operator action by accident.
  *
  * The proposal id stays a canonical DECIMAL STRING (`params.ts`'s rule): x/group
  * ids are u64 and the JSON number domain stops at 2^53, and one proposal must
@@ -471,7 +471,7 @@ export async function runOperatorPreflight(
   };
 }
 
-// ── M7.3–7.4 governance preflight (§2.5) ─────────────────────────────────
+// ── Governance preflight ─────────────────────────────────────────────────
 //
 // Same contract as the operator matrix above, and the same limit. Every
 // predicate RESTATES one the x/group module or the contract already enforces,
@@ -663,7 +663,7 @@ export function governancePreflightReasons(
     // FAILURE is terminal too: x/group does not permit a second attempt.
     reasons.push({ code: "already-executed" });
   } else {
-    // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW (PR #25 review, 2026-07-30).
+    // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW.
     // `minExecutionPeriod` is null ONLY when it could not be determined — the
     // proposal's policy is outside the discovered set, or its decision rule is a
     // kind this build does not model. x/group serializes a Duration for both

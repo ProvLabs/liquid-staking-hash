@@ -165,17 +165,15 @@ describe("relay guards (each an enforced mechanism)", () => {
 
   // ── The §12.3 amendment, asserted on the CONSTANT ─────────────────────
   //
-  // Through PR 7.1 this suite held the opposite assertion — "the allowlist
-  // carries no x/group type URL" — precisely so that admitting one would be a
-  // line someone had to delete. THIS PR is that deliberate design-review event,
-  // and the replacement is not weaker: it pins the admitted set to EXACTLY the
-  // three named types, so a fourth is still an edit to this line.
+  // The admitted set is pinned to EXACTLY the three named types, so admitting
+  // a fourth is an edit to this line — a deliberate design-review event, never
+  // a widening that passes unnoticed.
   it("the allowlist admits EXACTLY three x/group types and no others", () => {
     const group = ALLOWED_MSG_TYPE_URLS.filter((url) => url.startsWith("/cosmos.group."));
     expect([...group].sort()).toEqual(
       [MSG_GOV_VOTE, MSG_GOV_EXEC, MSG_GOV_SUBMIT_PROPOSAL].sort(),
     );
-    // …and the M6.4 entries are untouched by the extension.
+    // …and the operator entry is untouched by the extension.
     expect(ALLOWED_MSG_TYPE_URLS).toContain(MSG_EXECUTE_CONTRACT);
     expect(ALLOWED_MSG_TYPE_URLS).toHaveLength(6);
   });
@@ -659,7 +657,7 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
   });
 });
 
-// ── M7.3–7.4 §2.2: the GOVERNANCE guards ─────────────────────────────────
+// ── The GOVERNANCE guards ────────────────────────────────────────────────
 //
 // The three `cosmos.group.v1` types are on the allowlist, so on the first level
 // they are "allowed". Everything below is an attempt to reach the chain with
@@ -873,7 +871,7 @@ describe("governance — the three admitted types are accepted in canonical form
   });
 
   it("accepts an update_config supplying ALL TEN optional fields", async () => {
-    // The 2^10 shape space (§4b C1) at its far end: the canonical builder emits
+    // The 2^10 shape space at its far end: the canonical builder emits
     // every supplied field in declaration order, and condition 5 makes the
     // shape space irrelevant rather than enumerated.
     const tx = govTx(
@@ -962,8 +960,8 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   });
 
   it("a proposal whose SECOND proposer is not the session → 400", async () => {
-    // §4b C1's disproof, made executable: a verdict decided by ONE element of a
-    // collection while another rides along unchecked. Checking only
+    // A verdict decided by ONE element of a collection while another rides
+    // along unchecked. Checking only
     // `proposers[0]` would admit this; the count pin refuses it outright.
     await reject(
       signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, OTHER_POLICY] })),
@@ -978,13 +976,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   // ── WHAT THE GUARD DELIBERATELY NO LONGER CHECKS ──────────────────────
   //
   // These cases assert ACCEPTANCE, and they are the load-bearing half of the
-  // 2026-07-30 revision. The original guard rejected each of them; the
-  // rationale for doing so did not survive review (a proposal executes nothing
-  // until the group's threshold is met, so restricting what may be PROPOSED
-  // reduced no authority). They are asserted rather than merely deleted so
-  // that re-tightening the guard is a deliberate edit to a named case, not a
-  // silent regression — the same reason the pre-7.3 suite asserted the
-  // allowlist carried no x/group type at all.
+  // guard: a proposal executes nothing until the group's threshold is met, so
+  // restricting what may be PROPOSED reduces no authority available to anyone.
+  // They are asserted rather than left unwritten so that re-tightening the
+  // guard is a deliberate edit to a named case, not a silent regression.
   it("a proposal to a policy this program did not discover → ACCEPTED", () => {
     // The relay no longer resolves the program's policy set. A proposal to
     // another group's policy is that group's business; it grants its proposer
@@ -1061,7 +1056,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   // ── What the guard still enforces on a proposal ───────────────────────
   it("a proposal with ZERO inner messages → 400", () => {
     // Legal on the wire, and still refused: a proposal to do nothing would
-    // consume the group's voting period regardless (§4b C1).
+    // consume the group's voting period regardless.
     reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [] })), "zero messages");
   });
 
@@ -1101,7 +1096,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     );
   });
 
-  it("a vote carrying metadata → 400 (votes carry none, §7 Q3)", async () => {
+  it("a vote carrying metadata → 400 (votes carry none)", async () => {
     for (const metadata of ["", "because"]) {
       await reject(
         signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n, metadata })),
@@ -1150,7 +1145,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   });
 
   it("a governance msg BESIDE an unguarded one in the same tx → 400", async () => {
-    // The guard runs over EVERY message in the body (§4b C1), so pairing a
+    // The guard runs over EVERY message in the body, so pairing a
     // legitimate vote with a message that would otherwise be refused does not
     // smuggle the second one through.
     const vote = new ProtoWriter()
@@ -1175,9 +1170,9 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
 });
 
 describe("invariant 8 — the direct-admin path stays closed after the amendment", () => {
-  // THE INVARIANT MOST AT RISK OF ACCIDENTAL EROSION (plan §9). Admin ops reach
-  // the chain ONLY through governance, and the easiest way to lose that is to
-  // relax the older matrix while extending the newer one. So the M6.4 rows are
+  // THE INVARIANT MOST AT RISK OF ACCIDENTAL EROSION. Admin ops reach the
+  // chain ONLY through governance, and the easiest way to lose that is to
+  // relax the older matrix while extending the newer one. So the operator rows are
   // re-asserted HERE, after the governance guards exist, rather than trusted to
   // still be passing further up the file.
   it("every ADMIN variant is STILL refused as a direct MsgExecuteContract", async () => {

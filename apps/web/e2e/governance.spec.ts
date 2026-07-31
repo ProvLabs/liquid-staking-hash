@@ -74,9 +74,9 @@ test("tally, member status and votes all degrade honestly with no live plane", a
 
 test("the READ half of the page renders ANONYMOUSLY — §8.7 is still a public read", async ({ page }) => {
   // No session exists offline. No READ section may be withheld: session-address
-  // highlighting is decoration, never a gate. M7.3–7.4 adds a WRITE section,
-  // and the distinction this spec now draws is the point — the actions section
-  // may say "connect a wallet", but nothing above it may be gated on one.
+  // highlighting is decoration, never a gate. The WRITE section is where the
+  // distinction matters — the actions section may say "connect a wallet", but
+  // nothing above it may be gated on one.
   await page.goto("/governance/4");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   for (const heading of ["Tally", "Member status", "Recorded votes", "What this proposal does"]) {
@@ -87,9 +87,9 @@ test("the READ half of the page renders ANONYMOUSLY — §8.7 is still a public 
   await expect(prompts).toHaveCount(1);
 });
 
-test("NO action control renders for an anonymous reader, in any state (§4b C4)", async ({ page }) => {
+test("NO action control renders for an anonymous reader, in any state", async ({ page }) => {
   // The affordance sweep. Offline the corpus is ungoverned and there is no
-  // session, so EVERY row of the C4 matrix lands on "hidden" — and what must
+  // session, so EVERY row of the affordance matrix lands on "hidden" — and what must
   // never appear is a control the reader could press into a certain failure.
   // The per-row logic is unit-gated in `test/governance-flows.test.ts`; this is
   // the end-to-end assertion that the loader's verdict actually reaches the DOM.

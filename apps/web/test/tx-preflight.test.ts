@@ -221,7 +221,7 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
 //     ("anyone, nhash attached") and pretending otherwise would block a
 //     co-op partner from doing something the contract allows.
 
-describe("operator preflight predicates (M6.4 §2.4)", () => {
+describe("operator preflight predicates", () => {
   const ADDRESS = "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk";
   const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
   /** The valoper ADDRESS actually operates: same bech32 payload, `valoper` HRP
@@ -511,7 +511,7 @@ describe("operator preflight predicates (M6.4 §2.4)", () => {
   });
 });
 
-// ── M7.3–7.4: the governance predicate matrix (§2.5) ─────────────────────
+// ── The governance predicate matrix ──────────────────────────────────────
 //
 // Same contract as the operator matrix above, including its two-directional
 // rule: a variant MUST short-circuit on every fact IT consumes, and is equally
@@ -650,7 +650,7 @@ describe("governance preflight — exec", () => {
   });
 
   it("an UNDETERMINED window BLOCKS — an unresolved window is not a zero window", () => {
-    // The preflight half of the PR #25 review finding. `minExecutionPeriod` is
+    // The preflight half of the same rule. `minExecutionPeriod` is
     // null only when it could not be determined (policy outside the discovered
     // set, or a decision rule this build does not model); x/group serializes
     // `"0s"` for a policy that genuinely has no waiting period. Passing null
@@ -727,7 +727,7 @@ describe("governance preflight — exec", () => {
     }
   });
 
-  it("does NOT require membership — execution is permissionless (§7 Q2)", () => {
+  it("does NOT require membership — execution is permissionless", () => {
     expect(
       govCodes(
         governancePreflightReasons(

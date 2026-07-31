@@ -1,5 +1,5 @@
 // Governance-center degradation + honesty matrix — invariants 5, 6, 7,
-// 9 and 10, and the §4b C5 plane-precedence table walked cell by cell.
+// 9 and 10, and the plane-precedence table walked cell by cell.
 //
 // This is the `operator-data.test.ts` idiom applied to governance, and the same
 // reason applies twice over: this page is where a member decides how to vote. A
@@ -185,7 +185,7 @@ describe("live plane: `not-governed` and `unavailable` are different answers (§
   });
 });
 
-describe("plane precedence, cell by cell (§4b C5)", () => {
+describe("plane precedence, cell by cell", () => {
   it("open + live ok → LIVE status and tally, no stale badge", async () => {
     server.use(...governedWorld(), mirrorList([proposalRow()]));
     const data = await loadGovernanceListData(config, { now: () => NOW });
@@ -195,7 +195,7 @@ describe("plane precedence, cell by cell (§4b C5)", () => {
   });
 
   it("open + live DOWN → the mirror, badged with the height it was observed at", async () => {
-    // M6.4's stale-registry P1 in this page's shape: the danger is not an empty
+    // The stale-registry hazard in this page's shape: the danger is not an empty
     // value, it is a successful-looking one.
     server.use(...governedWorld(), liveDown(), mirrorList([proposalRow({ tally: { yes: "1", no: "0", abstain: "0", no_with_veto: "0" } })]));
     const data = await loadGovernanceListData(config, { now: () => NOW });
@@ -383,7 +383,7 @@ describe("votes: the live read only ever ADDS (§3.4 R6)", () => {
   });
 });
 
-describe("cardinality the chain permits, not the shapes the drill happened to walk (§4b C1)", () => {
+describe("cardinality the chain permits, not the shapes the drill happened to walk", () => {
   it("several proposers, several messages, and both truncation flags render", async () => {
     server.use(
       mirrorList([

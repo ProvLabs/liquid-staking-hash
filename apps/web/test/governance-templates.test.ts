@@ -1,4 +1,4 @@
-// The proposal-template registry gate (M7.3–7.4 §4 invariants 6, 7, 9).
+// The proposal-template registry gate (invariants 6, 7, 9).
 //
 // THE INVARIANT THIS FILE EXISTS FOR, and its disproof line: a drift test that
 // only checks "every template still matches the contract" catches a template
@@ -110,7 +110,7 @@ describe("invariant 7 — the template set matches the contract, in both directi
 
   it("no template exists for an operator or keeper variant", () => {
     // Templates carry ADMIN actions only. An operator action reaches the chain
-    // directly through M6.4's guard; naming one here would give it a second,
+    // directly through the operator guard; naming one here would give it a second,
     // governance-shaped route with a different authority.
     for (const variant of [...OPERATOR_VARIANTS, ...KEEPER_VARIANTS]) {
       expect(templateById(variant), variant).toBeNull();

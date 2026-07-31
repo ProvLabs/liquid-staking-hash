@@ -92,7 +92,7 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
         ))}
       </nav>
 
-      {/* Open above history (§7 Q1): what can still be influenced, then what
+      {/* Open above history: what can still be influenced, then what
           happened. Both sections render even when empty, so an empty "open" is
           a statement rather than a missing section. */}
       <ProposalList

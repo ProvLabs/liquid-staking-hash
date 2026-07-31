@@ -63,7 +63,7 @@ export function reasonText(
       return t(locale, "tx.reason-program-halted");
     case "too-many-validators":
       return t(locale, "tx.reason-too-many-validators", { max: String(reason.max) });
-    // M7.3–7.4 governance predicates (§2.5).
+    // Governance predicates.
     case "proposal-not-found":
       return t(locale, "tx.reason-proposal-not-found");
     case "proposal-pruned":

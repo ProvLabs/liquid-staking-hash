@@ -1,17 +1,18 @@
-// The proposal detail page's WRITE surface (M7.3 §2.2/§2.6, app-spec §8.7).
+// The proposal detail page's WRITE surface (app-spec §8.7).
 //
 // Vote and execute run through the UNMODIFIED 5.2 lifecycle (`useTxFlow`:
 // preflight → simulate → confirm → sign → broadcast → track), exactly as the
-// M6.4 operator flows do. Nothing here signs: the wallet does, and no key
+// operator flows do. Nothing here signs: the wallet does, and no key
 // material is touched.
 //
 // WHAT THIS COMPONENT DOES NOT DECIDE. Whether a control appears is
 // `app/governance/actions.ts`'s answer, computed in the loader from the LIVE
 // plane and passed in — not a condition written in JSX. That separation is the
-// point: the M6.4 P1 this inherits (an action panel rendered against a state the
-// action could not validly operate on) was a decision made in a component, where
-// no table could drive it. Here every affordance is a value with a reason, and
-// `test/governance-flows.test.ts` drives one case per row of the §4b C4 matrix.
+// point: an action panel rendered against a state the action cannot validly
+// operate on is the failure this prevents, and it is what happens when the
+// decision is made in a component, where no table can drive it. Here every
+// affordance is a value with a reason, and `test/governance-flows.test.ts`
+// drives one case per row of the state × affordance matrix.
 //
 // EVERY HIDDEN CONTROL SAYS WHY. There is no silently-absent action and no
 // disabled control without an explanation — the console R1 rule.
@@ -186,7 +187,7 @@ export function ProposalActions({
         </div>
       ) : execute.state === "disabled" ? (
         // SHOWN, DISABLED, with the eligible-at time — never hidden. The user
-        // needs to know it is coming (§4b C4).
+        // needs to know it is coming.
         <div className="flex flex-col gap-2 rounded-lg border bg-card p-4">
           <h3 className="text-sm font-medium">{t(locale, "governance.execute-title")}</h3>
           <Button disabled>{t(locale, "governance.execute-submit")}</Button>

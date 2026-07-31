@@ -14,7 +14,7 @@
 // produced its status and tally, and an indexed figure standing in for a failed
 // live read is BADGED with the height it was observed at. Never blank, never
 // indexed-presented-as-current (SECURITY.md "never lie about state"). That is
-// M6.4's stale-registry P1 applied here before it can happen again.
+// the stale-registry hazard, refused here before it can happen.
 
 import type {
   FreshnessMeta,
@@ -145,7 +145,7 @@ function toWireDecisionPolicy(policy: {
 }
 
 /** Seconds until an ISO instant, or null once elapsed / unparseable. Computed
- * against the SERVER clock and labeled approximate at render (§7 Q2): the
+ * against the SERVER clock and labeled approximate at render: the
  * absolute `voting_period_end` is the fact, this is the hint. */
 export function secondsUntil(iso: string, nowMs: number): number | null {
   const end = Date.parse(iso);
@@ -552,7 +552,7 @@ export async function loadGovernanceListData(
     }),
   );
 
-  // Open proposals pinned above the rest (§7 Q1), newest first within each
+  // Open proposals pinned above the rest, newest first within each
   // group. `proposal_id` is a u64 decimal string, so it is compared as BigInt —
   // string order would put "10" before "9".
   proposals.sort((a, b) => {
@@ -614,11 +614,11 @@ export async function loadGovernanceProposalData(
   // A pruned proposal is never live-read: the chain answers 500 for a pruned id,
   // a never-existing id and an outage alike, so the read could only add noise.
   //
-  // M7.3–7.4 WIDENS THIS to ACCEPTED proposals as well, and the widening is
-  // load-bearing rather than incidental. Actions are decided from the live plane
-  // alone (§4b C5), and execute is offered on accepted proposals — so without a
-  // live read, execute could never be offered at all, and offering it from the
-  // mirror would be exactly the stale-row hazard C5 names. The read also carries
+  // ACCEPTED proposals ARE live-read, and that is load-bearing rather than
+  // incidental. Actions are decided from the live plane alone, and execute is
+  // offered on accepted proposals — so without a live read, execute could never
+  // be offered at all, and offering it from the mirror would be exactly the
+  // stale-row hazard that rule exists to refuse. The read also carries
   // its own answer for free: a SUCCESSFULLY executed proposal is pruned by the
   // module in its own transaction (F4), so a failed read on an accepted proposal
   // is itself evidence not to offer the button.
@@ -686,7 +686,7 @@ export async function loadGovernanceProposalData(
       decisionPolicy === null || decisionPolicy.kind === "unknown"
         ? null
         : decisionPolicy.min_execution_period,
-    // The affordance plane (§4b C5). Present ONLY when the chain itself served
+    // The affordance plane. Present ONLY when the chain itself served
     // this proposal on this request; a mirrored row never fills it in.
     liveState:
       liveProposal === null
@@ -702,9 +702,9 @@ export async function loadGovernanceProposalData(
             // the module reads `min_execution_period` from the policy account at
             // execution time — and `runGovernancePreflight` reads it the same
             // way. Sourcing the affordance from the snapshot let the button and
-            // the check that gates it disagree after a policy change (PR #25
-            // review, 2026-07-30). Resolved for THIS proposal's own policy;
-            // "the first policy" would be D1's topology assumption in miniature.
+            // the check that gates it disagree after a policy change. Resolved
+            // for THIS proposal's own policy; "the first policy" would be a
+            // topology assumption in miniature.
             minExecutionPeriod: livePolicyMinExecutionPeriod(
               live,
               liveProposal.groupPolicyAddress,

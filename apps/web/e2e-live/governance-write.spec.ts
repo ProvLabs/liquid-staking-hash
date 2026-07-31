@@ -1,30 +1,29 @@
 import { expect, test } from "@playwright/test";
 
 // e2e-live: the governance WRITE path against the REAL devnet stack
-// (M7.3–7.4 §3.3; master plan §4 "e2e (live)" layer).
+// (the master plan's §4 "e2e (live)" layer).
 //
 // WHAT THIS LAYER PROVES THAT NOTHING ELSE CAN. The rejection matrix
 // (`test/broadcast-guard.test.ts`) proves the relay refuses what it must, and
 // the unit suites prove the encoders and the affordance matrix. None of them
 // proves the CANONICAL FORM IS THE FORM THE CHAIN ACCEPTS — that is a claim
-// about a real node, and it is exactly the claim M6.4's byte-goldens exist for.
-// So this spec closes the loop against 7.1's `gov-drill.sh` substrate:
+// about a real node, and it is exactly the claim the byte-goldens exist for.
+// So this spec closes the loop against the `gov-drill.sh` substrate:
 // compose → vote → execute → observe `executorResult`.
 //
 // SKIP DISCIPLINE. The write legs need a funded throwaway devnet key that is
 // ALSO a group member — proposing and voting are membership-gated, so the
-// generic `E2E_LIVE_SIGNER_KEY` cannot cover them any more than it could cover
-// M6.4's enrol leg. Absent, those legs skip LOUDLY and the read-only assertions
+// generic `E2E_LIVE_SIGNER_KEY` cannot cover them any more than it covers the
+// operator enrol leg. Absent, those legs skip LOUDLY and the read-only assertions
 // still run. SECURITY.md devnet rules: throwaway keys only, and the signer
 // lives in the test process alone (`e2e-live/signer.ts`; `check:bundle` scans
 // for its sentinel so it can never ship).
 //
-// RE-RUN TRAP, inherited from M6.4 and worth repeating: the compose `web`
-// service builds at container START, so a long-running stack serves a stale
-// bundle. A live run against it can PASS FOR THE WRONG REASON — M6.4's guard
-// assertions "passed" against a build where the type URL was not in the
-// allowlist at all, a first-level rejection indistinguishable from the deep
-// guard's. Restart the service before trusting a green run.
+// RE-RUN TRAP: the compose `web` service builds at container START, so a
+// long-running stack serves a stale bundle. A live run against it can PASS FOR
+// THE WRONG REASON — guard assertions "pass" against a build where the type URL
+// is not in the allowlist at all, a first-level rejection indistinguishable
+// from the deep guard's. Restart the service before trusting a green run.
 
 const LIVE = process.env.E2E_LIVE_BASE_URL !== undefined;
 const MEMBER_KEY = process.env.E2E_LIVE_GOV_MEMBER_KEY;
@@ -71,7 +70,7 @@ test("the template picker offers exactly the program's admin actions, and no fre
   ]) {
     await expect(page.getByRole("button", { name: label })).toBeVisible();
   }
-  // Bridge config has NO template (§7 Q1): absent, and the absence is stated.
+  // Bridge config has NO template: absent, and the absence is stated.
   await expect(page.getByRole("button", { name: /bridge/i })).toHaveCount(0);
   await expect(page.getByText("Bridge configuration has no template", { exact: false })).toBeVisible();
 });

@@ -1,17 +1,15 @@
-// The state × affordance matrix (M7.3–7.4 §4b C4). PURE — no I/O, no clock
+// The state × affordance matrix. PURE — no I/O, no clock
 // beyond the `nowMs` passed in, no config.
 //
-// WHY THIS IS A MODULE AND NOT JSX. 7.2 filled C4 with every row reading "read
-// only" and changed nothing, and the plan says to judge that table HERE, where
-// affordances first exist. The M6.4 P1 it exists to prevent — an action panel
-// rendered against a state the action could not validly operate on — was a
-// decision made in a component, where it could not be driven by a table. So the
-// decision is a function over a closed input, and `test/governance-flows.test.ts`
-// drives one case per row.
+// WHY THIS IS A MODULE AND NOT JSX. The failure it exists to prevent — an
+// action panel rendered against a state the action cannot validly operate on —
+// is what a decision made inside a component produces, because no table can
+// drive it there. So the decision is a function over a closed input, and
+// `test/governance-flows.test.ts` drives one case per row.
 //
 // TWO RULES SHAPE EVERY ANSWER:
 //
-//   1. **Affordances come from the LIVE plane alone** (§4b C5). An action is
+//   1. **Affordances come from the LIVE plane alone.** An action is
 //      never offered on the strength of an indexed row a live read has not
 //      confirmed: a stale "accepted" that has since been executed would offer
 //      an execute button guaranteed to fail. When the live read is down, actions
@@ -45,11 +43,10 @@ export interface LiveProposalState {
   /**
    * The policy's `min_execution_period`, read from the LIVE policy account.
    *
-   * IT LIVES IN HERE, AND THAT IS THE FIX FOR A REAL DEFECT (PR #25 review,
-   * 2026-07-30). It was previously a separate `AffordanceInput` field, and the
-   * detail loader filled it from the MIRROR'S SNAPSHOT of the decision policy
-   * while `runGovernancePreflight` read the LIVE policy — so the button and the
-   * check that gates it could disagree after any policy change.
+   * IT LIVES IN HERE DELIBERATELY, and not as a separate `AffordanceInput`
+   * field: filled from the MIRROR'S SNAPSHOT of the decision policy while
+   * `runGovernancePreflight` reads the LIVE policy, the button and the check
+   * that gates it disagree after any policy change.
    *
    * The live read is the correct one, and the reason is structural: the chain's
    * `Proposal` carries NO decision policy (see `GroupProposal` in
@@ -66,7 +63,7 @@ export interface LiveProposalState {
    *
    * Placing it inside `liveState` makes the mistake unrepresentable: the
    * affordance now takes everything it needs from the one field that is by
-   * definition "what the chain confirmed just now" (§4b C5).
+   * definition "what the chain confirmed just now".
    *
    * Null when the policy could not be read or its rule is one this build does
    * not understand — which yields "not yet, and we cannot say when", never an
@@ -123,7 +120,7 @@ export type VoteAffordance =
 export type ExecuteAffordance =
   | { state: "offered" }
   /** Shown but not actionable, WITH the eligible-at time. Never hidden: the
-   * user needs to know it is coming (§4b C4). */
+   * user needs to know it is coming. */
   | { state: "disabled"; reason: "min-execution-pending"; readyAtIso: string | null }
   | { state: "hidden"; reason: ExecuteHiddenReason };
 
@@ -202,8 +199,8 @@ export function voteAffordance(input: AffordanceInput): VoteAffordance {
 /**
  * Can the connected session execute this proposal right now?
  *
- * Execution is PERMISSIONLESS in x/group once a proposal has passed (§7 Q2,
- * confirmed 2026-07-30): any connected wallet is offered it, and the UI says
+ * Execution is PERMISSIONLESS in x/group once a proposal has passed: any
+ * connected wallet is offered it, and the UI says
  * plainly that this is the module's rule rather than a permission we granted.
  * A connected wallet is still required — the transaction needs a signer.
  *
@@ -232,10 +229,9 @@ export function executeAffordance(input: AffordanceInput): ExecuteAffordance {
   // waiting period the chain will actually compare against.
   const readyAtIso = executableAtIso(input.live.submitTime, input.live.minExecutionPeriod);
 
-  // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW (PR #25 review, 2026-07-30).
-  // This previously fell through to `offered` when `minExecutionPeriod` was
-  // null, on the reasoning that there was "no window to wait out". That
-  // reasoning was wrong: for both decision-policy kinds x/group serializes a
+  // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW. Falling through to `offered`
+  // when `minExecutionPeriod` is null — on the reasoning that there is "no
+  // window to wait out" — is wrong: for both decision-policy kinds x/group serializes a
   // Duration, so a policy with no waiting period yields `"0s"` — never null
   // (`parseDecisionPolicy`, `packages/chain-client/src/group.ts`). Null means
   // only that we COULD NOT DETERMINE it: the policy is outside the discovered

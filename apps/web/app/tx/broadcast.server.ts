@@ -12,7 +12,7 @@
 // 4b. MsgExecuteContract ONLY: the deep guard — configured
 //      contract, one of six operator variants, per-variant body, funds
 //      discipline, canonical bytes → 400
-//  4c. cosmos.group.v1 ONLY (M7.3–7.4 §2.2): the governance guard — signer ↔
+//  4c. cosmos.group.v1 ONLY: the governance guard — signer ↔
 //      session binding, closed field set, the `exec` pin, canonical bytes → 400
 //   5. every vault msg's vault == configured vault → 400
 //   6. every msg's owner/sender == session address → 403
@@ -24,15 +24,15 @@
 // boundary); these guards keep the relay from being a general tx submission
 // service for anyone with a session.
 //
-// WHAT THE GOVERNANCE GUARDS DELIBERATELY DO NOT DO (§12.3 amendment, revised
-// 2026-07-30). They do not inspect a proposal's inner messages, and they do not
-// check that a vote's or a proposal's policy belongs to this program. The
-// original design did both — a closed template set, a per-inner-message
-// canonical re-encode, and a live policy sweep that made this whole function
-// async — on the argument that carrying `messages []Any` bound for the policy
-// account was "strictly worse" than the `MsgExecuteContract` hole M6.4 closed.
+// WHAT THE GOVERNANCE GUARDS DELIBERATELY DO NOT DO (§12.3 amendment). They do
+// not inspect a proposal's inner messages, and they do not check that a vote's
+// or a proposal's policy belongs to this program. Doing either — a closed
+// template set, a per-inner-message canonical re-encode, a live policy sweep
+// that would make this whole function async — buys nothing, and the argument
+// for it (that carrying `messages []Any` bound for the policy account is
+// "strictly worse" than an unguarded `MsgExecuteContract`) is backwards.
 //
-// That was backwards, and the simplification is the correction. An unguarded
+// An unguarded
 // `MsgExecuteContract` executes ON INCLUSION under the signer's own authority.
 // A `MsgSubmitProposal` executes NOTHING until the group's decision policy is
 // satisfied by other members voting — so the THRESHOLD is the enforcement
@@ -113,9 +113,9 @@ export function guardSignedTx(
     return { ok: false, status: 400, reason: "expected exactly one signer" };
   }
 
-  // GUARD 6 IS PER-SHAPE, NOT PER-MESSAGE-FIELD-1. Through M6.4 every carried
-  // message had its signer in field 1 (`owner`/`sender`), so one check outside
-  // the dispatch served all of them. The governance messages do NOT: `MsgVote`
+  // GUARD 6 IS PER-SHAPE, NOT PER-MESSAGE-FIELD-1. The vault and operator
+  // messages carry their signer in field 1 (`owner`/`sender`), so one check
+  // outside the dispatch serves all of them. The governance messages do NOT: `MsgVote`
   // field 1 is a varint proposal id and `MsgSubmitProposal` field 1 is the
   // policy address. Each governance guard therefore performs its OWN
   // session binding (on `voter`, `signer`, and every entry of `proposers`), and
@@ -128,7 +128,7 @@ export function guardSignedTx(
       return { ok: false, status: 400, reason: "message type not allowed" };
     }
     if ((GOVERNANCE_MSG_TYPE_URLS as readonly string[]).includes(msg.typeUrl)) {
-      // Guard 4c — the structural governance guard (M7.3–7.4 §2.2).
+      // Guard 4c — the structural governance guard.
       const verdict = guardGovernanceMsg(msg, { signerAddress: sessionAddress });
       if (!verdict.ok) return { ok: false, status: 400, reason: verdict.reason };
       continue;
@@ -139,7 +139,7 @@ export function guardSignedTx(
       // any call to any contract. It replaces the vault check (field 2 is the
       // CONTRACT here, not the vault) and is never skipped for it.
       //
-      // UNCHANGED BY M7.3–7.4, and that is invariant 8: a DIRECT
+      // UNCHANGED by the governance guards, and that is invariant 8: a DIRECT
       // `MsgExecuteContract` carrying an admin variant is still refused here.
       // Admin ops reach the chain only through governance.
       const verdict = guardOperatorExecute(msg, { contractAddress: config.contractAddress });

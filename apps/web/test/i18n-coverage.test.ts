@@ -268,7 +268,7 @@ function scanApp(): Scan {
 // output of all six against golden strings, so an unfilled placeholder here
 // fails that suite rather than reaching a user.
 //
-// `governance.msg-update-config` (M7.4) joins for a stronger reason than the
+// `governance.msg-update-config` joins for a stronger reason than the
 // six above: `templateSummaryKey` in `app/governance/templates.ts` returns the
 // key AND its params as ONE value, so a caller cannot take the key without the
 // params — the pairing is enforced by the return type rather than by review.

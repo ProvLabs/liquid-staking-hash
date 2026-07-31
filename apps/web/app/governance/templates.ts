@@ -1,26 +1,24 @@
-// The CLOSED proposal-template registry (M7.3–7.4 §2.3; app-spec §8.7, §14.6).
+// The CLOSED proposal-template registry (app-spec §8.7, §14.6).
 // PURE — no I/O, no clock, no config. Runs unchanged in the browser bundle
 // (the composer form imports it) AND on the server (the relay guard does).
 //
-// WHAT THIS FILE IS — AND IS NOT, since it briefly was something else. This is
-// the COMPOSER'S vocabulary: it is what makes proposal creation
+// WHAT THIS FILE IS — AND IS NOT. This is the COMPOSER'S vocabulary: it is what makes proposal creation
 // "template-scoped" per app-spec §8.7, which asks the App to offer decoded
 // templates of the program's admin actions rather than free-form message
 // building (free-form stays a Console strength).
 //
-// It is NOT a relay guard input. The 2026-07-30 revision of the §12.3
-// amendment removed the guard's per-inner-message template matching: a proposal
-// executes nothing until the group's decision policy is satisfied by members
-// voting, so restricting what may be PROPOSED reduced no authority while
-// costing a live chain read and a registry the relay had to keep in lockstep
-// with the contract. What protects members from a hostile proposal is being
+// It is NOT a relay guard input, and must not become one: the guard does no
+// per-inner-message template matching. A proposal executes nothing until the
+// group's decision policy is satisfied by members voting, so restricting what
+// may be PROPOSED reduces no authority, while costing a live chain read and a
+// registry the relay would have to keep in lockstep with the contract. What
+// protects members from a hostile proposal is being
 // able to READ it before voting — `app/governance/decode.ts`, which summarizes
 // a closed union and tags everything else `unknown` with the exact JSON.
 //
-// ONE VOCABULARY, THREE CONSUMERS (§2.3, invariant 6) — still true, and still
-// the reason this is one file:
+// ONE VOCABULARY, THREE CONSUMERS — the reason this is one file:
 //
-//   * `app/governance/decode.ts` (7.2) READS proposals containing these
+//   * `app/governance/decode.ts` READS proposals containing these
 //     messages — through `ADMIN_VARIANTS`, which this file keys off, so a
 //     proposal composed here and read back there cannot be described
 //     differently;
@@ -31,12 +29,12 @@
 // no other variant. `test/governance-templates.test.ts` asserts that mapping is
 // total in BOTH directions against the committed `cargo schema` output
 // (`contracts/schema/nvhash-staking.json`, the tracked IDL — `schema/raw/` is
-// gitignored). That gate is now a PRODUCT
-// completeness property rather than a security one: a contract that gains an
+// gitignored). That gate is a PRODUCT completeness property, not a security
+// one: a contract that gains an
 // admin capability fails CI here rather than leaving it unreachable from the
 // App's composer.
 //
-// BRIDGE CONFIG IS ABSENT, NOT STUBBED (§7 Q1, confirmed 2026-07-30). App-spec
+// BRIDGE CONFIG IS ABSENT, NOT STUBBED. App-spec
 // §8.7 names it, but it depends on §14.3 (external, NUVA) and no contract
 // variant backs it. An absent template is honest; a disabled one invites "when".
 
@@ -77,7 +75,7 @@ const U32_MAX = 4_294_967_295n;
  * and "paused, no reason given" is the kind of state SECURITY.md's never-lie
  * rule exists to prevent. So this App will neither compose nor relay a
  * pause proposal without one. Declared HERE and imported by the template, the
- * composer form and the guard — one limit, never three literals (§4b C2).
+ * composer form and the guard — one limit, never three literals.
  */
 export const MIN_PAUSE_REASON_LEN = 1;
 export const MAX_PAUSE_REASON_LEN = 256;
@@ -140,7 +138,7 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
   {
     id: "update_config",
     optionalParams: true,
-    // Ten optional fields → 2¹⁰ possible shapes (§4b C1). The canonical builder
+    // Ten optional fields → 2¹⁰ possible shapes. The canonical builder
     // OMITS absent fields, and condition 5's byte comparison makes the shape
     // space irrelevant to the guard: it never enumerates the 1024 forms, it
     // demands the bytes equal the one form this builder would have produced.
@@ -395,7 +393,7 @@ export function validateTemplateValues(
 
 /**
  * The CANONICAL inner execute payload for a template instance — the ONE place
- * this JSON is produced, exactly as `operatorInnerJson` is for M6.4.
+ * this JSON is produced, exactly as `operatorInnerJson` is for operator actions.
  *
  * Both the composer and the relay guard call it: the guard re-encodes what it
  * parsed and requires byte equality, so the only inner payload the relay will
@@ -570,7 +568,7 @@ export function templateFieldLines(
 }
 
 /**
- * The `update_config` DIFF (§8.7's named requirement, D19): current → proposed
+ * The `update_config` DIFF (§8.7's named requirement): current → proposed
  * for exactly the fields being changed, with untouched fields visibly untouched.
  *
  * `current` is the live `Config {}` read, keyed by the same parameter names.

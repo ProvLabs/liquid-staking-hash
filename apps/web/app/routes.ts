@@ -49,7 +49,7 @@ export default [
     // Governance center (app-spec §8.7). Public read; the detail route is
     // registered AFTER the list so the bare path stays the list.
     route("governance", "routes/governance.tsx"),
-    // The composer (M7.4) is registered BEFORE the `:proposalId` detail route:
+    // The composer is registered BEFORE the `:proposalId` detail route:
     // a bare `route("governance/:proposalId")` would otherwise match `/new` and
     // 400 it as a malformed proposal id.
     route("governance/new", "routes/governance.new.tsx"),
