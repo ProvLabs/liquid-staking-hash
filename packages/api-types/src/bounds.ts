@@ -157,11 +157,88 @@ export const MAX_YIELD_POINTS_WIRE = 20_000;
 export const MARKER_CAP = 200;
 export const MARKER_CAP_WIRE = 2_000;
 
+/** Every governance collection field that must appear in `WIRE_BOUNDS`. The test
+ * cross-checks this list, so adding a bounded governance array without declaring
+ * its pair fails CI rather than shipping a half-coupled bound. */
+export const GOVERNANCE_BOUNDED_FIELDS: readonly string[] = [
+  "governance/proposals.proposals",
+  "governance/proposal.votes",
+  "GovProposalRow.messages",
+  "GovProposalRow.proposers",
+  "governance/policies.policies",
+];
+
+// --- §8.8 admin analytics -------------------------------------------------
+//
+// Each of these grows WITHOUT OPERATOR ACTION — with epoch count, holder count,
+// or incident count — which is exactly the class C2 exists for. The producer
+// trims and FLAGS (`*_truncated`); the consumer cap is strictly larger so a
+// producer-side bump is not instantly a wire break.
+
 /**
- * The registry the pairing test walks. A bounded field that crosses the boundary
- * and is NOT in here is invisible to the gate, which is the whole failure mode —
- * so the test also asserts that every governance payload field it knows about is
- * represented.
+ * `AdminProgramHealth.epochs`, `AdminHolderCohorts.adoption`, and
+ * `AdminValidatorCohorts.timeline` — one point per settled epoch.
+ *
+ * Epochs are calendar-monthly (liquid-staking-spec §9), so 600 points is ~50
+ * years. Bounded anyway, and flagged rather than silently trimmed: an
+ * unflagged trim would present a partial trend as the whole history, which is
+ * the §12.1 lie this cap exists to make impossible.
+ */
+export const MAX_ADMIN_EPOCH_POINTS = 600;
+export const MAX_ADMIN_EPOCH_POINTS_WIRE = 1_200;
+
+/** `AdminHolderCohorts.retention` — one curve per first-deposit epoch, so it
+ * grows with epoch count on the same schedule as the series above. */
+export const MAX_ADMIN_RETENTION_CURVES = 600;
+export const MAX_ADMIN_RETENTION_CURVES_WIRE = 1_200;
+
+/** `AdminUpkeepDistribution.buckets`. Bounded by the bucket schedule, not by
+ * history — the reason a distribution is served instead of raw samples. */
+export const MAX_ADMIN_UPKEEP_BUCKETS = 16;
+export const MAX_ADMIN_UPKEEP_BUCKETS_WIRE = 32;
+
+/** `GET /api/v1/admin/incidents` — paginated under the shared page limit. */
+export const MAX_ADMIN_INCIDENTS_PAGE = 200;
+export const MAX_ADMIN_INCIDENTS_PAGE_WIRE = 500;
+
+/**
+ * `incident_acks.note` — the optional operator note on an acknowledgment
+ * (app-spec §9.1; plan §7.1 Q2). ONE declaration, three consumers: the
+ * `POST /admin/incidents/ack` body schema rejects over-length input, the
+ * `VarChar(500)` column is the backstop, and the admin UI's input caps at it.
+ *
+ * It lives here rather than beside the Prisma model because the third consumer
+ * is a CLIENT component: importing the bound from a `*.server.ts` module would
+ * pull server code into the browser bundle, which the bundle-secret gate exists
+ * to prevent.
+ */
+export const MAX_ACK_NOTE_LENGTH = 500;
+
+/**
+ * `FunnelCounter` rows the §8.8 funnel panel can ever read: stages × retention
+ * days, both closed sets (§14.10). Stated as the PRODUCT because "bounded by
+ * two closed sets" is only reassuring once someone has multiplied it.
+ *
+ * The funnel panel is the one §8.8 surface with no wire pair to register: its
+ * data lives in the `app` schema, which `api_reader` has no grants on, so it
+ * never crosses the API boundary at all (ADR-001 Decision 1). The bound is
+ * declared here anyway, beside its siblings, so a reader looking for the
+ * funnel's cap finds it rather than concluding there is none.
+ */
+export const MAX_FUNNEL_STAGES = 5;
+export const MAX_FUNNEL_RETENTION_DAYS = 400;
+export const MAX_FUNNEL_ROWS_TOTAL = MAX_FUNNEL_STAGES * MAX_FUNNEL_RETENTION_DAYS;
+
+/**
+ * THE registry the pairing test walks — one list, deliberately. A bounded field
+ * that crosses the boundary and is NOT in here is invisible to the gate, which
+ * is the whole failure mode, so a second registry alongside it would recreate
+ * exactly the blind spot this file exists to close. It is declared at the FOOT
+ * of the file for that reason: every bound above it can be referenced, so a new
+ * family joins this array rather than starting its own.
+ *
+ * The test also cross-checks the per-family field lists (`*_BOUNDED_FIELDS`)
+ * against it, so "add an array, forget the pair" fails CI.
  *
  * NOT YET COVERED, and recorded rather than implied: the collection bounds on
  * `/validators` (500), `/portfolio.active_redemptions` (500),
@@ -207,15 +284,45 @@ export const WIRE_BOUNDS: readonly WireBound[] = [
     consumer: MAX_YIELD_POINTS_WIRE,
   },
   { field: "PortfolioMetrics.accrual_markers", producer: MARKER_CAP, consumer: MARKER_CAP_WIRE },
+  {
+    field: "admin/program-health.epochs",
+    producer: MAX_ADMIN_EPOCH_POINTS,
+    consumer: MAX_ADMIN_EPOCH_POINTS_WIRE,
+  },
+  {
+    field: "admin/holder-cohorts.adoption",
+    producer: MAX_ADMIN_EPOCH_POINTS,
+    consumer: MAX_ADMIN_EPOCH_POINTS_WIRE,
+  },
+  {
+    field: "admin/holder-cohorts.retention",
+    producer: MAX_ADMIN_RETENTION_CURVES,
+    consumer: MAX_ADMIN_RETENTION_CURVES_WIRE,
+  },
+  {
+    field: "admin/validator-cohorts.timeline",
+    producer: MAX_ADMIN_EPOCH_POINTS,
+    consumer: MAX_ADMIN_EPOCH_POINTS_WIRE,
+  },
+  {
+    field: "AdminUpkeepDistribution.buckets",
+    producer: MAX_ADMIN_UPKEEP_BUCKETS,
+    consumer: MAX_ADMIN_UPKEEP_BUCKETS_WIRE,
+  },
+  {
+    field: "admin/incidents.incidents",
+    producer: MAX_ADMIN_INCIDENTS_PAGE,
+    consumer: MAX_ADMIN_INCIDENTS_PAGE_WIRE,
+  },
 ];
 
-/** Every governance collection field that must appear in `WIRE_BOUNDS`. The test
- * cross-checks this list, so adding a bounded governance array without declaring
- * its pair fails CI rather than shipping a half-coupled bound. */
-export const GOVERNANCE_BOUNDED_FIELDS: readonly string[] = [
-  "governance/proposals.proposals",
-  "governance/proposal.votes",
-  "GovProposalRow.messages",
-  "GovProposalRow.proposers",
-  "governance/policies.policies",
+/** Every §8.8 collection field that must appear in `WIRE_BOUNDS` — the
+ * governance cross-check, applied to this family for the same reason. */
+export const ADMIN_BOUNDED_FIELDS: readonly string[] = [
+  "admin/program-health.epochs",
+  "admin/holder-cohorts.adoption",
+  "admin/holder-cohorts.retention",
+  "admin/validator-cohorts.timeline",
+  "AdminUpkeepDistribution.buckets",
+  "admin/incidents.incidents",
 ];

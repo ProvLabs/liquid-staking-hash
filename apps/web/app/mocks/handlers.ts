@@ -413,6 +413,64 @@ export const handlers = [
       envelope({ proposal, votes: [], votes_truncated: false }, { source: "indexed" }),
     );
   }),
+  // §8.8 admin analytics. Offline these serve the HONEST EMPTY state rather
+  // than fabricated cohorts: the dashboard's job in the mock harness is to
+  // prove its degradation paths render, and inventing a retention curve would
+  // exercise the opposite of what the panels are gated on. The fixture corpus
+  // carries no admin analytics, so an empty payload is also the truthful one.
+  http.get("*/api/v1/admin/program-health", () =>
+    HttpResponse.json(
+      envelope(
+        { depositor_count: null, epochs: [], epochs_truncated: false },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/admin/holder-cohorts", () =>
+    HttpResponse.json(
+      envelope(
+        {
+          min_cohort_size: 5,
+          adoption: [],
+          adoption_truncated: false,
+          retention: [],
+          retention_truncated: false,
+          redemption_mix: { enqueued: 0, expedited: 0, matured: 0, refunded: 0 },
+          concentration: null,
+        },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/admin/validator-cohorts", () =>
+    HttpResponse.json(
+      envelope(
+        { enrolled_now: 0, churned_total: 0, timeline: [], timeline_truncated: false },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/admin/upkeep", () =>
+    HttpResponse.json(
+      envelope(
+        {
+          epoch_lag: { sample_count: 0, median_seconds: null, p90_seconds: null, buckets: [] },
+          redemption_latency: {
+            sample_count: 0,
+            median_seconds: null,
+            p90_seconds: null,
+            buckets: [],
+          },
+          capture_cadence: null,
+        },
+        { source: "indexed" },
+      ),
+    ),
+  ),
+  http.get("*/api/v1/admin/incidents", () =>
+    HttpResponse.json(envelope([] as unknown[], { source: "indexed" })),
+  ),
+
   http.get("*/api/v1/governance/policies", () =>
     HttpResponse.json(envelope(GOV_MIRROR_POLICIES, { source: "indexed" })),
   ),

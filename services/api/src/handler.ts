@@ -14,9 +14,12 @@
 //        validation, so an unauthenticated probe learns nothing about
 //        parameter validity — ADR-001 Decision 2)
 //   5. zod query bounds      → 400   (SECURITY.md: bound every query param)
-//   6. Scope ↔ target match  → 403   (needs the parsed `?address=`, so it
-//        necessarily FOLLOWS zod; cross-address rejection is enforced here,
-//        in-process, never by topology)
+//   6. Scope ↔ route match   → 403   (for `address` routes this needs the
+//        parsed `?address=`, so it necessarily FOLLOWS zod; cross-address
+//        rejection is enforced here, in-process, never by topology. `admin`
+//        and `internal:notifier` routes match on scope KIND alone — they are
+//        program-wide and have no target — and are checked in the same step
+//        so one place decides every scope↔route question)
 //   7. handler → envelope wrap / raw body (a route may return a raw
 //        Response — the CSV export path — which passes through with the
 //        defensive headers merged in)
@@ -223,6 +226,18 @@ export function createHandler(
       route.auth === "internal:notifier" &&
       (scope === null || scope.kind !== "internal")
     ) {
+      return errorResponse(
+        403,
+        "forbidden",
+        "The assertion scope does not grant this surface.",
+        headers,
+      );
+    } else if (route.auth === "admin" && (scope === null || scope.kind !== "admin")) {
+      // §8.8 is program-wide, so there is no target to match — the kind IS the
+      // check. `address:` and `internal:notifier` are refused here even for the
+      // same address that could mint an `admin:` scope, because holding one
+      // scope must never imply the other (ADR-001 Decision 2, amendment
+      // 2026-07-28; the ADMIN_PATHS matrix in test/cross-address.test.ts).
       return errorResponse(
         403,
         "forbidden",

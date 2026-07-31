@@ -5,6 +5,7 @@ import { PremiumExplainer } from "~/components/market/premium-explainer";
 import { SupplyLocation } from "~/components/market/supply-location";
 import { getBootedConfig } from "~/config/config.server";
 import { t } from "~/i18n";
+import { recordFunnelEvent } from "~/lib/models/funnel-counters.server";
 import { loadMarketData } from "~/market/market.server";
 import { useLocale } from "~/root";
 import type { Route } from "./+types/market";
@@ -19,6 +20,9 @@ export function meta(_: Route.MetaArgs) {
 // so SSR and hydration agree on sample ages.
 export async function loader() {
   const config = await getBootedConfig();
+  // Page class + the due-diligence stage, as on /validators.
+  recordFunnelEvent(config, { stage: "visit", pageClass: "market" });
+  recordFunnelEvent(config, { stage: "due_diligence_depth" });
   return { data: await loadMarketData(config), nowMs: Date.now() };
 }
 

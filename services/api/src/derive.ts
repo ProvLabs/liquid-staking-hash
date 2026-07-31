@@ -15,6 +15,7 @@
 import {
   navHashPerShare,
   SHARE_EXPONENT,
+  type AdminIncidentRow,
   type AlertArrearsFact,
   type AlertIncidentFact,
   type AlertRedemptionFact,
@@ -990,5 +991,35 @@ export function toGovPolicyRow(f: GovPolicyFacts): GovPolicyRow {
     proposal_count: f.proposalCount,
     last_seen_height: toSafeInt(f.lastSeenHeight, "gov_policies.lastSeenHeight"),
     decision_policy: toGovDecisionPolicy(f.decisionPolicy),
+  };
+}
+
+// --- §8.8 admin incident feed --------------------------------------------
+
+/**
+ * Structural facts for one admin incident-feed row. Identical to
+ * `IncidentFacts` plus the `id`, which the PUBLIC row deliberately omits:
+ * acknowledgment references an incident by id across the schema boundary
+ * (ADR-001 Decision 1), so the admin surface needs an identity the public
+ * surface has no use for. `dedupeKey` stays out — it is the notifier's replay
+ * key and means nothing here.
+ */
+export interface AdminIncidentFacts {
+  readonly id: bigint;
+  readonly kind: IncidentKind;
+  readonly severity: IncidentSeverity;
+  readonly openedAt: Date;
+  readonly closedAt: Date | null;
+  readonly openedHeight: bigint | null;
+}
+
+export function toAdminIncidentRow(f: AdminIncidentFacts): AdminIncidentRow {
+  return {
+    id: toSafeInt(f.id, "incident id"),
+    kind: f.kind,
+    severity: f.severity,
+    opened_at: f.openedAt.toISOString(),
+    closed_at: f.closedAt === null ? null : f.closedAt.toISOString(),
+    height: f.openedHeight === null ? null : toSafeInt(f.openedHeight, "incident height"),
   };
 }

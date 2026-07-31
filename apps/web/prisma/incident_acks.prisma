@@ -1,0 +1,52 @@
+// incident_acks (app-spec §9.1, §9.6; ADR-001 Decision 1) — the admin
+// acknowledgment of an indexer-computed incident.
+//
+// It lives in `app` and not beside `incidents` because the two have different
+// owners: incidents are computed facts the indexer writes, the acknowledgment
+// is an app action. The web tier NEVER writes `incidents` — `app_writer` holds
+// no grants on `indexed` at all (roles.sql; the standing grant-boundary gate).
+// The reference is BY ID with no cross-schema foreign key, because there are
+// none across the domain boundary; validity is established by reading the
+// incident live at write time, not by the database.
+//
+// KEY (plan §4b C1, resolved 2026-07-31). A surrogate `id`, plus a PARTIAL
+// unique index on (incidentId, acknowledgedBy) WHERE unacknowledgedAt IS NULL,
+// hand-written in the migration because Prisma cannot express a partial unique
+// index. `incidentId` alone is the obvious key and is wrong the moment two
+// admins acknowledge, or one re-acknowledges after a reversal: later writes
+// would silently overwrite earlier ones, which is how batched payments were
+// lost. The constraint is also the CONCURRENCY remedy (C3) — two admins racing
+// are separated by the database, never by an application-level "already acked?"
+// read-then-write.
+//
+// REVERSAL PRESERVES HISTORY: un-acknowledging sets `unacknowledgedAt` rather
+// than deleting the row, so the audit trail survives and the partial index
+// frees the pair for a fresh ack.
+//
+// Columns are gated by test/app-schema-allowlist.test.ts. `acknowledgedBy` is a
+// bech32 wallet address (public chain data, and the SESSION address only —
+// never a client-supplied actor); the timestamps are operational metadata; and
+// `note` is the one judgement call, taken deliberately at plan §7 Q2 (Ira,
+// 2026-07-31): operator text ABOUT AN INCIDENT, not about a person, bounded at
+// 500 characters so it cannot become an unbounded free-text column in the one
+// schema that is not rebuildable from chain.
+
+model IncidentAck {
+  id               BigInt    @id @default(autoincrement())
+  /** `indexed.incidents.id`. No cross-schema FK exists (ADR-001 Decision 1);
+   * the id is validated against a live read of the incident on write. */
+  incidentId       Int
+  /** bech32 address of the acknowledging admin — the SESSION address (public
+   * chain data). Never a client-supplied actor. */
+  acknowledgedBy   String
+  acknowledgedAt   DateTime  @default(now())
+  /** Set on reversal; the row is kept so the trail is not lost. NULL means
+   * this is the LIVE ack, which is what the partial unique index keys on. */
+  unacknowledgedAt DateTime?
+  /** Optional bounded operator note about the incident (§7 Q2). */
+  note             String?   @db.VarChar(500)
+
+  @@index([incidentId])
+  @@map("incident_acks")
+  @@schema("app")
+}

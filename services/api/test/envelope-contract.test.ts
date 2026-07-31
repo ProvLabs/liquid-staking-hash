@@ -77,6 +77,15 @@ function validRequest(route: Route, baseUrl: string): { url: string; init: Reque
       init: { headers: { authorization: mintAssertion("internal:notifier") } },
     };
   }
+  if (route.auth === "admin") {
+    // §8.8 admin analytics: the `admin:` scope, and no target to match — the
+    // data is program-wide. Like the internal routes these serve honest-empty
+    // payloads on the default reader, which is still a valid envelope.
+    return {
+      url: `${baseUrl}${route.path}`,
+      init: { headers: { authorization: mintAssertion(`admin:${EXAMPLE_ADDRESS}`) } },
+    };
+  }
   throw new Error(`no valid-request builder for auth kind ${route.auth} (${route.path})`);
 }
 

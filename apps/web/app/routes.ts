@@ -33,6 +33,10 @@ export default [
   // Operator payment CSV export (§14.11): session-gated, outside
   // `:lang?` like the portfolio export it follows.
   route("operator/export", "routes/operator-export.tsx"),
+  // Incident acknowledgment (§8.8): session-gated AND admin-gated (the gate is
+  // a fresh on-chain membership read, not the session alone), outside `:lang?`
+  // like the alert resource routes.
+  route("admin/incidents/ack", "routes/admin-incidents-ack.tsx"),
   route(":lang?", "routes/locale.tsx", [
     index("routes/home.tsx"),
     // §8.0 nav targets (plan 4.1): stubs until their real pages land in
@@ -54,5 +58,8 @@ export default [
     // 400 it as a malformed proposal id.
     route("governance/new", "routes/governance.new.tsx"),
     route("governance/:proposalId", "routes/governance.$proposalId.tsx"),
+    // Admin analytics (app-spec §8.8). Registered inside `:lang?` like every
+    // other page; its resource route sits outside, above.
+    route("admin", "routes/admin.tsx"),
   ]),
 ] satisfies RouteConfig;

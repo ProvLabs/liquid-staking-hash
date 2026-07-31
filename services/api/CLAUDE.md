@@ -38,8 +38,10 @@ Read it before changing a read path, a cursor, or an auth rule.
 ## Layout
 
 - `src/routes.ts` — the route registry. Each route declares
-  `auth: "public" | "address" | "internal:notifier"`; the handler pipeline
-  enforces it in the pinned order **429→404→405→401→400→403**.
+  `auth: "public" | "address" | "internal:notifier" | "admin"`; the handler
+  pipeline enforces it in the pinned order **429→404→405→401→400→403**.
+  `admin` and `internal:notifier` match on scope KIND alone — they are
+  program-wide and have no `?address=` target to compare against.
 - `src/auth.ts` — in-process service-assertion verification (ADR-001
   Decision 2): constant-time compare, `exp − iat ≤ 60 s`, 10 s `iat` skew.
   Every failure is a bare 401 with no distinguishing detail.
@@ -64,6 +66,7 @@ non-`meta:` worker checkpoint with a null chain head.
 | `/api/v1/portfolio*`, `/transactions` | `address` | Scope must match the requested address exactly |
 | `/api/v1/operator/` | `address` | Second boundary: address→valoper resolved server-side from `validator_registry.operator` |
 | `/api/v1/internal/alert-facts/` | `internal:notifier` | Identity/ordinal fields only, **never amounts** |
+| `/api/v1/admin/` | `admin` | §8.8 program-wide aggregates. **No fact shape carries an address** — where one is needed to compute a figure it is a GROUP BY key inside SQL and is never selected out |
 
 CSV exports (`?format=csv`) serve the **complete** indexed history ascending;
 `limit`/`offset` bound only the JSON view. Exports stream by SQL row comparison

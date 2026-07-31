@@ -5,6 +5,11 @@
 // epochIndex, incidents newest-first by openedAt, skip/take slicing.
 
 import type { AlertArrearsFact } from "@nvhash/api-types";
+import type {
+  AdminEpochFacts,
+  HolderLifecycleFacts,
+  ValidatorEpochAggregateFacts,
+} from "../src/admin-derive.ts";
 import type { IndexedReader } from "../src/reader.ts";
 import type { EpochStepFact } from "../src/portfolio-metrics.ts";
 import {
@@ -25,6 +30,7 @@ import {
   toIncidentRow,
   toMarketSample,
   toTransactionRow,
+  type AdminIncidentFacts,
   type AlertIncidentFacts,
   type BridgedSupplyFacts,
   type GovPolicyFacts,
@@ -86,6 +92,25 @@ export interface FakeFacts {
   readonly govVotes?: readonly GovVoteFacts[] | undefined;
   readonly govPolicies?: readonly GovPolicyFacts[] | undefined;
   readonly govIndexedFromHeight?: number | null | undefined;
+  /**
+   * §8.8 admin fixtures. `adminEpochs` is the settlement series with the extra
+   * columns the admin panels need (`endHeight`, `netDeposits`,
+   * `validatorsPurged`) — distinct from `epochs`, which is the narrower public
+   * `/epochs` projection.
+   *
+   * `holderLifecycles` and `holderPositions` are seeded DIRECTLY rather than
+   * folded out of `transactions`: the Prisma reader computes them in SQL with a
+   * window function, so a fake that re-derived them here would be testing a
+   * second implementation of the fold instead of the panels that consume it.
+   * Neither carries an address — the production fact shapes do not either.
+   */
+  readonly adminEpochs?: readonly AdminEpochFacts[] | undefined;
+  readonly holderLifecycles?: readonly HolderLifecycleFacts[] | undefined;
+  readonly holderPositions?: readonly bigint[] | undefined;
+  readonly validatorEpochAggregates?: readonly ValidatorEpochAggregateFacts[] | undefined;
+  readonly validatorRegistryCounts?: { enrolledNow: number; churnedTotal: number } | undefined;
+  readonly redemptionLatencies?: readonly number[] | undefined;
+  readonly adminIncidents?: readonly AdminIncidentFacts[] | undefined;
 }
 
 function page<T>(rows: readonly T[], p: Pagination): T[] {
@@ -408,6 +433,68 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         [...(facts.epochs ?? [])]
           .map((e) => ({ epochIndex: e.epochIndex, endHeight: e.endHeight ?? e.epochIndex }))
           .sort((a, b) => (a.endHeight < b.endHeight ? -1 : 1)),
+      ),
+
+    // --- §8.8 admin analytics ---------------------------------------------
+    // Ordering mirrors reader-prisma.ts: epoch-keyed series ASCENDING (so a
+    // truncated series drops the newest, not the oldest), positions
+    // DESCENDING, incidents newest-first.
+    adminEpochsAsc: (limit) =>
+      Promise.resolve(
+        [...(facts.adminEpochs ?? [])]
+          .sort((a, b) => (a.epochIndex < b.epochIndex ? -1 : 1))
+          .slice(0, limit),
+      ),
+    depositorCount: () =>
+      Promise.resolve(
+        // Null when nothing seeded it — the dataless answer, distinct from a
+        // seeded zero, exactly as the Prisma reader distinguishes them.
+        facts.holderLifecycles === undefined ? null : facts.holderLifecycles.length,
+      ),
+    holderLifecycles: () => Promise.resolve([...(facts.holderLifecycles ?? [])]),
+    holderPositionsDesc: (limit) =>
+      Promise.resolve(
+        [...(facts.holderPositions ?? [])].sort((a, b) => (a > b ? -1 : 1)).slice(0, limit),
+      ),
+    redemptionMix: () => {
+      const mix = { enqueued: 0, expedited: 0, matured: 0, refunded: 0 };
+      for (const r of facts.redemptions ?? []) mix[r.status] += 1;
+      return Promise.resolve(mix);
+    },
+    validatorEpochAggregates: (limit) =>
+      Promise.resolve(
+        [...(facts.validatorEpochAggregates ?? [])]
+          .sort((a, b) => (a.epochIndex < b.epochIndex ? -1 : 1))
+          .slice(0, limit),
+      ),
+    validatorRegistryCounts: () =>
+      Promise.resolve(
+        facts.validatorRegistryCounts ?? {
+          enrolledNow: (facts.registry ?? []).filter((r) => r.unregisteredAt === null).length,
+          churnedTotal: (facts.registry ?? []).filter((r) => r.unregisteredAt !== null).length,
+        },
+      ),
+    redemptionLatencySeconds: () =>
+      Promise.resolve(
+        facts.redemptionLatencies !== undefined
+          ? [...facts.redemptionLatencies]
+          : // Derived through the SAME `payoutDurationSeconds` the Prisma
+            // reader uses, over terminal requests only.
+            (facts.redemptions ?? [])
+              .filter((r) => r.status !== "enqueued")
+              .map(payoutDurationSeconds)
+              .filter((s): s is number => s !== null),
+      ),
+    adminIncidents: (p) =>
+      Promise.resolve(
+        page(
+          [...(facts.adminIncidents ?? [])].sort((a, b) =>
+            a.openedAt.getTime() === b.openedAt.getTime()
+              ? Number(b.id - a.id)
+              : b.openedAt.getTime() - a.openedAt.getTime(),
+          ),
+          p,
+        ),
       ),
   };
 }

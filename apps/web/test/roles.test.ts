@@ -14,6 +14,7 @@ import {
   detectRoles,
   resetRoleCacheForTests,
   ROLE_CACHE_TTL_SECONDS,
+  verifyAdminUncached,
 } from "~/lib/services/roles.server";
 import {
   FIXTURE_CHAIN_ID,
@@ -140,5 +141,87 @@ describe("role detection (live chain facts, spec §4)", () => {
     server.use(...groupHandlers([]));
     const recovered = await detectRoles(config, OPERATOR);
     expect(recovered).toEqual({ operator: true, admin: false, degraded: false });
+  });
+});
+
+// ── The mint-time cache bypass (invariant 2) ────────────────────────────────
+//
+// THE difference between the ADR's claim and its implementation. `detectRoles`
+// is allowed to answer a revoked admin "yes" for up to ROLE_CACHE_TTL_SECONDS —
+// that is correct for rendering. `verifyAdminUncached` must not, because its
+// answer mints a capability. The pinned behavior: revoke membership on chain
+// and the very NEXT uncached check fails, with no TTL advanced.
+//
+// What this does NOT claim, and must not: that stale-admin access is
+// eliminated. An assertion already minted stays valid for its remaining
+// lifetime, so the residual window is the assertion's ≤ 60 s — down from the
+// cache's 60 s PLUS the assertion's, not down to zero.
+
+describe("admin membership at MINT time bypasses the role cache (invariant 2)", () => {
+  it("loses admin on the very next check after revocation — no TTL wait", async () => {
+    // A frozen clock: any TTL-driven expiry would need it to advance, so a pass
+    // here cannot be the cache quietly timing out instead of being bypassed.
+    const now = 1_750_000_000_000;
+    const deps = { now: () => now };
+
+    server.use(...groupHandlers([NOBODY]));
+    // Warm the cache through the RENDERING path first, so there is a cached
+    // "admin: true" for the mint path to ignore.
+    expect((await detectRoles(config, NOBODY, deps)).admin).toBe(true);
+    expect(await verifyAdminUncached(config, NOBODY, deps)).toEqual({
+      admin: true,
+      degraded: false,
+    });
+
+    // Membership revoked on chain, clock unmoved.
+    server.resetHandlers();
+    server.use(...groupHandlers([]));
+
+    // The cache still answers the rendering path — that is its documented,
+    // accepted staleness, asserted here so the bypass below is a contrast and
+    // not an accident of test ordering.
+    expect((await detectRoles(config, NOBODY, deps)).admin).toBe(true);
+
+    // The mint path does not. This is the invariant.
+    expect(await verifyAdminUncached(config, NOBODY, deps)).toEqual({
+      admin: false,
+      degraded: false,
+    });
+  });
+
+  it("does not POPULATE the cache either — a mint check cannot warm a stale role", async () => {
+    const now = 1_750_000_000_000;
+    const deps = { now: () => now };
+
+    server.use(...groupHandlers([NOBODY]));
+    expect(await verifyAdminUncached(config, NOBODY, deps)).toEqual({
+      admin: true,
+      degraded: false,
+    });
+
+    // Revoke, clock unmoved. If the uncached read had written the cache, the
+    // rendering path would now serve `admin: true` from that write for a full
+    // TTL — a privilege check leaking into the render cache.
+    server.resetHandlers();
+    server.use(...groupHandlers([]));
+    expect((await detectRoles(config, NOBODY, deps)).admin).toBe(false);
+  });
+
+  it("reports degraded (not `admin: false`) when the membership read fails", async () => {
+    // `degraded` and `admin: false` are different answers and the caller renders
+    // them differently: "we could not check" versus "you are not an admin". A
+    // failed read collapsing to the latter would be the App stating a fact it
+    // does not have (SECURITY.md: never lie about state).
+    server.use(
+      http.get("*/cosmwasm/wasm/v1/contract/:address/smart/:query", () =>
+        HttpResponse.json({ code: 2, message: "unavailable", details: [] }, { status: 503 }),
+      ),
+    );
+    expect(await verifyAdminUncached(config, NOBODY)).toEqual({ admin: false, degraded: true });
+
+    // And it caches nothing on the way out: the next check re-reads.
+    server.resetHandlers();
+    server.use(...groupHandlers([NOBODY]));
+    expect(await verifyAdminUncached(config, NOBODY)).toEqual({ admin: true, degraded: false });
   });
 });

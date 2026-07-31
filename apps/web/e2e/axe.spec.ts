@@ -21,6 +21,12 @@ const ROUTES = [
   // than the form, which is the state a scan can reach without a session — the
   // `/validators/mine` precedent for an authenticated surface.
   "/governance/new",
+  // Admin analytics. Offline there is no session, so the scan reaches the
+  // anonymous connect-prompt state rather than the panels — the
+  // `/validators/mine` precedent for an authenticated surface. The panels'
+  // own accessibility rides the live suite and their semantic markup
+  // (captioned tables, `role="status"` on every "n/a" state).
+  "/admin",
 ];
 
 for (const route of ROUTES) {

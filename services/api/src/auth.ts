@@ -9,7 +9,8 @@
 //
 //   Authorization: Bearer <base64url(payload JSON)>.<base64url(hmac)>
 //
-//   payload = { "scope": "address:<bech32>" | "internal:notifier",
+//   payload = { "scope": "address:<bech32>" | "internal:notifier"
+//                        | "admin:<bech32>",
 //               "iat": <unix seconds>, "exp": <unix seconds> }
 //   hmac    = HMAC-SHA256(API_SERVICE_ASSERTION_KEY, base64url(payload JSON))
 //
@@ -35,10 +36,18 @@ export const MAX_ASSERTION_LIFETIME_SECONDS = 60;
 /** [R7d] tolerated forward clock skew on `iat`. */
 export const MAX_CLOCK_SKEW_SECONDS = 10;
 
-/** Verified scopes, as a closed union (never a raw string past this module). */
+/**
+ * Verified scopes, as a closed union (never a raw string past this module).
+ *
+ * `admin` carries an address like `address` does, but it is NOT a personal
+ * grant and the handler never matches it against a `?address=` target: §8.8
+ * data is program-wide. The address rides so an admin request is attributable,
+ * and so the two kinds can never be conflated by structural equality.
+ */
 export type VerifiedScope =
   | { readonly kind: "address"; readonly address: string }
-  | { readonly kind: "internal"; readonly service: "notifier" };
+  | { readonly kind: "internal"; readonly service: "notifier" }
+  | { readonly kind: "admin"; readonly address: string };
 
 export type VerifyResult =
   | { readonly ok: true; readonly scope: VerifiedScope }
@@ -58,6 +67,15 @@ function parseScope(raw: string): VerifiedScope | null {
   if (raw.startsWith("address:")) {
     const address = raw.slice("address:".length);
     if (bech32AddressSchema.safeParse(address).success) return { kind: "address", address };
+  }
+  // ADR-001 Decision 2, amendment 2026-07-28. The address is bounded by the
+  // same bech32 schema as `address:` — this service verifies the scope's SHAPE;
+  // that the address is genuinely an admin was established by the web tier's
+  // fresh on-chain read before minting, which is why the API keeps no chain
+  // client (it has none by design).
+  if (raw.startsWith("admin:")) {
+    const address = raw.slice("admin:".length);
+    if (bech32AddressSchema.safeParse(address).success) return { kind: "admin", address };
   }
   return null;
 }

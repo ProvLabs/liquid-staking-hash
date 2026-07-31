@@ -1,0 +1,74 @@
+// funnel_counters (app-spec §8.8, §14.10) — **aggregates by construction.**
+// The tension §14.10 resolves is that the program wants to know whether its
+// due-diligence material converts, while SECURITY.md forbids anything that
+// could deanonymize a wallet. Most analytics designs resolve that by promising
+// restraint. This one resolves it structurally: THERE IS NO PER-PERSON RECORD
+// TO RESTRAIN. The row IS the aggregate — one integer per (stage, UTC day),
+// with no row per visit, session, wallet or device, and nothing to join.
+//
+// Columns are exactly {stage, day, count} and may not grow (SECURITY.md: raise
+// it for design review instead of adding a column). The gate is
+// test/app-schema-allowlist.test.ts, which additionally applies a
+// funnel-specific forbidden-substring denylist to THIS model — `address`,
+// `wallet`, `session`, `device`, `ip`, `user`, `fingerprint` — so a column
+// named `address` trips here even though it is legitimate on other `app`
+// models. A migration without the allowlist edit fails CI.
+//
+// RETENTION: 400 days of day rows, swept by the notifier tick alongside the
+// notification sweep. Long enough for year-over-year comparison, short enough
+// to be a real bound rather than an aspiration.
+//
+// HONESTY CONSEQUENCE, accepted and surfaced rather than hidden: without an
+// identifier the counters cannot deduplicate, so a returning reader increments
+// `visit` again. These are EVENT TOTALS, NOT UNIQUE PEOPLE, and the §8.8 panel
+// says so. Acquiring an identifier to make a prettier number is not an
+// available trade.
+
+model FunnelCounter {
+  /** The funnel stage, page class already folded in (see FunnelStage). */
+  stage FunnelStage
+  /**
+   * The UTC calendar day the events fell on. UTC explicitly, so the series
+   * cannot go silently discontinuous across a DST boundary.
+   */
+  day   DateTime     @db.Date
+  /** Event total for (stage, day). Advanced only by ON CONFLICT DO UPDATE
+   * SET count = count + 1 — atomic in one statement, never read-then-write. */
+  count Int          @default(0)
+
+  @@id([stage, day])
+  @@map("funnel_counters")
+  @@schema("app")
+}
+
+// The closed funnel-stage set (app-spec §8.8, §14.10 as revised 2026-07-31).
+//
+// The §8.8 page class is folded INTO this enum rather than carried as a fourth
+// column, because `FunnelCounter`'s column set is pinned at three. The
+// call-site API in app/lib/services/funnel.server.ts keeps stage and page class
+// as separate closed types over a discriminated union, so a caller still cannot
+// attach a page class to a stage that has none.
+//
+// Every member has a real loader call site. `learn_deep` and `spec_link` were
+// proposed and are deliberately ABSENT: Learn is a single route with in-page
+// disclosure and the spec links are external anchors, so observing either would
+// need the client instrumentation §14.10 forbids — and an enum member nothing
+// can write would be a claim the schema cannot keep.
+//
+// `first_deposit` is likewise absent BY DESIGN: the funnel's terminal stage is
+// derived from public chain history, not incremented from web behavior, so the
+// panel composes it from the indexed plane. That asymmetry is why the panel
+// must not imply uniform precision across stages — the bottom is exact, the top
+// is an event total.
+enum FunnelStage {
+  visit_learn_index
+  visit_validators
+  visit_market
+  /** Loaded a program-evidence surface (/validators, /market) — the
+   * server-observable form of §8.1.7's "due-diligence sections". Scroll depth
+   * is NOT measurable without a client script and is not claimed. */
+  due_diligence_depth
+  connect
+
+  @@schema("app")
+}

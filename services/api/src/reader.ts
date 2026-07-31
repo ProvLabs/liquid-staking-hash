@@ -41,6 +41,12 @@ import {
   type GovVoteFacts,
   type TransactionFacts,
 } from "./derive.ts";
+import type {
+  AdminEpochFacts,
+  HolderLifecycleFacts,
+  ValidatorEpochAggregateFacts,
+} from "./admin-derive.ts";
+import type { AdminIncidentFacts } from "./derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Pagination } from "./query.ts";
 
@@ -168,6 +174,45 @@ export interface IndexedReader {
   ): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
   /** The HISTORICAL policy set observed in the mirror, newest activity first. */
   listGovPolicies(): Promise<GovPolicyFacts[]>;
+  /**
+   * §8.8 admin-analytics reads (`admin` scope). Program-wide aggregates, so
+   * they take no address and — deliberately — RETURN no address: every fact
+   * shape below carries heights, counts and positions only. That is what makes
+   * "no admin endpoint returns a per-wallet behavioral record" a property of
+   * the port rather than of the care taken in each handler (plan invariant 12).
+   *
+   * All are bounded: the epoch-keyed reads take an explicit cap, the
+   * holder-keyed reads are bounded by holder count (the panel's own
+   * cardinality), and the incident feed paginates.
+   */
+  adminEpochsAsc(limit: number): Promise<AdminEpochFacts[]>;
+  /** Distinct addresses with at least one `swap_in`; null when unknown. */
+  depositorCount(): Promise<number | null>;
+  /**
+   * One row per depositor: first-deposit height and exit height (or null while
+   * still holding). NO ADDRESS — cohort arithmetic does not need identity, so
+   * the shape does not carry it.
+   */
+  holderLifecycles(): Promise<HolderLifecycleFacts[]>;
+  /** Positive held positions, DESCENDING, values only — the concentration
+   * panel's input. Addresses are absent by design (plan §7.1 Q7). */
+  holderPositionsDesc(limit: number): Promise<bigint[]>;
+  /** Terminal-status counts across all indexed redemption requests. */
+  redemptionMix(): Promise<{
+    enqueued: number;
+    expedited: number;
+    matured: number;
+    refunded: number;
+  }>;
+  /** Per-epoch validator-set aggregates, ascending by epoch. */
+  validatorEpochAggregates(limit: number): Promise<ValidatorEpochAggregateFacts[]>;
+  /** Registry enrollment/churn totals as of the mirror. */
+  validatorRegistryCounts(): Promise<{ enrolledNow: number; churnedTotal: number }>;
+  /** Enqueue→terminal durations in seconds for settled requests (unordered). */
+  redemptionLatencySeconds(): Promise<number[]>;
+  /** The incident feed WITH ids, newest first, paginated (the public
+   * `/incidents` row omits the id; acknowledgment needs it). */
+  adminIncidents(page: Pagination): Promise<AdminIncidentFacts[]>;
 }
 
 /**
@@ -231,4 +276,18 @@ export const emptyReader: IndexedReader = {
   // exists but is empty" are different answers.
   govProposal: () => Promise.resolve(null),
   listGovPolicies: () => Promise.resolve([]),
+  // A dataless process has no history to aggregate. Every §8.8 panel therefore
+  // reports its honest empty state and the dashboard says "n/a" with a reason —
+  // NOT zeros, which would claim a measured program with nothing in it.
+  adminEpochsAsc: () => Promise.resolve([]),
+  // Null, not 0: "we cannot count depositors" and "nobody has deposited" are
+  // different answers, and the header renders them differently.
+  depositorCount: () => Promise.resolve(null),
+  holderLifecycles: () => Promise.resolve([]),
+  holderPositionsDesc: () => Promise.resolve([]),
+  redemptionMix: () => Promise.resolve({ enqueued: 0, expedited: 0, matured: 0, refunded: 0 }),
+  validatorEpochAggregates: () => Promise.resolve([]),
+  validatorRegistryCounts: () => Promise.resolve({ enrolledNow: 0, churnedTotal: 0 }),
+  redemptionLatencySeconds: () => Promise.resolve([]),
+  adminIncidents: () => Promise.resolve([]),
 };

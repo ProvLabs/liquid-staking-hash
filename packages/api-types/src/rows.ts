@@ -788,3 +788,195 @@ export interface GovPolicyRow {
    * its newest proposal, never a live read. */
   decision_policy: GovDecisionPolicy | null;
 }
+
+// --- §8.8 admin analytics ------------------------------------------------
+//
+// The cohort-satisfaction dashboard's payloads (app-spec §8.8; route auth
+// `admin`). Two properties hold across all of them, and both are load-bearing:
+//
+// 1. EVERY FIGURE IS DERIVABLE FROM PUBLIC CHAIN DATA, aggregated. No shape
+//    here carries a per-wallet behavioral record, and none carries an address
+//    at all.
+// 2. "DERIVABLE FROM PUBLIC DATA" IS NOT THE SAME AS "SINGLES NOBODY OUT". A
+//    cohort of one, or a top-1 concentration share in a three-holder program,
+//    names a holder by inference without ever returning an address. So every
+//    shape that could do that carries an explicit minimum-group-size gate, and
+//    reports `null` plus a stated reason below it — never a number, and never a
+//    zero (plan invariant 12).
+
+/**
+ * The minimum number of distinct depositors below which a cohort curve or a
+ * concentration band is served as `null` rather than as a figure.
+ *
+ * This is a PRIVACY threshold, not a display nicety: it is applied server-side
+ * and rides in the payload as data, so the web tier renders the honest state
+ * without re-deciding the rule (the `/redemptions/stats` precedent).
+ */
+export const MIN_COHORT_SIZE = 5;
+
+/** One epoch's point on the program-health trend. */
+export interface AdminHealthPoint {
+  epoch_index: number;
+  ended_at: string;
+  /** Total vault value after settlement, base units (unsigned). */
+  tvv: string;
+  net_apr_bps: number | null;
+  /** Net deposit flow across the epoch, base units. SIGNED — a net-outflow
+   * epoch is a real state and must not be floored to zero. */
+  net_deposits: string;
+}
+
+/** `GET /api/v1/admin/program-health` — the §8.8 header panel. */
+export interface AdminProgramHealth {
+  /** Distinct addresses with at least one `swap_in`. Null when no height
+   * certifies the count yet — never 0, which would claim "nobody deposited". */
+  depositor_count: number | null;
+  /** Ascending by epoch index. */
+  epochs: AdminHealthPoint[];
+  /** True when the series hit its cap; the panel says so rather than
+   * presenting a trimmed trend as the whole history. */
+  epochs_truncated: boolean;
+}
+
+/** New depositors (addresses whose FIRST `swap_in` fell in this epoch). */
+export interface AdminAdoptionPoint {
+  epoch_index: number;
+  ended_at: string;
+  new_depositors: number;
+}
+
+/** One point of a retention curve. */
+export interface AdminRetentionPoint {
+  /** Epochs after the cohort epoch (1, 3, 6, 12). */
+  horizon: number;
+  /**
+   * Fraction of the cohort still holding a positive position at the horizon,
+   * in bps. Null when the horizon has not elapsed yet, OR when the cohort is
+   * below `MIN_COHORT_SIZE` — the two are distinguished by `below_minimum`.
+   */
+  retained_bps: number | null;
+}
+
+/** A first-deposit cohort and its retention curve. */
+export interface AdminRetentionCurve {
+  cohort_epoch: number;
+  cohort_size: number;
+  points: AdminRetentionPoint[];
+  /** True when `cohort_size < MIN_COHORT_SIZE`: the curve is withheld as a
+   * privacy gate, NOT because the data is missing. The panel must say which. */
+  below_minimum: boolean;
+}
+
+/** Terminal-status mix across all indexed redemption requests. */
+export interface AdminRedemptionMix {
+  enqueued: number;
+  expedited: number;
+  matured: number;
+  refunded: number;
+}
+
+/**
+ * TVL concentration as BANDED SHARES — no addresses and no absolute amounts
+ * (plan §7.1 Q7). Served as `null` entirely below `MIN_COHORT_SIZE` holders,
+ * because a top-1 share among three holders identifies one of them.
+ */
+export interface AdminConcentration {
+  /** Share of the total held position, in bps. */
+  top1_bps: number;
+  top5_bps: number;
+  top10_bps: number;
+  /** Holders with a positive position — the denominator, and the gate. */
+  holder_count: number;
+}
+
+/** `GET /api/v1/admin/holder-cohorts` — the §8.8 holder panel. */
+export interface AdminHolderCohorts {
+  /** The gate applied above, as data. The web tier renders it, never re-decides it. */
+  min_cohort_size: number;
+  adoption: AdminAdoptionPoint[];
+  adoption_truncated: boolean;
+  retention: AdminRetentionCurve[];
+  retention_truncated: boolean;
+  redemption_mix: AdminRedemptionMix;
+  concentration: AdminConcentration | null;
+}
+
+/** One epoch's point on the validator-cohort timeline. */
+export interface AdminValidatorPoint {
+  epoch_index: number;
+  ended_at: string;
+  /** Validators sampled in this epoch. */
+  sampled: number;
+  eligible: number;
+  /** Sampled validators with `commission_due > 0`. */
+  in_arrears: number;
+  /** Sampled validators that paid a TIP in the epoch. */
+  tip_paying: number;
+  /** Purges recorded by the epoch's settlement. */
+  purged: number;
+}
+
+/** `GET /api/v1/admin/validator-cohorts` — the §8.8 validator panel. */
+export interface AdminValidatorCohorts {
+  /** Registry rows with no `unregistered_at` — enrollment as of the mirror. */
+  enrolled_now: number;
+  /** Registry rows that have been unregistered — the churn total. */
+  churned_total: number;
+  timeline: AdminValidatorPoint[];
+  timeline_truncated: boolean;
+}
+
+/** One bucket of an upkeep-lag distribution. */
+export interface AdminUpkeepBucket {
+  /** Inclusive lower bound, seconds. */
+  from_seconds: number;
+  /** Exclusive upper bound; null on the final open-ended bucket. */
+  to_seconds: number | null;
+  count: number;
+}
+
+/** A bucketed lag distribution. Bounded by BUCKET COUNT, not by history. */
+export interface AdminUpkeepDistribution {
+  sample_count: number;
+  median_seconds: number | null;
+  p90_seconds: number | null;
+  buckets: AdminUpkeepBucket[];
+}
+
+/**
+ * `GET /api/v1/admin/upkeep` — the §8.8 upkeep-timeliness panel, derived from
+ * crank timing already in the indexed history (no new indexing).
+ *
+ * `capture_cadence` is permanently `null` in this build and that is a stated
+ * fact, not a gap to fill in silently: §8.8 names capture-signal cadence gaps
+ * as a third distribution, but no capture-signal series is indexed — the NAV
+ * marker is consumed at ingest and not retained as its own row. Serving it as
+ * null with the panel saying why is the honest answer; deriving it would be an
+ * indexer change, not an API one.
+ */
+export interface AdminUpkeepTimeliness {
+  /** Seconds between an epoch becoming eligible (the civil-month rollover
+   * after the previous close) and the permissionless crank actually running. */
+  epoch_lag: AdminUpkeepDistribution;
+  /** Seconds from enqueue to terminal payout/refund, per request. */
+  redemption_latency: AdminUpkeepDistribution;
+  /** Always null — see above. */
+  capture_cadence: AdminUpkeepDistribution | null;
+}
+
+/**
+ * One row of `GET /api/v1/admin/incidents` — the §8.8 incident feed.
+ *
+ * It carries `id`, which the public `/incidents` row deliberately does not:
+ * acknowledgment references an incident BY ID across the schema boundary
+ * (ADR-001 Decision 1), so the admin surface needs the identity the public
+ * one has no use for.
+ */
+export interface AdminIncidentRow {
+  id: number;
+  kind: IncidentKind;
+  severity: IncidentSeverity;
+  opened_at: string;
+  closed_at: string | null;
+  height: number | null;
+}

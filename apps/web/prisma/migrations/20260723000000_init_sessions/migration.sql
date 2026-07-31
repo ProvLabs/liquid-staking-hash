@@ -4,6 +4,10 @@
 --
 -- Applied AS `app_writer`, the role that owns the schema and holds no grants of
 -- any kind on `indexed` (ADR-001 Decision 1; infra/dev/postgres/roles.sql).
+--
+-- TWO BLOCKS ARE HAND-WRITTEN and must be re-applied after every regeneration:
+-- the CreateSchema guard immediately below, and the partial unique index at the
+-- foot of the file. `prisma migrate diff` emits neither. See apps/web/CLAUDE.md.
 
 -- CreateSchema
 --
@@ -24,6 +28,9 @@ $$;
 -- CreateEnum
 CREATE TYPE "app"."AlertKind" AS ENUM ('nav_step_posted', 'redemption_update', 'vault_status', 'validator_set_incident', 'operator_arrears');
 
+-- CreateEnum
+CREATE TYPE "app"."FunnelStage" AS ENUM ('visit_learn_index', 'visit_validators', 'visit_market', 'due_diligence_depth', 'connect');
+
 -- CreateTable
 CREATE TABLE "app"."address_activity" (
     "address" TEXT NOT NULL,
@@ -42,6 +49,27 @@ CREATE TABLE "app"."alert_rules" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "alert_rules_pkey" PRIMARY KEY ("address","kind")
+);
+
+-- CreateTable
+CREATE TABLE "app"."funnel_counters" (
+    "stage" "app"."FunnelStage" NOT NULL,
+    "day" DATE NOT NULL,
+    "count" INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT "funnel_counters_pkey" PRIMARY KEY ("stage","day")
+);
+
+-- CreateTable
+CREATE TABLE "app"."incident_acks" (
+    "id" BIGSERIAL NOT NULL,
+    "incidentId" INTEGER NOT NULL,
+    "acknowledgedBy" TEXT NOT NULL,
+    "acknowledgedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "unacknowledgedAt" TIMESTAMP(3),
+    "note" VARCHAR(500),
+
+    CONSTRAINT "incident_acks_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -101,6 +129,9 @@ CREATE TABLE "app"."sessions" (
 );
 
 -- CreateIndex
+CREATE INDEX "incident_acks_incidentId_idx" ON "app"."incident_acks"("incidentId");
+
+-- CreateIndex
 CREATE INDEX "notifications_address_readAt_idx" ON "app"."notifications"("address", "readAt");
 
 -- CreateIndex
@@ -130,3 +161,20 @@ CREATE INDEX "sessions_address_idx" ON "app"."sessions"("address");
 -- CreateIndex
 CREATE INDEX "sessions_expiresAt_idx" ON "app"."sessions"("expiresAt");
 
+
+-- CreateIndex (HAND-WRITTEN — plan §4b C1 / C3)
+--
+-- The "one LIVE acknowledgment per (incident, admin)" rule, as a DATABASE
+-- CONSTRAINT rather than an application-level "already acked?" read-then-write.
+-- Prisma cannot express a partial unique index, so this statement is written by
+-- hand and survives regeneration only by being re-applied.
+--
+-- It must be PARTIAL. A plain unique on (incidentId, acknowledgedBy) would
+-- forbid re-acknowledging after a reversal, and adding `unacknowledgedAt` to a
+-- plain unique would enforce nothing: Postgres treats NULLs as distinct, so two
+-- live acks would both be admitted — the exact defect the constraint exists to
+-- prevent. Reversal sets `unacknowledgedAt`, which drops the row out of the
+-- index and frees the pair for a fresh ack while the history row remains.
+CREATE UNIQUE INDEX "incident_acks_live_ack_key"
+    ON "app"."incident_acks" ("incidentId", "acknowledgedBy")
+    WHERE "unacknowledgedAt" IS NULL;

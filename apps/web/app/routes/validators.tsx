@@ -2,6 +2,7 @@ import { SetHealth } from "~/components/validators/set-health";
 import { SetTable } from "~/components/validators/set-table";
 import { getBootedConfig } from "~/config/config.server";
 import { t } from "~/i18n";
+import { recordFunnelEvent } from "~/lib/models/funnel-counters.server";
 import { useLocale } from "~/root";
 import { loadValidatorsData } from "~/validators/validators.server";
 import type { Route } from "./+types/validators";
@@ -15,6 +16,13 @@ export function meta(_: Route.MetaArgs) {
 // loader's clock rides along so SSR and hydration agree on tenure.
 export async function loader() {
   const config = await getBootedConfig();
+  // Two counters: the page class, and the funnel's DUE-DILIGENCE stage. §8.1.7
+  // words that stage "scroll depth / due-diligence sections", and scroll depth
+  // is not measurable without a client script (§14.10 forbids one) — so what is
+  // counted is what a loader can honestly observe: the visitor went past the
+  // front page into the program's evidence.
+  recordFunnelEvent(config, { stage: "visit", pageClass: "validators" });
+  recordFunnelEvent(config, { stage: "due_diligence_depth" });
   return { data: await loadValidatorsData(config), nowMs: Date.now() };
 }
 

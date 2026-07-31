@@ -175,6 +175,35 @@ involvement; it holds no keys, performs no fetches, and renders from the closed
 `{ kind, url }` payload. No token outlives its session (four deletion paths, see
 design notes).
 
+**The `admin:` scope is the ONE scope with a precondition beyond the key.**
+`mintAdminAssertion` is pure and unguarded (the golden vectors pin its bytes);
+`app/lib/services/admin-auth.server.ts` holds the gate and is its only
+sanctioned caller. Minting performs a **fresh on-chain group-membership read
+that bypasses the 60 s role cache in both directions** — it neither consults nor
+populates it — and a degraded read mints **nothing** rather than a hopeful
+assertion (ADR-001 Decision 2, amendment 2026-07-28). The split into two modules
+is load-bearing, not cosmetic: `notifier/` loads the minting module under Node's
+strip-only TS and must not acquire a runtime chain-client dependency. Note what
+this does NOT claim — the residual stale-admin window is the assertion's ≤ 60 s,
+not zero.
+
+**The admin gate is a CAPABILITY gate, never a safety gate** (`SECURITY.md`:
+never gate a safety property on who calls). Nothing behind `/admin` writes
+program state; every figure is derivable from public chain history, aggregated.
+Do not reason "it is behind the admin gate, therefore it is safe to expose X."
+
+**Funnel counters (§14.10) are aggregates BY CONSTRUCTION.** `FunnelCounter`'s
+columns are exactly `{stage, day, count}` and may not grow — raise a column for
+design review instead of adding one. `recordFunnelEvent` takes a closed event
+and the store config and **nothing else**: no address, session, request or
+headers appear in its signature, so the mistake is unavailable rather than
+merely forbidden. Increments are **server-side in loaders**, fire-and-forget,
+and swallowed on failure — a metrics table never takes a page down, and there is
+no client script, beacon, pixel or cookie anywhere in the design. Totals are
+**event totals, not unique people**, and the §8.8 panel says so; the
+chain-derived terminal stage is kept structurally apart so the view cannot imply
+uniform precision.
+
 **Load the `dataviz` skill before touching `app/components/charts/`.**
 
 ## Commands
@@ -235,7 +264,26 @@ All fail CI on violation.
   (resource route); cookie flags, nonce single-use/replay, and expiry bounds are
   pinned. **Every new personal or public-by-design route joins this suite.**
 - **App-schema allowlist** (`test/app-schema-allowlist.test.ts`) — the
-  data-minimization gate; forbids any role/identity/device column.
+  data-minimization gate; forbids any role/identity/device column. It carries
+  TWO gates: the global per-model allowlist, and a **funnel-specific identifier
+  denylist** applied to `FunnelCounter` alone (`address` trips there though it
+  is legitimate on `Session`). The second is the master plan §4
+  security-executable check and gates CI from PR 7.5–7.6 on. Its limit is stated
+  in the suite: it checks column NAMES, not cardinality.
+- **Funnel counters** (`test/funnel-counters.test.ts`) — the code half of the
+  same check: the write path has no identifier-shaped parameter, **every
+  `recordFunnelEvent` call site is read from source** and asserted
+  identifier-free (a new counted surface must join the expected list
+  deliberately), a write failure is swallowed without failing a page, and the
+  failure log carries the stage and nothing else.
+- **Admin analytics** (`test/admin-data.test.ts`) — the §8.8 honesty matrix:
+  every panel degrades individually with a stated reason, "withheld below the
+  minimum cohort" stays distinguishable from "the horizon has not elapsed", and
+  C4's incident state × affordance is exhaustive (an incident acknowledged by
+  ANOTHER admin is never re-offered as if unacknowledged).
+  `test/admin-auth.test.ts` pins the mint gate; `test/incident-acks.test.ts`
+  pins the live-ack constraint, reversal-preserves-history, and that the store
+  touches exactly one Prisma model.
 - **Push-token deletion** (`test/push-token-deletion.test.ts`) — makes the
   SECURITY.md accepted exception's *condition* mechanical: a token is deleted on
   opt-out, logout, session expiry/removal, dead-endpoint (404/410) pruning, and
@@ -271,3 +319,7 @@ All fail CI on violation.
   status family stays on its values in both themes.
 - **axe** (`e2e/axe.spec.ts`): WCAG A/AA on both themes. **New routes join its
   route list.**
+- **No client-side analytics** (`e2e/admin.spec.ts`): the counted pages issue no
+  request that looks like analytics and none that leaves the app's origin, and
+  set no cookie beyond the theme preference. §14.10's "no beacon, no pixel, no
+  cookie" as an observable property rather than a promise.
