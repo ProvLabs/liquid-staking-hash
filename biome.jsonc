@@ -1,0 +1,76 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/build",
+      "!**/dist",
+      // Generated: the Prisma clients, the React Router typegen output, and the
+      // committed migration SQL are outputs, not sources.
+      "!**/.react-router",
+      "!**/generated",
+      "!**/prisma/migrations",
+      // Captured chain data and generated IDL — reformatting either would
+      // break the byte/hash comparisons that gate them.
+      "!packages/fixtures/fixtures",
+      "!contracts/schema",
+      "!infra/devnet/state"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    // 100, not Biome's default 80: measured against the tree at adoption, p99
+    // of existing lines was 110, so 80 would have reflowed code that was never
+    // written to that width. Comments are not reflowed by the formatter.
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "css": {
+    // apps/web is Tailwind v4: `@theme`, `@layer`, `@apply` are real syntax
+    // here, not errors.
+    "parser": { "tailwindDirectives": true }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Every package sets `noUncheckedIndexedAccess: true`, so an indexed
+        // read is `T | undefined` by construction and `xs[0]!` is how a caller
+        // states "this index is known present". Banning the assertion would
+        // penalise the stricter compiler setting.
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        // Wire-shaped payloads are read by bracket access on purpose
+        // (`msg["@type"]`, `fixture["tx_response"]`): the key is JSON data, and
+        // dot access reads as a field of ours rather than of the wire.
+        "useLiteralKeys": "off"
+      },
+      "suspicious": {
+        // TypeScript's evolving-`any` already types `let x; try { x = … }` from
+        // its assignments under `strict`, which is the shape every one of these
+        // is. Satisfying the rule would mean restating an inferred type at each
+        // try/catch boundary for no additional checking.
+        "noImplicitAnyLet": "off",
+        // The index-keyed lists here render derived, immutable view-model
+        // arrays that are replaced wholesale on each load — never reordered,
+        // spliced, or holding input state — so position IS identity. Chart
+        // segments and banner stacks have no other stable id.
+        "noArrayIndexKey": "off"
+      }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } }
+}

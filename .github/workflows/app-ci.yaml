@@ -50,6 +50,14 @@ jobs:
       - name: Install (frozen lockfile)
         run: corepack pnpm install --frozen-lockfile
 
+      # Biome (biome.jsonc) is formatter AND linter for every JS/TS/CSS source
+      # in the repo — including apps/console, which is outside the pnpm
+      # workspace and therefore reached by no other job here. Runs before
+      # typecheck so a formatting-only failure is reported as one.
+      # Warnings do not fail the build; errors do.
+      - name: Lint + format check (biome)
+        run: corepack pnpm run lint
+
       - name: Typecheck (all workspace packages)
         run: corepack pnpm -r run typecheck
 
