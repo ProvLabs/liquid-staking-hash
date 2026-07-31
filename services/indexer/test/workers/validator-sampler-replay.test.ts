@@ -6,7 +6,12 @@
 
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { applySamples, type EpochRow, type RegistryRow, type ValidatorStore } from "../../src/workers/validator-sampler/write.ts";
+import {
+  applySamples,
+  type EpochRow,
+  type RegistryRow,
+  type ValidatorStore,
+} from "../../src/workers/validator-sampler/write.ts";
 import type { CrankSample, SampledValidator } from "../../src/workers/validator-sampler/sample.ts";
 
 interface RegistryState extends RegistryRow {
@@ -35,7 +40,9 @@ class MemValidatorStore implements ValidatorStore {
     this.epochs.set(`${row.valoper}|${row.epochIndex}`, row);
   }
   async enrolledValopers(): Promise<string[]> {
-    return [...this.registry.values()].filter((r) => r.unregisteredAt === null).map((r) => r.valoper);
+    return [...this.registry.values()]
+      .filter((r) => r.unregisteredAt === null)
+      .map((r) => r.valoper);
   }
   async markUnregistered(valoper: string, at: Date): Promise<void> {
     const r = this.registry.get(valoper);
@@ -100,10 +107,9 @@ function build(epochs: { present: string[]; gap: number }[]): CrankSample[] {
 }
 
 const arb = fc.record({
-  epochs: fc.array(
-    fc.record({ present: fc.subarray(POOL), gap: fc.integer({ min: 1, max: 5 }) }),
-    { maxLength: 10 },
-  ),
+  epochs: fc.array(fc.record({ present: fc.subarray(POOL), gap: fc.integer({ min: 1, max: 5 }) }), {
+    maxLength: 10,
+  }),
   splitFraction: fc.double({ min: 0, max: 1, noNaN: true }),
 });
 

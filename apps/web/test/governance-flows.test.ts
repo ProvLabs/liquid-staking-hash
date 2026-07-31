@@ -235,7 +235,7 @@ describe("C4 — the execute column, one case per row", () => {
     }
   });
 
-  it("a ZERO window is still offered — `\"0s\"` is a value, not an absence", () => {
+  it('a ZERO window is still offered — `"0s"` is a value, not an absence', () => {
     // The other half: the fix must not turn a legitimately-executable proposal
     // into a permanently disabled one. A policy with no waiting period says so
     // explicitly, and that is distinguishable from not knowing.
@@ -356,7 +356,9 @@ describe("no action is offered in any terminal state, under any other input", ()
             votedOption: hasVoted ? "yes" : null,
           });
           expect(voteAffordance(facts).state, `${status}/${isMember}/${hasVoted}`).toBe("hidden");
-          expect(executeAffordance(facts).state, `${status}/${isMember}/${hasVoted}`).toBe("hidden");
+          expect(executeAffordance(facts).state, `${status}/${isMember}/${hasVoted}`).toBe(
+            "hidden",
+          );
         }
       }
     }

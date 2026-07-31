@@ -173,7 +173,8 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
         key: "min_capture_interval_secs",
         min: 0n,
         max: MAX_JSON_SAFE_UINT,
-        contractRule: "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
+        contractRule:
+          "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
         labelKey: "governance.param-min-capture-interval-secs",
       },
       {
@@ -214,8 +215,7 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
         // Strictly below 10000: the contract rejects 10000 explicitly, because
         // a 100% offset would silently zero every deploy target.
         max: BPS_MAX - 1n,
-        contractRule:
-          "state.rs Config::validate: concentration_safety_offset_bps must be < 10000",
+        contractRule: "state.rs Config::validate: concentration_safety_offset_bps must be < 10000",
         labelKey: "governance.param-concentration-safety-offset-bps",
       },
       {
@@ -231,15 +231,13 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
         key: "jail_unbond_delay_secs",
         min: 0n,
         max: MAX_JSON_SAFE_UINT,
-        contractRule: "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
+        contractRule:
+          "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
         labelKey: "governance.param-jail-unbond-delay-secs",
       },
     ],
     labelKey: "governance.template-update-config",
-    summaryKeys: [
-      "governance.confirm-update-config-1",
-      "governance.confirm-update-config-2",
-    ],
+    summaryKeys: ["governance.confirm-update-config-1", "governance.confirm-update-config-2"],
   },
   {
     id: "set_halted",
@@ -284,10 +282,7 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
     optionalParams: false,
     params: [],
     labelKey: "governance.template-clear-pending-delegations",
-    summaryKeys: [
-      "governance.confirm-clear-pending-1",
-      "governance.confirm-clear-pending-2",
-    ],
+    summaryKeys: ["governance.confirm-clear-pending-1", "governance.confirm-clear-pending-2"],
   },
 ] as const;
 
@@ -324,10 +319,7 @@ export type TemplateParamError =
  * error the user must fix, not one this module quietly moves inside the range —
  * a clamped bps would submit a governance proposal for a number nobody chose.
  */
-export function validateTemplateValues(
-  id: string,
-  values: TemplateValues,
-): TemplateParamError[] {
+export function validateTemplateValues(id: string, values: TemplateValues): TemplateParamError[] {
   const template = templateById(id);
   if (template === null) return [{ code: "unknown-template", id }];
 
@@ -338,7 +330,7 @@ export function validateTemplateValues(
   }
 
   for (const param of template.params) {
-    const supplied = Object.prototype.hasOwnProperty.call(values, param.key);
+    const supplied = Object.hasOwn(values, param.key);
     if (!supplied) {
       if (!template.optionalParams) errors.push({ code: "missing-param", key: param.key });
       continue;
@@ -417,10 +409,9 @@ export function templateInnerJson(id: string, values: TemplateValues): string {
   // `update_config` field is optional (none appears in its `required` list), so
   // omission is the shape the contract reads as "do not change this".
   for (const param of template.params) {
-    if (!Object.prototype.hasOwnProperty.call(values, param.key)) continue;
+    if (!Object.hasOwn(values, param.key)) continue;
     const value = values[param.key]!;
-    body[param.key] =
-      param.kind === "uint" ? Number(value as bigint) : (value as boolean | string);
+    body[param.key] = param.kind === "uint" ? Number(value as bigint) : (value as boolean | string);
   }
   return JSON.stringify({ [template.id]: body });
 }
@@ -559,7 +550,7 @@ export function templateFieldLines(
   const template = templateById(id);
   if (template === null) return [];
   return template.params
-    .filter((param) => Object.prototype.hasOwnProperty.call(values, param.key))
+    .filter((param) => Object.hasOwn(values, param.key))
     .map((param) => ({
       key: param.key,
       labelKey: param.labelKey,
@@ -594,7 +585,7 @@ export function configDiffRows(
 ): ConfigDiffRow[] {
   const template = templateById("update_config")!;
   return template.params.map((param) => {
-    const supplied = Object.prototype.hasOwnProperty.call(values, param.key);
+    const supplied = Object.hasOwn(values, param.key);
     const currentValue = current[param.key] ?? null;
     const proposed = supplied ? String(values[param.key]) : null;
     const state: ConfigDiffRow["state"] = !supplied
@@ -629,7 +620,8 @@ export function templateSummaryKey(
   if (template === null) return { key: "governance.msg-unknown-variant", params: {} };
   if (id === "set_halted") {
     const halted = values["halted"];
-    if (typeof halted !== "boolean") return { key: "governance.msg-set-halted-unknown", params: {} };
+    if (typeof halted !== "boolean")
+      return { key: "governance.msg-set-halted-unknown", params: {} };
     return {
       key: halted ? "governance.msg-set-halted-on" : "governance.msg-set-halted-off",
       params: {},

@@ -11,12 +11,7 @@
 // mapping (app-spec §9.5 render-time conversion). The acting address is the
 // SESSION address only (standing session-scope gate); no query param is read.
 
-import {
-  BankClient,
-  LcdClient,
-  VaultClient,
-  type FetchLike,
-} from "@nvhash/chain-client";
+import { BankClient, LcdClient, VaultClient, type FetchLike } from "@nvhash/chain-client";
 
 import {
   fetchApiJson,
@@ -119,8 +114,7 @@ export function composePosition(
     };
   }
 
-  const basisKnown =
-    indexed !== null && indexed.heldBasis !== null && indexed.escrowBasis !== null;
+  const basisKnown = indexed !== null && indexed.heldBasis !== null && indexed.escrowBasis !== null;
   const costBasisNhash = basisKnown ? indexed.heldBasis! + indexed.escrowBasis! : null;
   const realizedGainNhash = indexed?.realizedGain ?? null;
   const accruedGainNhash =
@@ -164,7 +158,10 @@ export async function loadPortfolioData(
     throw new RangeError(`page must be a non-negative integer, got ${page}`);
   }
   const doFetch: FetchLike = fetchImpl ?? ((url, init) => fetch(url, init));
-  const lcd = new LcdClient(config.lcdUrl, { fetchImpl: doFetch, timeoutMs: CHROME_READ_TIMEOUT_MS });
+  const lcd = new LcdClient(config.lcdUrl, {
+    fetchImpl: doFetch,
+    timeoutMs: CHROME_READ_TIMEOUT_MS,
+  });
   const vault = new VaultClient(lcd);
   const bank = new BankClient(lcd);
   const apiBase = config.apiUrl.replace(/\/+$/, "");
@@ -186,7 +183,11 @@ export async function loadPortfolioData(
     })().catch(() => null),
     authFetch === null
       ? Promise.resolve(null)
-      : fetchApiJson(`${apiBase}/api/v1/portfolio?address=${addr}`, authFetch, CHROME_READ_TIMEOUT_MS)
+      : fetchApiJson(
+          `${apiBase}/api/v1/portfolio?address=${addr}`,
+          authFetch,
+          CHROME_READ_TIMEOUT_MS,
+        )
           .then((body) => portfolioEnvelopeSchema.parse(body))
           .catch(() => null),
     authFetch === null
@@ -280,17 +281,19 @@ export async function loadPortfolioData(
           historyTruncated: metrics.accrual_truncated,
         };
 
-  const activeRedemptions: RedemptionVM[] = (summaryEnv?.data.active_redemptions ?? []).map((r) => ({
-    requestId: r.request_id,
-    sharesDisplay: formatBaseAmount(BigInt(r.shares), SHARE_EXPONENT, 6),
-    status: r.status,
-    enqueuedAt: r.enqueued_at,
-    statusTimestamps: {
-      expeditedAt: r.expedited_at,
-      maturedAt: r.matured_at,
-      refundedAt: r.refunded_at,
-    },
-  }));
+  const activeRedemptions: RedemptionVM[] = (summaryEnv?.data.active_redemptions ?? []).map(
+    (r) => ({
+      requestId: r.request_id,
+      sharesDisplay: formatBaseAmount(BigInt(r.shares), SHARE_EXPONENT, 6),
+      status: r.status,
+      enqueuedAt: r.enqueued_at,
+      statusTimestamps: {
+        expeditedAt: r.expedited_at,
+        maturedAt: r.matured_at,
+        refundedAt: r.refunded_at,
+      },
+    }),
+  );
 
   const history: HistoryPageVM | null =
     txEnv === null
@@ -332,9 +335,7 @@ export async function loadPortfolioData(
 
 /** Verify-link to the configured explorer, or null when none is configured. */
 export function explorerHref(config: WebConfig, txhash: string): string | null {
-  return config.explorerUrl
-    ? `${config.explorerUrl.replace(/\/$/, "")}/tx/${txhash}`
-    : null;
+  return config.explorerUrl ? `${config.explorerUrl.replace(/\/$/, "")}/tx/${txhash}` : null;
 }
 
 // ── CSV export proxy ─────────────────────────────────────────────────────────

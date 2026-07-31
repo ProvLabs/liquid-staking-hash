@@ -97,9 +97,7 @@ export async function mintNonce(
   };
 }
 
-export type LoginResult =
-  | { ok: true; address: string; setCookie: string }
-  | { ok: false }; // one undifferentiated failure → 401 (auth.ts precedent)
+export type LoginResult = { ok: true; address: string; setCookie: string } | { ok: false }; // one undifferentiated failure → 401 (auth.ts precedent)
 
 /** Verify a signed challenge and establish a session (POST /session/login). */
 export async function login(
@@ -133,7 +131,11 @@ export async function login(
   };
   await store.createSession(row);
   await store.touchAddressActivity(body.address, at);
-  return { ok: true, address: body.address, setCookie: sessionCookie(config, id, row.expiresAt, at) };
+  return {
+    ok: true,
+    address: body.address,
+    setCookie: sessionCookie(config, id, row.expiresAt, at),
+  };
 }
 
 /** Destroy the session row and clear the cookie (POST /session/logout). */
@@ -166,7 +168,11 @@ export async function logout(
  *     covering crash remnants AND browsers that never present their stale
  *     cookie. Push is latency-sugar (§10.4), never load-bearing.
  */
-async function destroySession(store: SessionStore, pushStore: PushStore, id: string): Promise<void> {
+async function destroySession(
+  store: SessionStore,
+  pushStore: PushStore,
+  id: string,
+): Promise<void> {
   await pushStore.deleteForSession(id);
   await store.deleteSession(id);
 }

@@ -112,7 +112,10 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
       ) : (
         <>
           {data.owned.length > 1 ? (
-            <nav aria-label={t(locale, "operator.switch-validator")} className="flex flex-wrap gap-2">
+            <nav
+              aria-label={t(locale, "operator.switch-validator")}
+              className="flex flex-wrap gap-2"
+            >
               {data.owned.map((v) => (
                 <a
                   key={v.valoper}
@@ -163,7 +166,10 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
               />
             ) : (
               <>
-                <p role="status" className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                <p
+                  role="status"
+                  className="rounded-lg border bg-card p-4 text-sm text-muted-foreground"
+                >
                   {t(locale, "operator.inactive-validator")}
                 </p>
                 <OperatorFlows

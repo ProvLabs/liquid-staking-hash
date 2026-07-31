@@ -36,8 +36,20 @@ describe("loadConfig", () => {
   });
 
   it("parses and coerces provided values", () => {
-    const config = loadConfig({ APP_ENV: "production", PORT: "3000", RATE_LIMIT_MAX: "10", RATE_LIMIT_WINDOW_MS: "5000", TRUST_PROXY: "true" });
-    expect(config).toEqual({ appEnv: "production", port: 3000, rateLimitMax: 10, rateLimitWindowMs: 5000, trustProxy: true });
+    const config = loadConfig({
+      APP_ENV: "production",
+      PORT: "3000",
+      RATE_LIMIT_MAX: "10",
+      RATE_LIMIT_WINDOW_MS: "5000",
+      TRUST_PROXY: "true",
+    });
+    expect(config).toEqual({
+      appEnv: "production",
+      port: 3000,
+      rateLimitMax: 10,
+      rateLimitWindowMs: 5000,
+      trustProxy: true,
+    });
   });
 
   it("rejects an out-of-range port", () => {

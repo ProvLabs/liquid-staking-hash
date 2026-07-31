@@ -29,7 +29,10 @@ test("cold-start shows the 60-day guarantee alone, no fabricated typical", async
   // placeholder fails here.
   await expect(page.getByText("Guaranteed within 60 days", { exact: false })).toBeVisible();
   await expect(
-    page.getByText("Not enough recent redemptions to show a typical time yet; the 60-day guarantee stands", { exact: false }),
+    page.getByText(
+      "Not enough recent redemptions to show a typical time yet; the 60-day guarantee stands",
+      { exact: false },
+    ),
   ).toBeVisible();
   // No unresolved i18n placeholder ever reaches the user.
   await expect(page.getByText(/\{\w+\}/)).toHaveCount(0);

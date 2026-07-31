@@ -122,10 +122,22 @@ export interface WriteReadBound {
 }
 
 export const WRITE_READ_BOUNDS: readonly WriteReadBound[] = [
-  { field: "MsgSubmitProposal.messages", write: MAX_PROPOSAL_MESSAGES, read: MAX_GOV_PROPOSAL_MESSAGES },
-  { field: "MsgSubmitProposal.metadata", write: MAX_PROPOSAL_METADATA_LEN, read: MAX_GOV_METADATA_LENGTH },
+  {
+    field: "MsgSubmitProposal.messages",
+    write: MAX_PROPOSAL_MESSAGES,
+    read: MAX_GOV_PROPOSAL_MESSAGES,
+  },
+  {
+    field: "MsgSubmitProposal.metadata",
+    write: MAX_PROPOSAL_METADATA_LEN,
+    read: MAX_GOV_METADATA_LENGTH,
+  },
   { field: "MsgSubmitProposal.title", write: MAX_PROPOSAL_TITLE_LEN, read: MAX_GOV_TITLE_LENGTH },
-  { field: "MsgSubmitProposal.summary", write: MAX_PROPOSAL_SUMMARY_LEN, read: MAX_GOV_SUMMARY_LENGTH },
+  {
+    field: "MsgSubmitProposal.summary",
+    write: MAX_PROPOSAL_SUMMARY_LEN,
+    read: MAX_GOV_SUMMARY_LENGTH,
+  },
 ];
 
 // --- adopted (pairs previously coupled by comment alone) ----
@@ -159,13 +171,41 @@ export const MARKER_CAP_WIRE = 2_000;
  * constant, which is a change to those endpoints rather than to this one.
  */
 export const WIRE_BOUNDS: readonly WireBound[] = [
-  { field: "governance/proposals.proposals", producer: MAX_GOV_PROPOSALS_PAGE, consumer: MAX_GOV_PROPOSALS_PAGE_WIRE },
-  { field: "governance/proposal.votes", producer: MAX_GOV_VOTES_PER_PROPOSAL, consumer: MAX_GOV_VOTES_PER_PROPOSAL_WIRE },
-  { field: "GovProposalRow.messages", producer: MAX_GOV_PROPOSAL_MESSAGES, consumer: MAX_GOV_PROPOSAL_MESSAGES_WIRE },
-  { field: "GovProposalRow.proposers", producer: MAX_GOV_PROPOSERS, consumer: MAX_GOV_PROPOSERS_WIRE },
-  { field: "governance/policies.policies", producer: MAX_GOV_POLICIES, consumer: MAX_GOV_POLICIES_WIRE },
-  { field: "PortfolioMetrics.accrual", producer: MAX_ACCRUAL_POINTS, consumer: MAX_ACCRUAL_POINTS_WIRE },
-  { field: "PortfolioMetrics.yield_by_epoch", producer: MAX_YIELD_POINTS, consumer: MAX_YIELD_POINTS_WIRE },
+  {
+    field: "governance/proposals.proposals",
+    producer: MAX_GOV_PROPOSALS_PAGE,
+    consumer: MAX_GOV_PROPOSALS_PAGE_WIRE,
+  },
+  {
+    field: "governance/proposal.votes",
+    producer: MAX_GOV_VOTES_PER_PROPOSAL,
+    consumer: MAX_GOV_VOTES_PER_PROPOSAL_WIRE,
+  },
+  {
+    field: "GovProposalRow.messages",
+    producer: MAX_GOV_PROPOSAL_MESSAGES,
+    consumer: MAX_GOV_PROPOSAL_MESSAGES_WIRE,
+  },
+  {
+    field: "GovProposalRow.proposers",
+    producer: MAX_GOV_PROPOSERS,
+    consumer: MAX_GOV_PROPOSERS_WIRE,
+  },
+  {
+    field: "governance/policies.policies",
+    producer: MAX_GOV_POLICIES,
+    consumer: MAX_GOV_POLICIES_WIRE,
+  },
+  {
+    field: "PortfolioMetrics.accrual",
+    producer: MAX_ACCRUAL_POINTS,
+    consumer: MAX_ACCRUAL_POINTS_WIRE,
+  },
+  {
+    field: "PortfolioMetrics.yield_by_epoch",
+    producer: MAX_YIELD_POINTS,
+    consumer: MAX_YIELD_POINTS_WIRE,
+  },
   { field: "PortfolioMetrics.accrual_markers", producer: MARKER_CAP, consumer: MARKER_CAP_WIRE },
 ];
 

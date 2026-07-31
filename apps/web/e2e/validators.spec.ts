@@ -16,9 +16,7 @@ test("renders the set table with the corpus validator", async ({ page }) => {
   await expect(table).toContainText("315.35"); // program delegation, HASH
 });
 
-test("set health shows the live eligible count and the indexed aggregates", async ({
-  page,
-}) => {
+test("set health shows the live eligible count and the indexed aggregates", async ({ page }) => {
   await page.goto("/validators");
   const health = page.getByLabel("Set health");
   await expect(health).toContainText("Eligible now");

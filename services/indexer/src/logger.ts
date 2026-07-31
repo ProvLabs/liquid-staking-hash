@@ -56,8 +56,8 @@ function emit(level: Level, message: string, context: LogContext = {}): void {
     safe[key] = typeof value === "bigint" ? value.toString() : value;
   }
   const line = JSON.stringify({ level, message, ...safe });
-  if (level === "error" || level === "warn") process.stderr.write(line + "\n");
-  else process.stdout.write(line + "\n");
+  if (level === "error" || level === "warn") process.stderr.write(`${line}\n`);
+  else process.stdout.write(`${line}\n`);
 }
 
 export const logger = {

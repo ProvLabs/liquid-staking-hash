@@ -66,6 +66,7 @@ export function WalletButton({ locale }: { locale: Locale }) {
                 className="w-48 rounded bg-white p-2 [&_svg]:h-auto [&_svg]:w-full"
                 // uqr renders a self-contained static SVG of the pairing URI —
                 // no external fetch, no script (CSP-safe).
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: uqr generates this markup locally from a value we hold; it is never remote input.
                 dangerouslySetInnerHTML={{ __html: renderSVG(state.pairingUri) }}
               />
               <p className="break-all font-mono text-[10px] text-muted-foreground">

@@ -61,6 +61,10 @@ interface StoreState extends StoreData {
 
 const StoreCtx = createContext<StoreState | null>(null);
 
+/** Wall clock in ms. Module scope: it captures nothing, so hook dependency
+ *  arrays stay stable across renders. */
+const now = () => Date.now();
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet();
   const [d, setD] = useState<StoreData>({
@@ -100,8 +104,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setD((cur) => ({ ...cur, [key]: value }));
   }, []);
 
-  const now = () => Date.now();
-
   const loadMock = useCallback(async () => {
     set("config", { data: fx.mockConfig, fetchedAt: now(), error: null });
     set("epoch", { data: fx.mockEpochStatus, fetchedAt: now(), error: null });
@@ -112,7 +114,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     set("vault", { data: fx.mockVault, fetchedAt: now(), error: null });
     set("swapOuts", { data: fx.mockSwapOuts, fetchedAt: now(), error: null });
     set("deployment", { data: fx.mockDeployment, fetchedAt: now(), error: null });
-    set("block", { data: { height: fx.mockSnapshot.end_height, timeSecs: nowSecs }, error: null, fetchedAt: now() });
+    set("block", {
+      data: { height: fx.mockSnapshot.end_height, timeSecs: nowSecs },
+      error: null,
+      fetchedAt: now(),
+    });
     await ledgerSeed(fx.mockLedger);
     set("ledger", await ledgerAll());
   }, [set, nowSecs]);
@@ -148,7 +154,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         one("validators", () => smartQuery<ValidatorsResponse>({ validators: {} })),
         one("jail", () => smartQuery<JailReportsResponse>({ jail_reports: {} })),
         one("snapshot", () =>
-          smartQuery<{ snapshot: EpochSnapshot | null }>({ epoch_snapshot: {} }).then((r) => r.snapshot),
+          smartQuery<{ snapshot: EpochSnapshot | null }>({ epoch_snapshot: {} }).then(
+            (r) => r.snapshot,
+          ),
         ),
         one("apr", () => smartQuery<AprResponse>({ apr: {} }).catch(() => null)),
         one("block", () => latestBlock()),
@@ -203,19 +211,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
     if (config.mock) return;
-    const fast = window.setInterval(() => loadReal(["epoch", "block", "vault"]), config.pollFastSecs * 1000);
+    const fast = window.setInterval(
+      () => loadReal(["epoch", "block", "vault"]),
+      config.pollFastSecs * 1000,
+    );
     const med = window.setInterval(
       () => loadReal(["validators", "jail", "swapOuts", "deployment"]),
       config.pollMedSecs * 1000,
     );
-    const slow = window.setInterval(() => loadReal(["config", "snapshot", "apr"]), config.pollSlowSecs * 1000);
+    const slow = window.setInterval(
+      () => loadReal(["config", "snapshot", "apr"]),
+      config.pollSlowSecs * 1000,
+    );
     return () => {
       window.clearInterval(fast);
       window.clearInterval(med);
       window.clearInterval(slow);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh, loadReal]);
 
   // role detection = on-chain fact (spec Decision 4)
   const role = useMemo<Role>(() => {

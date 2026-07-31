@@ -79,11 +79,16 @@ export function TxProvider({ children }: { children: ReactNode }) {
     <TxCtx.Provider value={{ submit }}>
       {children}
       {pending && (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: click-outside is a pointer-only convenience; the sheet's Cancel button is the keyboard dismissal path.
         <div className="sheet-overlay" role="dialog" aria-modal="true" onClick={close}>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only; the sheet adds no interaction of its own. */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: as above — this handler exists to NOT dismiss. */}
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet__title">{pending.title}</div>
             {pending.consequence && (
-              <div className={tier === "danger" ? "callout callout--serious" : "callout callout--info"}>
+              <div
+                className={tier === "danger" ? "callout callout--serious" : "callout callout--info"}
+              >
                 {pending.consequence}
               </div>
             )}
@@ -94,9 +99,9 @@ export function TxProvider({ children }: { children: ReactNode }) {
                 returns; there is no gas × price math to state. Say what is
                 actually true until the §14.1 wallet adapter lands. */}
             <div className="muted" style={{ fontSize: 13 }}>
-              Fee: not estimated here. Provenance charges a fixed per-message
-              fee, taken from the chain&rsquo;s simulate result when signing is
-              wired (§14.1).{config.mock ? " Mock mode does not broadcast." : ""}
+              Fee: not estimated here. Provenance charges a fixed per-message fee, taken from the
+              chain&rsquo;s simulate result when signing is wired (§14.1).
+              {config.mock ? " Mock mode does not broadcast." : ""}
             </div>
             <details className="disclosure">
               <summary className="muted" style={{ cursor: "pointer" }}>
@@ -106,8 +111,8 @@ export function TxProvider({ children }: { children: ReactNode }) {
             </details>
             {needsAck && (
               <label style={{ display: "flex", gap: 8, fontSize: 13 }}>
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-                I understand this action is non-refundable / long-lived.
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />I
+                understand this action is non-refundable / long-lived.
               </label>
             )}
             {needsTyped && (
@@ -117,10 +122,11 @@ export function TxProvider({ children }: { children: ReactNode }) {
               </label>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="btn btn--secondary" onClick={close}>
+              <button type="button" className="btn btn--secondary" onClick={close}>
                 Cancel
               </button>
               <button
+                type="button"
                 className={`btn ${tier === "danger" ? "btn--danger" : tier === "warning" ? "btn--warning" : "btn--primary"}`}
                 disabled={!typedOk || !ackOk}
                 onClick={confirm}
@@ -140,7 +146,11 @@ export function TxProvider({ children }: { children: ReactNode }) {
                 <span
                   className={
                     "pill " +
-                    (t.status === "success" ? "pill--good" : t.status === "failed" ? "pill--critical" : "pill--neutral")
+                    (t.status === "success"
+                      ? "pill--good"
+                      : t.status === "failed"
+                        ? "pill--critical"
+                        : "pill--neutral")
                   }
                 >
                   <span className="pill__dot" />
@@ -159,7 +169,12 @@ export function TxProvider({ children }: { children: ReactNode }) {
                 </details>
               )}
               {t.status !== "pending" && (
-                <button className="btn btn--ghost btn--sm" style={{ marginTop: 6 }} onClick={() => dropToast(t.id)}>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  style={{ marginTop: 6 }}
+                  onClick={() => dropToast(t.id)}
+                >
                   dismiss
                 </button>
               )}

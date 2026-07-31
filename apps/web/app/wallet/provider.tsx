@@ -113,8 +113,7 @@ export function WalletProvider({
         const created = await WALLET_VENDORS[vendor].create({
           chainId,
           walletConnectProjectId,
-          onPairingUri: (uri) =>
-            setClientState({ phase: "connecting", vendor, pairingUri: uri }),
+          onPairingUri: (uri) => setClientState({ phase: "connecting", vendor, pairingUri: uri }),
         });
         const account = await created.connect();
         setAdapter(created);

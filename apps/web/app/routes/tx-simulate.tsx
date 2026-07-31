@@ -21,7 +21,10 @@ import { simulateIntent } from "~/tx/simulate.server";
 import type { Route } from "./+types/tx-simulate";
 
 /** base64 33-byte compressed secp256k1 from the connected wallet. */
-const pubkeySchema = z.string().length(44).regex(/^[A-Za-z0-9+/]+={0,2}$/);
+const pubkeySchema = z
+  .string()
+  .length(44)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/);
 const valoperSchema = z.string().max(90).regex(VALOPER_RE);
 
 const bodySchema = z.object({
@@ -42,7 +45,10 @@ const operatorBodySchema = z
     variant: z.enum(OPERATOR_VARIANTS),
     valoper: valoperSchema,
     claimantValoper: valoperSchema.nullable().default(null),
-    amount: z.string().regex(/^[0-9]{1,39}$/).default("0"),
+    amount: z
+      .string()
+      .regex(/^[0-9]{1,39}$/)
+      .default("0"),
     denom: z.string().min(1).max(64).default(PROGRAM_UNDERLYING_DENOM),
     pubkey: pubkeySchema,
   })
@@ -52,7 +58,7 @@ const operatorBodySchema = z
   // rather than a 500: a zero-amount payment, or funds on a fundless action,
   // never reaches the builder (2026-07-28 review).
   .refine(
-    (b) => FUNDED_VARIANTS.has(b.variant) === (BigInt(b.amount) > 0n),
+    (b) => FUNDED_VARIANTS.has(b.variant) === BigInt(b.amount) > 0n,
     "a payment requires a positive amount; every other action must carry none",
   );
 

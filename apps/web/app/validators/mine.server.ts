@@ -158,7 +158,11 @@ export function estimateOperatorEarnings(
  */
 export function buildEarningsSteps(
   delegationByEpoch: ReadonlyMap<number, bigint>,
-  epochBoundaries: readonly { epochIndex: number; endedAtSeconds: number; netAprBps: number | null }[],
+  epochBoundaries: readonly {
+    epochIndex: number;
+    endedAtSeconds: number;
+    netAprBps: number | null;
+  }[],
 ): EarningsStep[] {
   const steps: EarningsStep[] = [];
   for (let i = 1; i < epochBoundaries.length; i++) {
@@ -168,7 +172,11 @@ export function buildEarningsSteps(
     if (delegation === undefined || current.netAprBps === null) continue;
     const duration = BigInt(current.endedAtSeconds - previous.endedAtSeconds);
     if (duration <= 0n) continue;
-    steps.push({ programDelegation: delegation, netAprBps: current.netAprBps, durationSeconds: duration });
+    steps.push({
+      programDelegation: delegation,
+      netAprBps: current.netAprBps,
+      durationSeconds: duration,
+    });
   }
   return steps;
 }
@@ -196,7 +204,10 @@ export async function loadOperatorViewData(
   options: OperatorViewOptions = {},
 ): Promise<OperatorViewData> {
   const doFetch: FetchLike = options.fetchImpl ?? ((url, init) => fetch(url, init));
-  const lcd = new LcdClient(config.lcdUrl, { fetchImpl: doFetch, timeoutMs: CHROME_READ_TIMEOUT_MS });
+  const lcd = new LcdClient(config.lcdUrl, {
+    fetchImpl: doFetch,
+    timeoutMs: CHROME_READ_TIMEOUT_MS,
+  });
   const contract = new NvhashContractClient(lcd, config.contractAddress);
   const staking = new StakingClient(lcd);
   const apiBase = config.apiUrl.replace(/\/+$/, "");
@@ -212,7 +223,11 @@ export async function loadOperatorViewData(
     staking.validators().catch(() => null),
     authFetch === null
       ? Promise.resolve(null)
-      : fetchApiJson(`${apiBase}/api/v1/operator/summary?address=${addr}`, authFetch, CHROME_READ_TIMEOUT_MS)
+      : fetchApiJson(
+          `${apiBase}/api/v1/operator/summary?address=${addr}`,
+          authFetch,
+          CHROME_READ_TIMEOUT_MS,
+        )
           .then((body) => operatorSummaryEnvelopeSchema.parse(body))
           .catch(() => null),
   ]);
@@ -263,15 +278,16 @@ export async function loadOperatorViewData(
     // Null, not "0.0000": an unsampled validator has no known history, and
     // claiming zero paid would be a fabricated fact (§12.1).
     commissionPaidTotalHash:
-      indexed === null ? null : formatBaseAmount(BigInt(indexed.commission_paid_total), HASH_EXPONENT, 4),
+      indexed === null
+        ? null
+        : formatBaseAmount(BigInt(indexed.commission_paid_total), HASH_EXPONENT, 4),
     tipPaidTotalHash:
       indexed === null ? null : formatBaseAmount(BigInt(indexed.tip_paid_total), HASH_EXPONENT, 4),
     paymentCount: indexed?.payment_count ?? null,
   });
 
-  const liveOwned = liveValidators === null
-    ? null
-    : liveValidators.filter((v) => v.operator === session.address);
+  const liveOwned =
+    liveValidators === null ? null : liveValidators.filter((v) => v.operator === session.address);
   const owned: OperatorValidatorVM[] =
     liveOwned === null
       ? [...indexedByValoper.values()].map((v) => toVM(v.valoper, v, v.active))
@@ -361,8 +377,7 @@ export async function loadOperatorViewData(
           active: owned.find((v) => v.valoper === selectedValoper)?.active ?? true,
           enrolledAt: summaryRow?.enrolled_at ?? null,
           failingReasons: summaryRow?.failing_reasons ?? [],
-          jailReport:
-            (jailReports ?? []).find((r) => r.valoper === selectedValoper) ?? null,
+          jailReport: (jailReports ?? []).find((r) => r.valoper === selectedValoper) ?? null,
         });
 
   // Epoch history (newest first from the API; the chart needs oldest first).
@@ -493,13 +508,16 @@ function buildStanding(input: {
 function buildNetBenefit(input: {
   summaryRow: { commission_paid_total: string; tip_paid_total: string };
   epochsAsc: readonly { epoch_index: number; program_delegation: string }[];
-  programEpochs: readonly { epoch_index: number; ended_at: string; net_apr_bps: number | null }[] | null;
+  programEpochs:
+    | readonly { epoch_index: number; ended_at: string; net_apr_bps: number | null }[]
+    | null;
   commissionRate: string | null;
   truncated: boolean;
 }): NetBenefitVM {
   const commissionPaid = BigInt(input.summaryRow.commission_paid_total);
   const tipPaid = BigInt(input.summaryRow.tip_paid_total);
-  const rateScaled = input.commissionRate === null ? null : parseCommissionRate(input.commissionRate);
+  const rateScaled =
+    input.commissionRate === null ? null : parseCommissionRate(input.commissionRate);
 
   let earnings: bigint | null = null;
   let epochsCovered = 0;
@@ -526,8 +544,7 @@ function buildNetBenefit(input: {
     commissionPaidTotalHash: formatBaseAmount(commissionPaid, HASH_EXPONENT, 4),
     tipPaidTotalHash: formatBaseAmount(tipPaid, HASH_EXPONENT, 4),
     netBenefitHash: earnings === null ? null : hash(earnings - commissionPaid - tipPaid),
-    commissionRatePercent:
-      rateScaled === null ? null : formatBaseAmount(rateScaled * 100n, 18, 2),
+    commissionRatePercent: rateScaled === null ? null : formatBaseAmount(rateScaled * 100n, 18, 2),
     epochsCovered,
     truncated: input.truncated,
   };

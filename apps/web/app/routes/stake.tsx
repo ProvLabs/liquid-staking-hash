@@ -100,8 +100,13 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
           {t(locale, "stake.unavailable")}
         </p>
       ) : vault.paused ? (
-        <p className="rounded-lg border border-[var(--status-serious)] bg-card p-4 text-sm" role="alert">
-          {t(locale, "stake.paused", { reason: vault.pausedReason || t(locale, "stake.paused-generic") })}
+        <p
+          className="rounded-lg border border-[var(--status-serious)] bg-card p-4 text-sm"
+          role="alert"
+        >
+          {t(locale, "stake.paused", {
+            reason: vault.pausedReason || t(locale, "stake.paused-generic"),
+          })}
         </p>
       ) : !connected ? (
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
@@ -132,8 +137,14 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
           {vault.minSwapIn !== "" || vault.maxSwapIn !== "" ? (
             <p className="text-xs text-muted-foreground">
               {t(locale, "stake.limits", {
-                min: vault.minSwapIn === "" ? "—" : formatBaseAmount(BigInt(vault.minSwapIn), HASH_EXPONENT, 4),
-                max: vault.maxSwapIn === "" ? "—" : formatBaseAmount(BigInt(vault.maxSwapIn), HASH_EXPONENT, 4),
+                min:
+                  vault.minSwapIn === ""
+                    ? "—"
+                    : formatBaseAmount(BigInt(vault.minSwapIn), HASH_EXPONENT, 4),
+                max:
+                  vault.maxSwapIn === ""
+                    ? "—"
+                    : formatBaseAmount(BigInt(vault.maxSwapIn), HASH_EXPONENT, 4),
               })}
             </p>
           ) : null}
@@ -150,12 +161,16 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
               ) : (
                 <p className="text-muted-foreground">{t(locale, "stake.preview-empty-vault")}</p>
               )}
-              <p className="mt-1 text-xs text-muted-foreground">{t(locale, "stake.preview-estimate-note")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t(locale, "stake.preview-estimate-note")}
+              </p>
             </div>
           ) : null}
 
           {input !== "" && !parsed.ok && parsed.error !== "zero" ? (
-            <p className="text-xs text-[var(--status-serious)]">{t(locale, "stake.amount-invalid")}</p>
+            <p className="text-xs text-[var(--status-serious)]">
+              {t(locale, "stake.amount-invalid")}
+            </p>
           ) : null}
 
           {!wallet.canSign ? (
@@ -164,7 +179,10 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
 
           {!vault.swapInEnabled ? (
             // §10.2: a disabled control always carries its reason.
-            <p className="rounded-lg border border-[var(--status-warning)] bg-card p-3 text-sm" role="alert">
+            <p
+              className="rounded-lg border border-[var(--status-warning)] bg-card p-3 text-sm"
+              role="alert"
+            >
               {t(locale, "tx.reason-swaps-disabled")}
             </p>
           ) : null}
@@ -193,7 +211,12 @@ export default function Stake({ loaderData }: Route.ComponentProps) {
         />
       ) : null}
 
-      <FlowStatus locale={locale} state={flow.state} amountExponent={HASH_EXPONENT} onReset={flow.reset} />
+      <FlowStatus
+        locale={locale}
+        state={flow.state}
+        amountExponent={HASH_EXPONENT}
+        onReset={flow.reset}
+      />
     </section>
   );
 }

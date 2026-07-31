@@ -39,7 +39,7 @@ const config = loadConfig({
 } as NodeJS.ProcessEnv); // no DATABASE_URL → the in-memory store
 
 const A = "tp1aaa";
-const B = "tp1bbb";
+const _B = "tp1bbb";
 const P256 = "BPa1".padEnd(87, "x"); // base64url-shaped, within the 256 cap
 const AUTH = "c2VjcmV0"; // base64url-shaped, within the 128 cap
 
@@ -56,34 +56,45 @@ beforeEach(() => resetPushStoreForTests());
 
 describe("route boundary schema (reject, never clamp)", () => {
   it("accepts the W3C triple: https endpoint + base64url p256dh/auth", () => {
-    expect(pushSubscriptionBodySchema.safeParse(body("https://push.example/ep/1")).success).toBe(true);
+    expect(pushSubscriptionBodySchema.safeParse(body("https://push.example/ep/1")).success).toBe(
+      true,
+    );
   });
 
   it("rejects a non-https endpoint", () => {
-    expect(pushSubscriptionBodySchema.safeParse(body("http://push.example/ep/1")).success).toBe(false);
-    expect(pushSubscriptionBodySchema.safeParse(body("ftp://push.example/ep/1")).success).toBe(false);
+    expect(pushSubscriptionBodySchema.safeParse(body("http://push.example/ep/1")).success).toBe(
+      false,
+    );
+    expect(pushSubscriptionBodySchema.safeParse(body("ftp://push.example/ep/1")).success).toBe(
+      false,
+    );
   });
 
   it("rejects an oversized endpoint (> 1024) and oversized keys", () => {
-    const huge = "https://push.example/" + "z".repeat(1100);
+    const huge = `https://push.example/${"z".repeat(1100)}`;
     expect(pushSubscriptionBodySchema.safeParse(body(huge)).success).toBe(false);
     expect(
-      pushSubscriptionBodySchema.safeParse(body("https://push.example/ep", { p256dh: "z".repeat(300), auth: AUTH }))
-        .success,
+      pushSubscriptionBodySchema.safeParse(
+        body("https://push.example/ep", { p256dh: "z".repeat(300), auth: AUTH }),
+      ).success,
     ).toBe(false);
     expect(
-      pushSubscriptionBodySchema.safeParse(body("https://push.example/ep", { p256dh: P256, auth: "z".repeat(200) }))
-        .success,
+      pushSubscriptionBodySchema.safeParse(
+        body("https://push.example/ep", { p256dh: P256, auth: "z".repeat(200) }),
+      ).success,
     ).toBe(false);
   });
 
   it("rejects non-base64url key material and empty keys", () => {
     expect(
-      pushSubscriptionBodySchema.safeParse(body("https://push.example/ep", { p256dh: "has spaces!", auth: AUTH }))
-        .success,
+      pushSubscriptionBodySchema.safeParse(
+        body("https://push.example/ep", { p256dh: "has spaces!", auth: AUTH }),
+      ).success,
     ).toBe(false);
     expect(
-      pushSubscriptionBodySchema.safeParse(body("https://push.example/ep", { p256dh: "", auth: AUTH })).success,
+      pushSubscriptionBodySchema.safeParse(
+        body("https://push.example/ep", { p256dh: "", auth: AUTH }),
+      ).success,
     ).toBe(false);
   });
 
@@ -107,16 +118,36 @@ describe("route boundary schema (reject, never clamp)", () => {
 describe("opt-in upsert semantics", () => {
   it("replace-by-session: a new endpoint for a session replaces, never accumulates", async () => {
     const s = await store();
-    await saveSubscription(config, A, "sess-1", pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")));
-    await saveSubscription(config, A, "sess-1", pushSubscriptionBodySchema.parse(body("https://push.example/ep/2")));
+    await saveSubscription(
+      config,
+      A,
+      "sess-1",
+      pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")),
+    );
+    await saveSubscription(
+      config,
+      A,
+      "sess-1",
+      pushSubscriptionBodySchema.parse(body("https://push.example/ep/2")),
+    );
     expect(await s.countForAddress(A)).toBe(1);
     expect(s.listForAddressSync(A).map((r) => r.endpoint)).toEqual(["https://push.example/ep/2"]);
   });
 
   it("a re-subscription with the same endpoint under a new session re-homes it, never duplicating", async () => {
     const s = await store();
-    await saveSubscription(config, A, "sess-1", pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")));
-    await saveSubscription(config, A, "sess-2", pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")));
+    await saveSubscription(
+      config,
+      A,
+      "sess-1",
+      pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")),
+    );
+    await saveSubscription(
+      config,
+      A,
+      "sess-2",
+      pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")),
+    );
     expect(await s.countForAddress(A)).toBe(1);
     // The row now belongs to sess-2 (deleting sess-1 removes nothing).
     expect(await deleteSubscriptionsForSession(config, "sess-1")).toBe(0);
@@ -204,14 +235,20 @@ describe("PrismaPushStore query shaping (concurrency + invariant sweep)", () => 
   it("retries a serialization conflict (P2034), then surfaces a persistent one", async () => {
     // Two conflicts then success: the caller never sees them.
     const recorded: Call[] = [];
-    const s = new PrismaPushStore(capturingPrisma(recorded, { conflicts: UPSERT_SERIALIZATION_ATTEMPTS - 1 }) as never);
+    const s = new PrismaPushStore(
+      capturingPrisma(recorded, { conflicts: UPSERT_SERIALIZATION_ATTEMPTS - 1 }) as never,
+    );
     await s.upsertForSession(A, "sess-1", SUB);
-    expect(recorded.filter((c) => c.method === "$transaction")).toHaveLength(UPSERT_SERIALIZATION_ATTEMPTS);
+    expect(recorded.filter((c) => c.method === "$transaction")).toHaveLength(
+      UPSERT_SERIALIZATION_ATTEMPTS,
+    );
     // Persistent conflict: bounded — rethrown after the attempt budget.
     const recorded2: Call[] = [];
     const s2 = new PrismaPushStore(capturingPrisma(recorded2, { conflicts: 99 }) as never);
     await expect(s2.upsertForSession(A, "sess-1", SUB)).rejects.toThrow("write conflict");
-    expect(recorded2.filter((c) => c.method === "$transaction")).toHaveLength(UPSERT_SERIALIZATION_ATTEMPTS);
+    expect(recorded2.filter((c) => c.method === "$transaction")).toHaveLength(
+      UPSERT_SERIALIZATION_ATTEMPTS,
+    );
   });
 
   it("sweepOrphans is ONE anti-join DELETE mirroring the session liveness rule", async () => {
@@ -236,8 +273,18 @@ describe("opt-out / deletion is session-scoped", () => {
   it("DELETE removes only the session's rows, never another session's", async () => {
     const s = await store();
     // Same address, two browsers (two sessions), distinct endpoints.
-    await saveSubscription(config, A, "sess-1", pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")));
-    await saveSubscription(config, A, "sess-2", pushSubscriptionBodySchema.parse(body("https://push.example/ep/2")));
+    await saveSubscription(
+      config,
+      A,
+      "sess-1",
+      pushSubscriptionBodySchema.parse(body("https://push.example/ep/1")),
+    );
+    await saveSubscription(
+      config,
+      A,
+      "sess-2",
+      pushSubscriptionBodySchema.parse(body("https://push.example/ep/2")),
+    );
     expect(await s.countForAddress(A)).toBe(2);
 
     const deleted = await deleteSubscriptionsForSession(config, "sess-1");

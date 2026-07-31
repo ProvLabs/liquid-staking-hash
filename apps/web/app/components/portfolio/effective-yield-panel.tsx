@@ -33,13 +33,17 @@ export function EffectiveYieldPanel({
       <h2 className="text-xl font-semibold">{t(locale, "portfolio.yield-title")}</h2>
 
       <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
-        <span className="text-xs text-muted-foreground">{t(locale, "portfolio.yield-apr-label")}</span>
+        <span className="text-xs text-muted-foreground">
+          {t(locale, "portfolio.yield-apr-label")}
+        </span>
         {effectiveAprBps === null ? (
           <span className="text-sm text-muted-foreground">{t(locale, "portfolio.yield-cold")}</span>
         ) : (
           <>
             <span className="text-2xl font-semibold tabular-nums">{`${bpsToPercent(effectiveAprBps)}%`}</span>
-            <span className="text-xs text-muted-foreground">{t(locale, "portfolio.yield-apr-caption")}</span>
+            <span className="text-xs text-muted-foreground">
+              {t(locale, "portfolio.yield-apr-caption")}
+            </span>
           </>
         )}
       </div>

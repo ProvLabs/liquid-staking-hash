@@ -78,7 +78,9 @@ const deps: ReconcilerDeps = {
 
 async function cleanup(): Promise<void> {
   await prisma.reconcilerRun.deleteMany({ where: { chainHeight: 1000n } });
-  await prisma.incident.deleteMany({ where: { kind: "reconciler_divergence", dedupeKey: "latest" } });
+  await prisma.incident.deleteMany({
+    where: { kind: "reconciler_divergence", dedupeKey: "latest" },
+  });
   await prisma.epochSnapshot.deleteMany({ where: { epochIndex: TEST_EPOCH } });
 }
 

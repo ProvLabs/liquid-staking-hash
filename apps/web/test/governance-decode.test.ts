@@ -112,7 +112,12 @@ describe("MsgSend — the one type the corpus pins", () => {
   });
 
   it("a malformed coin makes the whole message unknown, not a partial summary", () => {
-    for (const amount of [[{ denom: "nhash", amount: "1.5" }], [{ denom: "", amount: "1" }], "x", [{}]]) {
+    for (const amount of [
+      [{ denom: "nhash", amount: "1.5" }],
+      [{ denom: "", amount: "1" }],
+      "x",
+      [{}],
+    ]) {
       const decoded = decodeMessage(
         { "@type": MSG_SEND_TYPE_URL, from_address: "tp1a", to_address: "tp1b", amount },
         CONTRACT,
@@ -170,7 +175,10 @@ describe("program actions — golden summaries against contracts/src/msg.rs", ()
       summary: "Update program configuration: aum_fee_bps, commission_bps",
     },
     // "pause the managed vault (manual override / emergency stop)"
-    pause_vault: { msg: { pause_vault: { reason: "incident" } }, summary: "Pause the managed vault" },
+    pause_vault: {
+      msg: { pause_vault: { reason: "incident" } },
+      summary: "Pause the managed vault",
+    },
     unpause_vault: { msg: { unpause_vault: {} }, summary: "Unpause the managed vault" },
     // "abort a stuck epoch continuation by dropping the persisted delegation targets"
     clear_pending_delegations: {

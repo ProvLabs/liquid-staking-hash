@@ -45,7 +45,6 @@ import {
   toOperatorEpochRow,
   toOperatorPaymentRow,
   toTransactionRow,
-  type EpochBoundary,
   type OperatorPaymentFacts,
 } from "./derive.ts";
 import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
@@ -429,11 +428,14 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       // [R3]: freshness rides in headers for the non-JSON representation —
       // same values the envelope would carry, never omitted.
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
-      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      if (heads.indexedHeight !== null)
+        headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
       return new Response(
-        csvStream(ctx.reader.transactionsAscStream(ctx.query.address), transactionsCsvHeader(), (facts) =>
-          transactionsCsvRows(facts.map(toTransactionRow)),
+        csvStream(
+          ctx.reader.transactionsAscStream(ctx.query.address),
+          transactionsCsvHeader(),
+          (facts) => transactionsCsvRows(facts.map(toTransactionRow)),
         ),
         { status: 200, headers },
       );
@@ -631,7 +633,8 @@ const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
       headers.set("content-type", "text/csv; charset=utf-8");
       headers.set("content-disposition", 'attachment; filename="operator-payments.csv"');
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
-      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      if (heads.indexedHeight !== null)
+        headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
       return new Response(
         csvStream(source, operatorPaymentsCsvHeader(), (facts) =>
@@ -686,7 +689,11 @@ const alertRedemptionsRoute = defineEnveloped<AlertRedemptionsQuery>({
   handle: async (ctx) => {
     const [heads, data] = await Promise.all([
       ctx.reader.heads(),
-      ctx.reader.redemptionsChangedSince(ctx.query.since_height, ctx.query.after_id, ctx.query.limit),
+      ctx.reader.redemptionsChangedSince(
+        ctx.query.since_height,
+        ctx.query.after_id,
+        ctx.query.limit,
+      ),
     ]);
     return {
       data,
@@ -749,7 +756,6 @@ const alertArrearsRoute = defineEnveloped<unknown>({
     };
   },
 });
-
 
 /**
  * `GET /api/v1/governance/proposals` — the §8.7 proposal list, newest first,
@@ -857,10 +863,7 @@ const governancePoliciesRoute = defineEnveloped<unknown>({
   querySchema: null,
   summary: "Historical x/group policy set observed in the mirror",
   handle: async (ctx) => {
-    const [heads, policies] = await Promise.all([
-      ctx.reader.heads(),
-      ctx.reader.listGovPolicies(),
-    ]);
+    const [heads, policies] = await Promise.all([ctx.reader.heads(), ctx.reader.listGovPolicies()]);
     return {
       data: policies.map(toGovPolicyRow) satisfies GovPolicyRow[],
       source: "indexed" as const,

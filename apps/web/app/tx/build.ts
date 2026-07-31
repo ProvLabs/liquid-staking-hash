@@ -588,7 +588,9 @@ export function encodeTxBody(
 export function encodeAuthInfo(signer: SignerContext, fee: Fee): Uint8Array {
   const pubkey = encodeAny(
     PUBKEY_TYPE_URL,
-    new ProtoWriter().bytes(1, Uint8Array.from(Buffer.from(signer.pubkeyBase64, "base64"))).finish(),
+    new ProtoWriter()
+      .bytes(1, Uint8Array.from(Buffer.from(signer.pubkeyBase64, "base64")))
+      .finish(),
   );
   const modeInfo = new ProtoWriter()
     .message(1, new ProtoWriter().uint(1, SIGN_MODE_DIRECT).finish(), true)
@@ -758,7 +760,12 @@ export function buildTxPlan(intent: TxIntent, fee: Fee, signer: SignerContext): 
   const msg = encodeIntentMsg(intent);
   const bodyBytes = encodeTxBody([msg]);
   const authInfoBytes = encodeAuthInfo(signer, fee);
-  const signDocBytes = encodeSignDoc(bodyBytes, authInfoBytes, signer.chainId, signer.accountNumber);
+  const signDocBytes = encodeSignDoc(
+    bodyBytes,
+    authInfoBytes,
+    signer.chainId,
+    signer.accountNumber,
+  );
   return {
     intent,
     fee,
@@ -943,7 +950,8 @@ export function guardOperatorExecute(
   const allowedKeys =
     typed === "purge_jailed_validator" ? ["valoper", "claimant_valoper"] : ["valoper"];
   for (const key of Object.keys(body)) {
-    if (!allowedKeys.includes(key)) return { ok: false, reason: "unexpected field in execute body" };
+    if (!allowedKeys.includes(key))
+      return { ok: false, reason: "unexpected field in execute body" };
   }
   const valoper = body["valoper"];
   if (typeof valoper !== "string" || !VALOPER_RE.test(valoper)) {
@@ -989,9 +997,7 @@ export function guardOperatorExecute(
   }
 
   // 5 — canonical byte equality with what this module would have built.
-  const canonical = new TextEncoder().encode(
-    operatorInnerJson(typed, valoper, claimantValoper),
-  );
+  const canonical = new TextEncoder().encode(operatorInnerJson(typed, valoper, claimantValoper));
   if (
     canonical.length !== msg.execMsgBytes.length ||
     !canonical.every((byte, i) => byte === msg.execMsgBytes![i])
@@ -1062,10 +1068,7 @@ export function guardGovernanceMsg(
   return { ok: false, reason: "not a guarded governance message" };
 }
 
-function guardVote(
-  msg: DecodedMsg,
-  expected: { signerAddress: string },
-): GovernanceGuardResult {
+function guardVote(msg: DecodedMsg, expected: { signerAddress: string }): GovernanceGuardResult {
   // 2 — voter ↔ session binding. A vote cannot be cast on another's behalf.
   const voter = singleString(msg.fields, VOTE_FIELD.voter);
   if (voter === null || voter !== expected.signerAddress) {
@@ -1118,10 +1121,7 @@ function guardVote(
   return { ok: true, kind: "vote" };
 }
 
-function guardExec(
-  msg: DecodedMsg,
-  expected: { signerAddress: string },
-): GovernanceGuardResult {
+function guardExec(msg: DecodedMsg, expected: { signerAddress: string }): GovernanceGuardResult {
   // 2 — signer ↔ session binding. Execution is permissionless in x/group, but
   // the RELAY carries the session's own transactions and nobody else's.
   const signer = singleString(msg.fields, EXEC_FIELD.signer);

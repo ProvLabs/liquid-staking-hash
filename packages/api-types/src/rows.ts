@@ -611,7 +611,6 @@ export interface EpochRow {
   net_apr_bps: number | null;
 }
 
-
 // --- governance (app-spec §8.7/§9.1/§9.4) --------
 //
 // The durable MIRROR's shapes, not the live chain's. `services/api` has no chain

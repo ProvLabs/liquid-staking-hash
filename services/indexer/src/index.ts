@@ -128,14 +128,16 @@ export async function run(): Promise<void> {
   touchHeartbeat(Date.now());
   logger.info("indexer started", { count: workers.length });
 
-  const onLoopCrash = (stream: string) => (cause: unknown): void => {
-    logger.error("worker crashed", {
-      stream,
-      error: cause instanceof Error ? cause.message : String(cause),
-    });
-    process.exitCode = 1;
-    controller.abort();
-  };
+  const onLoopCrash =
+    (stream: string) =>
+    (cause: unknown): void => {
+      logger.error("worker crashed", {
+        stream,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      process.exitCode = 1;
+      controller.abort();
+    };
 
   // Start each worker; a crash is fatal (abort siblings, exit non-zero).
   const loops = workers.map((worker) => runWorker(worker, deps).catch(onLoopCrash(worker.stream)));

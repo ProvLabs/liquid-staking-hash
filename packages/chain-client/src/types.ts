@@ -1,9 +1,4 @@
-import {
-  expectObject,
-  expectString,
-  parseU64String,
-  type Coin,
-} from "./amounts.ts";
+import { expectObject, expectString, parseU64String, type Coin } from "./amounts.ts";
 
 /** Standard cosmos-sdk pagination envelope. */
 export interface Pagination {

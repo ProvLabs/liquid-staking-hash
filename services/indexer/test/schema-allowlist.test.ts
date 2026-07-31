@@ -6,7 +6,11 @@
 
 import { describe, expect, it } from "vitest";
 import { parseModels } from "./security/parse-prisma.ts";
-import { ALLOWED_FIELDS, AMOUNT_FIELDS, FORBIDDEN_FIELD_SUBSTRINGS } from "./security/allowed-fields.ts";
+import {
+  ALLOWED_FIELDS,
+  AMOUNT_FIELDS,
+  FORBIDDEN_FIELD_SUBSTRINGS,
+} from "./security/allowed-fields.ts";
 
 const models = parseModels();
 
@@ -18,9 +22,10 @@ describe("indexed schema field allowlist (SECURITY.md data minimization)", () =>
 
   it("every model is covered by the allowlist", () => {
     const uncovered = models.map((m) => m.name).filter((name) => !(name in ALLOWED_FIELDS));
-    expect(uncovered, `models missing from allowed-fields.ts (design-review required): ${uncovered.join(", ")}`).toEqual(
-      [],
-    );
+    expect(
+      uncovered,
+      `models missing from allowed-fields.ts (design-review required): ${uncovered.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("every column is on its model's allowlist", () => {
@@ -53,7 +58,9 @@ describe("indexed schema field allowlist (SECURITY.md data minimization)", () =>
         }
       }
     }
-    expect(violations, `forbidden identity/IP/device columns: ${violations.join(", ")}`).toEqual([]);
+    expect(violations, `forbidden identity/IP/device columns: ${violations.join(", ")}`).toEqual(
+      [],
+    );
   });
 });
 
@@ -66,12 +73,18 @@ describe("amount discipline (app-spec §5.8: Decimal(39,0), never a JS number)",
       expect(model, `amount-bearing model ${modelName} not found`).toBeDefined();
       for (const fieldName of amountFields) {
         const field = model!.fields.find((f) => f.name === fieldName);
-        expect(field, `${modelName}.${fieldName} declared as amount but absent from schema`).toBeDefined();
-        const ok = field!.type === "Decimal" && /@db\.Decimal\(\s*39\s*,\s*0\s*\)/.test(field!.attributes);
+        expect(
+          field,
+          `${modelName}.${fieldName} declared as amount but absent from schema`,
+        ).toBeDefined();
+        const ok =
+          field!.type === "Decimal" && /@db\.Decimal\(\s*39\s*,\s*0\s*\)/.test(field!.attributes);
         if (!ok) violations.push(`${modelName}.${fieldName} → ${field!.type} ${field!.attributes}`);
       }
     }
-    expect(violations, `amount columns not typed Decimal(39,0): ${violations.join(", ")}`).toEqual([]);
+    expect(violations, `amount columns not typed Decimal(39,0): ${violations.join(", ")}`).toEqual(
+      [],
+    );
   });
 
   it("no indexed column uses Float (floating point is banned on amounts)", () => {

@@ -20,7 +20,11 @@ function load(rel: string): Record<string, unknown> {
 }
 
 /** A tx-search-shaped tx from a run-epoch fixture (hash/height/events). */
-function txOf(fixture: Record<string, unknown>): { hash: string; height: bigint; events: RawEvent[] } {
+function txOf(fixture: Record<string, unknown>): {
+  hash: string;
+  height: bigint;
+  events: RawEvent[];
+} {
   const resp = fixture["tx_response"] as Record<string, unknown>;
   return {
     hash: String(resp["txhash"]),

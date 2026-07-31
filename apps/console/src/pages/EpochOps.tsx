@@ -30,25 +30,50 @@ export function EpochOps() {
     <div className="stack">
       <div>
         <h1 className="page-title">Epoch &amp; Operations</h1>
-        <p className="page-sub">Drive the four permissionless cranks with honest guard state; read the last epoch leg by leg.</p>
+        <p className="page-sub">
+          Drive the four permissionless cranks with honest guard state; read the last epoch leg by
+          leg.
+        </p>
       </div>
 
       {/* Rank 1: the cranks */}
       <Panel title="Cranks">
         <div className="row" style={{ alignItems: "flex-start", gap: 16 }}>
-          <GuardButton guard={guardClaimRewards(gi)} variant="secondary" onClick={() => tx.submit({ title: "Claim rewards", message: msg.claimRewards(), onDone })}>
+          <GuardButton
+            guard={guardClaimRewards(gi)}
+            variant="secondary"
+            onClick={() =>
+              tx.submit({ title: "Claim rewards", message: msg.claimRewards(), onDone })
+            }
+          >
             Claim rewards
           </GuardButton>
           <div className="callout callout--info" style={{ alignSelf: "center", maxWidth: 260 }}>
             Claim before Run so the epoch's deposit includes current rewards (contract §11.2).
           </div>
-          <GuardButton guard={guardRunEpoch(gi)} variant="primary" onClick={() => tx.submit({ title: "Run epoch", message: msg.runEpoch(), onDone })}>
+          <GuardButton
+            guard={guardRunEpoch(gi)}
+            variant="primary"
+            onClick={() => tx.submit({ title: "Run epoch", message: msg.runEpoch(), onDone })}
+          >
             Run epoch
           </GuardButton>
-          <GuardButton guard={guardServiceRedemptions(gi)} variant="secondary" onClick={() => tx.submit({ title: "Service redemptions", message: msg.serviceRedemptions(), onDone })}>
+          <GuardButton
+            guard={guardServiceRedemptions(gi)}
+            variant="secondary"
+            onClick={() =>
+              tx.submit({ title: "Service redemptions", message: msg.serviceRedemptions(), onDone })
+            }
+          >
             Service redemptions
           </GuardButton>
-          <GuardButton guard={guardCaptureUptime(gi)} variant="secondary" onClick={() => tx.submit({ title: "Capture uptime signal", message: msg.captureUptime(), onDone })}>
+          <GuardButton
+            guard={guardCaptureUptime(gi)}
+            variant="secondary"
+            onClick={() =>
+              tx.submit({ title: "Capture uptime signal", message: msg.captureUptime(), onDone })
+            }
+          >
             Capture uptime
           </GuardButton>
         </div>
@@ -63,47 +88,79 @@ export function EpochOps() {
             return (
               <div className="stack" style={{ gap: 12 }}>
                 <div className="row" style={{ gap: 8, alignItems: "center" }}>
-                  <Pill tone={e.halted ? "critical" : releasing ? "warning" : "good"}>{e.halted ? "Halted" : e.phase}</Pill>
+                  <Pill tone={e.halted ? "critical" : releasing ? "warning" : "good"}>
+                    {e.halted ? "Halted" : e.phase}
+                  </Pill>
                   <span className="muted">
-                    {releasing ? "Releasing: a deploy leg is draining continuation queues." : "Idle: no epoch in flight."}
+                    {releasing
+                      ? "Releasing: a deploy leg is draining continuation queues."
+                      : "Idle: no epoch in flight."}
                   </span>
-                  <Pill tone="neutral">last run {humanDuration(nowSecs - e.last_run_seconds)} ago</Pill>
+                  <Pill tone="neutral">
+                    last run {humanDuration(nowSecs - e.last_run_seconds)} ago
+                  </Pill>
                   <Pill tone={nowSecs >= nextAt ? "good" : "neutral"}>
-                    next {nowSecs >= nextAt ? "eligible now" : `in ${humanDuration(nextAt - nowSecs)}`}
+                    next{" "}
+                    {nowSecs >= nextAt ? "eligible now" : `in ${humanDuration(nextAt - nowSecs)}`}
                   </Pill>
                   <Pill tone="neutral">receipt_minted {hash(e.receipt_minted)} HASH</Pill>
                 </div>
                 {releasing && (
                   <div className="callout callout--info">
-                    Continuation pending: RunEpoch may be called now to continue (interval guard bypassed, contract §11.2).
+                    Continuation pending: RunEpoch may be called now to continue (interval guard
+                    bypassed, contract §11.2).
                   </div>
                 )}
                 <div className="grid-2">
                   <div>
-                    <div className="muted" style={{ marginBottom: 6 }}>pending delegations</div>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      pending delegations
+                    </div>
                     {e.pending_delegations.length === 0 ? (
                       <p className="muted-3">none</p>
                     ) : (
                       <table className="data">
-                        <thead><tr><th>valoper</th><th className="num">amount</th></tr></thead>
+                        <thead>
+                          <tr>
+                            <th>valoper</th>
+                            <th className="num">amount</th>
+                          </tr>
+                        </thead>
                         <tbody>
                           {e.pending_delegations.map((p) => (
-                            <tr key={p.valoper}><td><AddressChip addr={p.valoper} /></td><td className="num tnum">{hash(p.amount)} HASH</td></tr>
+                            <tr key={p.valoper}>
+                              <td>
+                                <AddressChip addr={p.valoper} />
+                              </td>
+                              <td className="num tnum">{hash(p.amount)} HASH</td>
+                            </tr>
                           ))}
                         </tbody>
                       </table>
                     )}
                   </div>
                   <div>
-                    <div className="muted" style={{ marginBottom: 6 }}>pending redelegations</div>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      pending redelegations
+                    </div>
                     {e.pending_redelegations.length === 0 ? (
                       <p className="muted-3">none</p>
                     ) : (
                       <table className="data">
-                        <thead><tr><th>src → dst</th><th className="num">amount</th></tr></thead>
+                        <thead>
+                          <tr>
+                            <th>src → dst</th>
+                            <th className="num">amount</th>
+                          </tr>
+                        </thead>
                         <tbody>
                           {e.pending_redelegations.map((p, i) => (
-                            <tr key={i}><td className="mono" style={{ fontSize: 12 }}>{p.src.slice(0, 10)}…→{p.dst.slice(0, 10)}…</td><td className="num tnum">{hash(p.amount)} HASH</td></tr>
+                            <tr key={i}>
+                              <td className="mono" style={{ fontSize: 12 }}>
+                                {p.src.slice(0, 10)}…→{p.dst.slice(0, 10)}…
+                              </td>
+                              <td className="num tnum">{hash(p.amount)} HASH</td>
+                            </tr>
                           ))}
                         </tbody>
                       </table>
@@ -118,11 +175,23 @@ export function EpochOps() {
 
       {/* Rank 3: last snapshot decomposition + identity */}
       <Panel title="Last epoch snapshot">
-        <Cell cell={snap} empty={<p className="muted">No epoch has run yet (snapshot is None before the first crank).</p>}>
+        <Cell
+          cell={snap}
+          empty={
+            <p className="muted">No epoch has run yet (snapshot is None before the first crank).</p>
+          }
+        >
           {(s) => {
             const ok = epochIdentity(s);
             const leg = (label: string, v: string) => (
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "3px 0" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  padding: "3px 0",
+                }}
+              >
                 <span className="muted">{label}</span>
                 <span className="tnum">{hash(v)} HASH</span>
               </div>
@@ -132,11 +201,15 @@ export function EpochOps() {
                 <div className="row" style={{ alignItems: "center", gap: 12 }}>
                   <Pill tone="neutral">epoch #{s.epoch_index}</Pill>
                   <Pill tone={ok ? "good" : "critical"}>identity {ok ? "pass" : "FAIL"}</Pill>
-                  <span className="muted-3" style={{ fontSize: 12 }}>tvv_after == tvv_before + rewards_deposited − write_down</span>
+                  <span className="muted-3" style={{ fontSize: 12 }}>
+                    tvv_after == tvv_before + rewards_deposited − write_down
+                  </span>
                 </div>
                 <div className="grid-2">
                   <div>
-                    <div className="muted" style={{ fontWeight: 600, marginBottom: 4 }}>value legs</div>
+                    <div className="muted" style={{ fontWeight: 600, marginBottom: 4 }}>
+                      value legs
+                    </div>
                     {leg("rewards deposited", s.rewards_deposited)}
                     {leg("settled", s.settled)}
                     {leg("write-down", s.write_down)}
@@ -144,11 +217,28 @@ export function EpochOps() {
                     {leg("rebalanced", s.rebalanced)}
                   </div>
                   <div>
-                    <div className="muted" style={{ fontWeight: 600, marginBottom: 4 }}>redemption &amp; ops legs</div>
+                    <div className="muted" style={{ fontWeight: 600, marginBottom: 4 }}>
+                      redemption &amp; ops legs
+                    </div>
                     {leg("unbonded for redemptions", s.unbonded_for_redemptions)}
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}><span className="muted">redemptions expedited</span><span className="tnum">{s.redemptions_expedited}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}><span className="muted">validators purged</span><span className="tnum">{s.validators_purged}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}><span className="muted">eligible count</span><span className="tnum">{s.eligible_count}</span></div>
+                    <div
+                      style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}
+                    >
+                      <span className="muted">redemptions expedited</span>
+                      <span className="tnum">{s.redemptions_expedited}</span>
+                    </div>
+                    <div
+                      style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}
+                    >
+                      <span className="muted">validators purged</span>
+                      <span className="tnum">{s.validators_purged}</span>
+                    </div>
+                    <div
+                      style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}
+                    >
+                      <span className="muted">eligible count</span>
+                      <span className="tnum">{s.eligible_count}</span>
+                    </div>
                     {leg("AUM fee estimate", s.aum_fee_estimate)}
                   </div>
                 </div>

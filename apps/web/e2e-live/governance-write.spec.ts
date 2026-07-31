@@ -55,7 +55,10 @@ test("the composer gate resolves to exactly one state, and states which", async 
 test("the template picker offers exactly the program's admin actions, and no free-form field", async ({
   page,
 }) => {
-  test.skip(MEMBER_KEY === undefined, "E2E_LIVE_GOV_MEMBER_KEY not set — composer form unreachable");
+  test.skip(
+    MEMBER_KEY === undefined,
+    "E2E_LIVE_GOV_MEMBER_KEY not set — composer form unreachable",
+  );
   await page.goto("/governance/new");
 
   // Proposal creation is TEMPLATE-SCOPED (§8.7, and the boundary doc's split:
@@ -72,13 +75,18 @@ test("the template picker offers exactly the program's admin actions, and no fre
   }
   // Bridge config has NO template: absent, and the absence is stated.
   await expect(page.getByRole("button", { name: /bridge/i })).toHaveCount(0);
-  await expect(page.getByText("Bridge configuration has no template", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("Bridge configuration has no template", { exact: false }),
+  ).toBeVisible();
 });
 
 test("the config diff shows current → proposed and leaves untouched fields visible", async ({
   page,
 }) => {
-  test.skip(MEMBER_KEY === undefined, "E2E_LIVE_GOV_MEMBER_KEY not set — composer form unreachable");
+  test.skip(
+    MEMBER_KEY === undefined,
+    "E2E_LIVE_GOV_MEMBER_KEY not set — composer form unreachable",
+  );
   await page.goto("/governance/new");
   await page.getByRole("button", { name: "Update program configuration" }).click();
 
@@ -92,7 +100,10 @@ test("the config diff shows current → proposed and leaves untouched fields vis
 });
 
 test("a value outside a contract bound is REJECTED, never clamped", async ({ page }) => {
-  test.skip(MEMBER_KEY === undefined, "E2E_LIVE_GOV_MEMBER_KEY not set — composer form unreachable");
+  test.skip(
+    MEMBER_KEY === undefined,
+    "E2E_LIVE_GOV_MEMBER_KEY not set — composer form unreachable",
+  );
   await page.goto("/governance/new");
   await page.getByRole("button", { name: "Update program configuration" }).click();
 

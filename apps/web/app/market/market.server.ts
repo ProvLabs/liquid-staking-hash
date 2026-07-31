@@ -57,7 +57,11 @@ export async function loadMarketData(
                 ? null
                 : {
                     venue: summary.data.sample.venue,
-                    priceHash: formatBaseAmount(BigInt(summary.data.sample.price), HASH_EXPONENT, 4),
+                    priceHash: formatBaseAmount(
+                      BigInt(summary.data.sample.price),
+                      HASH_EXPONENT,
+                      4,
+                    ),
                     premiumPercent:
                       summary.data.sample.premium_discount_bps === null
                         ? null

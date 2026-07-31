@@ -26,7 +26,9 @@ test.skip(
 
 const DEPOSIT = 1_000_000n; // 0.001 HASH
 
-test("stake preview matches the minted nvHASH (execution-time rate honesty)", async ({ request }) => {
+test("stake preview matches the minted nvHASH (execution-time rate honesty)", async ({
+  request,
+}) => {
   const signer = new DevnetTestSigner(KEY!);
   const lcd = new LcdClient(LCD!);
   const vaultClient = new VaultClient(lcd);
@@ -65,7 +67,12 @@ test("stake preview matches the minted nvHASH (execution-time rate honesty)", as
 
   const sim = (await (
     await request.post("/tx/simulate", {
-      data: { kind: "swap_in", amount: DEPOSIT.toString(), denom: pf.denom, pubkey: signer.pubkeyBase64 },
+      data: {
+        kind: "swap_in",
+        amount: DEPOSIT.toString(),
+        denom: pf.denom,
+        pubkey: signer.pubkeyBase64,
+      },
     })
   ).json()) as {
     fee: { gas_limit: string; amount: string; denom: string };
@@ -89,7 +96,9 @@ test("stake preview matches the minted nvHASH (execution-time rate honesty)", as
       pubkeyBase64: signer.pubkeyBase64,
     },
   );
-  const txRaw = encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [signer.signDirect(plan.signDocBytes)]);
+  const txRaw = encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [
+    signer.signDirect(plan.signDocBytes),
+  ]);
   const broadcast = (await (
     await request.post("/tx/broadcast", { data: { tx_raw: Buffer.from(txRaw).toString("base64") } })
   ).json()) as { txhash: string; code: number };

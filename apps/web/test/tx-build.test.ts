@@ -199,9 +199,7 @@ describe("governance messages encode to exactly one canonical byte string", () =
     // 12 29 <41 bytes> field 2 string = the voter
     // 18 01            field 3 varint = VOTE_OPTION_YES
     // …and no field 4 (metadata) or field 5 (exec): the pins are ABSENCE.
-    expect(hex(value)).toBe(
-      `080c1229${Buffer.from(GOV_VOTER, "utf8").toString("hex")}1801`,
-    );
+    expect(hex(value)).toBe(`080c1229${Buffer.from(GOV_VOTER, "utf8").toString("hex")}1801`);
   });
 
   it("MsgVote's option byte is the module's enum value, per option", () => {
@@ -302,9 +300,7 @@ describe("governance messages encode to exactly one canonical byte string", () =
       proposer: GOV_VOTER,
       policyAddress: GOV_POLICY_ADDR,
       contractAddress: GOV_CONTRACT_ADDR,
-      templates: [
-        { id: "update_config", values: { commission_bps: 1_000n, aum_fee_bps: 25n } },
-      ],
+      templates: [{ id: "update_config", values: { commission_bps: 1_000n, aum_fee_bps: 25n } }],
       title: "Retune",
       summary: "Adjust two parameters.",
       metadata: "",
@@ -312,9 +308,7 @@ describe("governance messages encode to exactly one canonical byte string", () =
     // Input key order differs; the canonical output must not.
     const other = {
       ...intent,
-      templates: [
-        { id: "update_config", values: { aum_fee_bps: 25n, commission_bps: 1_000n } },
-      ],
+      templates: [{ id: "update_config", values: { aum_fee_bps: 25n, commission_bps: 1_000n } }],
     };
     expect(hex(encodeIntentMsg(intent).value)).toBe(hex(encodeIntentMsg(other).value));
   });

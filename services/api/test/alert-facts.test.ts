@@ -20,27 +20,118 @@ const facts: FakeFacts = {
   reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
   redemptions: [
     // lastHeight spread across the cursor boundary so windowing is observable.
-    { requestId: "req-1", owner: OWNER_A, shares: 500n, status: "matured", enqueuedAt: new Date("2026-05-01T00:00:00Z"), expeditedAt: null, maturedAt: new Date("2026-05-20T00:00:00Z"), refundedAt: null, lastHeight: 100n, lastTxhash: "AA" },
-    { requestId: "req-2", owner: OWNER_B, shares: 200n, status: "expedited", enqueuedAt: new Date("2026-05-02T00:00:00Z"), expeditedAt: new Date("2026-05-10T00:00:00Z"), maturedAt: null, refundedAt: null, lastHeight: 200n, lastTxhash: "BB" },
-    { requestId: "req-3", owner: OWNER_A, shares: 300n, status: "refunded", enqueuedAt: new Date("2026-05-03T00:00:00Z"), expeditedAt: null, maturedAt: null, refundedAt: new Date("2026-06-01T00:00:00Z"), lastHeight: 300n, lastTxhash: "CC" },
+    {
+      requestId: "req-1",
+      owner: OWNER_A,
+      shares: 500n,
+      status: "matured",
+      enqueuedAt: new Date("2026-05-01T00:00:00Z"),
+      expeditedAt: null,
+      maturedAt: new Date("2026-05-20T00:00:00Z"),
+      refundedAt: null,
+      lastHeight: 100n,
+      lastTxhash: "AA",
+    },
+    {
+      requestId: "req-2",
+      owner: OWNER_B,
+      shares: 200n,
+      status: "expedited",
+      enqueuedAt: new Date("2026-05-02T00:00:00Z"),
+      expeditedAt: new Date("2026-05-10T00:00:00Z"),
+      maturedAt: null,
+      refundedAt: null,
+      lastHeight: 200n,
+      lastTxhash: "BB",
+    },
+    {
+      requestId: "req-3",
+      owner: OWNER_A,
+      shares: 300n,
+      status: "refunded",
+      enqueuedAt: new Date("2026-05-03T00:00:00Z"),
+      expeditedAt: null,
+      maturedAt: null,
+      refundedAt: new Date("2026-06-01T00:00:00Z"),
+      lastHeight: 300n,
+      lastTxhash: "CC",
+    },
   ],
   alertIncidents: [
-    { id: 1n, kind: "vault_paused", severity: "critical", dedupeKey: "vault:1", openedAt: new Date("2026-06-01T00:00:00Z"), openedHeight: 150n },
-    { id: 2n, kind: "jail_report", severity: "warning", dedupeKey: "jail:pbvaloper1aaa", openedAt: new Date("2026-06-02T00:00:00Z"), openedHeight: 260n },
-    { id: 3n, kind: "reconciler_divergence", severity: "critical", dedupeKey: "recon:nav", openedAt: new Date("2026-06-03T00:00:00Z"), openedHeight: null },
+    {
+      id: 1n,
+      kind: "vault_paused",
+      severity: "critical",
+      dedupeKey: "vault:1",
+      openedAt: new Date("2026-06-01T00:00:00Z"),
+      openedHeight: 150n,
+    },
+    {
+      id: 2n,
+      kind: "jail_report",
+      severity: "warning",
+      dedupeKey: "jail:pbvaloper1aaa",
+      openedAt: new Date("2026-06-02T00:00:00Z"),
+      openedHeight: 260n,
+    },
+    {
+      id: 3n,
+      kind: "reconciler_divergence",
+      severity: "critical",
+      dedupeKey: "recon:nav",
+      openedAt: new Date("2026-06-03T00:00:00Z"),
+      openedHeight: null,
+    },
   ],
   registry: [
     { valoper: "pbvaloper1aaa", moniker: "alpha", unregisteredAt: null, operator: "pb1opalpha" },
     { valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null, operator: "pb1opbravo" },
     // charlie is UNREGISTERED — its arrears must never surface.
-    { valoper: "pbvaloper1ccc", moniker: "charlie", unregisteredAt: new Date("2026-05-01T00:00:00Z"), operator: "pb1opcharlie" },
+    {
+      valoper: "pbvaloper1ccc",
+      moniker: "charlie",
+      unregisteredAt: new Date("2026-05-01T00:00:00Z"),
+      operator: "pb1opcharlie",
+    },
   ],
   validatorEpochs: [
     // Latest epoch is 12. alpha owes; bravo is square; charlie owes but is unregistered.
-    { valoper: "pbvaloper1aaa", epochIndex: 11n, uptimeBps: 9000, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 999n },
-    { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 7n },
-    { valoper: "pbvaloper1bbb", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 0n },
-    { valoper: "pbvaloper1ccc", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 42n },
+    {
+      valoper: "pbvaloper1aaa",
+      epochIndex: 11n,
+      uptimeBps: 9000,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 999n,
+    },
+    {
+      valoper: "pbvaloper1aaa",
+      epochIndex: 12n,
+      uptimeBps: 9990,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 7n,
+    },
+    {
+      valoper: "pbvaloper1bbb",
+      epochIndex: 12n,
+      uptimeBps: 9990,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 0n,
+    },
+    {
+      valoper: "pbvaloper1ccc",
+      epochIndex: 12n,
+      uptimeBps: 9990,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 42n,
+    },
   ],
 };
 
@@ -48,7 +139,11 @@ function server(): Promise<RunningServer> {
   return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(facts));
 }
 
-async function getData<T>(s: RunningServer, path: string, headers = NOTIFIER): Promise<{ status: number; data: T }> {
+async function getData<T>(
+  s: RunningServer,
+  path: string,
+  headers = NOTIFIER,
+): Promise<{ status: number; data: T }> {
   const res = await fetch(`${s.baseUrl}${path}`, { headers });
   const body = (await res.json()) as { data: T };
   return { status: res.status, data: body.data };
@@ -154,7 +249,13 @@ describe("internal alert-facts: redemptions", () => {
   it("rejects out-of-bounds query params with 400 (bounded at entry)", async () => {
     const s = await server();
     try {
-      for (const qs of ["?limit=0", "?limit=501", "?since_height=-1", "?limit=abc", `?after_id=${"x".repeat(129)}`]) {
+      for (const qs of [
+        "?limit=0",
+        "?limit=501",
+        "?since_height=-1",
+        "?limit=abc",
+        `?after_id=${"x".repeat(129)}`,
+      ]) {
         const res = await fetch(`${s.baseUrl}${API_BASE}/internal/alert-facts/redemptions${qs}`, {
           headers: NOTIFIER,
         });

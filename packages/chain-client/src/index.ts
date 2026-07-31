@@ -14,7 +14,14 @@ export {
   parseUint128,
   type Coin,
 } from "./amounts.ts";
-export { LcdClient, LcdError, UnsupportedTransportError, type FetchLike, type LcdClientOptions, type QueryParams } from "./lcd.ts";
+export {
+  LcdClient,
+  LcdError,
+  UnsupportedTransportError,
+  type FetchLike,
+  type LcdClientOptions,
+  type QueryParams,
+} from "./lcd.ts";
 export { parsePagination, type Pagination } from "./types.ts";
 export {
   VaultClient,

@@ -98,7 +98,11 @@ export interface IndexedReader {
    * single latest-epoch snapshot); the cursor is efficiency, the notifier's
    * unique constraint is correctness.
    */
-  redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]>;
+  redemptionsChangedSince(
+    sinceHeight: number,
+    afterId: string,
+    limit: number,
+  ): Promise<AlertRedemptionFact[]>;
   incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]>;
   /** Validators with commission due in the latest sampled epoch (active only). */
   latestArrears(): Promise<AlertArrearsFact[]>;
@@ -159,7 +163,9 @@ export interface IndexedReader {
     filter: { policy?: string; status?: string },
   ): Promise<{ proposals: GovProposalFacts[]; indexedFromHeight: number | null }>;
   /** One proposal with its votes, or null when the mirror has never seen the id. */
-  govProposal(proposalId: bigint): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
+  govProposal(
+    proposalId: bigint,
+  ): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
   /** The HISTORICAL policy set observed in the mirror, newest activity first. */
   listGovPolicies(): Promise<GovPolicyFacts[]>;
 }

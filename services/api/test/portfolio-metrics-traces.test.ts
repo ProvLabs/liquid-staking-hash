@@ -200,7 +200,8 @@ function stepGainSum(
     const e = epochs[j]!;
     if (p.totalShares > 0n && e.totalShares > 0n && e.endedAtSeconds > firstDepSec) {
       const s = sharesAt(txs, e.endedAtSeconds);
-      sum += valueAtLocal(s, e.tvvAfter, e.totalShares)! - valueAtLocal(s, p.tvvAfter, p.totalShares)!;
+      sum +=
+        valueAtLocal(s, e.tvvAfter, e.totalShares)! - valueAtLocal(s, p.tvvAfter, p.totalShares)!;
     }
   }
   return sum;
@@ -305,7 +306,8 @@ describe("portfolio-metrics sim-trace replay (R3)", () => {
         for (let j = 1; j < epochs.length; j += 1) {
           const p = epochs[j - 1]!;
           const e = epochs[j]!;
-          if (!(p.totalShares > 0n && e.totalShares > 0n && p.endedAtSeconds >= firstDepSec!)) continue;
+          if (!(p.totalShares > 0n && e.totalShares > 0n && p.endedAtSeconds >= firstDepSec!))
+            continue;
           const s = sharesAt(txs, e.endedAtSeconds);
           const dur = e.endedAtSeconds - p.endedAtSeconds;
           const vp = valueAtLocal(s, p.tvvAfter, p.totalShares)!;
@@ -331,7 +333,8 @@ describe("portfolio-metrics sim-trace replay (R3)", () => {
         const gain = stepGainSum(txs, epochs, firstDepSec);
         const dust = BigInt(txs.length + epochs.length);
         if (gain > dust) expect(result.effective_apr_bps! > 0, "positive gain → +apr").toBe(true);
-        else if (gain < -dust) expect(result.effective_apr_bps! < 0, "negative gain → -apr").toBe(true);
+        else if (gain < -dust)
+          expect(result.effective_apr_bps! < 0, "negative gain → -apr").toBe(true);
       });
 
       it("holds over 3 seeded random prefixes", () => {
@@ -351,7 +354,9 @@ describe("portfolio-metrics sim-trace replay (R3)", () => {
         for (const idx of refundIdx) {
           const before = derivePortfolioMetrics(POOLED, txs.slice(0, idx), epochs);
           const after = derivePortfolioMetrics(POOLED, txs.slice(0, idx + 1), epochs);
-          expect(after.realized_gain_nhash, `refund at seq ${idx}`).toBe(before.realized_gain_nhash);
+          expect(after.realized_gain_nhash, `refund at seq ${idx}`).toBe(
+            before.realized_gain_nhash,
+          );
         }
       });
 
@@ -360,7 +365,12 @@ describe("portfolio-metrics sim-trace replay (R3)", () => {
         let sor = 0n;
         let pay = 0n;
         let ref = 0n;
-        const counts = { swap_in: 0, swap_out_request: 0, redemption_payout: 0, redemption_refund: 0 };
+        const counts = {
+          swap_in: 0,
+          swap_out_request: 0,
+          redemption_payout: 0,
+          redemption_refund: 0,
+        };
         for (const ev of trace.events) {
           if (ev.kind === "swap_out_request") sor += BigInt(ev.shares);
           else if (ev.kind === "redemption_payout") pay += BigInt(ev.shares);

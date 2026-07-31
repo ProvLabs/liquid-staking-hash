@@ -50,7 +50,9 @@ export class RateLimiter {
       throw new RangeError(`rate limit max must be a positive integer, got ${options.max}`);
     }
     if (!Number.isInteger(options.windowMs) || options.windowMs < 1) {
-      throw new RangeError(`rate limit windowMs must be a positive integer, got ${options.windowMs}`);
+      throw new RangeError(
+        `rate limit windowMs must be a positive integer, got ${options.windowMs}`,
+      );
     }
     this.#max = options.max;
     this.#windowMs = options.windowMs;

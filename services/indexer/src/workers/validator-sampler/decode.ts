@@ -48,8 +48,11 @@ export function parseValidatorStatus(value: unknown, path = "$"): ValidatorStatu
   return {
     valoper: expectString(o["valoper"], `${path}.valoper`),
     operator: expectString(o["operator"], `${path}.operator`),
-    enrolledAtSeconds: BigInt(parseU64Number(o["enrolled_at_seconds"], `${path}.enrolled_at_seconds`)),
-    uptimeBps: uptime === null || uptime === undefined ? null : parseU64Number(uptime, `${path}.uptime_bps`),
+    enrolledAtSeconds: BigInt(
+      parseU64Number(o["enrolled_at_seconds"], `${path}.enrolled_at_seconds`),
+    ),
+    uptimeBps:
+      uptime === null || uptime === undefined ? null : parseU64Number(uptime, `${path}.uptime_bps`),
     jailed: expectBool(o["jailed"], `${path}.jailed`),
     tombstoned: expectBool(o["tombstoned"], `${path}.tombstoned`),
     inArrears: expectBool(o["in_arrears"], `${path}.in_arrears`),
@@ -77,8 +80,15 @@ export function parseJailReports(data: unknown, path = "$"): JailReport[] {
     const jr = expectObject(r, `${path}.reports[${i}]`);
     return {
       valoper: expectString(jr["valoper"], `${path}.reports[${i}].valoper`),
-      reportedAtSeconds: BigInt(parseU64Number(jr["reported_at_seconds"], `${path}.reports[${i}].reported_at_seconds`)),
-      purgeReadyAtSeconds: BigInt(parseU64Number(jr["purge_ready_at_seconds"], `${path}.reports[${i}].purge_ready_at_seconds`)),
+      reportedAtSeconds: BigInt(
+        parseU64Number(jr["reported_at_seconds"], `${path}.reports[${i}].reported_at_seconds`),
+      ),
+      purgeReadyAtSeconds: BigInt(
+        parseU64Number(
+          jr["purge_ready_at_seconds"],
+          `${path}.reports[${i}].purge_ready_at_seconds`,
+        ),
+      ),
     };
   });
 }
@@ -90,7 +100,10 @@ export function parseMonikers(body: unknown, path = "$"): Map<string, string> {
   for (const v of expectArray(o["validators"], `${path}.validators`)) {
     const vo = expectObject(v, `${path}.validators[]`);
     const desc = expectObject(vo["description"], `${path}.validators[].description`);
-    map.set(expectString(vo["operator_address"], `${path}.operator_address`), String(desc["moniker"] ?? ""));
+    map.set(
+      expectString(vo["operator_address"], `${path}.operator_address`),
+      String(desc["moniker"] ?? ""),
+    );
   }
   return map;
 }
@@ -104,7 +117,10 @@ export function parseProgramDelegations(body: unknown, path = "$"): Map<string, 
     const del = expectObject(dr["delegation"], `${path}.delegation_responses[].delegation`);
     const bal = expectObject(dr["balance"], `${path}.delegation_responses[].balance`);
     map.set(
-      expectString(del["validator_address"], `${path}.delegation_responses[].delegation.validator_address`),
+      expectString(
+        del["validator_address"],
+        `${path}.delegation_responses[].delegation.validator_address`,
+      ),
       parseUint128(bal["amount"], `${path}.delegation_responses[].balance.amount`),
     );
   }

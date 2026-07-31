@@ -69,7 +69,10 @@ export class ProtoWriter {
    */
   message(field: number, encoded: Uint8Array, alwaysEmit = false): this {
     if (encoded.length === 0 && !alwaysEmit) return this;
-    this.parts.push(...varintBytes(BigInt((field << 3) | 2)), ...varintBytes(BigInt(encoded.length)));
+    this.parts.push(
+      ...varintBytes(BigInt((field << 3) | 2)),
+      ...varintBytes(BigInt(encoded.length)),
+    );
     for (const b of encoded) this.parts.push(b);
     return this;
   }

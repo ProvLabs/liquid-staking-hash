@@ -65,7 +65,11 @@ export function History({
           firstXLabel={`#${navRows[0]!.epoch_index}`}
           lastXLabel={`#${navRows[navRows.length - 1]!.epoch_index}`}
           formatAxisValue={(value) => value.toFixed(4)}
-          tableHeaders={[settledCol, t(locale, "learn.chart-col-ended"), t(locale, "learn.chart-col-nav")]}
+          tableHeaders={[
+            settledCol,
+            t(locale, "learn.chart-col-ended"),
+            t(locale, "learn.chart-col-nav"),
+          ]}
           tableRows={navRows.map((row) => [String(row.epoch_index), dateOf(row), row.nav])}
         />
       )}
@@ -80,7 +84,11 @@ export function History({
           firstXLabel={`#${rows[0]!.epoch_index}`}
           lastXLabel={`#${rows[rows.length - 1]!.epoch_index}`}
           formatAxisValue={(value) => value.toFixed(2)}
-          tableHeaders={[settledCol, t(locale, "learn.chart-col-ended"), t(locale, "market.history-tvv-col")]}
+          tableHeaders={[
+            settledCol,
+            t(locale, "learn.chart-col-ended"),
+            t(locale, "market.history-tvv-col"),
+          ]}
           tableRows={rows.map((row) => [
             String(row.epoch_index),
             dateOf(row),
@@ -99,7 +107,11 @@ export function History({
           firstXLabel={`#${aprRows[0]!.epoch_index}`}
           lastXLabel={`#${aprRows[aprRows.length - 1]!.epoch_index}`}
           formatAxisValue={(value) => `${value.toFixed(2)}%`}
-          tableHeaders={[settledCol, t(locale, "learn.chart-col-ended"), t(locale, "market.history-apr-col")]}
+          tableHeaders={[
+            settledCol,
+            t(locale, "learn.chart-col-ended"),
+            t(locale, "market.history-apr-col"),
+          ]}
           tableRows={aprRows.map((row) => [
             String(row.epoch_index),
             dateOf(row),

@@ -37,6 +37,7 @@ export function parseModels(source = readSchemaSource()): PrismaModel[] {
   const models: PrismaModel[] = [];
   const modelRe = /model\s+(\w+)\s*\{([^}]*)\}/g;
   let match: RegExpExecArray | null;
+  // biome-ignore lint/suspicious/noAssignInExpressions: the canonical `exec` iteration idiom; `match` is explicitly typed and compared to null.
   while ((match = modelRe.exec(source)) !== null) {
     const name = match[1]!;
     const body = match[2]!;

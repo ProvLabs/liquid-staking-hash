@@ -90,7 +90,11 @@ const FLOWS: FlowSpec[] = [
   {
     variant: "purge_jailed_validator",
     labelKey: "operator.flow-purge-jailed",
-    summaryKeys: ["operator.confirm-purge-1", "operator.confirm-purge-2", "operator.confirm-purge-3"],
+    summaryKeys: [
+      "operator.confirm-purge-1",
+      "operator.confirm-purge-2",
+      "operator.confirm-purge-3",
+    ],
     tier: "danger",
     funded: false,
   },

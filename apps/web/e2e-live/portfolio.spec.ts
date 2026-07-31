@@ -12,7 +12,10 @@ const KEY = process.env.E2E_LIVE_SIGNER_KEY;
 test.skip(KEY === undefined, "E2E_LIVE_SIGNER_KEY not set (needs the devnet stack)");
 
 /** nonce → ADR-36 login; returns the session cookie value for a browser context. */
-async function login(request: import("@playwright/test").APIRequestContext, signer: DevnetTestSigner) {
+async function login(
+  request: import("@playwright/test").APIRequestContext,
+  signer: DevnetTestSigner,
+) {
   const nonceRes = await request.post("/session/nonce", { data: { address: signer.address } });
   expect(nonceRes.ok()).toBe(true);
   const { nonce, challenge } = (await nonceRes.json()) as { nonce: string; challenge: string };

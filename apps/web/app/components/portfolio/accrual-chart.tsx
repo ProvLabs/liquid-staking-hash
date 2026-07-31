@@ -80,7 +80,9 @@ export function AccrualChart({ locale, accrual }: { locale: Locale; accrual: Acc
         ])}
       />
       {accrual.historyTruncated ? (
-        <p className="text-xs text-muted-foreground">{t(locale, "portfolio.accrual-history-truncated")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t(locale, "portfolio.accrual-history-truncated")}
+        </p>
       ) : null}
       {accrual.truncated ? (
         <p className="text-xs text-muted-foreground">{t(locale, "portfolio.accrual-truncated")}</p>

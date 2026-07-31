@@ -17,13 +17,17 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const classification = JSON.parse(readFileSync(join(appDir, "scripts/server-only-env.json"), "utf8"));
+const classification = JSON.parse(
+  readFileSync(join(appDir, "scripts/server-only-env.json"), "utf8"),
+);
 
 const sentinels = new Map(
   classification.serverOnly.map((key) => [key, `NVHASH_SERVER_ONLY_${key}_SENTINEL_MUST_NOT_SHIP`]),
 );
 
-console.log(`[check-bundle-secrets] building with sentinels in: ${[...sentinels.keys()].join(", ")}`);
+console.log(
+  `[check-bundle-secrets] building with sentinels in: ${[...sentinels.keys()].join(", ")}`,
+);
 
 const build = spawnSync("corepack", ["pnpm", "exec", "react-router", "build"], {
   cwd: appDir,

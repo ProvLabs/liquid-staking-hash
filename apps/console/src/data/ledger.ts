@@ -15,7 +15,8 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "epoch_index" });
+      if (!db.objectStoreNames.contains(STORE))
+        db.createObjectStore(STORE, { keyPath: "epoch_index" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -28,11 +29,14 @@ export async function ledgerAll(): Promise<LedgerRow[]> {
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, "readonly");
       const req = tx.objectStore(STORE).getAll();
-      req.onsuccess = () => resolve((req.result as LedgerRow[]).sort((a, b) => a.epoch_index - b.epoch_index));
+      req.onsuccess = () =>
+        resolve((req.result as LedgerRow[]).sort((a, b) => a.epoch_index - b.epoch_index));
       req.onerror = () => reject(req.error);
     });
   } catch {
-    return memFallback ? [...memFallback.values()].sort((a, b) => a.epoch_index - b.epoch_index) : [];
+    return memFallback
+      ? [...memFallback.values()].sort((a, b) => a.epoch_index - b.epoch_index)
+      : [];
   }
 }
 

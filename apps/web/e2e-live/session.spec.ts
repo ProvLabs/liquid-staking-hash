@@ -67,7 +67,7 @@ test("nonce → ADR-36 login → HttpOnly session; replay refused; logout kills 
   // Logout destroys the row: the same cookie is dead server-side.
   const logoutRes = await request.post("/session/logout", { data: {} });
   expect(logoutRes.ok()).toBe(true);
-  const status = await request.get("/tx/status?hash=" + "0".repeat(64));
+  const status = await request.get(`/tx/status?hash=${"0".repeat(64)}`);
   expect(status.status()).toBe(401);
   await context.close();
 });

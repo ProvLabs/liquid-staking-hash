@@ -17,7 +17,10 @@ import { DevnetTestSigner } from "./signer";
 const KEY = process.env.E2E_LIVE_SIGNER_KEY;
 test.skip(KEY === undefined, "E2E_LIVE_SIGNER_KEY not set (needs the devnet stack)");
 
-async function login(request: import("@playwright/test").APIRequestContext, signer: DevnetTestSigner) {
+async function login(
+  request: import("@playwright/test").APIRequestContext,
+  signer: DevnetTestSigner,
+) {
   const nonceRes = await request.post("/session/nonce", { data: { address: signer.address } });
   expect(nonceRes.ok()).toBe(true);
   const { nonce, challenge } = (await nonceRes.json()) as { nonce: string; challenge: string };
@@ -32,7 +35,10 @@ async function login(request: import("@playwright/test").APIRequestContext, sign
   return value!;
 }
 
-test("authenticated alert-settings CRUD roundtrip + notifications shape", async ({ playwright, baseURL }) => {
+test("authenticated alert-settings CRUD roundtrip + notifications shape", async ({
+  playwright,
+  baseURL,
+}) => {
   const signer = new DevnetTestSigner(KEY!);
   const request = await playwright.request.newContext({ baseURL });
   try {
@@ -49,10 +55,14 @@ test("authenticated alert-settings CRUD roundtrip + notifications shape", async 
     expect(byKind.get("nav_step_posted")).toMatchObject({ enabled: false, isDefault: false });
 
     // Opt in to nav steps, then confirm it persisted.
-    const post = await request.post("/alerts/rules", { data: { kind: "nav_step_posted", enabled: true } });
+    const post = await request.post("/alerts/rules", {
+      data: { kind: "nav_step_posted", enabled: true },
+    });
     expect(post.ok()).toBe(true);
     const afterRes = await request.get("/alerts/rules");
-    const after = (await afterRes.json()) as { settings: Array<{ kind: string; enabled: boolean }> };
+    const after = (await afterRes.json()) as {
+      settings: Array<{ kind: string; enabled: boolean }>;
+    };
     expect(after.settings.find((s) => s.kind === "nav_step_posted")!.enabled).toBe(true);
 
     // Restore the default so the run is idempotent.
@@ -66,14 +76,19 @@ test("authenticated alert-settings CRUD roundtrip + notifications shape", async 
     expect(typeof body.unread).toBe("number");
 
     // An unknown kind is rejected (reject, never guess).
-    const bad = await request.post("/alerts/rules", { data: { kind: "not_a_kind", enabled: true } });
+    const bad = await request.post("/alerts/rules", {
+      data: { kind: "not_a_kind", enabled: true },
+    });
     expect(bad.status()).toBe(400);
   } finally {
     await request.dispose();
   }
 });
 
-test("the Portfolio page renders the alert-settings section for a session", async ({ browser, baseURL }) => {
+test("the Portfolio page renders the alert-settings section for a session", async ({
+  browser,
+  baseURL,
+}) => {
   const signer = new DevnetTestSigner(KEY!);
   const request = await browser.newContext().then((c) => c.request);
   const cookie = await login(request, signer);

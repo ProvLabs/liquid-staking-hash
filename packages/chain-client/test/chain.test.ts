@@ -23,19 +23,25 @@ function lcdServing(body: unknown): LcdClient {
 
 describe("staking decoders against the devnet corpus", () => {
   it("decodes the validator set (tokens as bigint)", async () => {
-    const r = await new StakingClient(lcdServing(fixture("queries/staking/validators.json"))).validators();
+    const r = await new StakingClient(
+      lcdServing(fixture("queries/staking/validators.json")),
+    ).validators();
     expect(r.validators.length).toBeGreaterThan(0);
     for (const v of r.validators) {
       expect(typeof v.tokens).toBe("bigint");
       expect(v.operatorAddress).toMatch(/^tpvaloper1/);
     }
     // pagination total decodes to the exact value the corpus carries
-    const rawTotal = expectObject(expectObject(fixture("queries/staking/validators.json"))["pagination"])["total"];
+    const rawTotal = expectObject(
+      expectObject(fixture("queries/staking/validators.json"))["pagination"],
+    )["total"];
     expect(r.pagination.total).toBe(BigInt(rawTotal as string));
   });
 
   it("decodes the contract's program delegations", async () => {
-    const r = await new StakingClient(lcdServing(fixture("queries/staking/delegations.json"))).delegations("tp1contract");
+    const r = await new StakingClient(
+      lcdServing(fixture("queries/staking/delegations.json")),
+    ).delegations("tp1contract");
     expect(r.delegations.length).toBeGreaterThan(0);
     const d = r.delegations[0]!;
     expect(d.balance.denom).toBe("nhash");
@@ -75,7 +81,9 @@ describe("group decoders against the devnet corpus", () => {
   });
 
   it("decodes group members through the nested `member` envelope", async () => {
-    const r = await new GroupClient(lcdServing(fixture("queries/group/group-members.json"))).groupMembers(1n);
+    const r = await new GroupClient(
+      lcdServing(fixture("queries/group/group-members.json")),
+    ).groupMembers(1n);
     expect(r.members.length).toBeGreaterThan(0);
     for (const m of r.members) {
       expect(m.address).toMatch(/^tp1/);
@@ -175,7 +183,9 @@ describe("group decoders against the devnet corpus", () => {
     do {
       const r = await client.proposalsByGroupPolicy(
         "tp1policy",
-        key === null ? { "pagination.limit": "2" } : { "pagination.limit": "2", "pagination.key": key },
+        key === null
+          ? { "pagination.limit": "2" }
+          : { "pagination.limit": "2", "pagination.key": key },
       );
       seen.push(...r.proposals.map((p) => p.id));
       key = r.pagination.nextKey;
@@ -275,7 +285,12 @@ describe("group decoders against the devnet corpus", () => {
       group_version: "1",
       group_policy_version: "1",
       status: "PROPOSAL_STATUS_SOMETHING_NEW",
-      final_tally_result: { yes_count: "0", abstain_count: "0", no_count: "0", no_with_veto_count: "0" },
+      final_tally_result: {
+        yes_count: "0",
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      },
       voting_period_end: "2026-07-29T00:01:00Z",
       executor_result: "PROPOSAL_EXECUTOR_RESULT_WAT",
       messages: [],
@@ -286,10 +301,20 @@ describe("group decoders against the devnet corpus", () => {
 
   it("rejects a non-canonical tally count rather than coercing it", () => {
     expect(() =>
-      parseTallyResult({ yes_count: "1.5", abstain_count: "0", no_count: "0", no_with_veto_count: "0" }),
+      parseTallyResult({
+        yes_count: "1.5",
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      }),
     ).toThrow(/canonical unsigned integer/);
     expect(() =>
-      parseTallyResult({ yes_count: 2, abstain_count: "0", no_count: "0", no_with_veto_count: "0" }),
+      parseTallyResult({
+        yes_count: 2,
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      }),
     ).toThrow();
   });
 

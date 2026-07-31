@@ -37,7 +37,10 @@ export type Pagination = z.infer<typeof paginationSchema>;
 export const bech32AddressSchema = z
   .string()
   .max(90)
-  .regex(/^[a-z]{1,10}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/, "must be a bech32 account address");
+  .regex(
+    /^[a-z]{1,10}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/,
+    "must be a bech32 account address",
+  );
 
 /**
  * Bech32 VALIDATOR-operator address (`…valoper1…`), bounded at the boundary

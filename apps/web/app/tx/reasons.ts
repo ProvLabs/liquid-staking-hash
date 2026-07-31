@@ -9,11 +9,7 @@ import type { PreflightReason } from "./lifecycle";
 
 /** One localized sentence per reason. `denomExponent` scales amount details
  * (HASH for swap-in, shares for swap-out). */
-export function reasonText(
-  locale: Locale,
-  reason: PreflightReason,
-  denomExponent: number,
-): string {
+export function reasonText(locale: Locale, reason: PreflightReason, denomExponent: number): string {
   switch (reason.code) {
     case "vault-paused":
       return reason.detail

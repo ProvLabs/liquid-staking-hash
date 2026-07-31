@@ -58,19 +58,17 @@ export interface ExitContext {
   address: string | null;
   /** §9.5.3 typical time-to-payout (public); null when the API is unreadable. */
   payout: PayoutStats | null;
-  vault:
-    | {
-        shareDenom: string;
-        underlyingDenom: string;
-        paused: boolean;
-        pausedReason: string;
-        swapOutEnabled: boolean;
-        minSwapOut: string;
-        maxSwapOut: string;
-        totalShares: string;
-        totalValueNhash: string;
-      }
-    | null;
+  vault: {
+    shareDenom: string;
+    underlyingDenom: string;
+    paused: boolean;
+    pausedReason: string;
+    swapOutEnabled: boolean;
+    minSwapOut: string;
+    maxSwapOut: string;
+    totalShares: string;
+    totalValueNhash: string;
+  } | null;
   /** nvHASH balance (base units), null when anonymous/unread. */
   shareBalance: string | null;
   /** null when anonymous; each field degrades independently otherwise. */
@@ -137,26 +135,39 @@ export async function loadExitContext(
     const shareDenom = record?.totalShares.denom ?? "nvhash";
     const headers = personalApiHeaders(config, address);
     const authFetch: FetchLike = (url, init) =>
-      fetchImpl(url, { ...init, headers: { ...(init as { headers?: Record<string, string> }).headers, ...(headers ?? {}) } });
+      fetchImpl(url, {
+        ...init,
+        headers: { ...(init as { headers?: Record<string, string> }).headers, ...(headers ?? {}) },
+      });
 
     const [balance, pending, portfolioEnv, txEnv] = await Promise.all([
       bank.balance(address, shareDenom).catch(() => null),
       vaultClient.pendingSwapOuts(config.vaultAddress).catch(() => null),
       headers === null
         ? Promise.resolve(null)
-        : fetchApiJson(`${apiBase}/api/v1/portfolio?address=${encodeURIComponent(address)}`, authFetch, CHROME_READ_TIMEOUT_MS)
+        : fetchApiJson(
+            `${apiBase}/api/v1/portfolio?address=${encodeURIComponent(address)}`,
+            authFetch,
+            CHROME_READ_TIMEOUT_MS,
+          )
             .then((body) => portfolioEnvelopeSchema.parse(body))
             .catch(() => null),
       headers === null
         ? Promise.resolve(null)
-        : fetchApiJson(`${apiBase}/api/v1/transactions?address=${encodeURIComponent(address)}`, authFetch, CHROME_READ_TIMEOUT_MS)
+        : fetchApiJson(
+            `${apiBase}/api/v1/transactions?address=${encodeURIComponent(address)}`,
+            authFetch,
+            CHROME_READ_TIMEOUT_MS,
+          )
             .then((body) => transactionsEnvelopeSchema.parse(body))
             .catch(() => null),
     ]);
 
     shareBalance = balance === null ? null : balance.amount.toString();
     const terminal: TerminalLeg[] = (txEnv?.data ?? [])
-      .filter((t: TransactionRow) => t.kind === "redemption_payout" || t.kind === "redemption_refund")
+      .filter(
+        (t: TransactionRow) => t.kind === "redemption_payout" || t.kind === "redemption_refund",
+      )
       .map((t: TransactionRow) => ({
         kind: t.kind as TerminalLeg["kind"],
         shares: t.shares,

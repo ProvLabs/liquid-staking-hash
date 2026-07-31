@@ -77,7 +77,10 @@ export function ActiveRedemptions({
                       })
                     : null;
             return (
-              <li key={r.requestId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-4">
+              <li
+                key={r.requestId}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-4"
+              >
                 <div className="flex flex-col gap-1">
                   <span className="font-medium tabular-nums">
                     {t(locale, "portfolio.redemption-shares", { shares: r.sharesDisplay })}
@@ -88,7 +91,13 @@ export function ActiveRedemptions({
                   </span>
                 </div>
                 <span className="inline-flex items-center gap-1.5 text-sm">
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" className="h-3 w-3 shrink-0" style={{ fill: status.token }}>
+                  <svg
+                    aria-hidden="true"
+                    focusable="false"
+                    viewBox="0 0 16 16"
+                    className="h-3 w-3 shrink-0"
+                    style={{ fill: status.token }}
+                  >
                     <path d={status.iconPath} />
                   </svg>
                   {t(locale, status.labelKey)}
@@ -98,7 +107,9 @@ export function ActiveRedemptions({
           })}
         </ul>
       )}
-      <p className="text-xs text-muted-foreground">{t(locale, "portfolio.redemptions-tracker-note")}</p>
+      <p className="text-xs text-muted-foreground">
+        {t(locale, "portfolio.redemptions-tracker-note")}
+      </p>
     </section>
   );
 }

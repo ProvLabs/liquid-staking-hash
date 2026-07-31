@@ -15,11 +15,11 @@
     <title>nvHASH Console</title>
     <!-- Pre-paint theme resolution so the first frame is the right surface (no flash). -->
     <script>
-      (function () {
+      (() => {
         try {
-          var t = localStorage.getItem("nvhash.theme");
+          const t = localStorage.getItem("nvhash.theme");
           if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
-        } catch (e) {}
+        } catch (_e) {}
       })();
     </script>
   </head>

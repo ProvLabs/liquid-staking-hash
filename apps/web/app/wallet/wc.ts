@@ -124,10 +124,7 @@ export class WcAdapter implements WalletAdapter {
     return { address, pubkeyBase64: pubkey };
   }
 
-  async signArbitrary(
-    signerAddress: string,
-    challengeText: string,
-  ): Promise<SignArbitraryResult> {
+  async signArbitrary(signerAddress: string, challengeText: string): Promise<SignArbitraryResult> {
     if (this.client === null || this.session === null) throw new Error("not connected");
     const signDoc = buildAdr36SignDoc(signerAddress, utf8ToBase64(challengeText));
     const response = await this.client.request<{

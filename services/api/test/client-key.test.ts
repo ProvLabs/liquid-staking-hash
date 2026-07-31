@@ -6,7 +6,10 @@ import type { IncomingMessage } from "node:http";
 import { describe, expect, it } from "vitest";
 import { clientKey } from "../src/http-server.ts";
 
-function fakeReq(headers: Record<string, string | string[] | undefined>, remoteAddress?: string): IncomingMessage {
+function fakeReq(
+  headers: Record<string, string | string[] | undefined>,
+  remoteAddress?: string,
+): IncomingMessage {
   return { headers, socket: { remoteAddress } } as unknown as IncomingMessage;
 }
 

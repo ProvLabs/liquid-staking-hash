@@ -23,7 +23,10 @@ describe("previewSharesOut", () => {
 
   it("reports empty-vault when there is no value or no shares", () => {
     expect(previewSharesOut(1_000_000_000n, 0n, 0n)).toEqual({ ok: false, reason: "empty-vault" });
-    expect(previewSharesOut(1_000_000_000n, 100n, 0n)).toEqual({ ok: false, reason: "empty-vault" });
+    expect(previewSharesOut(1_000_000_000n, 100n, 0n)).toEqual({
+      ok: false,
+      reason: "empty-vault",
+    });
   });
 });
 

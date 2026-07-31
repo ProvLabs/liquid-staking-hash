@@ -109,7 +109,11 @@ export function guardSignedTx(
     return { ok: false, status: 400, reason: "malformed transaction" };
   }
 
-  if (decoded.messages.length === 0 || decoded.signatureCount !== 1 || decoded.signerPubkeys.length !== 1) {
+  if (
+    decoded.messages.length === 0 ||
+    decoded.signatureCount !== 1 ||
+    decoded.signerPubkeys.length !== 1
+  ) {
     return { ok: false, status: 400, reason: "expected exactly one signer" };
   }
 

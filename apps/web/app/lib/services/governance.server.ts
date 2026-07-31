@@ -119,7 +119,7 @@ async function pageAll<T>(
   read: (key: string | undefined) => Promise<{ items: T[]; nextKey: string | null }>,
 ): Promise<{ items: T[]; truncated: boolean }> {
   const items: T[] = [];
-  let key: string | undefined = undefined;
+  let key: string | undefined;
   for (let page = 0; page < GROUP_MAX_PAGES; page++) {
     const result: { items: T[]; nextKey: string | null } = await read(key);
     items.push(...result.items);

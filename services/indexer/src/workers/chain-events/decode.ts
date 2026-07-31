@@ -50,7 +50,11 @@ function msgIndexOf(event: RawEvent): number {
 }
 
 /** Decode a DeliverTx event, or null if it is not an in-scope vault event. */
-export function decodeTxEvent(event: RawEvent, ctx: TxContext, scope: EventScope): DomainEvent | null {
+export function decodeTxEvent(
+  event: RawEvent,
+  ctx: TxContext,
+  scope: EventScope,
+): DomainEvent | null {
   switch (event.type) {
     case VAULT_EVENT.swapIn: {
       if (attr(event, "vault_address") !== scope.vaultAddress) return null;
@@ -261,7 +265,11 @@ export function decodeTxPayments(
 }
 
 /** Decode an EndBlocker event, or null if it is not an in-scope event. */
-export function decodeBlockEvent(event: RawEvent, ctx: BlockContext, scope: EventScope): DomainEvent | null {
+export function decodeBlockEvent(
+  event: RawEvent,
+  ctx: BlockContext,
+  scope: EventScope,
+): DomainEvent | null {
   switch (event.type) {
     case VAULT_EVENT.swapOutCompleted: {
       if (attr(event, "vault_address") !== scope.vaultAddress) return null;

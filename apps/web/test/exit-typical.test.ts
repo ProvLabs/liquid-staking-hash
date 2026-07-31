@@ -13,7 +13,13 @@ const BAND = { band_floor_seconds: 21 * 86400, band_ceiling_seconds: 60 * 86400 
 
 describe("typicalDisplay", () => {
   it("withholds the typical during cold-start; guarantee still stands", () => {
-    const stats: PayoutStats = { sample_count: 0, median_seconds: null, p90_seconds: null, cold_start: true, ...BAND };
+    const stats: PayoutStats = {
+      sample_count: 0,
+      median_seconds: null,
+      p90_seconds: null,
+      cold_start: true,
+      ...BAND,
+    };
     const d = typicalDisplay(stats);
     expect(d.hasTypical).toBe(false);
     expect(d.withheld).toBe("cold-start");
@@ -21,7 +27,13 @@ describe("typicalDisplay", () => {
   });
 
   it("withholds when below sample threshold (null stats, not cold-start)", () => {
-    const stats: PayoutStats = { sample_count: 4, median_seconds: null, p90_seconds: null, cold_start: false, ...BAND };
+    const stats: PayoutStats = {
+      sample_count: 4,
+      median_seconds: null,
+      p90_seconds: null,
+      cold_start: false,
+      ...BAND,
+    };
     const d = typicalDisplay(stats);
     expect(d.hasTypical).toBe(false);
     expect(d.withheld).toBe("insufficient-sample");

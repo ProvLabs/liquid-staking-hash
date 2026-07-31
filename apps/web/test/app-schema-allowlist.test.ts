@@ -28,6 +28,7 @@ function parseModels(): PrismaModel[] {
   const models: PrismaModel[] = [];
   const modelRe = /model\s+(\w+)\s*\{([^}]*)\}/g;
   let match: RegExpExecArray | null;
+  // biome-ignore lint/suspicious/noAssignInExpressions: the canonical `exec` iteration idiom; `match` is explicitly typed and compared to null.
   while ((match = modelRe.exec(source)) !== null) {
     const fields: string[] = [];
     for (const rawLine of match[2]!.split("\n")) {
@@ -126,7 +127,8 @@ describe("app schema field allowlist (SECURITY.md data minimization)", () => {
       for (const field of model.fields) {
         const lowered = field.toLowerCase();
         for (const forbidden of FORBIDDEN_FIELD_SUBSTRINGS) {
-          if (lowered.includes(forbidden)) violations.push(`${model.name}.${field} ("${forbidden}")`);
+          if (lowered.includes(forbidden))
+            violations.push(`${model.name}.${field} ("${forbidden}")`);
         }
       }
     }

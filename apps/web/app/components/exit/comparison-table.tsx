@@ -23,17 +23,23 @@ export function ComparisonTable({ locale, typical }: { locale: Locale; typical: 
                 {t(locale, "exit.coming-soon")}
               </span>
             </th>
-            <th scope="col" className="p-3">{t(locale, "exit.col-native")}</th>
+            <th scope="col" className="p-3">
+              {t(locale, "exit.col-native")}
+            </th>
           </tr>
         </thead>
         <tbody>
           <tr className="border-b align-top">
-            <th scope="row" className="p-3 font-medium">{t(locale, "exit.row-you-get")}</th>
+            <th scope="row" className="p-3 font-medium">
+              {t(locale, "exit.row-you-get")}
+            </th>
             <td className="p-3 text-muted-foreground">{t(locale, "exit.dex-you-get")}</td>
             <td className="p-3">{t(locale, "exit.native-you-get")}</td>
           </tr>
           <tr className="border-b align-top">
-            <th scope="row" className="p-3 font-medium">{t(locale, "exit.row-timing")}</th>
+            <th scope="row" className="p-3 font-medium">
+              {t(locale, "exit.row-timing")}
+            </th>
             <td className="p-3 text-muted-foreground">{t(locale, "exit.dex-timing")}</td>
             <td className="p-3">
               {/* PROMISE POSITION: the guaranteed ceiling, always first and
@@ -58,7 +64,9 @@ export function ComparisonTable({ locale, typical }: { locale: Locale; typical: 
             </td>
           </tr>
           <tr className="border-b align-top">
-            <th scope="row" className="p-3 font-medium">{t(locale, "exit.row-risks")}</th>
+            <th scope="row" className="p-3 font-medium">
+              {t(locale, "exit.row-risks")}
+            </th>
             <td className="p-3 text-muted-foreground">{t(locale, "exit.dex-risks")}</td>
             <td className="p-3">{t(locale, "exit.native-risks")}</td>
           </tr>

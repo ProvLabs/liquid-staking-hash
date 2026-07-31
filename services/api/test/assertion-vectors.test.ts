@@ -34,9 +34,9 @@ describe("web-minted assertion verifies here (one contract, two ends)", () => {
   });
 
   it("rejects it under a different key", () => {
-    expect(verifyAssertion(VECTOR_HEADER, "some-other-key-0123456789abcdefghij", VECTOR_IAT + 1).ok).toBe(
-      false,
-    );
+    expect(
+      verifyAssertion(VECTOR_HEADER, "some-other-key-0123456789abcdefghij", VECTOR_IAT + 1).ok,
+    ).toBe(false);
   });
 });
 
@@ -51,8 +51,9 @@ describe("web-minted internal:notifier assertion verifies here (M6.2)", () => {
 
   it("rejects the internal vector once expired and under a different key", () => {
     expect(verifyAssertion(VECTOR_INTERNAL_HEADER, VECTOR_KEY, VECTOR_IAT + 61).ok).toBe(false);
-    expect(verifyAssertion(VECTOR_INTERNAL_HEADER, "some-other-key-0123456789abcdefghij", VECTOR_IAT + 1).ok).toBe(
-      false,
-    );
+    expect(
+      verifyAssertion(VECTOR_INTERNAL_HEADER, "some-other-key-0123456789abcdefghij", VECTOR_IAT + 1)
+        .ok,
+    ).toBe(false);
   });
 });

@@ -39,11 +39,7 @@ import {
 import { VALOPER_RE } from "~/lib/bech32";
 import { sameBech32Payload } from "~/lib/adr36-verify.server";
 import type { WebConfig } from "~/config/config.server";
-import {
-  GOVERNANCE_VOTE_OPTION_NAMES,
-  OPERATOR_VARIANTS,
-  PROGRAM_UNDERLYING_DENOM,
-} from "./build";
+import { GOVERNANCE_VOTE_OPTION_NAMES, OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM } from "./build";
 import type { PreflightReason } from "./lifecycle";
 
 /**
@@ -87,7 +83,10 @@ export const operatorPreflightRequestSchema = z.object({
   variant: z.enum(OPERATOR_VARIANTS),
   valoper: valoperString,
   claimantValoper: valoperString.nullable().default(null),
-  amount: z.string().regex(/^[0-9]{1,39}$/, "expected a base-unit integer string").default("0"),
+  amount: z
+    .string()
+    .regex(/^[0-9]{1,39}$/, "expected a base-unit integer string")
+    .default("0"),
 });
 export type OperatorPreflightRequest = z.infer<typeof operatorPreflightRequestSchema>;
 
@@ -100,7 +99,10 @@ export type OperatorPreflightRequest = z.infer<typeof operatorPreflightRequestSc
  * ids are u64 and the JSON number domain stops at 2^53, and one proposal must
  * not be addressable by two spellings.
  */
-const proposalIdString = z.string().max(20).regex(/^(0|[1-9][0-9]*)$/);
+const proposalIdString = z
+  .string()
+  .max(20)
+  .regex(/^(0|[1-9][0-9]*)$/);
 const bech32String = z.string().max(MAX_BECH32_LENGTH);
 
 export const governancePreflightRequestSchema = z.discriminatedUnion("kind", [
@@ -191,8 +193,7 @@ export async function runPreflight(
 
   // Balance including fee (§10.2 step 2). Spendable subtracts vesting locks;
   // the fee always needs the underlying (nhash) side.
-  const spend = (d: string): bigint =>
-    spendable.balances.find((c) => c.denom === d)?.amount ?? 0n;
+  const spend = (d: string): bigint => spendable.balances.find((c) => c.denom === d)?.amount ?? 0n;
   const total = (d: string): bigint => spend(d); // spendable is the honest bound
   if (request.kind === "swap_in") {
     const required = amount + FEE_PROVISION_NHASH;
@@ -333,7 +334,8 @@ export function operatorPreflightReasons(
       // and has no admin persona, so an admin sees a reason that does not apply
       // to them rather than the App growing an admin path it does not serve.
       if (enrolled === null) reasons.push({ code: "not-enrolled" });
-      else if (enrolled.operator !== facts.address) reasons.push({ code: "not-validator-operator" });
+      else if (enrolled.operator !== facts.address)
+        reasons.push({ code: "not-validator-operator" });
       break;
     }
     case "pay_commission":

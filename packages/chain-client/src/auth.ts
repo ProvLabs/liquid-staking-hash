@@ -4,7 +4,7 @@
 // preflight must know before the wallet is ever asked to sign.
 
 import { expectObject, expectString, parseU64String } from "./amounts.ts";
-import { LcdClient, LcdError } from "./lcd.ts";
+import { type LcdClient, LcdError } from "./lcd.ts";
 
 export interface AccountInfo {
   address: string;
@@ -44,9 +44,9 @@ export class AuthClient {
             ],
             "$.account.base_vesting_account.base_account",
           )
-        : (account["base_account"] !== undefined
-            ? expectObject(account["base_account"], "$.account.base_account")
-            : account);
+        : account["base_account"] !== undefined
+          ? expectObject(account["base_account"], "$.account.base_account")
+          : account;
     return {
       address: expectString(base["address"], "$.account…address"),
       accountNumber: parseU64String(base["account_number"], "$.account…account_number"),

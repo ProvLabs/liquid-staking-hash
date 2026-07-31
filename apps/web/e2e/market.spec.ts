@@ -8,7 +8,9 @@ import { expect, test } from "@playwright/test";
 test("renders the labeled forthcoming shell, never a fabricated market", async ({ page }) => {
   await page.goto("/market");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Market");
-  await expect(page.getByText("No bridged nvHASH market exists yet", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("No bridged nvHASH market exists yet", { exact: false }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why a spread exists" })).toBeVisible();
 });
 

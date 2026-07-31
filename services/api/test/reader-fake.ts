@@ -97,17 +97,22 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
   const ascTransactions = (address: string): TransactionFacts[] =>
     [...(facts.transactions ?? [])]
       .filter((t) => t.address === address)
-      .sort((a, b) => (a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1));
+      .sort((a, b) =>
+        a.height === b.height ? a.msgIndex - b.msgIndex : a.height < b.height ? -1 : 1,
+      );
 
   return {
     heads: () =>
-      Promise.resolve(
-        deriveHeads(facts.reconcilerRun ?? null, facts.maxCheckpointHeight ?? null),
-      ),
+      Promise.resolve(deriveHeads(facts.reconcilerRun ?? null, facts.maxCheckpointHeight ?? null)),
     programMetrics: () =>
       Promise.resolve(
         deriveMetrics(
-          facts.metrics ?? { indexed: false, participantCount: 0, firstActivityAt: null, epochCount: 0 },
+          facts.metrics ?? {
+            indexed: false,
+            participantCount: 0,
+            firstActivityAt: null,
+            epochCount: 0,
+          },
         ),
       ),
     listEpochs: (p) =>
@@ -203,12 +208,13 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         page(
           [...(facts.transactions ?? [])]
             .filter((t) => t.address === address)
-            .sort((a, b) => (a.height === b.height ? b.msgIndex - a.msgIndex : a.height < b.height ? 1 : -1)),
+            .sort((a, b) =>
+              a.height === b.height ? b.msgIndex - a.msgIndex : a.height < b.height ? 1 : -1,
+            ),
           p,
         ).map(toTransactionRow),
       ),
-    transactionsAscFor: (address) =>
-      Promise.resolve(ascTransactions(address)),
+    transactionsAscFor: (address) => Promise.resolve(ascTransactions(address)),
     // Chunked like the Prisma reader so a consumer that only handles a
     // single-chunk stream cannot pass here and fail in production.
     async *transactionsAscStream(address) {

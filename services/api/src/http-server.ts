@@ -3,7 +3,12 @@
 // writes the Web `Response` back. Being read-only, it never reads a request
 // body — there is nothing a client can POST here.
 
-import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import type { ApiConfig } from "./config.ts";
 import { createHandler, type RequestMeta } from "./handler.ts";
 import { RateLimiter } from "./rate-limit.ts";
@@ -36,8 +41,16 @@ export interface ApiServer {
  * `reader` is the indexed-data port: absent, the honest empty
  * reader serves the dataless null/empty state and `/status` says "unwired".
  */
-export function createApiServer(config: ApiConfig, now?: () => Date, reader?: IndexedReader): ApiServer {
-  const limiter = new RateLimiter({ max: config.rateLimitMax, windowMs: config.rateLimitWindowMs, ...(now ? { now: () => now().getTime() } : {}) });
+export function createApiServer(
+  config: ApiConfig,
+  now?: () => Date,
+  reader?: IndexedReader,
+): ApiServer {
+  const limiter = new RateLimiter({
+    max: config.rateLimitMax,
+    windowMs: config.rateLimitWindowMs,
+    ...(now ? { now: () => now().getTime() } : {}),
+  });
   const handle = createHandler({
     limiter,
     appEnv: config.appEnv,
@@ -72,7 +85,9 @@ export function createApiServer(config: ApiConfig, now?: () => Date, reader?: In
       const response = await handle(request, meta);
 
       res.statusCode = response.status;
-      response.headers.forEach((value, key) => res.setHeader(key, value));
+      response.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
       const body = await response.text();
       res.end(body.length > 0 ? body : undefined);
     } catch {
@@ -98,7 +113,10 @@ export function createApiServer(config: ApiConfig, now?: () => Date, reader?: In
  * never by itself keeps the process alive. Returns the timer so callers may
  * clear it on shutdown.
  */
-export function scheduleWindowSweep(limiter: RateLimiter, windowMs: number): ReturnType<typeof setInterval> {
+export function scheduleWindowSweep(
+  limiter: RateLimiter,
+  windowMs: number,
+): ReturnType<typeof setInterval> {
   const timer = setInterval(() => limiter.sweep(), windowMs);
   timer.unref();
   return timer;

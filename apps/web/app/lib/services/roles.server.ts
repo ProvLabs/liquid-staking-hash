@@ -10,12 +10,7 @@
 // false — the App never guesses a privilege and never renders a role surface
 // from stale knowledge (SECURITY.md: never lie about state).
 
-import {
-  GroupClient,
-  LcdClient,
-  NvhashContractClient,
-  type FetchLike,
-} from "@nvhash/chain-client";
+import { GroupClient, LcdClient, NvhashContractClient, type FetchLike } from "@nvhash/chain-client";
 
 import type { WebConfig } from "~/config/config.server";
 

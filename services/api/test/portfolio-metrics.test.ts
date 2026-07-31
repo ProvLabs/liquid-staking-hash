@@ -72,11 +72,32 @@ describe("derivePortfolioMetrics: empty history", () => {
 
 describe("derivePortfolioMetrics: single deposit then two rising-NAV epochs", () => {
   const txs = [
-    tx({ kind: "swap_in", txhash: "DEP", shares: CORPUS_SHARES, nhash: UNIT_TVV, height: 100n, blockTime: new Date(Number(T0) * 1000) }),
+    tx({
+      kind: "swap_in",
+      txhash: "DEP",
+      shares: CORPUS_SHARES,
+      nhash: UNIT_TVV,
+      height: 100n,
+      blockTime: new Date(Number(T0) * 1000),
+    }),
   ];
   const epochs = [
-    epoch({ epochIndex: 1n, endedAtSeconds: T1, tvvAfter: UNIT_TVV, totalShares: CORPUS_SHARES, netAprBps: 400, endHeight: 200n }),
-    epoch({ epochIndex: 2n, endedAtSeconds: T2, tvvAfter: CORPUS_TVV, totalShares: CORPUS_SHARES, netAprBps: 431, endHeight: 300n }),
+    epoch({
+      epochIndex: 1n,
+      endedAtSeconds: T1,
+      tvvAfter: UNIT_TVV,
+      totalShares: CORPUS_SHARES,
+      netAprBps: 400,
+      endHeight: 200n,
+    }),
+    epoch({
+      epochIndex: 2n,
+      endedAtSeconds: T2,
+      tvvAfter: CORPUS_TVV,
+      totalShares: CORPUS_SHARES,
+      netAprBps: 431,
+      endHeight: 300n,
+    }),
   ];
   const m = derivePortfolioMetrics(ADDR, txs, epochs);
 
@@ -93,8 +114,18 @@ describe("derivePortfolioMetrics: single deposit then two rising-NAV epochs", ()
     // gain_e = 315397882283 - 309963777029 = 5434105254
     // personal = floor(5434105254 * 10000 * 31536000 / (309963777029 * 604800))
     expect(m.yield_by_epoch).toEqual([
-      { epoch_index: 1, ended_at: "2026-01-01T00:00:00.000Z", personal_apr_bps: null, net_apr_bps: 400 },
-      { epoch_index: 2, ended_at: "2026-01-08T00:00:00.000Z", personal_apr_bps: 9141, net_apr_bps: 431 },
+      {
+        epoch_index: 1,
+        ended_at: "2026-01-01T00:00:00.000Z",
+        personal_apr_bps: null,
+        net_apr_bps: 400,
+      },
+      {
+        epoch_index: 2,
+        ended_at: "2026-01-08T00:00:00.000Z",
+        personal_apr_bps: 9141,
+        net_apr_bps: 431,
+      },
     ]);
     expect(m.effective_apr_bps).toBe(9141);
   });
@@ -108,7 +139,13 @@ describe("derivePortfolioMetrics: single deposit then two rising-NAV epochs", ()
 
   it("marks the deposit event", () => {
     expect(m.accrual_markers).toEqual([
-      { time: "2025-12-31T00:00:00.000Z", txhash: "DEP", kind: "swap_in", shares: CORPUS_SHARES.toString(), nhash: UNIT_TVV.toString() },
+      {
+        time: "2025-12-31T00:00:00.000Z",
+        txhash: "DEP",
+        kind: "swap_in",
+        shares: CORPUS_SHARES.toString(),
+        nhash: UNIT_TVV.toString(),
+      },
     ]);
     expect(m.markers_truncated).toBe(false);
   });
@@ -198,11 +235,32 @@ describe("derivePortfolioMetrics: payout against an empty escrow", () => {
 describe("derivePortfolioMetrics: a slashing epoch", () => {
   it("reports a signed negative gain and personal APR", () => {
     const txs = [
-      tx({ kind: "swap_in", txhash: "DEP", shares: CORPUS_SHARES, nhash: UNIT_TVV, height: 100n, blockTime: new Date(Number(T0) * 1000) }),
+      tx({
+        kind: "swap_in",
+        txhash: "DEP",
+        shares: CORPUS_SHARES,
+        nhash: UNIT_TVV,
+        height: 100n,
+        blockTime: new Date(Number(T0) * 1000),
+      }),
     ];
     const epochs = [
-      epoch({ epochIndex: 1n, endedAtSeconds: T1, tvvAfter: UNIT_TVV, totalShares: CORPUS_SHARES, netAprBps: 400, endHeight: 200n }),
-      epoch({ epochIndex: 2n, endedAtSeconds: T2, tvvAfter: 300000000000n, totalShares: CORPUS_SHARES, netAprBps: -1200, endHeight: 300n }),
+      epoch({
+        epochIndex: 1n,
+        endedAtSeconds: T1,
+        tvvAfter: UNIT_TVV,
+        totalShares: CORPUS_SHARES,
+        netAprBps: 400,
+        endHeight: 200n,
+      }),
+      epoch({
+        epochIndex: 2n,
+        endedAtSeconds: T2,
+        tvvAfter: 300000000000n,
+        totalShares: CORPUS_SHARES,
+        netAprBps: -1200,
+        endHeight: 300n,
+      }),
     ];
     const m = derivePortfolioMetrics(ADDR, txs, epochs);
     // gain_e = 300000000000 - 309963777029 = -9963777029
@@ -212,7 +270,11 @@ describe("derivePortfolioMetrics: a slashing epoch", () => {
       personal_apr_bps: -16761, // BigInt division truncates toward zero
       net_apr_bps: -1200,
     });
-    expect(m.accrual[1]).toEqual({ time: "2026-01-08T00:00:00.000Z", height: 300, value_nhash: "300000000000" });
+    expect(m.accrual[1]).toEqual({
+      time: "2026-01-08T00:00:00.000Z",
+      height: 300,
+      value_nhash: "300000000000",
+    });
     expect(m.effective_apr_bps).toBe(-16761);
   });
 });
@@ -233,13 +295,48 @@ describe("derivePortfolioMetrics: multi-segment TWAB (deposit between epochs)", 
   const T = 1000n;
   const at = (s: number): Date => new Date(s * 1000);
   const txs = [
-    tx({ kind: "swap_in", txhash: "D1", shares: 100n, nhash: 100n, height: 2n, blockTime: at(100) }),
-    tx({ kind: "swap_in", txhash: "D2", shares: 100n, nhash: 110n, height: 4n, blockTime: at(300) }),
+    tx({
+      kind: "swap_in",
+      txhash: "D1",
+      shares: 100n,
+      nhash: 100n,
+      height: 2n,
+      blockTime: at(100),
+    }),
+    tx({
+      kind: "swap_in",
+      txhash: "D2",
+      shares: 100n,
+      nhash: 110n,
+      height: 4n,
+      blockTime: at(300),
+    }),
   ];
   const epochs: EpochStepFact[] = [
-    { epochIndex: 1n, endedAtSeconds: 0n, tvvAfter: 1000n, totalShares: T, netAprBps: null, endHeight: 1n },
-    { epochIndex: 2n, endedAtSeconds: 200n, tvvAfter: 1100n, totalShares: T, netAprBps: 500, endHeight: 3n },
-    { epochIndex: 3n, endedAtSeconds: 400n, tvvAfter: 1200n, totalShares: T, netAprBps: 600, endHeight: 5n },
+    {
+      epochIndex: 1n,
+      endedAtSeconds: 0n,
+      tvvAfter: 1000n,
+      totalShares: T,
+      netAprBps: null,
+      endHeight: 1n,
+    },
+    {
+      epochIndex: 2n,
+      endedAtSeconds: 200n,
+      tvvAfter: 1100n,
+      totalShares: T,
+      netAprBps: 500,
+      endHeight: 3n,
+    },
+    {
+      epochIndex: 3n,
+      endedAtSeconds: 400n,
+      tvvAfter: 1200n,
+      totalShares: T,
+      netAprBps: 600,
+      endHeight: 5n,
+    },
   ];
   const m = derivePortfolioMetrics(ADDR, txs, epochs);
 
@@ -250,15 +347,29 @@ describe("derivePortfolioMetrics: multi-segment TWAB (deposit between epochs)", 
   it("prices per-epoch personal APR against the right predecessor", () => {
     expect(m.yield_by_epoch).toEqual([
       // e2 predecessor (e1) predates the first deposit -> personal null
-      { epoch_index: 2, ended_at: "1970-01-01T00:03:20.000Z", personal_apr_bps: null, net_apr_bps: 500 },
-      { epoch_index: 3, ended_at: "1970-01-01T00:06:40.000Z", personal_apr_bps: 143345454, net_apr_bps: 600 },
+      {
+        epoch_index: 2,
+        ended_at: "1970-01-01T00:03:20.000Z",
+        personal_apr_bps: null,
+        net_apr_bps: 500,
+      },
+      {
+        epoch_index: 3,
+        ended_at: "1970-01-01T00:06:40.000Z",
+        personal_apr_bps: 143345454,
+        net_apr_bps: 600,
+      },
     ]);
   });
 });
 
 describe("derivePortfolioMetrics: negative swap_in", () => {
   it("flags a negative-amount deposit as inconsistent (boundary guard)", () => {
-    const m = derivePortfolioMetrics(ADDR, [tx({ kind: "swap_in", txhash: "BAD", shares: -100n, nhash: 0n, height: 1n })], []);
+    const m = derivePortfolioMetrics(
+      ADDR,
+      [tx({ kind: "swap_in", txhash: "BAD", shares: -100n, nhash: 0n, height: 1n })],
+      [],
+    );
     expect(m.history_state).toBe("inconsistent");
     expect(m.indexed_share_balance).toBe("0");
     expect(m.cost_basis_nhash).toBeNull();
@@ -266,7 +377,11 @@ describe("derivePortfolioMetrics: negative swap_in", () => {
   });
 
   it("flags a negative nhash leg as inconsistent", () => {
-    const m = derivePortfolioMetrics(ADDR, [tx({ kind: "swap_in", txhash: "BAD", shares: 100n, nhash: -1n, height: 1n })], []);
+    const m = derivePortfolioMetrics(
+      ADDR,
+      [tx({ kind: "swap_in", txhash: "BAD", shares: 100n, nhash: -1n, height: 1n })],
+      [],
+    );
     expect(m.history_state).toBe("inconsistent");
   });
 });
@@ -275,7 +390,9 @@ describe("derivePortfolioMetrics: marker cap", () => {
   it("keeps the most recent MARKER_CAP events and flags truncation", () => {
     const txs: TransactionFacts[] = [];
     for (let i = 0; i < MARKER_CAP + 1; i += 1) {
-      txs.push(tx({ kind: "swap_in", txhash: `T${i}`, shares: 1n, nhash: 1n, height: BigInt(i + 1) }));
+      txs.push(
+        tx({ kind: "swap_in", txhash: `T${i}`, shares: 1n, nhash: 1n, height: BigInt(i + 1) }),
+      );
     }
     const m = derivePortfolioMetrics(ADDR, txs, []);
     expect(m.accrual_markers).toHaveLength(MARKER_CAP);
@@ -291,7 +408,16 @@ describe("derivePortfolioMetrics: accrual cap", () => {
   // point priced at its NAV). endHeight = epochIndex so a kept point is
   // identifiable by height.
   const withEpochs = (n: number) => {
-    const txs = [tx({ kind: "swap_in", txhash: "DEP", shares: 1000n, nhash: 1000n, height: 1n, blockTime: new Date(1000) })];
+    const txs = [
+      tx({
+        kind: "swap_in",
+        txhash: "DEP",
+        shares: 1000n,
+        nhash: 1000n,
+        height: 1n,
+        blockTime: new Date(1000),
+      }),
+    ];
     const epochs: EpochStepFact[] = [];
     for (let i = 0; i < n; i += 1) {
       epochs.push({

@@ -1,3 +1,6 @@
+// biome-ignore-all lint/suspicious/noExportsInTest: these vectors are the
+// SHARED half of a cross-suite pin — services/api/test/assertion-vectors.test.ts
+// imports them so both sides assert the same bytes rather than two copies.
 // Assertion-minting gate (ADR-001 Decision 2): the web tier
 // mints EXACTLY what services/api verifies — one contract, two
 // implementations. The golden vectors below are CROSS-PINNED: the identical
@@ -57,7 +60,10 @@ describe("service-assertion minting (ADR-001 Decision 2)", () => {
   it("mints the internal:notifier golden-vector header (M6.2, cross-pinned)", () => {
     expect(mintInternalAssertion(VECTOR_KEY, VECTOR_IAT)).toBe(VECTOR_INTERNAL_HEADER);
     const payload = JSON.parse(
-      Buffer.from(VECTOR_INTERNAL_HEADER.slice("Bearer ".length).split(".")[0]!, "base64url").toString("utf8"),
+      Buffer.from(
+        VECTOR_INTERNAL_HEADER.slice("Bearer ".length).split(".")[0]!,
+        "base64url",
+      ).toString("utf8"),
     ) as { iat: number; exp: number; scope: string };
     expect(payload.scope).toBe("internal:notifier");
     expect(payload.exp - payload.iat).toBe(60);

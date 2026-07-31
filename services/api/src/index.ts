@@ -21,9 +21,22 @@ export { createApiServer, clientKey, scheduleWindowSweep, type ApiServer } from 
 export { createHandler, type HandlerDeps, type RequestMeta } from "./handler.ts";
 export { RateLimiter, type RateLimitResult } from "./rate-limit.ts";
 export { routes, findRoute, API_BASE, type Route } from "./routes.ts";
-export { paginationSchema, bech32AddressSchema, bech32ValoperSchema, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_PAGE_OFFSET } from "./query.ts";
+export {
+  paginationSchema,
+  bech32AddressSchema,
+  bech32ValoperSchema,
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+  MAX_PAGE_OFFSET,
+} from "./query.ts";
 export { emptyReader, type IndexedReader, type Heads } from "./reader.ts";
-export { verifyAssertion, MAX_ASSERTION_LIFETIME_SECONDS, MAX_CLOCK_SKEW_SECONDS, type VerifiedScope, type VerifyResult } from "./auth.ts";
+export {
+  verifyAssertion,
+  MAX_ASSERTION_LIFETIME_SECONDS,
+  MAX_CLOCK_SKEW_SECONDS,
+  type VerifiedScope,
+  type VerifyResult,
+} from "./auth.ts";
 export {
   transactionsCsv,
   transactionsCsvHeader,
@@ -65,7 +78,9 @@ export async function main(): Promise<void> {
     server.close(() => {
       void (async () => {
         await closeReader?.();
-        process.stdout.write(JSON.stringify({ level: "info", message: "api stopped", signal }) + "\n");
+        process.stdout.write(
+          `${JSON.stringify({ level: "info", message: "api stopped", signal })}\n`,
+        );
         process.exit(0);
       })();
     });
@@ -78,7 +93,15 @@ export async function main(): Promise<void> {
   server.listen(config.port, () => {
     // One structured line; no client identifiers, no connection string
     // (SECURITY.md data minimization / secrets via environment only).
-    process.stdout.write(JSON.stringify({ level: "info", message: "api listening", port: config.port, env: config.appEnv, data_source: reader === undefined ? "unwired" : "api_reader" }) + "\n");
+    process.stdout.write(
+      `${JSON.stringify({
+        level: "info",
+        message: "api listening",
+        port: config.port,
+        env: config.appEnv,
+        data_source: reader === undefined ? "unwired" : "api_reader",
+      })}\n`,
+    );
   });
 }
 

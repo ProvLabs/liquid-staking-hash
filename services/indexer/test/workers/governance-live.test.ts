@@ -79,7 +79,9 @@ describe.skipIf(!LCD || !CONTRACT)("governance collector against a live governed
     // gone from chain state, and its outcome survives only in the tx plane.
     const succeeded = batch.execResults.filter((e) => e.result === "SUCCESS");
     const onChain = new Set(batch.proposals.map((p) => p.proposalId.toString()));
-    const recovered = new Set(batch.recoveredProposals.map((r) => r.snapshot.proposalId.toString()));
+    const recovered = new Set(
+      batch.recoveredProposals.map((r) => r.snapshot.proposalId.toString()),
+    );
     for (const exec of succeeded) {
       expect(onChain.has(exec.proposalId.toString())).toBe(false);
       // …and the prune event carried its terminal status, so the row is still

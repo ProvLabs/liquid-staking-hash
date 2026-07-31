@@ -94,7 +94,9 @@ function epochRow(index: number, overrides: Record<string, unknown> = {}) {
 }
 
 const epochs = (rows: Record<string, unknown>[]) =>
-  http.get("*/api/v1/operator/epochs", () => HttpResponse.json(envelope(rows, { source: "indexed" })));
+  http.get("*/api/v1/operator/epochs", () =>
+    HttpResponse.json(envelope(rows, { source: "indexed" })),
+  );
 
 const payments = (rows: Record<string, unknown>[]) =>
   http.get("*/api/v1/operator/payments", () =>
@@ -490,7 +492,10 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
 
   it("shows a validator enrolled live but not yet sampled into the registry", async () => {
     // The just-enrolled case: live knows it, the indexed summary does not.
-    server.use(summary([summaryRow()]), liveValidators([liveValidator(), liveValidator({ valoper: NEW_VALOPER })]));
+    server.use(
+      summary([summaryRow()]),
+      liveValidators([liveValidator(), liveValidator({ valoper: NEW_VALOPER })]),
+    );
     const data = await loadOperatorViewData(withKey(), SESSION);
 
     expect(data.owned.map((v) => v.valoper).sort()).toEqual([NEW_VALOPER, VALOPER].sort());
@@ -541,7 +546,10 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
     // "gone" sorts before "testing", so without the active-first preference the
     // page would open on the one validator the operator cannot act on.
     server.use(
-      summary([summaryRow(), summaryRow({ valoper: OTHER_VALOPER, moniker: "gone", active: true })]),
+      summary([
+        summaryRow(),
+        summaryRow({ valoper: OTHER_VALOPER, moniker: "gone", active: true }),
+      ]),
       liveValidators([liveValidator()]),
     );
     const data = await loadOperatorViewData(withKey(), SESSION);
@@ -614,7 +622,10 @@ describe("boundary validation", () => {
       liveValidators([liveValidator()]),
       http.get("*/api/v1/operator/summary", () =>
         HttpResponse.json(
-          envelope({ address: OPERATOR, validators: [{ valoper: VALOPER }] }, { source: "indexed" }),
+          envelope(
+            { address: OPERATOR, validators: [{ valoper: VALOPER }] },
+            { source: "indexed" },
+          ),
         ),
       ),
     );

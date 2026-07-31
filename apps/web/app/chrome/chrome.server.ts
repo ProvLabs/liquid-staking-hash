@@ -14,18 +14,9 @@
 //   the page.
 
 import type { FreshnessMeta, IncidentRow } from "@nvhash/api-types";
-import {
-  LcdClient,
-  NvhashContractClient,
-  VaultClient,
-  type FetchLike,
-} from "@nvhash/chain-client";
+import { LcdClient, NvhashContractClient, VaultClient, type FetchLike } from "@nvhash/chain-client";
 
-import {
-  fetchApiJson,
-  incidentsEnvelopeSchema,
-  statusEnvelopeSchema,
-} from "~/api/api.server";
+import { fetchApiJson, incidentsEnvelopeSchema, statusEnvelopeSchema } from "~/api/api.server";
 import type { WebConfig } from "~/config/config.server";
 import type { ChromeBanner, ChromeState } from "./types";
 
@@ -61,12 +52,11 @@ function isDegraded(freshness: FreshnessMeta | null, incidents: IncidentRow[] | 
     freshness.indexed_height !== null &&
     freshness.chain_height - freshness.indexed_height > DEGRADED_LAG_BLOCKS;
   const openIncident =
-    incidents !== null &&
-    incidents.some(
+    incidents?.some(
       (incident) =>
         (DEGRADED_INCIDENT_KINDS as readonly string[]).includes(incident.kind) &&
         (incident.closed_at ?? null) === null,
-    );
+    ) ?? false;
   return lagging || openIncident;
 }
 

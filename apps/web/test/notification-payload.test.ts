@@ -71,7 +71,9 @@ describe("notification payload shapes (closed, identifier-only)", () => {
 
   it("rejects malformed leaf values (bounds at the boundary)", () => {
     expect(navStepPayloadSchema.safeParse({ epoch_index: -1 }).success).toBe(false);
-    expect(redemptionPayloadSchema.safeParse({ request_id: "r", event: "queued" }).success).toBe(false);
+    expect(redemptionPayloadSchema.safeParse({ request_id: "r", event: "queued" }).success).toBe(
+      false,
+    );
     expect(incidentPayloadSchema.safeParse({ incident_kind: "not_a_kind" }).success).toBe(false);
     expect(arrearsPayloadSchema.safeParse({ valoper: "v", epoch_index: 1.5 }).success).toBe(false);
   });

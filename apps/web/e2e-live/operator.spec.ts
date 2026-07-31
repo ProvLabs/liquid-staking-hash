@@ -168,7 +168,10 @@ test("pay commission end to end: preflight → simulate → relay → chain acce
 }) => {
   const signer = new DevnetTestSigner(KEY!);
   const { contract, valoper } = await programContext();
-  test.skip(valoper === null, "no validator is enrolled on this devnet — run register-validator.sh");
+  test.skip(
+    valoper === null,
+    "no validator is enrolled on this devnet — run register-validator.sh",
+  );
 
   await login(request, signer);
 
@@ -248,10 +251,7 @@ test("THE guard is wired: an admin variant is refused by the live relay", async 
     .string(2, contract)
     .bytes(3, new TextEncoder().encode('{"set_halted":{"halted":true}}'))
     .finish();
-  const anyMsg = new ProtoWriter()
-    .string(1, MSG_EXECUTE_CONTRACT)
-    .bytes(2, execValue)
-    .finish();
+  const anyMsg = new ProtoWriter().string(1, MSG_EXECUTE_CONTRACT).bytes(2, execValue).finish();
   const body = new ProtoWriter().message(1, anyMsg, true).finish();
 
   // A structurally valid, correctly signed tx — only the payload is forbidden.
@@ -320,9 +320,9 @@ test("the guard refuses a call to a DIFFERENT contract, session and all", async 
 
   const res = await request.post("/tx/broadcast", {
     data: {
-      tx_raw: Buffer.from(
-        encodeTxRaw(body, scaffold.authInfoBytes, [new Uint8Array(64)]),
-      ).toString("base64"),
+      tx_raw: Buffer.from(encodeTxRaw(body, scaffold.authInfoBytes, [new Uint8Array(64)])).toString(
+        "base64",
+      ),
     },
   });
   expect(res.status()).toBe(400);

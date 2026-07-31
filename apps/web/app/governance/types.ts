@@ -16,7 +16,12 @@
 //   3. "n/a" is a value. `meetsThreshold` is `boolean | null` end to end and
 //      the null never collapses to false on the way to the page.
 
-import type { FreshnessMeta, GovExecutorResult, GovProposalStatus, GovVoteOption } from "@nvhash/api-types";
+import type {
+  FreshnessMeta,
+  GovExecutorResult,
+  GovProposalStatus,
+  GovVoteOption,
+} from "@nvhash/api-types";
 
 import type { LiveProposalState } from "./actions";
 import type { DecodedMessage } from "./decode";

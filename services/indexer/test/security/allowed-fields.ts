@@ -110,7 +110,16 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
     "observedAt",
   ],
   // Computed incidents (§9.6). Acknowledgment lives in app-schema incident_acks.
-  Incident: ["id", "kind", "severity", "dedupeKey", "openedAt", "closedAt", "openedHeight", "payload"],
+  Incident: [
+    "id",
+    "kind",
+    "severity",
+    "dedupeKey",
+    "openedAt",
+    "closedAt",
+    "openedHeight",
+    "payload",
+  ],
   // DEX market observations; venue/pool are public contract addresses.
   MarketSample: ["id", "venue", "pool", "price", "depthBands", "sampledAt"],
   // Remote-chain supply readings.
@@ -158,11 +167,28 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   // x/group vote mirror; `voter` is a public member address and `metadata` is the
   // vote's own public on-chain text. `weight` is a member weight, not an amount
   // of anything owned.
-  GovVote: ["proposalId", "voter", "option", "metadata", "weight", "submitTime", "height", "txhash"],
+  GovVote: [
+    "proposalId",
+    "voter",
+    "option",
+    "metadata",
+    "weight",
+    "submitTime",
+    "height",
+    "txhash",
+  ],
   // Worker cursors (operational).
   IndexerCheckpoint: ["stream", "cursorHeight", "cursorPage", "updatedAt"],
   // Reconciler run records (operational reconciliation facts).
-  ReconcilerRun: ["id", "ranAt", "chainHeight", "indexedHeight", "deltas", "withinTolerance", "incidentId"],
+  ReconcilerRun: [
+    "id",
+    "ranAt",
+    "chainHeight",
+    "indexedHeight",
+    "deltas",
+    "withinTolerance",
+    "incidentId",
+  ],
 };
 
 // Substrings that must never appear in an indexed column name — the explicit
@@ -213,7 +239,13 @@ export const AMOUNT_FIELDS: Record<string, readonly string[]> = {
     "aumFeeEstimate",
     "netDeposits",
   ],
-  ValidatorEpoch: ["tip", "commissionAccrued", "commissionPaid", "commissionDue", "programDelegation"],
+  ValidatorEpoch: [
+    "tip",
+    "commissionAccrued",
+    "commissionPaid",
+    "commissionDue",
+    "programDelegation",
+  ],
   OperatorPayment: ["amount"],
   MarketSample: ["price"],
   BridgeSupplySample: ["remoteSupply"],

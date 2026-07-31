@@ -38,7 +38,7 @@ export interface TemplateFormProps {
  * the values themselves — a key present IS the choice, which keeps the form's
  * state and the message's shape from being two different facts. */
 function isSupplied(values: WireTemplateValues, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(values, key);
+  return Object.hasOwn(values, key);
 }
 
 function ParamField({

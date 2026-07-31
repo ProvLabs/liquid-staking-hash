@@ -89,11 +89,7 @@ function record(value: unknown, path: string): Record<string, unknown> {
  * chain upgrade adds must degrade to a value the surfaces already render
  * honestly, not wedge the stream.
  */
-function enumMember<T extends string>(
-  raw: string,
-  prefix: string,
-  allowed: readonly T[],
-): T {
+function enumMember<T extends string>(raw: string, prefix: string, allowed: readonly T[]): T {
   const stripped = raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
   return (allowed as readonly string[]).includes(stripped)
     ? (stripped as T)
@@ -206,7 +202,10 @@ export function decodeTxVotes(
     const o = body as Record<string, unknown>;
     const typeUrl = typeof o["@type"] === "string" ? o["@type"] : "";
     if (typeUrl !== MSG_VOTE_TYPE_URL) {
-      undecodable.push({ msgIndex, reason: `message at this index is ${typeUrl || "untyped"}, not MsgVote` });
+      undecodable.push({
+        msgIndex,
+        reason: `message at this index is ${typeUrl || "untyped"}, not MsgVote`,
+      });
       continue;
     }
     const voter = o["voter"];
@@ -269,7 +268,8 @@ export function decodeProposal(
 ): ProposalSnapshot {
   const o = record(value, path);
   const proposers = o["proposers"];
-  if (!Array.isArray(proposers)) throw new DecodeError(`${path}.proposers`, "expected array", proposers);
+  if (!Array.isArray(proposers))
+    throw new DecodeError(`${path}.proposers`, "expected array", proposers);
   const messages = o["messages"];
   return {
     proposalId: u64(o["id"], `${path}.id`),
@@ -277,7 +277,9 @@ export function decodeProposal(
     groupId: context.groupId,
     proposers: proposers.map((p, i) => str(p, `${path}.proposers[${i}]`)),
     status: decodeStatus(str(o["status"] ?? "", `${path}.status`)),
-    executorResult: decodeExecutorResult(str(o["executor_result"] ?? "", `${path}.executor_result`)),
+    executorResult: decodeExecutorResult(
+      str(o["executor_result"] ?? "", `${path}.executor_result`),
+    ),
     metadata: typeof o["metadata"] === "string" ? o["metadata"] : "",
     title: typeof o["title"] === "string" ? o["title"] : "",
     summary: typeof o["summary"] === "string" ? o["summary"] : "",

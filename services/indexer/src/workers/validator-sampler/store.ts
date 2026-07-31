@@ -34,7 +34,8 @@ export class PrismaValidatorStore implements ValidatorStore {
       commissionPaid: row.commissionPaid.toString(),
       commissionDue: row.commissionDue.toString(),
       programDelegation: row.programDelegation.toString(),
-      jailedEvents: row.jailedEvents === null ? Prisma.DbNull : (row.jailedEvents as Prisma.InputJsonValue),
+      jailedEvents:
+        row.jailedEvents === null ? Prisma.DbNull : (row.jailedEvents as Prisma.InputJsonValue),
       height: row.height,
       observedAt: row.observedAt,
     };

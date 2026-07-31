@@ -72,7 +72,12 @@ interface ChainProposal {
   group_policy_version: string;
   status: string;
   executor_result: string;
-  final_tally_result: { yes_count: string; abstain_count: string; no_count: string; no_with_veto_count: string };
+  final_tally_result: {
+    yes_count: string;
+    abstain_count: string;
+    no_count: string;
+    no_with_veto_count: string;
+  };
   messages: unknown[];
   title: string;
   summary: string;
@@ -117,7 +122,10 @@ function policySnapshot(address: string): Record<string, unknown> {
     groupPoliciesByGroup as {
       group_policies: {
         address: string;
-        decision_policy: { threshold?: string; windows?: { voting_period: string; min_execution_period: string } };
+        decision_policy: {
+          threshold?: string;
+          windows?: { voting_period: string; min_execution_period: string };
+        };
       }[];
     }
   ).group_policies.find((p) => p.address === address);
@@ -189,7 +197,12 @@ const PRUNED_ROW = {
       group_policy_version: "1",
       status: "PROPOSAL_STATUS_WITHDRAWN",
       executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
-      final_tally_result: { yes_count: "0", abstain_count: "0", no_count: "0", no_with_veto_count: "0" },
+      final_tally_result: {
+        yes_count: "0",
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      },
       messages: [],
       title: "drill-withdraw",
       summary: "",
@@ -225,7 +238,12 @@ export const handlers = [
   http.get("*/api/v1/status", () =>
     HttpResponse.json(
       envelope(
-        { service: "nvhash-api", api_version: "v1", environment: "development", data_source: "unwired" },
+        {
+          service: "nvhash-api",
+          api_version: "v1",
+          environment: "development",
+          data_source: "unwired",
+        },
         { source: "indexed" },
       ),
     ),
@@ -287,9 +305,7 @@ export const handlers = [
   // The /market shape (MarketSummary), honest-empty exactly as the real
   // route serves with the sampler parked: no sample, no bridged supply.
   http.get("*/api/v1/market", () =>
-    HttpResponse.json(
-      envelope({ sample: null, bridged_supply: [] }, { source: "indexed" }),
-    ),
+    HttpResponse.json(envelope({ sample: null, bridged_supply: [] }, { source: "indexed" })),
   ),
   // Personal surfaces (/portfolio, /portfolio/metrics, /transactions):
   // honest-empty defaults mirroring the services/api empty payloads (reader
@@ -375,7 +391,8 @@ export const handlers = [
   http.get("*/api/v1/governance/proposals", ({ request }) => {
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
-    const rows = status === null ? GOV_MIRROR_ROWS : GOV_MIRROR_ROWS.filter((r) => r.status === status);
+    const rows =
+      status === null ? GOV_MIRROR_ROWS : GOV_MIRROR_ROWS.filter((r) => r.status === status);
     return HttpResponse.json(
       envelope(
         { proposals: rows, indexed_from_height: GOV_INDEXED_FROM_HEIGHT },
@@ -517,9 +534,7 @@ export const handlers = [
   // not exist — a 404 account, empty balances, and tx endpoints that refuse
   // (a mock must not fabricate gas or an inclusion). Tests exercising the
   // lifecycle override these with server.use() (the roles-test pattern).
-  http.get("*/cosmos/auth/v1beta1/accounts/:address", () =>
-    lcdError(404, "account not found"),
-  ),
+  http.get("*/cosmos/auth/v1beta1/accounts/:address", () => lcdError(404, "account not found")),
   http.get("*/cosmos/bank/v1beta1/spendable_balances/:address", () =>
     HttpResponse.json({ balances: [], pagination: { next_key: null, total: "0" } }),
   ),

@@ -157,7 +157,10 @@ export async function discoverGovernance(
         });
       }
     } catch {
-      logger.warn("configured governance policy could not be read", { stream: "governance", height });
+      logger.warn("configured governance policy could not be read", {
+        stream: "governance",
+        height,
+      });
     }
   }
 

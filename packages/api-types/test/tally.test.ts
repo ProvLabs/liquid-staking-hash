@@ -37,11 +37,15 @@ describe("threshold rules", () => {
     // x/group's ThresholdDecisionPolicy is a yes-weight threshold. Implementing it
     // as `yes - no` would be a plausible-looking reimplementation of a DIFFERENT
     // module's rule, and it would report this passing proposal as failed.
-    expect(meetsThreshold(counts("2", "5", "0", "3"), { kind: "threshold", threshold: "2" })).toBe(true);
+    expect(meetsThreshold(counts("2", "5", "0", "3"), { kind: "threshold", threshold: "2" })).toBe(
+      true,
+    );
   });
 
   it("ignores abstain for passage while counting it toward participation", () => {
-    expect(meetsThreshold(counts("1", "0", "9"), { kind: "threshold", threshold: "2" })).toBe(false);
+    expect(meetsThreshold(counts("1", "0", "9"), { kind: "threshold", threshold: "2" })).toBe(
+      false,
+    );
     expect(totalVoted(counts("1", "0", "9"))).toBe(10n);
   });
 
@@ -61,7 +65,9 @@ describe("percentage rules", () => {
   });
 
   it("fails just below", () => {
-    expect(meetsThreshold(counts("4"), { kind: "percentage", percentage: "0.5" }, "10")).toBe(false);
+    expect(meetsThreshold(counts("4"), { kind: "percentage", percentage: "0.5" }, "10")).toBe(
+      false,
+    );
   });
 
   it("is exact where a float would round the wrong way", () => {

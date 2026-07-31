@@ -28,11 +28,7 @@ export const ASSERTION_LIFETIME_SECONDS = 60;
  * `nowSeconds`. Deterministic over its inputs (clock injected) — the golden
  * vectors pin exact output strings.
  */
-export function mintAddressAssertion(
-  key: string,
-  address: string,
-  nowSeconds: number,
-): string {
+export function mintAddressAssertion(key: string, address: string, nowSeconds: number): string {
   // Field order is fixed (scope, iat, exp) so the serialized payload — and
   // therefore the golden vectors — are byte-stable.
   const payload = JSON.stringify({

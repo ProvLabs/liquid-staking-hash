@@ -24,7 +24,9 @@ const pair = (name) => {
     new RegExp(`--${name}:\\s*light-dark\\(\\s*(#[0-9a-fA-F]{6})\\s*,\\s*(#[0-9a-fA-F]{6})\\s*\\)`),
   );
   if (!m) {
-    console.error(`[check-palette] FAIL — token --${name} not found as a light-dark(#hex, #hex) pair`);
+    console.error(
+      `[check-palette] FAIL — token --${name} not found as a light-dark(#hex, #hex) pair`,
+    );
     process.exit(1);
   }
   return { light: m[1], dark: m[2] };
@@ -47,7 +49,14 @@ for (const mode of ["light", "dark"]) {
   console.log(`\n[check-palette] ${mode}: ${slots.length} slots on surface ${surface[mode]}`);
   const run = spawnSync(
     process.execPath,
-    [join(appDir, "scripts/validate_palette.js"), palette, "--mode", mode, "--surface", surface[mode]],
+    [
+      join(appDir, "scripts/validate_palette.js"),
+      palette,
+      "--mode",
+      mode,
+      "--surface",
+      surface[mode],
+    ],
     { stdio: "inherit" },
   );
   if (run.status !== 0) failed = true;

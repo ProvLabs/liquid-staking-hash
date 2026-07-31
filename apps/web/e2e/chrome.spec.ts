@@ -49,9 +49,7 @@ test("footer renders the honest n/a freshness line (null heights)", async ({ pag
   await expect(footer).not.toContainText("Program status unavailable");
 });
 
-test("failed live reads degrade honestly: no banner, footer says unavailable", async ({
-  page,
-}) => {
+test("failed live reads degrade honestly: no banner, footer says unavailable", async ({ page }) => {
   await page.goto(`${LIVE_DOWN_ORIGIN}/`);
   await expect(page.getByRole("status")).toHaveCount(0);
   await expect(page.locator("footer")).toContainText("Program status unavailable");

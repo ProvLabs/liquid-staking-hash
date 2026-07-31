@@ -16,7 +16,10 @@ export const notifierConfigSchema = z.object({
   /** HMAC key for minting `internal:notifier` assertions. Required, ≥ 32. */
   apiServiceAssertionKey: z.string().min(32).max(512),
   /** services/api base origin (no trailing slash needed; normalized on use). */
-  apiBaseUrl: z.string().url().refine((u) => /^https?:\/\//.test(u), "expected an http(s) URL"),
+  apiBaseUrl: z
+    .string()
+    .url()
+    .refine((u) => /^https?:\/\//.test(u), "expected an http(s) URL"),
   /** Tick cadence in seconds (default 60, bounded 10–600). */
   tickSeconds: z.coerce.number().int().min(10).max(600).default(60),
   /** Fact page size per stream (default 200, ≤ 500 = the API's ceiling). */
@@ -42,8 +45,12 @@ export const notifierConfigSchema = z.object({
           (s) => /^mailto:.+@.+/.test(s) || /^https:\/\//.test(s),
           "expected a mailto: or https:// VAPID subject",
         ),
-      publicKey: z.string().regex(/^[A-Za-z0-9_-]{80,200}$/, "expected a base64url VAPID public key"),
-      privateKey: z.string().regex(/^[A-Za-z0-9_-]{20,120}$/, "expected a base64url VAPID private key"),
+      publicKey: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{80,200}$/, "expected a base64url VAPID public key"),
+      privateKey: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{20,120}$/, "expected a base64url VAPID private key"),
     })
     .optional(),
 });

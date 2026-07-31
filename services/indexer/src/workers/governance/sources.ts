@@ -250,11 +250,14 @@ export async function collectWindow(
       // recover it; the tx BODY could, and doing so is a recorded follow-on rather
       // than a silent gap.
       if (terminal !== undefined && terminal <= submitted) {
-        logger.warn("governance proposal submitted and finished in one block: not recoverable by a pinned read", {
-          stream: "governance",
-          height: submitted,
-          error: `proposal ${key} has no height at which it was alive`,
-        });
+        logger.warn(
+          "governance proposal submitted and finished in one block: not recoverable by a pinned read",
+          {
+            stream: "governance",
+            height: submitted,
+            error: `proposal ${key} has no height at which it was alive`,
+          },
+        );
         continue;
       }
       absent.push({ proposalId: BigInt(key), pinHeight: submitted });

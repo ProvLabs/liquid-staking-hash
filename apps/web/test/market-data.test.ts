@@ -141,7 +141,9 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
 
   it("a failed vault read nulls only localSupply", async () => {
     server.use(
-      http.get("*/vault/v1/vaults/:id", () => HttpResponse.json({ message: "down" }, { status: 503 })),
+      http.get("*/vault/v1/vaults/:id", () =>
+        HttpResponse.json({ message: "down" }, { status: 503 }),
+      ),
     );
     const data = await loadMarketData(config());
     expect(data.localSupply).toBeNull();
@@ -155,7 +157,15 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
       http.get("*/api/v1/epochs", () =>
         HttpResponse.json(
           envelope(
-            [{ epoch_index: 8, ended_at: "2026-07-14T00:00:01Z", nav: "1.0175", tvv: "1.5", net_apr_bps: null }],
+            [
+              {
+                epoch_index: 8,
+                ended_at: "2026-07-14T00:00:01Z",
+                nav: "1.0175",
+                tvv: "1.5",
+                net_apr_bps: null,
+              },
+            ],
             { source: "indexed" },
           ),
         ),

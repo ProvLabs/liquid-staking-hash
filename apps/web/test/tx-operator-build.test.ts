@@ -81,7 +81,10 @@ function intentFromFixture(fixture: ExecuteFixture): OperatorIntent {
 function reencodedHash(fixture: ExecuteFixture): string {
   const signerInfo = fixture.tx.auth_info.signer_infos[0]!;
   const fee = fixture.tx.auth_info.fee;
-  const bodyBytes = encodeTxBody([encodeIntentMsg(intentFromFixture(fixture))], fixture.tx.body.memo);
+  const bodyBytes = encodeTxBody(
+    [encodeIntentMsg(intentFromFixture(fixture))],
+    fixture.tx.body.memo,
+  );
   const authInfoBytes = encodeAuthInfo(
     {
       chainId: "irrelevant-for-txraw",
@@ -220,7 +223,9 @@ describe("builder ↔ decoder round trip for operator messages", () => {
 
   it("decodeTxRaw recovers the sender, contract, payload and funds", () => {
     const plan = buildTxPlan(base, fee, signer);
-    const decoded = decodeTxRaw(encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]));
+    const decoded = decodeTxRaw(
+      encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]),
+    );
     expect(decoded.messages).toHaveLength(1);
     const msg = decoded.messages[0]!;
     expect(msg.typeUrl).toBe(MSG_EXECUTE_CONTRACT);
@@ -233,8 +238,14 @@ describe("builder ↔ decoder round trip for operator messages", () => {
   });
 
   it("a fundless variant encodes NO funds field at all", () => {
-    const plan = buildTxPlan({ ...base, variant: "unregister_participation", amount: 0n }, fee, signer);
-    const decoded = decodeTxRaw(encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]));
+    const plan = buildTxPlan(
+      { ...base, variant: "unregister_participation", amount: 0n },
+      fee,
+      signer,
+    );
+    const decoded = decodeTxRaw(
+      encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]),
+    );
     expect(decoded.messages[0]!.execFunds).toEqual([]);
   });
 

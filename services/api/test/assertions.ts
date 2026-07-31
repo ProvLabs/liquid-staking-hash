@@ -21,6 +21,8 @@ export function mintAssertion(scope: string, opts: MintOptions = {}): string {
   const iat = opts.iat ?? now;
   const exp = opts.exp ?? iat + 55;
   const payload = Buffer.from(JSON.stringify({ scope, iat, exp })).toString("base64url");
-  const sig = createHmac("sha256", opts.key ?? TEST_ASSERTION_KEY).update(payload).digest("base64url");
+  const sig = createHmac("sha256", opts.key ?? TEST_ASSERTION_KEY)
+    .update(payload)
+    .digest("base64url");
   return `Bearer ${payload}.${sig}`;
 }

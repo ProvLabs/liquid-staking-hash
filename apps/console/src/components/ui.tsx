@@ -65,6 +65,7 @@ export function AddressChip({ addr }: { addr: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
+      type="button"
       className="chip"
       title={addr}
       aria-label={`copy address ${addr}`}
@@ -96,6 +97,7 @@ export function GuardButton({
   return (
     <span className="guardbtn">
       <button
+        type="button"
         className={`btn btn--${variant}`}
         disabled={disabled}
         onClick={onClick}
@@ -109,7 +111,13 @@ export function GuardButton({
 }
 
 /** Countdown to a unix-seconds target; "ready" past it. */
-export function Countdown({ target, readyLabel = "eligible now" }: { target: number; readyLabel?: string }) {
+export function Countdown({
+  target,
+  readyLabel = "eligible now",
+}: {
+  target: number;
+  readyLabel?: string;
+}) {
   const now = useNow();
   const remaining = target - now;
   return <span className="tnum">{remaining <= 0 ? readyLabel : humanDuration(remaining)}</span>;
@@ -140,7 +148,11 @@ export function Loading({ rows = 3 }: { rows?: number }) {
   return (
     <div className="state" aria-busy>
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="skeleton" style={{ width: `${80 - i * 12}%`, margin: "8px auto" }} />
+        <div
+          key={i}
+          className="skeleton"
+          style={{ width: `${80 - i * 12}%`, margin: "8px auto" }}
+        />
       ))}
     </div>
   );
@@ -150,7 +162,12 @@ export function ErrorState({ error, onRetry }: { error: string; onRetry?: () => 
     <div className="state state--error">
       <div>{error}</div>
       {onRetry && (
-        <button className="btn btn--secondary btn--sm" style={{ marginTop: 8 }} onClick={onRetry}>
+        <button
+          type="button"
+          className="btn btn--secondary btn--sm"
+          style={{ marginTop: 8 }}
+          onClick={onRetry}
+        >
           retry
         </button>
       )}

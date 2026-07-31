@@ -189,7 +189,9 @@ describe("templateInnerJson — the one canonical serialization site", () => {
     expect(templateInnerJson("clear_pending_delegations", {})).toBe(
       `{"clear_pending_delegations":{}}`,
     );
-    expect(templateInnerJson("set_halted", { halted: true })).toBe(`{"set_halted":{"halted":true}}`);
+    expect(templateInnerJson("set_halted", { halted: true })).toBe(
+      `{"set_halted":{"halted":true}}`,
+    );
     expect(templateInnerJson("set_halted", { halted: false })).toBe(
       `{"set_halted":{"halted":false}}`,
     );
@@ -270,18 +272,73 @@ describe("templateInnerJson — the one canonical serialization site", () => {
 
 describe("invariant 9 — reject-never-clamp on every parameter", () => {
   const cases: { label: string; id: string; values: TemplateValues; code: string }[] = [
-    { label: "bps above ceiling", id: "update_config", values: { aum_fee_bps: 10_001n }, code: "out-of-range" },
-    { label: "offset at its exclusive ceiling", id: "update_config", values: { concentration_safety_offset_bps: 10_000n }, code: "out-of-range" },
-    { label: "max bonded cap at zero", id: "update_config", values: { max_bonded_cap_bps: 0n }, code: "out-of-range" },
-    { label: "concentration multiple at zero", id: "update_config", values: { max_concentration_multiple_bps: 0n }, code: "out-of-range" },
-    { label: "u32 field above its type", id: "update_config", values: { max_delegations_per_run: 4_294_967_296n }, code: "out-of-range" },
-    { label: "unknown parameter", id: "update_config", values: { admin: "tp1..." }, code: "unknown-param" },
-    { label: "wrong type for a uint", id: "update_config", values: { aum_fee_bps: "25" }, code: "wrong-type" },
-    { label: "wrong type for a bool", id: "set_halted", values: { halted: "true" }, code: "wrong-type" },
+    {
+      label: "bps above ceiling",
+      id: "update_config",
+      values: { aum_fee_bps: 10_001n },
+      code: "out-of-range",
+    },
+    {
+      label: "offset at its exclusive ceiling",
+      id: "update_config",
+      values: { concentration_safety_offset_bps: 10_000n },
+      code: "out-of-range",
+    },
+    {
+      label: "max bonded cap at zero",
+      id: "update_config",
+      values: { max_bonded_cap_bps: 0n },
+      code: "out-of-range",
+    },
+    {
+      label: "concentration multiple at zero",
+      id: "update_config",
+      values: { max_concentration_multiple_bps: 0n },
+      code: "out-of-range",
+    },
+    {
+      label: "u32 field above its type",
+      id: "update_config",
+      values: { max_delegations_per_run: 4_294_967_296n },
+      code: "out-of-range",
+    },
+    {
+      label: "unknown parameter",
+      id: "update_config",
+      values: { admin: "tp1..." },
+      code: "unknown-param",
+    },
+    {
+      label: "wrong type for a uint",
+      id: "update_config",
+      values: { aum_fee_bps: "25" },
+      code: "wrong-type",
+    },
+    {
+      label: "wrong type for a bool",
+      id: "set_halted",
+      values: { halted: "true" },
+      code: "wrong-type",
+    },
     { label: "missing required field", id: "set_halted", values: {}, code: "missing-param" },
-    { label: "empty pause reason", id: "pause_vault", values: { reason: "" }, code: "length-out-of-range" },
-    { label: "over-long pause reason", id: "pause_vault", values: { reason: "x".repeat(MAX_PAUSE_REASON_LEN + 1) }, code: "length-out-of-range" },
-    { label: "update_config supplying nothing", id: "update_config", values: {}, code: "no-fields-supplied" },
+    {
+      label: "empty pause reason",
+      id: "pause_vault",
+      values: { reason: "" },
+      code: "length-out-of-range",
+    },
+    {
+      label: "over-long pause reason",
+      id: "pause_vault",
+      values: { reason: "x".repeat(MAX_PAUSE_REASON_LEN + 1) },
+      code: "length-out-of-range",
+    },
+    {
+      label: "update_config supplying nothing",
+      id: "update_config",
+      values: {},
+      code: "no-fields-supplied",
+    },
   ];
 
   it.each(cases)("$label → $code, and nothing is moved into range", ({ id, values, code }) => {
@@ -304,9 +361,10 @@ describe("invariant 9 — reject-never-clamp on every parameter", () => {
       { max_delegations_per_run: 4_294_967_295n },
       { aum_fee_bps: 0n },
     ] as TemplateValues[]) {
-      expect(validateTemplateValues("update_config", values), JSON.stringify(values, (_, v) =>
-        typeof v === "bigint" ? v.toString() : v,
-      )).toEqual([]);
+      expect(
+        validateTemplateValues("update_config", values),
+        JSON.stringify(values, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
+      ).toEqual([]);
     }
     expect(validateTemplateValues("pause_vault", { reason: "x" })).toEqual([]);
   });

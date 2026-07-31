@@ -20,7 +20,9 @@ export interface GuardInputs {
 }
 
 const fresh = (g: GuardInputs): GuardState | null =>
-  g.stale ? { kind: "disabled", reason: "data stale; refusing to submit against unknown state" } : null;
+  g.stale
+    ? { kind: "disabled", reason: "data stale; refusing to submit against unknown state" }
+    : null;
 
 function isReleasing(e: EpochStatusResponse | null): boolean {
   return e?.phase === "Releasing";
@@ -34,7 +36,10 @@ export function guardRunEpoch(g: GuardInputs): GuardState {
   if (g.epoch) {
     const at = nextRunAt(g.epoch.last_run_seconds);
     if (g.nowSecs < at)
-      return { kind: "disabled", reason: `calendar month: eligible in ${humanDuration(at - g.nowSecs)}` };
+      return {
+        kind: "disabled",
+        reason: `calendar month: eligible in ${humanDuration(at - g.nowSecs)}`,
+      };
   }
   return { kind: "enabled" };
 }
@@ -55,7 +60,10 @@ export function guardCaptureUptime(_g: GuardInputs): GuardState {
 
 export function guardReportJailed(jailedNow: boolean): GuardState {
   if (!jailedNow)
-    return { kind: "disabled", reason: "target not currently jailed (report would be a clearing no-op)" };
+    return {
+      kind: "disabled",
+      reason: "target not currently jailed (report would be a clearing no-op)",
+    };
   return { kind: "enabled" };
 }
 
@@ -69,7 +77,10 @@ export function guardPurge(p: PurgeInputs): GuardState {
   if (!p.reportExists) return { kind: "disabled", reason: "no open jail report" };
   if (p.epoch?.halted) return { kind: "disabled", reason: "contract halted" };
   if (p.nowSecs < p.purgeReadyAt)
-    return { kind: "disabled", reason: `cooldown: purge-ready in ${humanDuration(p.purgeReadyAt - p.nowSecs)}` };
+    return {
+      kind: "disabled",
+      reason: `cooldown: purge-ready in ${humanDuration(p.purgeReadyAt - p.nowSecs)}`,
+    };
   if (!p.jailedNow) return { kind: "disabled", reason: "target unjailed; report will clear" };
   if (p.claimantEligibleAndMine === false)
     return { kind: "disabled", reason: "claimant must be an eligible validator you operate" };

@@ -60,20 +60,36 @@ export async function loader({ request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
   const session = await getSessionContext(config, request);
   if (session === null) {
-    return { gate: { kind: "anonymous" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "anonymous" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
 
   const live = await loadLiveGovernance(config);
   if (live.state === "not-governed") {
-    return { gate: { kind: "not-governed" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "not-governed" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
   if (live.state === "unavailable" || live.members === null) {
     // "We could not check" is a different sentence from "you are not a member",
     // and only one of them may be shown to an actual member.
-    return { gate: { kind: "unavailable" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "unavailable" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
   if (!live.members.some((member) => member.address === session.address)) {
-    return { gate: { kind: "not-member" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "not-member" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
 
   // The live `Config {}` read feeds the diff's CURRENT column. A failed read
@@ -132,7 +148,9 @@ export default function GovernanceNew({ loaderData }: Route.ComponentProps) {
 
   if (gate.kind === "anonymous") {
     return shell(
-      <p className="rounded-lg border bg-card p-4 text-sm">{t(locale, "governance.new-connect")}</p>,
+      <p className="rounded-lg border bg-card p-4 text-sm">
+        {t(locale, "governance.new-connect")}
+      </p>,
     );
   }
   if (gate.kind === "not-governed") {
@@ -144,7 +162,10 @@ export default function GovernanceNew({ loaderData }: Route.ComponentProps) {
   }
   if (gate.kind === "unavailable") {
     return shell(
-      <p className="rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm" role="alert">
+      <p
+        className="rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm"
+        role="alert"
+      >
         {t(locale, "governance.new-unavailable")}
       </p>,
     );
@@ -201,10 +222,7 @@ function Composer({
   }
 
   const ready =
-    parsed.ok &&
-    policyAddress !== "" &&
-    title.trim().length > 0 &&
-    summary.trim().length > 0;
+    parsed.ok && policyAddress !== "" && title.trim().length > 0 && summary.trim().length > 0;
 
   const template = templateById(templateId);
   const diffRows =

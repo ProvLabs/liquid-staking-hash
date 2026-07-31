@@ -10,10 +10,7 @@ import type { ValidatorRow } from "~/validators/types";
 
 type Reliability = "eligible" | "ineligible" | "jailed" | "tombstoned";
 
-const STATUS: Record<
-  Reliability,
-  { labelKey: MessageKey; token: string; iconPath: string }
-> = {
+const STATUS: Record<Reliability, { labelKey: MessageKey; token: string; iconPath: string }> = {
   eligible: {
     labelKey: "validators.status-eligible",
     token: "var(--status-good)",

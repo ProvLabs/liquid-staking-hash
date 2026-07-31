@@ -22,9 +22,7 @@ export interface TypicalDisplay {
 }
 
 export function typicalDisplay(stats: PayoutStats | null): TypicalDisplay {
-  const guaranteeDays = stats
-    ? Math.round(stats.band_ceiling_seconds / SECONDS_PER_DAY)
-    : 60; // the fixed ceiling stands even if the stats read failed
+  const guaranteeDays = stats ? Math.round(stats.band_ceiling_seconds / SECONDS_PER_DAY) : 60; // the fixed ceiling stands even if the stats read failed
   if (stats === null || stats.median_seconds === null || stats.p90_seconds === null) {
     return {
       hasTypical: false,

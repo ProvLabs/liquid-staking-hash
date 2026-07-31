@@ -23,12 +23,7 @@ import {
   type SignerContext,
   type TxIntent,
 } from "./build";
-import {
-  INITIAL_TX_STATE,
-  txReducer,
-  type PreflightReason,
-  type TxState,
-} from "./lifecycle";
+import { INITIAL_TX_STATE, txReducer, type PreflightReason, type TxState } from "./lifecycle";
 import { trackTransaction } from "./track";
 
 /** What the page provides to start a flow — the amount is already parsed to

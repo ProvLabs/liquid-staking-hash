@@ -24,18 +24,10 @@ export default function Validators({ loaderData }: Route.ComponentProps) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-12">
       <section className="flex flex-col gap-3">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {t(locale, "validators.title")}
-        </h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          {t(locale, "validators.lede")}
-        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "validators.title")}</h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">{t(locale, "validators.lede")}</p>
       </section>
-      <SetHealth
-        locale={locale}
-        eligibleCount={data.eligibleCount}
-        setHealth={data.setHealth}
-      />
+      <SetHealth locale={locale} eligibleCount={data.eligibleCount} setHealth={data.setHealth} />
       <SetTable locale={locale} rows={data.rows} nowMs={nowMs} />
     </div>
   );

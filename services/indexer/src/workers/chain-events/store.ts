@@ -23,7 +23,9 @@ export class PrismaStore implements Store {
   constructor(private readonly tx: Prisma.TransactionClient) {}
 
   async readNav(): Promise<bigint> {
-    const row = await this.tx.indexerCheckpoint.findUnique({ where: { stream: NAV_MARKER_STREAM } });
+    const row = await this.tx.indexerCheckpoint.findUnique({
+      where: { stream: NAV_MARKER_STREAM },
+    });
     return row?.cursorPage ? BigInt(row.cursorPage) : 0n;
   }
 

@@ -59,7 +59,10 @@ export interface EffectiveSetting {
  * (kind → enabled)? Absence = the kind's default. The single source of truth
  * for both the notifier's suppression and the settings UI's toggle state.
  */
-export function isKindEnabled(kind: AlertKind, overrides: ReadonlyMap<AlertKind, boolean>): boolean {
+export function isKindEnabled(
+  kind: AlertKind,
+  overrides: ReadonlyMap<AlertKind, boolean>,
+): boolean {
   const override = overrides.get(kind);
   return override === undefined ? DEFAULT_ON.has(kind) : override;
 }
@@ -79,7 +82,10 @@ const epochIndex = z.number().int().nonnegative();
 
 export const navStepPayloadSchema = z.object({ epoch_index: epochIndex }).strict();
 export const redemptionPayloadSchema = z
-  .object({ request_id: z.string().min(1).max(128), event: z.enum(["matured", "expedited", "refunded"]) })
+  .object({
+    request_id: z.string().min(1).max(128),
+    event: z.enum(["matured", "expedited", "refunded"]),
+  })
   .strict();
 export const incidentPayloadSchema = z
   .object({

@@ -18,7 +18,12 @@ test("anonymous operator view renders the connect prompt, never a blank page", a
 
 test("anonymous operator view exposes no operator data or actions", async ({ page }) => {
   await page.goto("/validators/mine");
-  for (const heading of ["Standing", "Net benefit after fees", "Payment history", "Per-epoch history"]) {
+  for (const heading of [
+    "Standing",
+    "Net benefit after fees",
+    "Payment history",
+    "Per-epoch history",
+  ]) {
     await expect(page.getByRole("heading", { name: heading })).toHaveCount(0);
   }
   // The export is session-gated; its link must not exist for an anonymous visitor.

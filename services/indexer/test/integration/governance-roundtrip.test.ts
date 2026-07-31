@@ -53,7 +53,9 @@ const BIG = (10n ** 38n - 1n).toString();
 
 const ZERO: Tally = { yes: "0", no: "0", abstain: "0", noWithVeto: "0" };
 
-function proposal(over: Partial<ProposalUpsert> & { proposalId: bigint; observedHeight: bigint }): ProposalUpsert {
+function proposal(
+  over: Partial<ProposalUpsert> & { proposalId: bigint; observedHeight: bigint },
+): ProposalUpsert {
   return {
     groupPolicyAddress: POLICY,
     groupId: 1n,
@@ -63,7 +65,9 @@ function proposal(over: Partial<ProposalUpsert> & { proposalId: bigint; observed
     metadata: null,
     title: "round-trip",
     summary: "",
-    messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend", amount: [{ denom: "nhash", amount: "1" }] }],
+    messages: [
+      { "@type": "/cosmos.bank.v1beta1.MsgSend", amount: [{ denom: "nhash", amount: "1" }] },
+    ],
     submitTime: new Date("2026-07-29T00:00:00Z"),
     votingPeriodEnd: new Date("2026-07-29T00:05:00Z"),
     tally: ZERO,
@@ -94,10 +98,18 @@ afterAll(async () => {
 
 describe("gov_proposals round-trip (real Postgres)", () => {
   it("enforces the monotonic observedHeight guard IN THE STATEMENT", async () => {
-    await inTx((s) => s.upsertProposal(proposal({ proposalId: ID_GUARD, observedHeight: 500n, status: "REJECTED" })));
+    await inTx((s) =>
+      s.upsertProposal(
+        proposal({ proposalId: ID_GUARD, observedHeight: 500n, status: "REJECTED" }),
+      ),
+    );
     // The stale write arrives LAST. Application logic that read-compared-then-wrote
     // could interleave here; the `ON CONFLICT … WHERE` arm cannot.
-    await inTx((s) => s.upsertProposal(proposal({ proposalId: ID_GUARD, observedHeight: 100n, status: "SUBMITTED" })));
+    await inTx((s) =>
+      s.upsertProposal(
+        proposal({ proposalId: ID_GUARD, observedHeight: 100n, status: "SUBMITTED" }),
+      ),
+    );
 
     const row = await prisma.govProposal.findUniqueOrThrow({ where: { proposalId: ID_GUARD } });
     expect(row.status).toBe("REJECTED");
@@ -105,7 +117,11 @@ describe("gov_proposals round-trip (real Postgres)", () => {
   });
 
   it("advances on a HIGHER observation", async () => {
-    await inTx((s) => s.upsertProposal(proposal({ proposalId: ID_GUARD, observedHeight: 900n, status: "ACCEPTED" })));
+    await inTx((s) =>
+      s.upsertProposal(
+        proposal({ proposalId: ID_GUARD, observedHeight: 900n, status: "ACCEPTED" }),
+      ),
+    );
     const row = await prisma.govProposal.findUniqueOrThrow({ where: { proposalId: ID_GUARD } });
     expect(row.status).toBe("ACCEPTED");
     expect(row.observedHeight).toBe(900n);
@@ -114,7 +130,14 @@ describe("gov_proposals round-trip (real Postgres)", () => {
   it("never regresses a known executorResult to the sweep's NOT_RUN default", async () => {
     await inTx((s) => s.setExecutorResult(ID_GUARD, "FAILURE", 890n));
     await inTx((s) =>
-      s.upsertProposal(proposal({ proposalId: ID_GUARD, observedHeight: 1000n, status: "ACCEPTED", executorResult: "NOT_RUN" })),
+      s.upsertProposal(
+        proposal({
+          proposalId: ID_GUARD,
+          observedHeight: 1000n,
+          status: "ACCEPTED",
+          executorResult: "NOT_RUN",
+        }),
+      ),
     );
     const row = await prisma.govProposal.findUniqueOrThrow({ where: { proposalId: ID_GUARD } });
     expect(row.executorResult).toBe("FAILURE");
@@ -123,7 +146,12 @@ describe("gov_proposals round-trip (real Postgres)", () => {
   it("round-trips proposers as an ARRAY, with the scalar column gone", async () => {
     await inTx((s) =>
       s.upsertProposal(
-        proposal({ proposalId: ID_BIG, observedHeight: 10n, proposers: ["tp1one", "tp1two"], tally: { yes: BIG, no: BIG, abstain: "0", noWithVeto: "1" } }),
+        proposal({
+          proposalId: ID_BIG,
+          observedHeight: 10n,
+          proposers: ["tp1one", "tp1two"],
+          tally: { yes: BIG, no: BIG, abstain: "0", noWithVeto: "1" },
+        }),
       ),
     );
     const row = await prisma.govProposal.findUniqueOrThrow({ where: { proposalId: ID_BIG } });
@@ -172,7 +200,12 @@ describe("prune PRESERVES the row — the mirror outlives chain state", () => {
     await inTx((s) => s.upsertProposal(proposal({ proposalId: ID_PRUNE, observedHeight: 200n })));
     await inTx((s) => s.setSubmitProvenance(ID_PRUNE, "PRUNEDTX", 190n));
     await inTx((s) =>
-      s.setTerminalState(ID_PRUNE, "ACCEPTED", { yes: "2", no: "0", abstain: "1", noWithVeto: "0" }, 205n),
+      s.setTerminalState(
+        ID_PRUNE,
+        "ACCEPTED",
+        { yes: "2", no: "0", abstain: "1", noWithVeto: "0" },
+        205n,
+      ),
     );
     await inTx((s) => s.markPruned(ID_PRUNE, 205n));
 

@@ -22,13 +22,8 @@
 // (invariant 8), and the raw payload is preserved so the surface can
 //    say what it does not understand instead of inventing a summary.
 
-import {
-  expectArray,
-  expectObject,
-  expectString,
-  parseU64String,
-} from "./amounts.ts";
-import { LcdClient, type QueryParams } from "./lcd.ts";
+import { expectArray, expectObject, expectString, parseU64String } from "./amounts.ts";
+import type { LcdClient, QueryParams } from "./lcd.ts";
 import { parsePagination, type Pagination } from "./types.ts";
 
 /**
@@ -41,7 +36,9 @@ import { parsePagination, type Pagination } from "./types.ts";
 function expectDecimalString(value: unknown, path: string): string {
   const s = expectString(value, path);
   if (!/^(0|[1-9][0-9]*)$/.test(s)) {
-    throw new Error(`decode ${path}: expected canonical unsigned integer string (got ${JSON.stringify(s)})`);
+    throw new Error(
+      `decode ${path}: expected canonical unsigned integer string (got ${JSON.stringify(s)})`,
+    );
   }
   return s;
 }
@@ -91,16 +88,27 @@ export function parseDecisionPolicy(value: unknown, path = "$"): GroupDecisionPo
     const w = expectObject(o["windows"], `${path}.windows`);
     return {
       votingPeriod: expectString(w["voting_period"], `${path}.windows.voting_period`),
-      minExecutionPeriod: expectString(w["min_execution_period"], `${path}.windows.min_execution_period`),
+      minExecutionPeriod: expectString(
+        w["min_execution_period"],
+        `${path}.windows.min_execution_period`,
+      ),
     };
   };
   switch (typeUrl) {
     case "/cosmos.group.v1.ThresholdDecisionPolicy":
-      return { kind: "threshold", threshold: expectDecimalString(o["threshold"], `${path}.threshold`), ...windows() };
+      return {
+        kind: "threshold",
+        threshold: expectDecimalString(o["threshold"], `${path}.threshold`),
+        ...windows(),
+      };
     case "/cosmos.group.v1.PercentageDecisionPolicy":
       // A percentage is a decimal fraction ("0.5"), NOT an integer — so it is
       // carried as the raw string rather than through expectDecimalString.
-      return { kind: "percentage", percentage: expectString(o["percentage"], `${path}.percentage`), ...windows() };
+      return {
+        kind: "percentage",
+        percentage: expectString(o["percentage"], `${path}.percentage`),
+        ...windows(),
+      };
     default:
       return { kind: "unknown", typeUrl, raw: value };
   }
@@ -307,7 +315,9 @@ export class GroupClient {
   async groups(params?: QueryParams): Promise<{ groups: GroupInfo[]; pagination: Pagination }> {
     const o = expectObject(await this.lcd.get("cosmos/group/v1/groups", params));
     return {
-      groups: expectArray(o["groups"], "$.groups").map((g, i) => parseGroupInfo(g, `$.groups[${i}]`)),
+      groups: expectArray(o["groups"], "$.groups").map((g, i) =>
+        parseGroupInfo(g, `$.groups[${i}]`),
+      ),
       pagination: parsePagination(o["pagination"]),
     };
   }
@@ -374,7 +384,10 @@ export class GroupClient {
     params?: QueryParams,
   ): Promise<{ policies: GroupPolicyInfo[]; pagination: Pagination }> {
     const o = expectObject(
-      await this.lcd.get(`cosmos/group/v1/group_policies_by_admin/${encodeURIComponent(admin)}`, params),
+      await this.lcd.get(
+        `cosmos/group/v1/group_policies_by_admin/${encodeURIComponent(admin)}`,
+        params,
+      ),
     );
     return {
       policies: expectArray(o["group_policies"], "$.group_policies").map((p, i) =>

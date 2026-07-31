@@ -14,6 +14,12 @@ packages:
 # is the reviewed decision to permit exactly those scripts, nothing else. Added
 # with the services/indexer scaffold (app plan PR 1.1).
 allowBuilds:
+  # Biome is the workspace formatter + linter (one tool, one dependency, per
+  # SECURITY.md's "prefer std/first-party, avoid install-script-heavy
+  # packages"). Its postinstall only resolves the platform-native binary from
+  # the already-declared optional dependencies — no network beyond the resolved
+  # package. Reviewed and permitted on that basis; nothing else it ships runs.
+  '@biomejs/biome': true
   '@prisma/client': true
   '@prisma/engines': true
   # esbuild's postinstall stages its platform-native binary for vite /

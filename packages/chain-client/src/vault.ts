@@ -17,10 +17,9 @@ import {
   parseCoin,
   parseU64Number,
   parseU64String,
-  parseUint128,
   type Coin,
 } from "./amounts.ts";
-import { LcdClient, UnsupportedTransportError } from "./lcd.ts";
+import { type LcdClient, UnsupportedTransportError } from "./lcd.ts";
 import { parsePagination, type Pagination } from "./types.ts";
 
 export interface VaultAccount {
@@ -144,7 +143,10 @@ export function parsePendingSwapOuts(
   return {
     pendingSwapOuts: list.map((e, i) => {
       const entry = expectObject(e, `${path}.pending_swap_outs[${i}]`);
-      const p = expectObject(entry["pending_swap_out"], `${path}.pending_swap_outs[${i}].pending_swap_out`);
+      const p = expectObject(
+        entry["pending_swap_out"],
+        `${path}.pending_swap_outs[${i}].pending_swap_out`,
+      );
       return {
         owner: expectString(p["owner"], `${path}[${i}].owner`),
         vaultAddress: expectString(p["vault_address"], `${path}[${i}].vault_address`),
@@ -170,7 +172,10 @@ export function parseVaultParams(value: unknown, path = "$"): VaultParams {
   const o = expectObject(expectObject(value, path)["params"], `${path}.params`);
   return {
     techFeeAddress: expectString(o["tech_fee_address"], `${path}.params.tech_fee_address`),
-    defaultAumFeeBips: parseU64Number(o["default_aum_fee_bips"], `${path}.params.default_aum_fee_bips`),
+    defaultAumFeeBips: parseU64Number(
+      o["default_aum_fee_bips"],
+      `${path}.params.default_aum_fee_bips`,
+    ),
   };
 }
 
@@ -195,11 +200,17 @@ export class VaultClient {
     return parseVaultParams(await this.lcd.get("vault/v1/params"));
   }
 
-  async pendingSwapOuts(vault: string): Promise<{ pendingSwapOuts: PendingSwapOut[]; pagination: Pagination }> {
+  async pendingSwapOuts(
+    vault: string,
+  ): Promise<{ pendingSwapOuts: PendingSwapOut[]; pagination: Pagination }> {
     return parsePendingSwapOuts(await this.lcd.get(`vault/v1/vaults/${vault}/pending_swap_outs`));
   }
 
-  async estimateSwapOut(vault: string, shares: bigint, redeemDenom?: string): Promise<SwapEstimate> {
+  async estimateSwapOut(
+    vault: string,
+    shares: bigint,
+    redeemDenom?: string,
+  ): Promise<SwapEstimate> {
     if (shares < 0n) throw new DecodeError("$.shares", "shares must be non-negative");
     return parseSwapEstimate(
       await this.lcd.get(`vault/v1/vaults/${vault}/estimate_swap_out`, {

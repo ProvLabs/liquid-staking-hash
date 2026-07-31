@@ -29,7 +29,9 @@ test("the governance page renders against the real chain, with no session", asyn
   await expect(page.getByText("Members vote and execute", { exact: false })).toBeVisible();
 });
 
-test("the live plane resolves to exactly one of its three states, and says which", async ({ page }) => {
+test("the live plane resolves to exactly one of its three states, and says which", async ({
+  page,
+}) => {
   await page.goto("/governance");
   const notGoverned = await page
     .getByText("is a plain account rather than a group policy", { exact: false })
@@ -62,5 +64,7 @@ test("a governed stack renders the member set rather than a not-checked note", a
   // Either the members table or the membership-changed note — both are real
   // answers. "The current member set could not be read" is not, on a chain the
   // page just read a group from.
-  await expect(page.getByText("The current member set could not be read", { exact: false })).toHaveCount(0);
+  await expect(
+    page.getByText("The current member set could not be read", { exact: false }),
+  ).toHaveCount(0);
 });

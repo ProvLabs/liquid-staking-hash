@@ -23,10 +23,18 @@ function fakeStore(initial?: MarkerRow) {
   const upserts: string[] = [];
   const prisma = {
     indexerCheckpoint: {
-      findUnique: async ({ where }: { where: { stream: string } }) => rows.get(where.stream) ?? null,
+      findUnique: async ({ where }: { where: { stream: string } }) =>
+        rows.get(where.stream) ?? null,
       // Models Postgres INSERT ... ON CONFLICT DO UPDATE: create if absent, else
       // apply `update` (here empty → leave the existing row untouched).
-      upsert: async ({ where, create }: { where: { stream: string }; create: MarkerRow; update: unknown }) => {
+      upsert: async ({
+        where,
+        create,
+      }: {
+        where: { stream: string };
+        create: MarkerRow;
+        update: unknown;
+      }) => {
         upserts.push(where.stream);
         if (!rows.has(where.stream)) rows.set(where.stream, create);
         return rows.get(where.stream)!;
@@ -43,7 +51,9 @@ describe("assertChainIsolation", () => {
     const { prisma, rows, upserts } = fakeStore();
     await assertChainIsolation(prisma, identity);
     expect(upserts).toEqual([PROVENANCE_MARKER_STREAM]);
-    expect(rows.get(PROVENANCE_MARKER_STREAM)).toMatchObject({ cursorPage: "chain-dev|tp1contract" });
+    expect(rows.get(PROVENANCE_MARKER_STREAM)).toMatchObject({
+      cursorPage: "chain-dev|tp1contract",
+    });
   });
 
   it("is a no-op when the persisted identity matches", async () => {
@@ -63,7 +73,9 @@ describe("assertChainIsolation", () => {
       cursorHeight: 0n,
       cursorPage: "chain-other|tp1different",
     });
-    await expect(assertChainIsolation(prisma, identity)).rejects.toBeInstanceOf(ChainIsolationError);
+    await expect(assertChainIsolation(prisma, identity)).rejects.toBeInstanceOf(
+      ChainIsolationError,
+    );
     // The foreign marker is preserved (empty `update`), not clobbered.
     expect(rows.get(PROVENANCE_MARKER_STREAM)?.cursorPage).toBe("chain-other|tp1different");
   });

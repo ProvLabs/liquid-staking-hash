@@ -17,7 +17,6 @@
 // the stale-registry hazard, refused here before it can happen.
 
 import type {
-  FreshnessMeta,
   GovDecisionPolicy,
   GovExecutorResult,
   GovProposalRow,
@@ -158,7 +157,10 @@ export function secondsUntil(iso: string, nowMs: number): number | null {
  * serves both planes. `observed_*` are deliberately absent from the live path —
  * a live read is AS OF now, and stamping it with a height it did not carry would
  * invent provenance. */
-export function liveProposalToRow(live: GroupProposal, tally: GovTally | null): Omit<
+export function liveProposalToRow(
+  live: GroupProposal,
+  tally: GovTally | null,
+): Omit<
   GovProposalRow,
   "observed_height" | "observed_at" | "pruned_at_height" | "height" | "txhash"
 > {
@@ -283,7 +285,8 @@ export function buildProposalSummary(input: ProposalMergeInput): ProposalSummary
     status: source.status,
     executorResult: source.executor_result,
     plane,
-    observedHeight: plane === "live" || plane === "live-only" ? null : (indexed?.observed_height ?? null),
+    observedHeight:
+      plane === "live" || plane === "live-only" ? null : (indexed?.observed_height ?? null),
     observedAt: plane === "live" || plane === "live-only" ? null : (indexed?.observed_at ?? null),
     submitTime: source.submit_time,
     votingPeriodEnd: source.voting_period_end,
@@ -433,7 +436,12 @@ function buildPolicies(
         proposalCount: mirrored?.proposal_count ?? null,
         lastSeenHeight: mirrored?.last_seen_height ?? null,
         rule: wire.kind,
-        ruleValue: wire.kind === "threshold" ? wire.threshold : wire.kind === "percentage" ? wire.percentage : null,
+        ruleValue:
+          wire.kind === "threshold"
+            ? wire.threshold
+            : wire.kind === "percentage"
+              ? wire.percentage
+              : null,
         votingPeriod: wire.kind === "unknown" ? null : wire.voting_period,
         live: true,
       });
@@ -459,7 +467,8 @@ function buildPolicies(
             : rule.kind === "percentage"
               ? rule.percentage
               : null,
-      votingPeriod: rule === null || rule === undefined || rule.kind === "unknown" ? null : rule.voting_period,
+      votingPeriod:
+        rule === null || rule === undefined || rule.kind === "unknown" ? null : rule.voting_period,
       live: false,
     });
   }
@@ -504,7 +513,11 @@ export async function loadGovernanceListData(
 
   const [live, proposalsEnv, policiesEnv] = await Promise.all([
     loadLiveGovernance(config, deps),
-    fetchApiJson(`${apiBase}/api/v1/governance/proposals?${query.toString()}`, doFetch, CHROME_READ_TIMEOUT_MS)
+    fetchApiJson(
+      `${apiBase}/api/v1/governance/proposals?${query.toString()}`,
+      doFetch,
+      CHROME_READ_TIMEOUT_MS,
+    )
       .then((body) => govProposalsEnvelopeSchema.parse(body))
       .catch(() => null),
     fetchApiJson(`${apiBase}/api/v1/governance/policies`, doFetch, CHROME_READ_TIMEOUT_MS)
@@ -519,14 +532,18 @@ export async function loadGovernanceListData(
 
   // Live reads happen ONLY for open, unpruned proposals (§3.4 R7): a closed
   // proposal's record is the mirror's, and a pruned one has nothing to read.
-  const openRows = rows.filter((row) => row.status === "submitted" && row.pruned_at_height === null);
+  const openRows = rows.filter(
+    (row) => row.status === "submitted" && row.pruned_at_height === null,
+  );
   const openPolicies = [...new Set(openRows.map((row) => row.group_policy_address))];
   const liveByPolicy = new Map<string, Map<string, GroupProposal> | null>();
   if (live.state === "governed" && openPolicies.length > 0) {
     const sweeps = await Promise.all(
       openPolicies.map((policy) => loadLiveProposals(config, policy, deps)),
     );
-    openPolicies.forEach((policy, index) => liveByPolicy.set(policy, sweeps[index] ?? null));
+    openPolicies.forEach((policy, index) => {
+      liveByPolicy.set(policy, sweeps[index] ?? null);
+    });
   }
 
   // One tally read per open proposal, under a hard cap. Past the cap a proposal
@@ -538,7 +555,9 @@ export async function loadGovernanceListData(
     const results = await Promise.all(
       tallyTargets.map((row) => loadLiveTally(config, row.proposal_id, deps)),
     );
-    tallyTargets.forEach((row, index) => tallies.set(row.proposal_id, results[index] ?? null));
+    tallyTargets.forEach((row, index) => {
+      tallies.set(row.proposal_id, results[index] ?? null);
+    });
   }
 
   const proposals = rows.map((row) =>
@@ -655,7 +674,8 @@ export async function loadGovernanceProposalData(
     members,
   );
 
-  const policy = buildPolicies(live, []).find((p) => p.address === source.group_policy_address) ?? null;
+  const policy =
+    buildPolicies(live, []).find((p) => p.address === source.group_policy_address) ?? null;
   const decisionPolicy = indexed?.decision_policy ?? null;
 
   const proposal: ProposalDetailVM = {
@@ -681,7 +701,9 @@ export async function loadGovernanceProposalData(
       sessionAddress,
     }),
     votingPeriod:
-      decisionPolicy === null || decisionPolicy.kind === "unknown" ? null : decisionPolicy.voting_period,
+      decisionPolicy === null || decisionPolicy.kind === "unknown"
+        ? null
+        : decisionPolicy.voting_period,
     minExecutionPeriod:
       decisionPolicy === null || decisionPolicy.kind === "unknown"
         ? null
@@ -705,10 +727,7 @@ export async function loadGovernanceProposalData(
             // the check that gates it disagree after a policy change. Resolved
             // for THIS proposal's own policy; "the first policy" would be a
             // topology assumption in miniature.
-            minExecutionPeriod: livePolicyMinExecutionPeriod(
-              live,
-              liveProposal.groupPolicyAddress,
-            ),
+            minExecutionPeriod: livePolicyMinExecutionPeriod(live, liveProposal.groupPolicyAddress),
           },
     // Membership is `null` — not `false` — when the live member read failed:
     // "we could not check" and "you are not a member" are different sentences,

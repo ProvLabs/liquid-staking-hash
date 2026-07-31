@@ -7,7 +7,11 @@
 import { describe, expect, it } from "vitest";
 import { computeDeltas } from "../../src/reconciler/deltas.ts";
 import { computeLag } from "../../src/reconciler/lag.ts";
-import { deriveActions, type IndexedPlane, type LivePlane } from "../../src/reconciler/incidents.ts";
+import {
+  deriveActions,
+  type IndexedPlane,
+  type LivePlane,
+} from "../../src/reconciler/incidents.ts";
 import { TOLERANCES } from "../../src/reconciler/tolerances.ts";
 
 const NOW = new Date("2026-07-21T00:00:00Z");
@@ -27,8 +31,10 @@ const indexed = (over: Partial<IndexedPlane> = {}): IndexedPlane => ({
   ...over,
 });
 
-const open = (a: ReturnType<typeof deriveActions>, kind: string) => a.open.find((o) => o.kind === kind);
-const closing = (a: ReturnType<typeof deriveActions>, kind: string) => a.close.some((c) => c.kind === kind);
+const open = (a: ReturnType<typeof deriveActions>, kind: string) =>
+  a.open.find((o) => o.kind === kind);
+const closing = (a: ReturnType<typeof deriveActions>, kind: string) =>
+  a.close.some((c) => c.kind === kind);
 
 describe("computeDeltas", () => {
   const snap = { epochIndex: 8n, totalShares: 1000n, tvvAfter: 500n };
@@ -68,7 +74,9 @@ describe("computeLag", () => {
   });
 
   it("is within tolerance when caught up", () => {
-    expect(computeLag([{ stream: "chain-events", cursorHeight: 1000n }], 1000n, TOLERANCES).over).toBe(false);
+    expect(
+      computeLag([{ stream: "chain-events", cursorHeight: 1000n }], 1000n, TOLERANCES).over,
+    ).toBe(false);
   });
 
   it("reports indexedHeight 0 (not the head) on cold start with no worker streams", () => {
@@ -83,7 +91,12 @@ describe("computeLag", () => {
 
 describe("deriveActions", () => {
   it("opens reconciler_divergence when an indexed value is corrupt (the alarm)", () => {
-    const actions = deriveActions(live(), indexed({ chainEpochRow: { totalShares: 999n, tvvAfter: 500n } }), TOLERANCES, NOW);
+    const actions = deriveActions(
+      live(),
+      indexed({ chainEpochRow: { totalShares: 999n, tvvAfter: 500n } }),
+      TOLERANCES,
+      NOW,
+    );
     const div = open(actions, "reconciler_divergence");
     expect(div).toMatchObject({ dedupeKey: "latest", severity: "critical", linkToRun: true });
     expect(actions.run.withinTolerance).toBe(false);
@@ -97,21 +110,37 @@ describe("deriveActions", () => {
   });
 
   it("opens indexer_lag when a stream trails the head", () => {
-    const actions = deriveActions(live(), indexed({ checkpoints: [{ stream: "chain-events", cursorHeight: 500n }] }), TOLERANCES, NOW);
+    const actions = deriveActions(
+      live(),
+      indexed({ checkpoints: [{ stream: "chain-events", cursorHeight: 500n }] }),
+      TOLERANCES,
+      NOW,
+    );
     expect(open(actions, "indexer_lag")).toMatchObject({ severity: "warning" });
   });
 
   it("opens contract_halted when the contract is halted", () => {
-    expect(open(deriveActions(live({ halted: true }), indexed(), TOLERANCES, NOW), "contract_halted")).toBeDefined();
-    expect(closing(deriveActions(live(), indexed(), TOLERANCES, NOW), "contract_halted")).toBe(true);
+    expect(
+      open(deriveActions(live({ halted: true }), indexed(), TOLERANCES, NOW), "contract_halted"),
+    ).toBeDefined();
+    expect(closing(deriveActions(live(), indexed(), TOLERANCES, NOW), "contract_halted")).toBe(
+      true,
+    );
   });
 
   it("opens point-in-time incidents for slash write-downs and refunds", () => {
-    const actions = deriveActions(live(), indexed({ writeDownEpochs: [3n], refundedRequestIds: ["7"] }), TOLERANCES, NOW);
+    const actions = deriveActions(
+      live(),
+      indexed({ writeDownEpochs: [3n], refundedRequestIds: ["7"] }),
+      TOLERANCES,
+      NOW,
+    );
     expect(open(actions, "slash_write_down")).toMatchObject({ dedupeKey: "epoch:3" });
     expect(open(actions, "redemption_refund")).toMatchObject({ dedupeKey: "request:7" });
     // point-in-time kinds never appear as close actions
-    expect(actions.close.some((c) => c.kind === "slash_write_down" || c.kind === "redemption_refund")).toBe(false);
+    expect(
+      actions.close.some((c) => c.kind === "slash_write_down" || c.kind === "redemption_refund"),
+    ).toBe(false);
   });
 
   it("does not re-open point-in-time incidents already recorded (bounded per-pass work)", () => {
@@ -121,19 +150,29 @@ describe("deriveActions", () => {
         writeDownEpochs: [3n, 4n],
         refundedRequestIds: ["7", "8"],
         // epoch:3 and request:7 already have incidents → only the new ones open.
-        existingPointInTimeKeys: new Set(["slash_write_down epoch:3", "redemption_refund request:7"]),
+        existingPointInTimeKeys: new Set([
+          "slash_write_down epoch:3",
+          "redemption_refund request:7",
+        ]),
       }),
       TOLERANCES,
       NOW,
     );
     const slash = actions.open.filter((o) => o.kind === "slash_write_down").map((o) => o.dedupeKey);
-    const refund = actions.open.filter((o) => o.kind === "redemption_refund").map((o) => o.dedupeKey);
+    const refund = actions.open
+      .filter((o) => o.kind === "redemption_refund")
+      .map((o) => o.dedupeKey);
     expect(slash).toEqual(["epoch:4"]);
     expect(refund).toEqual(["request:8"]);
   });
 
   it("produces JSON-safe payloads (no bigint) so they can persist to JSONB", () => {
-    const actions = deriveActions(live({ halted: true }), indexed({ writeDownEpochs: [3n] }), TOLERANCES, NOW);
+    const actions = deriveActions(
+      live({ halted: true }),
+      indexed({ writeDownEpochs: [3n] }),
+      TOLERANCES,
+      NOW,
+    );
     for (const o of actions.open) expect(() => JSON.stringify(o.payload)).not.toThrow();
     expect(() => JSON.stringify(actions.run.deltas)).not.toThrow();
   });

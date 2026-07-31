@@ -29,9 +29,7 @@ export function NavStepChart({
       <section className="flex flex-col gap-2">
         <h3 className="text-base font-medium">{t(locale, "learn.chart-title")}</h3>
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          {epochs === null
-            ? t(locale, "learn.chart-unavailable")
-            : t(locale, "learn.chart-empty")}
+          {epochs === null ? t(locale, "learn.chart-unavailable") : t(locale, "learn.chart-empty")}
         </p>
       </section>
     );

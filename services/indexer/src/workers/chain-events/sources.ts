@@ -63,7 +63,14 @@ export interface EventSource {
     query: string,
     page?: number,
     perPage?: number,
-  ): Promise<{ totalCount: number; txs: readonly { hash: string; height: bigint; events: readonly import("../../decode/attributes.ts").RawEvent[] }[] }>;
+  ): Promise<{
+    totalCount: number;
+    txs: readonly {
+      hash: string;
+      height: bigint;
+      events: readonly import("../../decode/attributes.ts").RawEvent[];
+    }[];
+  }>;
   blockResults(height: bigint | number): Promise<{
     finalizeBlockEvents: readonly import("../../decode/attributes.ts").RawEvent[];
   }>;
@@ -98,7 +105,11 @@ export async function collectWindow(
   // Phase 0 — tx-search across the window (swaps + expedite).
   let page = 1;
   for (;;) {
-    const res = await rpc.txSearch(`tx.height>=${window.from} AND tx.height<=${window.to}`, page, PER_PAGE);
+    const res = await rpc.txSearch(
+      `tx.height>=${window.from} AND tx.height<=${window.to}`,
+      page,
+      PER_PAGE,
+    );
     for (const tx of res.txs) {
       // Cheap type pre-pass: skip txs with no candidate event BEFORE fetching
       // the block time, so a height of purely non-vault txs costs no round-trip.

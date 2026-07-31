@@ -28,11 +28,11 @@ export function NetBenefitPanel({
 
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
-          <dt className="text-xs text-muted-foreground">
-            {t(locale, "operator.earnings-label")}
-          </dt>
+          <dt className="text-xs text-muted-foreground">{t(locale, "operator.earnings-label")}</dt>
           <dd className="text-lg font-semibold tabular-nums">{estimated ?? na}</dd>
-          <dd className="text-xs text-muted-foreground">{t(locale, "operator.earnings-estimate")}</dd>
+          <dd className="text-xs text-muted-foreground">
+            {t(locale, "operator.earnings-estimate")}
+          </dd>
         </div>
         <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
           <dt className="text-xs text-muted-foreground">
@@ -50,9 +50,7 @@ export function NetBenefitPanel({
         </div>
         <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
           <dt className="text-xs text-muted-foreground">{t(locale, "operator.net-label")}</dt>
-          <dd className="text-lg font-semibold tabular-nums">
-            {netBenefit.netBenefitHash ?? na}
-          </dd>
+          <dd className="text-lg font-semibold tabular-nums">{netBenefit.netBenefitHash ?? na}</dd>
           <dd className="text-xs text-muted-foreground">{t(locale, "operator.net-caption")}</dd>
         </div>
       </dl>

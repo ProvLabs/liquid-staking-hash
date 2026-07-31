@@ -19,7 +19,12 @@ describe("freshness()", () => {
   });
 
   it("carries provided heights and renders generated_at as ISO-8601", () => {
-    const meta = freshness({ source: "live", chainHeight: 100, indexedHeight: 98, generatedAt: FIXED });
+    const meta = freshness({
+      source: "live",
+      chainHeight: 100,
+      indexedHeight: 98,
+      generatedAt: FIXED,
+    });
     expect(meta.chain_height).toBe(100);
     expect(meta.indexed_height).toBe(98);
     expect(meta.generated_at).toBe("2026-07-14T12:00:00.000Z");

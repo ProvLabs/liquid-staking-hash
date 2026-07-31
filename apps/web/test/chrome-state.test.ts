@@ -10,10 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import vaultGet from "@nvhash/fixtures/queries/vault/get";
 
-import {
-  DEGRADED_LAG_BLOCKS,
-  loadChromeState,
-} from "~/chrome/chrome.server";
+import { DEGRADED_LAG_BLOCKS, loadChromeState } from "~/chrome/chrome.server";
 import { describeFreshness, formatAge } from "~/chrome/freshness";
 import { loadConfig } from "~/config/config.server";
 import {
@@ -98,7 +95,9 @@ describe("banner honesty (§12.1: a banner mirrors a true state, never an assump
 
   it("a failed live read is not health: liveStatusOk=false and NO banner", async () => {
     server.use(
-      http.get("*/vault/v1/vaults/:id", () => HttpResponse.json({ message: "down" }, { status: 503 })),
+      http.get("*/vault/v1/vaults/:id", () =>
+        HttpResponse.json({ message: "down" }, { status: 503 }),
+      ),
     );
     const state = await loadChromeState(config());
     expect(state.liveStatusOk).toBe(false);

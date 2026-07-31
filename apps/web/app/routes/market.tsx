@@ -33,7 +33,9 @@ export default function Market({ loaderData }: Route.ComponentProps) {
       </section>
       <MarketStatus locale={locale} market={data.market} nowMs={nowMs} />
       <PremiumExplainer locale={locale} />
-      {data.market?.sample ? <Depth locale={locale} sample={data.market.sample} nowMs={nowMs} /> : null}
+      {data.market?.sample ? (
+        <Depth locale={locale} sample={data.market.sample} nowMs={nowMs} />
+      ) : null}
       <SupplyLocation
         locale={locale}
         localSupply={data.localSupply}

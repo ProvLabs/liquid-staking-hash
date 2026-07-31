@@ -9,7 +9,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { RawEvent } from "../../src/decode/attributes.ts";
-import { decodeBlockEvent, decodeTxEvent, decodeTxPayments } from "../../src/workers/chain-events/decode.ts";
+import {
+  decodeBlockEvent,
+  decodeTxEvent,
+  decodeTxPayments,
+} from "../../src/workers/chain-events/decode.ts";
 import {
   NAV_EVENT,
   TRANSFER_EVENT,
@@ -81,7 +85,10 @@ describe("chain-events decode against the fixture corpus", () => {
   });
 
   it("decodes EventSwapOutCompleted (EndBlocker)", () => {
-    const ev = find(blockEvents(load("block-events/swap-out-completed.json")), VAULT_EVENT.swapOutCompleted);
+    const ev = find(
+      blockEvents(load("block-events/swap-out-completed.json")),
+      VAULT_EVENT.swapOutCompleted,
+    );
     expect(decodeBlockEvent(ev, blkCtx, scope)).toMatchObject({
       kind: "swap_out_completed",
       owner: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
@@ -91,7 +98,10 @@ describe("chain-events decode against the fixture corpus", () => {
   });
 
   it("decodes EventSwapOutRefunded (EndBlocker)", () => {
-    const ev = find(blockEvents(load("block-events/swap-out-refunded.json")), VAULT_EVENT.swapOutRefunded);
+    const ev = find(
+      blockEvents(load("block-events/swap-out-refunded.json")),
+      VAULT_EVENT.swapOutRefunded,
+    );
     expect(decodeBlockEvent(ev, blkCtx, scope)).toMatchObject({
       kind: "swap_out_refunded",
       requestId: "2",
@@ -102,7 +112,10 @@ describe("chain-events decode against the fixture corpus", () => {
 
   it("decodes EventSetNetAssetValue (NAV marker)", () => {
     const ev = find(blockEvents(load("block-events/swap-out-completed.json")), NAV_EVENT);
-    expect(decodeBlockEvent(ev, blkCtx, scope)).toMatchObject({ kind: "nav", priceNhash: 315387426370n });
+    expect(decodeBlockEvent(ev, blkCtx, scope)).toMatchObject({
+      kind: "nav",
+      priceNhash: 315387426370n,
+    });
   });
 
   it("scopes out a different vault's swap and a different denom's NAV", () => {
@@ -140,7 +153,11 @@ describe("chain-events decode against the fixture corpus", () => {
 const PAYER = "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk";
 const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
 
-function payEvents(action: "pay_commission" | "pay_tip", amount: string, msgIndex = "0"): RawEvent[] {
+function payEvents(
+  action: "pay_commission" | "pay_tip",
+  amount: string,
+  msgIndex = "0",
+): RawEvent[] {
   const wasmAttrs =
     action === "pay_commission"
       ? [
@@ -196,7 +213,9 @@ describe("operator-payment decode against the fixture corpus", () => {
     // attribute is the epoch-cumulative tip_epoch. If the contract ever emits a
     // per-payment amount here, this assertion is the prompt to simplify.
     const wasm = events.find(
-      (e) => e.type === WASM_EVENT && e.attributes.some((a) => a.key === "action" && a.value === "pay_tip"),
+      (e) =>
+        e.type === WASM_EVENT &&
+        e.attributes.some((a) => a.key === "action" && a.value === "pay_tip"),
     );
     expect(wasm?.attributes.map((a) => a.key)).not.toContain("amount");
 
@@ -215,7 +234,8 @@ describe("operator-payment decode against the fixture corpus", () => {
 
   it("ignores a non-payment execute against our contract (enroll)", () => {
     expect(
-      decodeTxPayments(txEvents(load("operator/register-participation.json")), txCtx, scope).payments,
+      decodeTxPayments(txEvents(load("operator/register-participation.json")), txCtx, scope)
+        .payments,
     ).toEqual([]);
   });
 
@@ -232,7 +252,10 @@ describe("operator-payment decode against the fixture corpus", () => {
   });
 
   it("decodes each payment in a multi-message tx by its own msg_index", () => {
-    const events = [...payEvents("pay_commission", "111", "0"), ...payEvents("pay_tip", "222", "1")];
+    const events = [
+      ...payEvents("pay_commission", "111", "0"),
+      ...payEvents("pay_tip", "222", "1"),
+    ];
     expect(decodeTxPayments(events, txCtx, scope).payments).toMatchObject([
       { paymentType: "commission", amount: 111n, msgIndex: 0 },
       { paymentType: "tip", amount: 222n, msgIndex: 1 },
@@ -304,7 +327,12 @@ describe("operator-payment decode against the fixture corpus", () => {
   it("skips and reports when a commission's declared amount disagrees with the funds moved", () => {
     const events = payEvents("pay_commission", "500").map((e) =>
       e.type === TRANSFER_EVENT
-        ? { ...e, attributes: e.attributes.map((a) => (a.key === "amount" ? { ...a, value: "499nhash" } : a)) }
+        ? {
+            ...e,
+            attributes: e.attributes.map((a) =>
+              a.key === "amount" ? { ...a, value: "499nhash" } : a,
+            ),
+          }
         : e,
     );
     const { payments, undecodable } = decodeTxPayments(events, txCtx, scope);
@@ -329,7 +357,12 @@ describe("operator-payment decode against the fixture corpus", () => {
   it("throws on a multi-coin funds transfer (must_pay bounds it to one)", () => {
     const events = payEvents("pay_tip", "500").map((e) =>
       e.type === TRANSFER_EVENT
-        ? { ...e, attributes: e.attributes.map((a) => (a.key === "amount" ? { ...a, value: "500nhash,1other" } : a)) }
+        ? {
+            ...e,
+            attributes: e.attributes.map((a) =>
+              a.key === "amount" ? { ...a, value: "500nhash,1other" } : a,
+            ),
+          }
         : e,
     );
     expect(() => decodeTxPayments(events, txCtx, scope)).toThrow(/coin string/);

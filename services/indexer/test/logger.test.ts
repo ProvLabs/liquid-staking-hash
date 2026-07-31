@@ -22,9 +22,16 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("logger", () => {
   it("emits allowlisted fields as JSON on stdout", () => {
-    const [line] = capture("stdout", () => logger.info("ingested", { address: "tp1abc", height: 42n }));
+    const [line] = capture("stdout", () =>
+      logger.info("ingested", { address: "tp1abc", height: 42n }),
+    );
     const parsed = JSON.parse(line!);
-    expect(parsed).toMatchObject({ level: "info", message: "ingested", address: "tp1abc", height: "42" });
+    expect(parsed).toMatchObject({
+      level: "info",
+      message: "ingested",
+      address: "tp1abc",
+      height: "42",
+    });
   });
 
   it("drops keys that are not on the safe-field allowlist", () => {
@@ -42,6 +49,10 @@ describe("logger", () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     const errLines = capture("stderr", () => logger.error("boom", { error: "nope" }));
     expect(stdoutSpy).not.toHaveBeenCalled();
-    expect(JSON.parse(errLines[0]!)).toMatchObject({ level: "error", message: "boom", error: "nope" });
+    expect(JSON.parse(errLines[0]!)).toMatchObject({
+      level: "error",
+      message: "boom",
+      error: "nope",
+    });
   });
 });

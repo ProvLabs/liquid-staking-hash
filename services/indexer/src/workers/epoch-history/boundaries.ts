@@ -58,7 +58,11 @@ export async function collectCranks(
   const cranks: Crank[] = [];
   let page = 1;
   for (;;) {
-    const res = await rpc.txSearch(`tx.height>=${window.from} AND tx.height<=${window.to}`, page, PER_PAGE);
+    const res = await rpc.txSearch(
+      `tx.height>=${window.from} AND tx.height<=${window.to}`,
+      page,
+      PER_PAGE,
+    );
     cranks.push(...findCranks(res.txs, contractAddress));
     if (res.txs.length === 0 || page * PER_PAGE >= res.totalCount) break;
     page++;

@@ -45,32 +45,157 @@ const facts: FakeFacts = {
   reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
   // Epoch boundaries: epoch 1 closes at height 100, epoch 2 at 200.
   epochs: [
-    { epochIndex: 1n, endedAtSeconds: 1_700_000_000n, tvvAfter: 1_000n, totalShares: 1_000n, netAprBps: 500, endHeight: 100n },
-    { epochIndex: 2n, endedAtSeconds: 1_700_100_000n, tvvAfter: 2_000n, totalShares: 1_000n, netAprBps: 600, endHeight: 200n },
+    {
+      epochIndex: 1n,
+      endedAtSeconds: 1_700_000_000n,
+      tvvAfter: 1_000n,
+      totalShares: 1_000n,
+      netAprBps: 500,
+      endHeight: 100n,
+    },
+    {
+      epochIndex: 2n,
+      endedAtSeconds: 1_700_100_000n,
+      tvvAfter: 2_000n,
+      totalShares: 1_000n,
+      netAprBps: 600,
+      endHeight: 200n,
+    },
   ],
   operatorRegistry: [
-    { valoper: VALOPER_A, operator: OPERATOR_A, moniker: "alpha", enrolledAt: new Date("2026-01-01T00:00:00Z"), unregisteredAt: null },
-    { valoper: VALOPER_A2, operator: OPERATOR_A, moniker: "beta", enrolledAt: new Date("2026-02-01T00:00:00Z"), unregisteredAt: new Date("2026-05-01T00:00:00Z") },
-    { valoper: VALOPER_B, operator: OPERATOR_B, moniker: "gamma", enrolledAt: new Date("2026-03-01T00:00:00Z"), unregisteredAt: null },
+    {
+      valoper: VALOPER_A,
+      operator: OPERATOR_A,
+      moniker: "alpha",
+      enrolledAt: new Date("2026-01-01T00:00:00Z"),
+      unregisteredAt: null,
+    },
+    {
+      valoper: VALOPER_A2,
+      operator: OPERATOR_A,
+      moniker: "beta",
+      enrolledAt: new Date("2026-02-01T00:00:00Z"),
+      unregisteredAt: new Date("2026-05-01T00:00:00Z"),
+    },
+    {
+      valoper: VALOPER_B,
+      operator: OPERATOR_B,
+      moniker: "gamma",
+      enrolledAt: new Date("2026-03-01T00:00:00Z"),
+      unregisteredAt: null,
+    },
   ],
   operatorEpochs: [
-    { valoper: VALOPER_A, epochIndex: 1n, uptimeBps: 9_900, eligible: true, failingReasons: [], tip: 10n, commissionAccrued: 100n, commissionPaid: 100n, commissionDue: 0n, programDelegation: 5_000n, height: 100n, observedAt: new Date("2026-04-01T00:00:00Z") },
-    { valoper: VALOPER_A, epochIndex: 2n, uptimeBps: 9_800, eligible: false, failingReasons: ["in_arrears"], tip: 20n, commissionAccrued: 300n, commissionPaid: 100n, commissionDue: 200n, programDelegation: 6_000n, height: 200n, observedAt: new Date("2026-05-01T00:00:00Z") },
-    { valoper: VALOPER_B, epochIndex: 2n, uptimeBps: 9_700, eligible: true, failingReasons: [], tip: 99n, commissionAccrued: 900n, commissionPaid: 900n, commissionDue: 0n, programDelegation: 9_000n, height: 200n, observedAt: new Date("2026-05-01T00:00:00Z") },
+    {
+      valoper: VALOPER_A,
+      epochIndex: 1n,
+      uptimeBps: 9_900,
+      eligible: true,
+      failingReasons: [],
+      tip: 10n,
+      commissionAccrued: 100n,
+      commissionPaid: 100n,
+      commissionDue: 0n,
+      programDelegation: 5_000n,
+      height: 100n,
+      observedAt: new Date("2026-04-01T00:00:00Z"),
+    },
+    {
+      valoper: VALOPER_A,
+      epochIndex: 2n,
+      uptimeBps: 9_800,
+      eligible: false,
+      failingReasons: ["in_arrears"],
+      tip: 20n,
+      commissionAccrued: 300n,
+      commissionPaid: 100n,
+      commissionDue: 200n,
+      programDelegation: 6_000n,
+      height: 200n,
+      observedAt: new Date("2026-05-01T00:00:00Z"),
+    },
+    {
+      valoper: VALOPER_B,
+      epochIndex: 2n,
+      uptimeBps: 9_700,
+      eligible: true,
+      failingReasons: [],
+      tip: 99n,
+      commissionAccrued: 900n,
+      commissionPaid: 900n,
+      commissionDue: 0n,
+      programDelegation: 9_000n,
+      height: 200n,
+      observedAt: new Date("2026-05-01T00:00:00Z"),
+    },
   ],
   operatorPayments: [
     // Heights 50 and 100 fall in epoch 1 (closes at 100); 150 falls in epoch 2.
-    { txhash: "P1", msgIndex: 0, ordinal: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "commission", amount: 100n, height: 50n, occurredAt: new Date("2026-03-01T00:00:00Z") },
-    { txhash: "P2", msgIndex: 1, ordinal: 0, valoper: VALOPER_A, payer: "pb1cooppartner", paymentType: "tip", amount: 20n, height: 100n, occurredAt: new Date("2026-03-02T00:00:00Z") },
-    { txhash: "P3", msgIndex: 0, ordinal: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "commission", amount: 7n, height: 150n, occurredAt: new Date("2026-04-02T00:00:00Z") },
+    {
+      txhash: "P1",
+      msgIndex: 0,
+      ordinal: 0,
+      valoper: VALOPER_A,
+      payer: OPERATOR_A,
+      paymentType: "commission",
+      amount: 100n,
+      height: 50n,
+      occurredAt: new Date("2026-03-01T00:00:00Z"),
+    },
+    {
+      txhash: "P2",
+      msgIndex: 1,
+      ordinal: 0,
+      valoper: VALOPER_A,
+      payer: "pb1cooppartner",
+      paymentType: "tip",
+      amount: 20n,
+      height: 100n,
+      occurredAt: new Date("2026-03-02T00:00:00Z"),
+    },
+    {
+      txhash: "P3",
+      msgIndex: 0,
+      ordinal: 0,
+      valoper: VALOPER_A,
+      payer: OPERATOR_A,
+      paymentType: "commission",
+      amount: 7n,
+      height: 150n,
+      occurredAt: new Date("2026-04-02T00:00:00Z"),
+    },
     // Past the last indexed boundary (200): its crediting epoch is still open.
-    { txhash: "P4", msgIndex: 0, ordinal: 0, valoper: VALOPER_A, payer: OPERATOR_A, paymentType: "tip", amount: 3n, height: 900n, occurredAt: new Date("2026-06-02T00:00:00Z") },
-    { txhash: "PB", msgIndex: 0, ordinal: 0, valoper: VALOPER_B, payer: OPERATOR_B, paymentType: "commission", amount: 900n, height: 60n, occurredAt: new Date("2026-03-03T00:00:00Z") },
+    {
+      txhash: "P4",
+      msgIndex: 0,
+      ordinal: 0,
+      valoper: VALOPER_A,
+      payer: OPERATOR_A,
+      paymentType: "tip",
+      amount: 3n,
+      height: 900n,
+      occurredAt: new Date("2026-06-02T00:00:00Z"),
+    },
+    {
+      txhash: "PB",
+      msgIndex: 0,
+      ordinal: 0,
+      valoper: VALOPER_B,
+      payer: OPERATOR_B,
+      paymentType: "commission",
+      amount: 900n,
+      height: 60n,
+      occurredAt: new Date("2026-03-03T00:00:00Z"),
+    },
   ],
 };
 
 function startOperatorServer(over: Partial<FakeFacts> = {}): Promise<RunningServer> {
-  return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader({ ...facts, ...over }));
+  return startServer(
+    { assertionKey: TEST_ASSERTION_KEY },
+    undefined,
+    fakeReader({ ...facts, ...over }),
+  );
 }
 
 async function json<T>(res: Response): Promise<T> {
@@ -81,9 +206,12 @@ describe("operator summary (address→valoper mapping enforced server-side)", ()
   it("serves only the validators the asserted address operates", async () => {
     const server = await startOperatorServer();
     try {
-      const res = await fetch(`${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`, {
-        headers: auth(OPERATOR_A),
-      });
+      const res = await fetch(
+        `${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`,
+        {
+          headers: auth(OPERATOR_A),
+        },
+      );
       expect(res.status).toBe(200);
       const data = await json<{ address: string; validators: Array<Record<string, unknown>> }>(res);
       expect(data.address).toBe(OPERATOR_A);
@@ -97,9 +225,12 @@ describe("operator summary (address→valoper mapping enforced server-side)", ()
   it("carries the latest epoch's economics and lifetime payment totals", async () => {
     const server = await startOperatorServer();
     try {
-      const res = await fetch(`${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`, {
-        headers: auth(OPERATOR_A),
-      });
+      const res = await fetch(
+        `${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`,
+        {
+          headers: auth(OPERATOR_A),
+        },
+      );
       const data = await json<{ validators: Array<Record<string, unknown>> }>(res);
       expect(data.validators[0]).toMatchObject({
         valoper: VALOPER_A,
@@ -130,9 +261,12 @@ describe("operator summary (address→valoper mapping enforced server-side)", ()
     // "no sample yet" state, and "0" is an honest sum over zero rows.
     const server = await startOperatorServer();
     try {
-      const res = await fetch(`${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`, {
-        headers: auth(OPERATOR_A),
-      });
+      const res = await fetch(
+        `${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`,
+        {
+          headers: auth(OPERATOR_A),
+        },
+      );
       const data = await json<{ validators: Array<Record<string, unknown>> }>(res);
       expect(data.validators[1]).toMatchObject({
         valoper: VALOPER_A2,
@@ -171,9 +305,12 @@ describe("operator summary (address→valoper mapping enforced server-side)", ()
   it("omits peer context entirely (plan §7 Q5 not approved)", async () => {
     const server = await startOperatorServer();
     try {
-      const res = await fetch(`${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`, {
-        headers: auth(OPERATOR_A),
-      });
+      const res = await fetch(
+        `${server.baseUrl}${API_BASE}/operator/summary?address=${OPERATOR_A}`,
+        {
+          headers: auth(OPERATOR_A),
+        },
+      );
       const data = await json<{ validators: Array<Record<string, unknown>> }>(res);
       for (const row of data.validators) {
         for (const forbidden of ["rank_by_tip", "eligible_count", "enrolled_count"]) {
@@ -433,7 +570,13 @@ describe("operator CSV export (§14.11 pinned columns; [R3] freshness headers)",
 
 describe("pure ownership + epoch-assignment rules", () => {
   const owned: OperatorRegistryFacts[] = [
-    { valoper: VALOPER_A, operator: OPERATOR_A, moniker: "alpha", enrolledAt: new Date(0), unregisteredAt: null },
+    {
+      valoper: VALOPER_A,
+      operator: OPERATOR_A,
+      moniker: "alpha",
+      enrolledAt: new Date(0),
+      unregisteredAt: null,
+    },
   ];
 
   it("resolveOwnedValoper returns the valoper only when it is in the owned set", () => {
@@ -446,7 +589,13 @@ describe("pure ownership + epoch-assignment rules", () => {
     // Registry rows are never deleted; unregistering ends participation, not
     // the operator's right to its own past economics and payment record.
     const past: OperatorRegistryFacts[] = [
-      { valoper: VALOPER_A2, operator: OPERATOR_A, moniker: "beta", enrolledAt: new Date(0), unregisteredAt: new Date(1) },
+      {
+        valoper: VALOPER_A2,
+        operator: OPERATOR_A,
+        moniker: "beta",
+        enrolledAt: new Date(0),
+        unregisteredAt: new Date(1),
+      },
     ];
     expect(resolveOwnedValoper(past, VALOPER_A2)).toBe(VALOPER_A2);
   });
@@ -486,7 +635,8 @@ describe("pure ownership + epoch-assignment rules", () => {
   it("toOperatorPaymentRow surfaces a null epoch rather than the latest one", () => {
     const fact: OperatorPaymentFacts = {
       txhash: "X",
-      msgIndex: 0, ordinal: 0,
+      msgIndex: 0,
+      ordinal: 0,
       valoper: VALOPER_A,
       payer: OPERATOR_A,
       paymentType: "tip",
@@ -502,7 +652,9 @@ describe("pure ownership + epoch-assignment rules", () => {
 
   it("bech32ValoperSchema separates valoper addresses from account addresses", () => {
     expect(bech32ValoperSchema.safeParse(VALOPER_A).success).toBe(true);
-    expect(bech32ValoperSchema.safeParse("tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp").success).toBe(true);
+    expect(
+      bech32ValoperSchema.safeParse("tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp").success,
+    ).toBe(true);
     expect(bech32ValoperSchema.safeParse(OPERATOR_A).success).toBe(false);
     expect(bech32ValoperSchema.safeParse("pbvaloper1UPPER").success).toBe(false);
     expect(bech32ValoperSchema.safeParse(`pbvaloper1${"q".repeat(100)}`).success).toBe(false);

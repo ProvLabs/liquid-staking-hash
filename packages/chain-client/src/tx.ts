@@ -5,7 +5,7 @@
 // web tier's relay guards are in apps/web, not here).
 
 import { expectObject, expectString, parseU64String } from "./amounts.ts";
-import { LcdClient, LcdError } from "./lcd.ts";
+import { type LcdClient, LcdError } from "./lcd.ts";
 
 export interface GasInfo {
   gasWanted: bigint;

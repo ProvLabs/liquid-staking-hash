@@ -37,7 +37,12 @@ interface Plan {
 // safe-integer-overflowing bps, outside the on-chain input domain).
 const DAY_MS = 86_400_000;
 
-function ev(kind: TransactionFacts["kind"], h: bigint, shares: bigint, nhash: bigint): TransactionFacts {
+function ev(
+  kind: TransactionFacts["kind"],
+  h: bigint,
+  shares: bigint,
+  nhash: bigint,
+): TransactionFacts {
   return {
     txhash: `tx${h}`,
     msgIndex: 0,
@@ -131,8 +136,20 @@ interface Ref {
 
 function reference(txs: readonly TransactionFacts[], epochs: readonly EpochStepFact[]): Ref {
   const moments = [
-    ...txs.map((t, idx) => ({ t: BigInt(Math.floor(t.blockTime.getTime() / 1000)), phase: 0, idx, tx: t as TransactionFacts | undefined, ep: undefined as EpochStepFact | undefined })),
-    ...epochs.map((e, idx) => ({ t: e.endedAtSeconds, phase: 1, idx, tx: undefined as TransactionFacts | undefined, ep: e as EpochStepFact | undefined })),
+    ...txs.map((t, idx) => ({
+      t: BigInt(Math.floor(t.blockTime.getTime() / 1000)),
+      phase: 0,
+      idx,
+      tx: t as TransactionFacts | undefined,
+      ep: undefined as EpochStepFact | undefined,
+    })),
+    ...epochs.map((e, idx) => ({
+      t: e.endedAtSeconds,
+      phase: 1,
+      idx,
+      tx: undefined as TransactionFacts | undefined,
+      ep: e as EpochStepFact | undefined,
+    })),
   ].sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : a.phase - b.phase));
 
   let held = 0n;
@@ -190,10 +207,19 @@ const bigTotal = fc.constant(10n ** 18n);
 const netArb = fc.option(fc.integer({ min: -5000, max: 5000 }), { nil: null });
 
 const opArb: fc.Arbitrary<Op> = fc.oneof(
-  fc.record({ type: fc.constant("epoch" as const), tvv: bigTvv, totalShares: bigTotal, net: netArb }),
+  fc.record({
+    type: fc.constant("epoch" as const),
+    tvv: bigTvv,
+    totalShares: bigTotal,
+    net: netArb,
+  }),
   fc.record({ type: fc.constant("deposit" as const), shares: bigShares }),
   fc.record({ type: fc.constant("request" as const), pct: fc.integer({ min: 1, max: 100 }) }),
-  fc.record({ type: fc.constant("settle" as const), refund: fc.boolean(), pct: fc.integer({ min: 1, max: 100 }) }),
+  fc.record({
+    type: fc.constant("settle" as const),
+    refund: fc.boolean(),
+    pct: fc.integer({ min: 1, max: 100 }),
+  }),
 );
 
 const planArb: fc.Arbitrary<Plan> = fc.record({
@@ -206,9 +232,9 @@ describe("derivePortfolioMetrics: properties", () => {
     fc.assert(
       fc.property(planArb, (plan) => {
         const { txs, epochs } = build(plan);
-        const cutoffs = [...new Set([...txs.map((t) => t.height), ...epochs.map((e) => e.endHeight)])].sort(
-          (a, b) => (a < b ? -1 : a > b ? 1 : 0),
-        );
+        const cutoffs = [
+          ...new Set([...txs.map((t) => t.height), ...epochs.map((e) => e.endHeight)]),
+        ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
         for (const cut of cutoffs) {
           const ptxs = txs.filter((t) => t.height <= cut);
           const peps = epochs.filter((e) => e.endHeight <= cut);
@@ -245,7 +271,9 @@ describe("derivePortfolioMetrics: properties", () => {
     fc.assert(
       fc.property(planArb, (plan) => {
         const { txs, epochs } = build(plan);
-        expect(derivePortfolioMetrics(A, txs, epochs)).toEqual(derivePortfolioMetrics(A, txs, epochs));
+        expect(derivePortfolioMetrics(A, txs, epochs)).toEqual(
+          derivePortfolioMetrics(A, txs, epochs),
+        );
       }),
       { numRuns: 300 },
     );
@@ -262,24 +290,32 @@ describe("derivePortfolioMetrics: properties", () => {
           pn: fc.bigInt({ min: 0n, max: 10n ** 18n }),
         }),
         ({ ds, bn, reqPct, setPct, pn }) => {
-          const rs = ((ds * BigInt(reqPct)) / 100n) < 1n ? 1n : (ds * BigInt(reqPct)) / 100n;
-          const ps = ((rs * BigInt(setPct)) / 100n) < 1n ? 1n : (rs * BigInt(setPct)) / 100n;
+          const rs = (ds * BigInt(reqPct)) / 100n < 1n ? 1n : (ds * BigInt(reqPct)) / 100n;
+          const ps = (rs * BigInt(setPct)) / 100n < 1n ? 1n : (rs * BigInt(setPct)) / 100n;
           const escrowBasis = (bn * rs) / ds; // moved at request
           const removed = (escrowBasis * ps) / rs;
 
-          const paid = derivePortfolioMetrics(A, [
-            ev("swap_in", 1n, ds, bn),
-            ev("swap_out_request", 2n, rs, 0n),
-            ev("redemption_payout", 3n, ps, pn),
-          ], []);
+          const paid = derivePortfolioMetrics(
+            A,
+            [
+              ev("swap_in", 1n, ds, bn),
+              ev("swap_out_request", 2n, rs, 0n),
+              ev("redemption_payout", 3n, ps, pn),
+            ],
+            [],
+          );
           expect(paid.realized_gain_nhash).toBe((pn - removed).toString());
           expect(BigInt(paid.escrowed_basis_nhash!) >= 0n).toBe(true);
 
-          const refunded = derivePortfolioMetrics(A, [
-            ev("swap_in", 1n, ds, bn),
-            ev("swap_out_request", 2n, rs, 0n),
-            ev("redemption_refund", 3n, ps, 0n),
-          ], []);
+          const refunded = derivePortfolioMetrics(
+            A,
+            [
+              ev("swap_in", 1n, ds, bn),
+              ev("swap_out_request", 2n, rs, 0n),
+              ev("redemption_refund", 3n, ps, 0n),
+            ],
+            [],
+          );
           expect(refunded.realized_gain_nhash).toBe("0");
         },
       ),
@@ -290,14 +326,22 @@ describe("derivePortfolioMetrics: properties", () => {
   it("full refund restores the pools exactly", () => {
     fc.assert(
       fc.property(
-        fc.record({ ds: fc.bigInt({ min: 1n, max: 10n ** 15n }), bn: fc.bigInt({ min: 0n, max: 10n ** 18n }), reqPct: fc.integer({ min: 1, max: 100 }) }),
+        fc.record({
+          ds: fc.bigInt({ min: 1n, max: 10n ** 15n }),
+          bn: fc.bigInt({ min: 0n, max: 10n ** 18n }),
+          reqPct: fc.integer({ min: 1, max: 100 }),
+        }),
         ({ ds, bn, reqPct }) => {
-          const rs = ((ds * BigInt(reqPct)) / 100n) < 1n ? 1n : (ds * BigInt(reqPct)) / 100n;
-          const m = derivePortfolioMetrics(A, [
-            ev("swap_in", 1n, ds, bn),
-            ev("swap_out_request", 2n, rs, 0n),
-            ev("redemption_refund", 3n, rs, 0n),
-          ], []);
+          const rs = (ds * BigInt(reqPct)) / 100n < 1n ? 1n : (ds * BigInt(reqPct)) / 100n;
+          const m = derivePortfolioMetrics(
+            A,
+            [
+              ev("swap_in", 1n, ds, bn),
+              ev("swap_out_request", 2n, rs, 0n),
+              ev("redemption_refund", 3n, rs, 0n),
+            ],
+            [],
+          );
           expect(m.indexed_share_balance).toBe(ds.toString());
           expect(m.escrowed_share_balance).toBe("0");
           expect(m.cost_basis_nhash).toBe(bn.toString());
@@ -327,7 +371,14 @@ describe("derivePortfolioMetrics: properties", () => {
         let sec = 1_000_000n;
         let idx = 0n;
         for (const s of steps) {
-          epochs.push({ epochIndex: idx, endedAtSeconds: sec, tvvAfter: s.tvv, totalShares: T, netAprBps: s.net, endHeight: sec });
+          epochs.push({
+            epochIndex: idx,
+            endedAtSeconds: sec,
+            tvvAfter: s.tvv,
+            totalShares: T,
+            netAprBps: s.net,
+            endHeight: sec,
+          });
           sec += s.gap;
           idx += 1n;
         }

@@ -17,7 +17,6 @@ import {
   encodeAuthInfo,
   encodeTxBody,
   encodeTxRaw,
-  templateExecuteAny,
   ADMIN_VARIANTS,
   ALLOWED_MSG_TYPE_URLS,
   GOVERNANCE_VOTE_OPTIONS,
@@ -170,9 +169,7 @@ describe("relay guards (each an enforced mechanism)", () => {
   // a widening that passes unnoticed.
   it("the allowlist admits EXACTLY three x/group types and no others", () => {
     const group = ALLOWED_MSG_TYPE_URLS.filter((url) => url.startsWith("/cosmos.group."));
-    expect([...group].sort()).toEqual(
-      [MSG_GOV_VOTE, MSG_GOV_EXEC, MSG_GOV_SUBMIT_PROPOSAL].sort(),
-    );
+    expect([...group].sort()).toEqual([MSG_GOV_VOTE, MSG_GOV_EXEC, MSG_GOV_SUBMIT_PROPOSAL].sort());
     // …and the operator entry is untouched by the extension.
     expect(ALLOWED_MSG_TYPE_URLS).toContain(MSG_EXECUTE_CONTRACT);
     expect(ALLOWED_MSG_TYPE_URLS).toHaveLength(6);
@@ -193,14 +190,17 @@ describe("relay guards (each an enforced mechanism)", () => {
       "/cosmos.group.v1.MsgCreateGroup",
       "/cosmos.authz.v1beta1.MsgExec",
     ]) {
-      const inner = new ProtoWriter().string(1, SESSION_ADDRESS).string(2, SESSION_ADDRESS).finish();
+      const inner = new ProtoWriter()
+        .string(1, SESSION_ADDRESS)
+        .string(2, SESSION_ADDRESS)
+        .finish();
       const anyMsg = new ProtoWriter().string(1, typeUrl).bytes(2, inner).finish();
       const body = new ProtoWriter().message(1, anyMsg, true).finish();
       const tx = encodeTxRaw(body, authInfoBytes(), [new Uint8Array(64)]);
-      expect(
-        guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
-        typeUrl,
-      ).toMatchObject({ ok: false, status: 400 });
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toMatchObject({
+        ok: false,
+        status: 400,
+      });
     }
   });
 
@@ -219,9 +219,9 @@ describe("relay guards (each an enforced mechanism)", () => {
   });
 
   it("malformed bytes → 400", async () => {
-    expect(guardSignedTx(config, SESSION_ADDRESS, new Uint8Array([0xff, 0x01, 0x02]))).toMatchObject(
-      { ok: false, status: 400 },
-    );
+    expect(
+      guardSignedTx(config, SESSION_ADDRESS, new Uint8Array([0xff, 0x01, 0x02])),
+    ).toMatchObject({ ok: false, status: 400 });
   });
 
   it("multiple signatures → 400 (sole-signer rule)", async () => {
@@ -260,7 +260,9 @@ describe("relay guards (each an enforced mechanism)", () => {
       ok: false,
       status: 429,
     });
-    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 61_000)).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 61_000)).toEqual({
+      ok: true,
+    });
   });
 });
 
@@ -630,7 +632,13 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
     // Per-message enforcement, not first-message enforcement.
     const good = new ProtoWriter()
       .string(1, MSG_EXECUTE_CONTRACT)
-      .bytes(2, rawExecute({ msg: `{"pay_tip":{"valoper":"${VALOPER}"}}`, funds: [{ denom: "nhash", amount: "5" }] }))
+      .bytes(
+        2,
+        rawExecute({
+          msg: `{"pay_tip":{"valoper":"${VALOPER}"}}`,
+          funds: [{ denom: "nhash", amount: "5" }],
+        }),
+      )
       .finish();
     const bad = new ProtoWriter()
       .string(1, MSG_EXECUTE_CONTRACT)
@@ -838,7 +846,9 @@ const submitIntent = (
 
 describe("governance — the three admitted types are accepted in canonical form", () => {
   it("accepts a vote for each of the four options", async () => {
-    for (const option of Object.keys(GOVERNANCE_VOTE_OPTIONS) as (keyof typeof GOVERNANCE_VOTE_OPTIONS)[]) {
+    for (const option of Object.keys(
+      GOVERNANCE_VOTE_OPTIONS,
+    ) as (keyof typeof GOVERNANCE_VOTE_OPTIONS)[]) {
       const tx = govTx({ kind: "gov_vote", voter: SESSION_ADDRESS, proposalId: 12n, option });
       expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), option).toEqual({
         ok: true,
@@ -911,18 +921,16 @@ describe("governance — the three admitted types are accepted in canonical form
     // the devnet corpus carries two policies on one group precisely so this is
     // exercised by data rather than by belief.
     const tx = govTx(submitIntent({ policyAddress: OTHER_POLICY }));
-    expect(
-      guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
-    ).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 });
 
 describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
-  const reject = async (tx: Uint8Array, label: string, policies?: readonly string[]) => {
-    expect(
-      guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
-      label,
-    ).toMatchObject({ ok: false, status: 400 });
+  const reject = async (tx: Uint8Array, label: string, _policies?: readonly string[]) => {
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), label).toMatchObject({
+      ok: false,
+      status: 400,
+    });
   };
 
   // ── invariant 4: the `exec` pin, on BOTH messages ──────────────────────
@@ -932,7 +940,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     // omits a zero varint, so writing it is a second encoding of the same
     // intent and there is exactly one accepted form.
     for (const exec of [0n, 1n, 2n, 255n]) {
-      await reject(signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n, exec })), `exec=${exec}`);
+      await reject(
+        signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n, exec })),
+        `exec=${exec}`,
+      );
     }
   });
 
@@ -956,7 +967,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   });
 
   it("a proposal whose proposer is not the session → 400", async () => {
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [OTHER_POLICY] })), "foreign proposer");
+    await reject(
+      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [OTHER_POLICY] })),
+      "foreign proposer",
+    );
   });
 
   it("a proposal whose SECOND proposer is not the session → 400", async () => {
@@ -964,7 +978,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     // along unchecked. Checking only
     // `proposers[0]` would admit this; the count pin refuses it outright.
     await reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, OTHER_POLICY] })),
+      signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ proposers: [SESSION_ADDRESS, OTHER_POLICY] }),
+      ),
       "second proposer is foreign",
     );
   });
@@ -998,10 +1015,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
       ["keeper variant", `{"run_epoch":{}}`],
       ["unknown variant", `{"not_a_variant":{}}`],
     ] as const) {
-      const tx = signedGovTx(
-        MSG_GOV_SUBMIT_PROPOSAL,
-        rawSubmit({ messages: [innerAny({ msg })] }),
-      );
+      const tx = signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [innerAny({ msg })] }));
       expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), label).toEqual({ ok: true });
     }
   });
@@ -1010,9 +1024,15 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     const cases: { label: string; opts: Parameters<typeof innerAny>[0] }[] = [
       {
         label: "other contract",
-        opts: { contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0", msg: `{"unpause_vault":{}}` },
+        opts: {
+          contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          msg: `{"unpause_vault":{}}`,
+        },
       },
-      { label: "sender is the proposer", opts: { sender: SESSION_ADDRESS, msg: `{"unpause_vault":{}}` } },
+      {
+        label: "sender is the proposer",
+        opts: { sender: SESSION_ADDRESS, msg: `{"unpause_vault":{}}` },
+      },
       {
         label: "funds attached",
         opts: { msg: `{"unpause_vault":{}}`, funds: [{ denom: "nhash", amount: "1000" }] },
@@ -1039,7 +1059,9 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
         MSG_GOV_SUBMIT_PROPOSAL,
         rawSubmit({ messages: [innerAny({ typeUrl, msg: `{"unpause_vault":{}}` })] }),
       );
-      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toEqual({ ok: true });
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toEqual({
+        ok: true,
+      });
     }
   });
 
@@ -1065,7 +1087,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     // These are the shapes the whole-message re-encode still refuses.
     reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ reorder: true })), "reordered fields");
     reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, SESSION_ADDRESS] })),
+      signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ proposers: [SESSION_ADDRESS, SESSION_ADDRESS] }),
+      ),
       "duplicated proposer (a second spelling of one intent)",
     );
     reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })), "unknown field 9");
@@ -1107,7 +1132,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
 
   it("a proposal with over-long metadata, title or summary → 400", async () => {
     await reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ metadata: "x".repeat(MAX_PROPOSAL_METADATA_LEN + 1) })),
+      signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ metadata: "x".repeat(MAX_PROPOSAL_METADATA_LEN + 1) }),
+      ),
       "metadata too long",
     );
     await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ title: "" })), "no title");
@@ -1126,7 +1154,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
       ),
       "exec field 9",
     );
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })), "submit field 9");
+    await reject(
+      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })),
+      "submit field 9",
+    );
   });
 
   it("a MsgSubmitProposal SHAPED to look like a vote → 400", async () => {

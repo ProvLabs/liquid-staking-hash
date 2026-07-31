@@ -6,7 +6,7 @@ import { RateLimiter } from "../src/rate-limit.ts";
 
 describe("RateLimiter", () => {
   it("allows up to max then refuses within a window", () => {
-    let t = 1_000;
+    const t = 1_000;
     const limiter = new RateLimiter({ max: 2, windowMs: 1_000, now: () => t });
     expect(limiter.hit("a").allowed).toBe(true);
     expect(limiter.hit("a").allowed).toBe(true);
@@ -16,7 +16,7 @@ describe("RateLimiter", () => {
   });
 
   it("tracks keys independently", () => {
-    let t = 0;
+    const t = 0;
     const limiter = new RateLimiter({ max: 1, windowMs: 1_000, now: () => t });
     expect(limiter.hit("a").allowed).toBe(true);
     expect(limiter.hit("b").allowed).toBe(true); // different key, own budget

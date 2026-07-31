@@ -128,7 +128,9 @@ describe("operator_payments round-trip (M6.4 §2.1)", () => {
 
     const rows = await prisma.operatorPayment.findMany({ where: { valoper: VALOPER } });
     expect(rows).toHaveLength(2);
-    expect(BigInt(rows.find((r) => r.txhash === TX_COMMISSION)!.amount.toFixed(0))).toBe(BIG_AMOUNT);
+    expect(BigInt(rows.find((r) => r.txhash === TX_COMMISSION)!.amount.toFixed(0))).toBe(
+      BIG_AMOUNT,
+    );
   });
 
   it("keeps BATCHED siblings as distinct rows, not one overwriting the other", async () => {
@@ -171,5 +173,4 @@ describe("operator_payments round-trip (M6.4 §2.1)", () => {
 
     await prisma.operatorPayment.deleteMany({ where: { txhash: TX_BATCH } });
   });
-
 });

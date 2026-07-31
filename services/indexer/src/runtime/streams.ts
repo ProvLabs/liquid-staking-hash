@@ -72,7 +72,9 @@ export async function assertChainIsolation(prisma: PrismaClient, id: ChainIdenti
   // Read back and assert identity. On first boot this is the row we just wrote;
   // on a later boot (or a concurrent one) it is whatever is persisted — a
   // mismatch means the DB holds a foreign chain/contract's history.
-  const marker = await prisma.indexerCheckpoint.findUnique({ where: { stream: PROVENANCE_MARKER_STREAM } });
+  const marker = await prisma.indexerCheckpoint.findUnique({
+    where: { stream: PROVENANCE_MARKER_STREAM },
+  });
   if (marker?.cursorPage !== value) {
     throw new ChainIsolationError(marker?.cursorPage ?? "(unset)", value);
   }

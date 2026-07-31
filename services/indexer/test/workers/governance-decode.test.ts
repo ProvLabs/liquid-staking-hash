@@ -210,10 +210,13 @@ describe("governance decode — state plane", () => {
   });
 
   it("decodes ACCEPTED + FAILURE and REJECTED", () => {
-    expect(decodeProposal(proposalOf("queries/group/proposal-exec-failure.json"), policyContext).executorResult).toBe(
-      "FAILURE",
-    );
-    expect(decodeProposal(proposalOf("queries/group/proposal-rejected.json"), policyContext).status).toBe("REJECTED");
+    expect(
+      decodeProposal(proposalOf("queries/group/proposal-exec-failure.json"), policyContext)
+        .executorResult,
+    ).toBe("FAILURE");
+    expect(
+      decodeProposal(proposalOf("queries/group/proposal-rejected.json"), policyContext).status,
+    ).toBe("REJECTED");
   });
 
   it("decodes a vote with the weight supplied from the member set", () => {
@@ -231,7 +234,19 @@ describe("governance decode — state plane", () => {
     );
     expect(v.option).toBe("NO_WITH_VETO");
     expect(v.weight).toBe("1");
-    expect(decodeVote({ ...{ proposal_id: "8", voter: "tp1v", option: "VOTE_OPTION_YES", submit_time: "2026-07-29T00:00:00Z" } }, null).weight).toBeNull();
+    expect(
+      decodeVote(
+        {
+          ...{
+            proposal_id: "8",
+            voter: "tp1v",
+            option: "VOTE_OPTION_YES",
+            submit_time: "2026-07-29T00:00:00Z",
+          },
+        },
+        null,
+      ).weight,
+    ).toBeNull();
   });
 
   it("decodes member weights through the nested `member` envelope", () => {

@@ -10,7 +10,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { loadConfig } from "~/config/config.server";
 import { loadExitContext } from "~/exit/exit.server";
-import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
+import {
+  FIXTURE_CHAIN_ID,
+  FIXTURE_CONTRACT_ADDRESS,
+  FIXTURE_VAULT_ADDRESS,
+} from "~/mocks/handlers";
 import { server } from "~/mocks/node";
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -73,8 +77,24 @@ describe("loadExitContext", () => {
       http.get("*/vault/v1/vaults/:id/pending_swap_outs", () =>
         HttpResponse.json({
           pending_swap_outs: [
-            { pending_swap_out: { owner: "tp1someoneelse000000000000000000000000000", vault_address: FIXTURE_VAULT_ADDRESS, shares: { denom: "nvhash", amount: "9000000000000000" }, redeem_denom: "" }, timeout: "2026-09-01T00:00:00Z" },
-            { pending_swap_out: { owner: PENDING_OWNER, vault_address: FIXTURE_VAULT_ADDRESS, shares: { denom: "nvhash", amount: "5000000000000000" }, redeem_denom: "" }, timeout: "2026-08-15T00:00:00Z" },
+            {
+              pending_swap_out: {
+                owner: "tp1someoneelse000000000000000000000000000",
+                vault_address: FIXTURE_VAULT_ADDRESS,
+                shares: { denom: "nvhash", amount: "9000000000000000" },
+                redeem_denom: "",
+              },
+              timeout: "2026-09-01T00:00:00Z",
+            },
+            {
+              pending_swap_out: {
+                owner: PENDING_OWNER,
+                vault_address: FIXTURE_VAULT_ADDRESS,
+                shares: { denom: "nvhash", amount: "5000000000000000" },
+                redeem_denom: "",
+              },
+              timeout: "2026-08-15T00:00:00Z",
+            },
           ],
           pagination: { next_key: null, total: "2" },
         }),
@@ -109,9 +129,36 @@ describe("loadExitContext", () => {
         HttpResponse.json(
           envelope(
             [
-              { txhash: "PAID", msg_index: 0, kind: "redemption_payout", shares: "1000000000000000", nhash: "1000000000", nav_at_height: "1.0", height: 90, block_time: "2026-06-20T00:00:00Z" },
-              { txhash: "REF", msg_index: 0, kind: "redemption_refund", shares: "2000000000000000", nhash: "0", nav_at_height: "1.0", height: 80, block_time: "2026-06-10T00:00:00Z" },
-              { txhash: "DEP", msg_index: 0, kind: "swap_in", shares: "3000000000000000", nhash: "3000000000", nav_at_height: "1.0", height: 70, block_time: "2026-06-01T00:00:00Z" },
+              {
+                txhash: "PAID",
+                msg_index: 0,
+                kind: "redemption_payout",
+                shares: "1000000000000000",
+                nhash: "1000000000",
+                nav_at_height: "1.0",
+                height: 90,
+                block_time: "2026-06-20T00:00:00Z",
+              },
+              {
+                txhash: "REF",
+                msg_index: 0,
+                kind: "redemption_refund",
+                shares: "2000000000000000",
+                nhash: "0",
+                nav_at_height: "1.0",
+                height: 80,
+                block_time: "2026-06-10T00:00:00Z",
+              },
+              {
+                txhash: "DEP",
+                msg_index: 0,
+                kind: "swap_in",
+                shares: "3000000000000000",
+                nhash: "3000000000",
+                nav_at_height: "1.0",
+                height: 70,
+                block_time: "2026-06-01T00:00:00Z",
+              },
             ],
             { source: "indexed" },
           ),
@@ -130,7 +177,9 @@ describe("loadExitContext", () => {
     // carries its (txhash, msgIndex) row identity (one tx can hold several
     // redemption legs; the tracker keys on the pair).
     expect(
-      ctx.tracker!.terminal.map((t) => ({ kind: t.kind, txhash: t.txhash, msgIndex: t.msgIndex })).sort((a, b) => a.kind.localeCompare(b.kind)),
+      ctx
+        .tracker!.terminal.map((t) => ({ kind: t.kind, txhash: t.txhash, msgIndex: t.msgIndex }))
+        .sort((a, b) => a.kind.localeCompare(b.kind)),
     ).toEqual([
       { kind: "redemption_payout", txhash: "PAID", msgIndex: 0 },
       { kind: "redemption_refund", txhash: "REF", msgIndex: 0 },

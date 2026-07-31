@@ -13,7 +13,11 @@
 
 import { getBootedConfig } from "~/config/config.server";
 import { requireSession, sessionIdFromCookieHeader } from "~/lib/services/session.server";
-import { deleteSubscriptionsForSession, pushSubscriptionBodySchema, saveSubscription } from "~/push/push.server";
+import {
+  deleteSubscriptionsForSession,
+  pushSubscriptionBodySchema,
+  saveSubscription,
+} from "~/push/push.server";
 import type { Route } from "./+types/push-subscription";
 
 export async function loader({ request }: Route.LoaderArgs) {

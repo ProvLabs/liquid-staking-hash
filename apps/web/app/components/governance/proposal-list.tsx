@@ -32,7 +32,9 @@ export function ProposalList({
     <section aria-label={heading} className="flex flex-col gap-3">
       <h2 className="text-xl font-semibold">{heading}</h2>
       {proposals.length === 0 ? (
-        <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">{emptyMessage}</p>
+        <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          {emptyMessage}
+        </p>
       ) : (
         <ul className="flex flex-col gap-3">
           {proposals.map((proposal) => (
@@ -54,7 +56,9 @@ export function ProposalList({
               <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                 <div className="flex justify-between gap-4">
                   <dt className="text-muted-foreground">{t(locale, "governance.tally-yes")}</dt>
-                  <dd className="tabular-nums">{proposal.tally.yes ?? t(locale, "governance.na")}</dd>
+                  <dd className="tabular-nums">
+                    {proposal.tally.yes ?? t(locale, "governance.na")}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-muted-foreground">

@@ -7,14 +7,24 @@
 
 import { describe, expect, it } from "vitest";
 import { InMemoryAlertStore, PrismaAlertStore } from "~/lib/models/alerts.server";
-import { effectiveSettings, isKindEnabled, type AlertKind, type Candidate } from "~/lib/services/alerts.server";
+import {
+  effectiveSettings,
+  isKindEnabled,
+  type AlertKind,
+  type Candidate,
+} from "~/lib/services/alerts.server";
 
 const NOW = new Date("2026-07-24T00:00:00Z");
 const A = "pb1aaa";
 const B = "pb1bbb";
 
 function candidate(address: string, dedupeKey: string): Candidate {
-  return { address, kind: "redemption_update", dedupeKey, payload: { request_id: dedupeKey, event: "matured" } };
+  return {
+    address,
+    kind: "redemption_update",
+    dedupeKey,
+    payload: { request_id: dedupeKey, event: "matured" },
+  };
 }
 
 describe("effective-settings merge (absence = default)", () => {
@@ -56,9 +66,15 @@ describe("InMemoryAlertStore contract", () => {
 
   it("commitTick returns the NEWLY-INSERTED candidates, skipping duplicates, and advances the cursor", async () => {
     const store = new InMemoryAlertStore(() => NOW);
-    const n1 = await store.commitTick("redemptions", "100", [candidate(A, "r1"), candidate(A, "r2")]);
+    const n1 = await store.commitTick("redemptions", "100", [
+      candidate(A, "r1"),
+      candidate(A, "r2"),
+    ]);
     expect(n1).toHaveLength(2); // both new (the push fan-out set, plan §2.3)
-    const n2 = await store.commitTick("redemptions", "250", [candidate(A, "r2"), candidate(A, "r3")]);
+    const n2 = await store.commitTick("redemptions", "250", [
+      candidate(A, "r2"),
+      candidate(A, "r3"),
+    ]);
     expect(n2).toHaveLength(1); // r2 already present → only r3 returned
     expect(n2[0]!.dedupeKey).toBe("r3");
     expect(await store.getCheckpoint("redemptions")).toBe("250");
@@ -105,11 +121,31 @@ describe("InMemoryAlertStore contract", () => {
   it("sweep deletes read-old and delivered-old rows in a bounded batch", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     const old = new Date(NOW.getTime() - 200 * 24 * 60 * 60 * 1000);
-    store.seed({ address: A, kind: "nav_step_posted", dedupeKey: "old", payload: {}, deliveredAt: old, readAt: null });
-    store.seed({ address: A, kind: "nav_step_posted", dedupeKey: "fresh", payload: {}, deliveredAt: NOW, readAt: null });
-    const deleted = await store.sweep(new Date(NOW.getTime() - 90 * 864e5), new Date(NOW.getTime() - 180 * 864e5), 500);
+    store.seed({
+      address: A,
+      kind: "nav_step_posted",
+      dedupeKey: "old",
+      payload: {},
+      deliveredAt: old,
+      readAt: null,
+    });
+    store.seed({
+      address: A,
+      kind: "nav_step_posted",
+      dedupeKey: "fresh",
+      payload: {},
+      deliveredAt: NOW,
+      readAt: null,
+    });
+    const deleted = await store.sweep(
+      new Date(NOW.getTime() - 90 * 864e5),
+      new Date(NOW.getTime() - 180 * 864e5),
+      500,
+    );
     expect(deleted).toBe(1);
-    expect((await store.listNotifications(A, { limit: 10, offset: 0 })).map((n) => n.dedupeKey)).toEqual(["fresh"]);
+    expect(
+      (await store.listNotifications(A, { limit: 10, offset: 0 })).map((n) => n.dedupeKey),
+    ).toEqual(["fresh"]);
   });
 });
 
@@ -157,7 +193,9 @@ describe("PrismaAlertStore query shaping (security-critical)", () => {
     const store = new PrismaAlertStore(capturingPrisma(recorded) as never);
     await store.markRead(A, { all: true }, NOW);
     await store.markRead(A, { ids: [1n, 2n] }, NOW);
-    const wheres = recorded.filter((c) => c.method === "updateMany").map((c) => (c.args as { where: Record<string, unknown> }).where);
+    const wheres = recorded
+      .filter((c) => c.method === "updateMany")
+      .map((c) => (c.args as { where: Record<string, unknown> }).where);
     expect(wheres).toHaveLength(2);
     for (const where of wheres) {
       expect(where.address).toBe(A); // an id belonging to another address can never be touched
@@ -174,9 +212,14 @@ describe("PrismaAlertStore query shaping (security-critical)", () => {
     expect(n).toHaveLength(1); // the newly-inserted candidate (the push fan-out set)
     const order = recorded.map((c) => c.method);
     expect(order).toEqual(["$transaction", "createManyAndReturn", "checkpoint.upsert"]);
-    const createMany = recorded.find((c) => c.method === "createManyAndReturn")!.args as { skipDuplicates: boolean };
+    const createMany = recorded.find((c) => c.method === "createManyAndReturn")!.args as {
+      skipDuplicates: boolean;
+    };
     expect(createMany.skipDuplicates).toBe(true); // ON CONFLICT DO NOTHING = the exactly-once gate
-    const cp = recorded.find((c) => c.method === "checkpoint.upsert")!.args as { where: { stream: string }; update: { cursor: string } };
+    const cp = recorded.find((c) => c.method === "checkpoint.upsert")!.args as {
+      where: { stream: string };
+      update: { cursor: string };
+    };
     expect(cp.where.stream).toBe("redemptions");
     expect(cp.update.cursor).toBe("250");
   });

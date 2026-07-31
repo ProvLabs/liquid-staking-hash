@@ -95,7 +95,9 @@ export function PolicyPanel({
       )}
 
       {truncated ? (
-        <p className="text-xs text-muted-foreground">{t(locale, "governance.policies-truncated")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t(locale, "governance.policies-truncated")}
+        </p>
       ) : null}
     </section>
   );

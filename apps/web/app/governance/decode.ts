@@ -348,7 +348,10 @@ export function summarizeMessage(locale: Locale, decoded: DecodedMessage): strin
   const { variant } = decoded;
   if (variant === "set_halted") {
     if (decoded.halted === null) return t(locale, "governance.msg-set-halted-unknown");
-    return t(locale, decoded.halted ? "governance.msg-set-halted-on" : "governance.msg-set-halted-off");
+    return t(
+      locale,
+      decoded.halted ? "governance.msg-set-halted-on" : "governance.msg-set-halted-off",
+    );
   }
   if (variant === "update_config") {
     // The contract changes only the fields a proposal supplies, so NAMING the

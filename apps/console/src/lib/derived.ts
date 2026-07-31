@@ -45,10 +45,7 @@ export interface InvariantCheck {
   delta: bigint; // receipt_minted - (delegated + unbonding + undeployed remainder)
 }
 /** §9.5.4 receipt invariant. In-flight legs legitimately skew it -> warning, not error. */
-export function receiptInvariant(
-  receiptMinted: bigint,
-  split: DeploymentSplit,
-): InvariantCheck {
+export function receiptInvariant(receiptMinted: bigint, split: DeploymentSplit): InvariantCheck {
   const backing = toBig(split.delegated) + toBig(split.unbonding) + toBig(split.pending);
   return { matched: backing >= receiptMinted, delta: receiptMinted - backing };
 }

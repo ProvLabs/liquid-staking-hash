@@ -8,9 +8,7 @@
 //
 // Pure and dependency-free (BigInt only, no floats — spec §3 decision 8).
 
-export type PreviewResult =
-  | { ok: true; shares: bigint }
-  | { ok: false; reason: "empty-vault" };
+export type PreviewResult = { ok: true; shares: bigint } | { ok: false; reason: "empty-vault" };
 
 /**
  * Expected nvHASH shares for a HASH deposit at the current NAV:

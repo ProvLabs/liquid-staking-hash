@@ -96,7 +96,11 @@ function maxStatus(a: RedemptionStatus, b: RedemptionStatus): RedemptionStatus {
 }
 
 /** Deterministic synthetic txhash for a txless EndBlocker row (payout/refund). */
-export function syntheticTxhash(height: bigint, requestId: string, kind: "payout" | "refund"): string {
+export function syntheticTxhash(
+  height: bigint,
+  requestId: string,
+  kind: "payout" | "refund",
+): string {
   return `blk:${height}:${requestId}:${kind}`;
 }
 
@@ -139,13 +143,13 @@ export async function applyEvents(store: Store, events: readonly DomainEvent[]):
           height: ev.height,
           blockTime: ev.blockTime,
         });
-        await store.upsertRedemption(
-          mergeEnqueued(await store.getRedemption(ev.requestId), ev),
-        );
+        await store.upsertRedemption(mergeEnqueued(await store.getRedemption(ev.requestId), ev));
         break;
 
       case "expedited":
-        await advance(store, ev.requestId, "expedited", ev.height, ev.txhash, { expeditedAt: ev.blockTime });
+        await advance(store, ev.requestId, "expedited", ev.height, ev.txhash, {
+          expeditedAt: ev.blockTime,
+        });
         break;
 
       case "operator_payment":
@@ -179,7 +183,9 @@ export async function applyEvents(store: Store, events: readonly DomainEvent[]):
           height: ev.height,
           blockTime: ev.blockTime,
         });
-        await advance(store, ev.requestId, "matured", ev.height, txhash, { maturedAt: ev.blockTime });
+        await advance(store, ev.requestId, "matured", ev.height, txhash, {
+          maturedAt: ev.blockTime,
+        });
         break;
       }
 
@@ -213,7 +219,13 @@ function mergeEnqueued(
 ): RedemptionRow {
   if (existing) {
     // Already known (replay) — keep terminal timestamps, refresh last-seen.
-    return { ...existing, owner: ev.owner, shares: ev.shares, lastHeight: ev.height, lastTxhash: ev.txhash };
+    return {
+      ...existing,
+      owner: ev.owner,
+      shares: ev.shares,
+      lastHeight: ev.height,
+      lastTxhash: ev.txhash,
+    };
   }
   return {
     requestId: ev.requestId,

@@ -10,8 +10,16 @@ import { http, HttpResponse } from "msw";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "~/config/config.server";
-import { detectRoles, resetRoleCacheForTests, ROLE_CACHE_TTL_SECONDS } from "~/lib/services/roles.server";
-import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
+import {
+  detectRoles,
+  resetRoleCacheForTests,
+  ROLE_CACHE_TTL_SECONDS,
+} from "~/lib/services/roles.server";
+import {
+  FIXTURE_CHAIN_ID,
+  FIXTURE_CONTRACT_ADDRESS,
+  FIXTURE_VAULT_ADDRESS,
+} from "~/mocks/handlers";
 import { server } from "~/mocks/node";
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

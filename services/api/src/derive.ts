@@ -302,7 +302,10 @@ export function premiumDiscountBps(priceNhash: bigint, navNhash: bigint | null):
   return toSafeSignedInt(((priceNhash - navNhash) * 10_000n) / navNhash, "premium_discount_bps");
 }
 
-export function toMarketSample(facts: MarketSampleFacts, navAtSampleTime: bigint | null): MarketSample {
+export function toMarketSample(
+  facts: MarketSampleFacts,
+  navAtSampleTime: bigint | null,
+): MarketSample {
   return {
     venue: facts.venue,
     pool: facts.pool,
@@ -738,7 +741,9 @@ export function derivePortfolio(
   let escrowed = 0n;
   for (const redemption of activeRedemptions) {
     if (!isActiveRedemption(redemption.status)) {
-      throw new RangeError(`redemption ${redemption.requestId} is ${redemption.status}, not active`);
+      throw new RangeError(
+        `redemption ${redemption.requestId} is ${redemption.status}, not active`,
+      );
     }
     escrowed += redemption.shares;
   }
@@ -852,7 +857,10 @@ export function toGovDecisionPolicy(stored: unknown): GovDecisionPolicy | null {
   const minExecution =
     typeof windows["min_execution_period"] === "string" ? windows["min_execution_period"] : "";
 
-  if (typeUrl === "/cosmos.group.v1.ThresholdDecisionPolicy" && typeof o["threshold"] === "string") {
+  if (
+    typeUrl === "/cosmos.group.v1.ThresholdDecisionPolicy" &&
+    typeof o["threshold"] === "string"
+  ) {
     return {
       kind: "threshold",
       threshold: o["threshold"],
@@ -860,7 +868,10 @@ export function toGovDecisionPolicy(stored: unknown): GovDecisionPolicy | null {
       min_execution_period: minExecution,
     };
   }
-  if (typeUrl === "/cosmos.group.v1.PercentageDecisionPolicy" && typeof o["percentage"] === "string") {
+  if (
+    typeUrl === "/cosmos.group.v1.PercentageDecisionPolicy" &&
+    typeof o["percentage"] === "string"
+  ) {
     return {
       kind: "percentage",
       percentage: o["percentage"],
@@ -918,7 +929,9 @@ export function toGovProposalRow(f: GovProposalFacts): GovProposalRow {
     height: f.height === null ? null : toSafeInt(f.height, "gov_proposals.height"),
     txhash: f.txhash,
     pruned_at_height:
-      f.prunedAtHeight === null ? null : toSafeInt(f.prunedAtHeight, "gov_proposals.prunedAtHeight"),
+      f.prunedAtHeight === null
+        ? null
+        : toSafeInt(f.prunedAtHeight, "gov_proposals.prunedAtHeight"),
     messages_truncated: truncated,
     proposers_truncated: proposersTruncated,
     messages: truncated ? messages.slice(0, MAX_GOV_PROPOSAL_MESSAGES) : messages,

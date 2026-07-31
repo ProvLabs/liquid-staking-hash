@@ -154,9 +154,7 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
   });
 
   it("an unreachable API nulls only setHealth (distinct from empty)", async () => {
-    server.use(
-      http.get("*/api/v1/validators", () => HttpResponse.json({}, { status: 502 })),
-    );
+    server.use(http.get("*/api/v1/validators", () => HttpResponse.json({}, { status: 502 })));
     const data = await loadValidatorsData(config());
     expect(data.setHealth).toBeNull();
     expect(data.rows).toHaveLength(1);

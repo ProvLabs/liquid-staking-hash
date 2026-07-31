@@ -22,7 +22,9 @@ import type {
 
 /** The injected provider surface this adapter certifies against (§14.1). */
 interface InjectedFigureProvider {
-  connect(args: { chainId: string }): Promise<{ address: string; pubKey?: string; pubkey?: string }>;
+  connect(args: {
+    chainId: string;
+  }): Promise<{ address: string; pubKey?: string; pubkey?: string }>;
   signAmino(args: {
     chainId: string;
     signerAddress: string;
@@ -68,10 +70,7 @@ export class FigureExtensionAdapter implements WalletAdapter {
     return { address: account.address, pubkeyBase64: pubkey };
   }
 
-  async signArbitrary(
-    signerAddress: string,
-    challengeText: string,
-  ): Promise<SignArbitraryResult> {
+  async signArbitrary(signerAddress: string, challengeText: string): Promise<SignArbitraryResult> {
     if (this.provider === null) throw new Error("not connected");
     const signDoc = buildAdr36SignDoc(signerAddress, utf8ToBase64(challengeText));
     const response = await this.provider.signAmino({

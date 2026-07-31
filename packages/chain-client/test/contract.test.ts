@@ -70,12 +70,21 @@ describe("NvhashContractClient transport", () => {
     const calls: string[] = [];
     const fetchImpl: FetchLike = async (url) => {
       calls.push(url);
-      return { ok: true, status: 200, text: async () => JSON.stringify(fixture("queries/contract/config.json")) };
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(fixture("queries/contract/config.json")),
+      };
     };
-    const client = new NvhashContractClient(new LcdClient("http://lcd", { fetchImpl }), "tp1contract");
+    const client = new NvhashContractClient(
+      new LcdClient("http://lcd", { fetchImpl }),
+      "tp1contract",
+    );
     const cfg = await client.config();
     expect(cfg.underlyingDenom).toBe("nhash");
     const expected = Buffer.from(JSON.stringify({ config: {} })).toString("base64");
-    expect(calls[0]).toBe(`http://lcd/cosmwasm/wasm/v1/contract/tp1contract/smart/${encodeURIComponent(expected)}`);
+    expect(calls[0]).toBe(
+      `http://lcd/cosmwasm/wasm/v1/contract/tp1contract/smart/${encodeURIComponent(expected)}`,
+    );
   });
 });

@@ -19,6 +19,8 @@ describe("log scrubbing (SECURITY.md: no IP/device identifiers in logs)", () => 
     const forbidden = SAFE_FIELDS.filter((f) =>
       /(^ip$|ipaddr|remoteaddr|forwardedfor|useragent|device|fingerprint|email|phone)/i.test(f),
     );
-    expect(forbidden, `logger SAFE_FIELDS leaks identity fields: ${forbidden.join(", ")}`).toEqual([]);
+    expect(forbidden, `logger SAFE_FIELDS leaks identity fields: ${forbidden.join(", ")}`).toEqual(
+      [],
+    );
   });
 });

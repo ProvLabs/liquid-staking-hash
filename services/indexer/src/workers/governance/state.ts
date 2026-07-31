@@ -183,11 +183,14 @@ export async function sweepPolicies(
       // Includes the pagination-cap throw: a truncated sweep is exactly the
       // thing that must not be mistaken for a complete one.
       sweepOk = false;
-      logger.warn("governance sweep failed for a policy; prune detection is suspended this window", {
-        stream: "governance",
-        height,
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
+      logger.warn(
+        "governance sweep failed for a policy; prune detection is suspended this window",
+        {
+          stream: "governance",
+          height,
+          error: cause instanceof Error ? cause.message : String(cause),
+        },
+      );
       continue;
     }
     sweptPolicies.push(policy.address);

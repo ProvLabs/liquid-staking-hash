@@ -73,7 +73,13 @@ function baseHeaders(): Headers {
   return headers;
 }
 
-function withRateLimitHeaders(headers: Headers, limit: number, remaining: number, resetAt: number, now: number): Headers {
+function withRateLimitHeaders(
+  headers: Headers,
+  limit: number,
+  remaining: number,
+  resetAt: number,
+  now: number,
+): Headers {
   headers.set("ratelimit-limit", String(limit));
   headers.set("ratelimit-remaining", String(remaining));
   headers.set("ratelimit-reset", String(Math.max(0, Math.ceil((resetAt - now) / 1000))));
@@ -84,12 +90,22 @@ function jsonResponse(status: number, body: unknown, headers: Headers): Response
   return new Response(jsonStringify(body), { status, headers });
 }
 
-function errorResponse(status: number, code: string, message: string, headers: Headers, extra?: Record<string, unknown>): Response {
+function errorResponse(
+  status: number,
+  code: string,
+  message: string,
+  headers: Headers,
+  extra?: Record<string, unknown>,
+): Response {
   // Errors are not chain data, so they are not enveloped.
   return jsonResponse(status, { error: { code, message, ...extra } }, headers);
 }
 
-async function runEnvelopedRoute(route: Extract<Route, { enveloped: true }>, ctx: Parameters<typeof route.handle>[0], headers: Headers): Promise<Response> {
+async function runEnvelopedRoute(
+  route: Extract<Route, { enveloped: true }>,
+  ctx: Parameters<typeof route.handle>[0],
+  headers: Headers,
+): Promise<Response> {
   const payload: EnvelopedPayload | Response = await route.handle(ctx);
   // A route may return a raw Response for non-JSON representations (the
   // `?format=csv` export, [R3]): freshness rides in its X- headers instead
@@ -112,7 +128,9 @@ async function runEnvelopedRoute(route: Extract<Route, { enveloped: true }>, ctx
 }
 
 /** Build the request handler with its dependencies (limiter, clock, env). */
-export function createHandler(deps: HandlerDeps): (request: Request, meta: RequestMeta) => Promise<Response> {
+export function createHandler(
+  deps: HandlerDeps,
+): (request: Request, meta: RequestMeta) => Promise<Response> {
   const now = deps.now ?? (() => new Date());
 
   return async function handle(request: Request, meta: RequestMeta): Promise<Response> {
@@ -137,7 +155,12 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
     //    served as GET-without-body. Any write verb is refused here.
     if (!ALLOWED_METHODS.includes(request.method as (typeof ALLOWED_METHODS)[number])) {
       headers.set("allow", ALLOWED_METHODS.join(", "));
-      return errorResponse(405, "method_not_allowed", `${request.method} is not allowed; this API is read-only.`, headers);
+      return errorResponse(
+        405,
+        "method_not_allowed",
+        `${request.method} is not allowed; this API is read-only.`,
+        headers,
+      );
     }
 
     // 4. Credential validity on non-public routes (ADR-001 Decision 2) —
@@ -146,9 +169,18 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
     //    post-zod target match; it is never derived from topology.
     let scope: VerifiedScope | null = null;
     if (route.auth !== "public") {
-      const result = verifyAssertion(meta.authorization, deps.assertionKey, Math.floor(nowMs / 1000));
+      const result = verifyAssertion(
+        meta.authorization,
+        deps.assertionKey,
+        Math.floor(nowMs / 1000),
+      );
       if (!result.ok) {
-        return errorResponse(401, "unauthorized", "A valid service assertion is required.", headers);
+        return errorResponse(
+          401,
+          "unauthorized",
+          "A valid service assertion is required.",
+          headers,
+        );
       }
       scope = result.scope;
     }
@@ -159,7 +191,10 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
       const parsed = route.querySchema.safeParse(searchParamsToRecord(url.searchParams));
       if (!parsed.success) {
         return errorResponse(400, "invalid_query", "Query parameters failed validation.", headers, {
-          issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+          issues: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
         });
       }
       query = parsed.data;
@@ -177,14 +212,34 @@ export function createHandler(deps: HandlerDeps): (request: Request, meta: Reque
         typeof target !== "string" ||
         scope.address !== target
       ) {
-        return errorResponse(403, "forbidden", "The assertion scope does not grant this address.", headers);
+        return errorResponse(
+          403,
+          "forbidden",
+          "The assertion scope does not grant this address.",
+          headers,
+        );
       }
-    } else if (route.auth === "internal:notifier" && (scope === null || scope.kind !== "internal")) {
-      return errorResponse(403, "forbidden", "The assertion scope does not grant this surface.", headers);
+    } else if (
+      route.auth === "internal:notifier" &&
+      (scope === null || scope.kind !== "internal")
+    ) {
+      return errorResponse(
+        403,
+        "forbidden",
+        "The assertion scope does not grant this surface.",
+        headers,
+      );
     }
 
     // 7. Dispatch.
-    const ctx = { query, url, now, appEnv: deps.appEnv, reader: deps.reader, dataSource: deps.dataSource };
+    const ctx = {
+      query,
+      url,
+      now,
+      appEnv: deps.appEnv,
+      reader: deps.reader,
+      dataSource: deps.dataSource,
+    };
     let response: Response;
     if (route.enveloped) {
       response = await runEnvelopedRoute(route, ctx, headers);

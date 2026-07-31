@@ -49,7 +49,9 @@ async function readLive(deps: ReconcilerDeps): Promise<LivePlane> {
           return { epochIndex: f.epochIndex, totalShares: f.totalShares, tvvAfter: f.tvvAfter };
         })();
 
-  const halted = parseHalted(await deps.pinned.smartAtHeight(deps.contractAddress, { epoch_status: {} }, head));
+  const halted = parseHalted(
+    await deps.pinned.smartAtHeight(deps.contractAddress, { epoch_status: {} }, head),
+  );
 
   return { head, snapshot, halted };
 }

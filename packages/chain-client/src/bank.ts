@@ -3,7 +3,7 @@
 // — the honest number for "can this account fund the transfer + fee".
 
 import { expectArray, expectObject, parseCoin, type Coin } from "./amounts.ts";
-import { LcdClient } from "./lcd.ts";
+import type { LcdClient } from "./lcd.ts";
 import { parsePagination, type Pagination } from "./types.ts";
 
 export class BankClient {
@@ -12,10 +12,9 @@ export class BankClient {
   /** GET /cosmos/bank/v1beta1/balances/{address}/by_denom — total balance. */
   async balance(address: string, denom: string): Promise<Coin> {
     const o = expectObject(
-      await this.lcd.get(
-        `cosmos/bank/v1beta1/balances/${encodeURIComponent(address)}/by_denom`,
-        { denom },
-      ),
+      await this.lcd.get(`cosmos/bank/v1beta1/balances/${encodeURIComponent(address)}/by_denom`, {
+        denom,
+      }),
     );
     return parseCoin(o["balance"], "$.balance");
   }
@@ -24,13 +23,9 @@ export class BankClient {
    * GET /cosmos/bank/v1beta1/spendable_balances/{address} — balances net of
    * vesting locks (the §8.3 vesting-honesty figure).
    */
-  async spendableBalances(
-    address: string,
-  ): Promise<{ balances: Coin[]; pagination: Pagination }> {
+  async spendableBalances(address: string): Promise<{ balances: Coin[]; pagination: Pagination }> {
     const o = expectObject(
-      await this.lcd.get(
-        `cosmos/bank/v1beta1/spendable_balances/${encodeURIComponent(address)}`,
-      ),
+      await this.lcd.get(`cosmos/bank/v1beta1/spendable_balances/${encodeURIComponent(address)}`),
     );
     return {
       balances: expectArray(o["balances"] ?? [], "$.balances").map((c, i) =>

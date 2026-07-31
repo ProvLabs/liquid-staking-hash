@@ -54,7 +54,9 @@ export function HistoryTable({ locale, history }: { locale: Locale; history: His
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="px-3 py-2 font-medium">{t(locale, "portfolio.history-col-time")}</th>
                 <th className="px-3 py-2 font-medium">{t(locale, "portfolio.history-col-kind")}</th>
-                <th className="px-3 py-2 font-medium">{t(locale, "portfolio.history-col-shares")}</th>
+                <th className="px-3 py-2 font-medium">
+                  {t(locale, "portfolio.history-col-shares")}
+                </th>
                 <th className="px-3 py-2 font-medium">{t(locale, "portfolio.history-col-hash")}</th>
                 <th className="px-3 py-2 font-medium">{t(locale, "portfolio.history-col-nav")}</th>
                 <th className="px-3 py-2 font-medium">{t(locale, "portfolio.history-col-tx")}</th>

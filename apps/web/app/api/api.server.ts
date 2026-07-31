@@ -123,7 +123,9 @@ const baseUnitString = z.string().regex(/^\d+$/, "expected a base-unit integer s
 /** Signed base-unit integer amount (realized gain, the one signed nhash
  * figure; leading `-` allowed, fractions a shape error since consumers
  * BigInt() these). */
-const signedBaseUnitString = z.string().regex(/^-?\d+$/, "expected a signed base-unit integer string");
+const signedBaseUnitString = z
+  .string()
+  .regex(/^-?\d+$/, "expected a signed base-unit integer string");
 
 export const epochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
@@ -539,8 +541,12 @@ export const govPoliciesEnvelopeSchema = envelopeSchema(
 );
 
 /** The notifier caps its fact page at 500 (MAX_ALERT_FACT_LIMIT); bound here. */
-export const alertRedemptionsEnvelopeSchema = envelopeSchema(z.array(alertRedemptionFactSchema).max(500));
-export const alertIncidentsEnvelopeSchema = envelopeSchema(z.array(alertIncidentFactSchema).max(500));
+export const alertRedemptionsEnvelopeSchema = envelopeSchema(
+  z.array(alertRedemptionFactSchema).max(500),
+);
+export const alertIncidentsEnvelopeSchema = envelopeSchema(
+  z.array(alertIncidentFactSchema).max(500),
+);
 export const alertArrearsEnvelopeSchema = envelopeSchema(z.array(alertArrearsFactSchema).max(500));
 
 /** Collections stay bounded at the boundary, mirroring the API's page cap. */
@@ -555,8 +561,12 @@ export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
 export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);
 export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));
 export const operatorSummaryEnvelopeSchema = envelopeSchema(operatorSummarySchema);
-export const operatorEpochsEnvelopeSchema = envelopeSchema(z.array(operatorEpochRowSchema).max(200));
-export const operatorPaymentsEnvelopeSchema = envelopeSchema(z.array(operatorPaymentRowSchema).max(200));
+export const operatorEpochsEnvelopeSchema = envelopeSchema(
+  z.array(operatorEpochRowSchema).max(200),
+);
+export const operatorPaymentsEnvelopeSchema = envelopeSchema(
+  z.array(operatorPaymentRowSchema).max(200),
+);
 
 /**
  * Bounded-timeout GET returning parsed JSON. Throws on non-OK status,

@@ -129,8 +129,7 @@ export function ProposalActions({
     t(locale, "governance.confirm-vote-3"),
   ];
 
-  const nothingOffered =
-    vote.state !== "offered" && execute.state === "hidden";
+  const nothingOffered = vote.state !== "offered" && execute.state === "hidden";
 
   return (
     <section aria-label={t(locale, "governance.actions-title")} className="flex flex-col gap-3">

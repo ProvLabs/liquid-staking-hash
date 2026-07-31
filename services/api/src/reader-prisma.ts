@@ -133,7 +133,10 @@ const KEYSET_CHUNK = 1000;
  * regardless of history size. `operator_payments` and `transactions` are both
  * append-only, so a keyset walk cannot skip a row.
  */
-async function* keysetStream<Row extends { height: bigint; msgIndex: number; ordinal?: number }, Fact>(
+async function* keysetStream<
+  Row extends { height: bigint; msgIndex: number; ordinal?: number },
+  Fact,
+>(
   page: (cursor: KeysetCursor | null, take: number) => Promise<Row[]>,
   toFact: (row: Row) => Fact,
 ): AsyncIterable<readonly Fact[]> {
@@ -436,7 +439,12 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     async programMetrics(): Promise<ProgramMetrics> {
       const indexed = (await maxWorkerCheckpoint()) !== null;
       if (!indexed) {
-        return deriveMetrics({ indexed: false, participantCount: 0, firstActivityAt: null, epochCount: 0 });
+        return deriveMetrics({
+          indexed: false,
+          participantCount: 0,
+          firstActivityAt: null,
+          epochCount: 0,
+        });
       }
       // COUNT(DISTINCT …) stays in SQL so the row set never crosses the wire
       // (a groupBy would materialize every address). Tagged template — no
@@ -562,7 +570,9 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           select: { tvvAfter: true, totalShares: true },
         });
         const nav =
-          navEpoch === null ? null : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
+          navEpoch === null
+            ? null
+            : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
         sample = toMarketSample(
           {
             venue: raw.venue,
@@ -577,7 +587,11 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return {
         sample,
         bridged_supply: bridged.map((row) =>
-          toBridgedSupplyRow({ chain: row.chain, remoteSupply: toBigint(row.remoteSupply), sampledAt: row.sampledAt }),
+          toBridgedSupplyRow({
+            chain: row.chain,
+            remoteSupply: toBigint(row.remoteSupply),
+            sampledAt: row.sampledAt,
+          }),
         ),
       };
     },
@@ -704,7 +718,11 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return facts;
     },
 
-    async redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]> {
+    async redemptionsChangedSince(
+      sinceHeight: number,
+      afterId: string,
+      limit: number,
+    ): Promise<AlertRedemptionFact[]> {
       // Compound keyset pagination: `(lastHeight, requestId) > (sinceHeight,
       // afterId)` in `(lastHeight asc, requestId asc)` order, so a same-height
       // burst larger than one page (mass maturation at an epoch settlement)
@@ -714,10 +732,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       const height = BigInt(sinceHeight);
       const rows = await prisma.redemptionRequest.findMany({
         where: {
-          OR: [
-            { lastHeight: { gt: height } },
-            { lastHeight: height, requestId: { gt: afterId } },
-          ],
+          OR: [{ lastHeight: { gt: height } }, { lastHeight: height, requestId: { gt: afterId } }],
         },
         orderBy: [{ lastHeight: "asc" }, { requestId: "asc" }],
         take: limit,

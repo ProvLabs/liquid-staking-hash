@@ -26,9 +26,7 @@ export function formatBaseAmount(base: bigint, exponent: number, fractionDigits 
   const whole = scaled / pow10(fractionDigits);
   const fraction = scaled % pow10(fractionDigits);
   const digits =
-    fractionDigits === 0
-      ? ""
-      : `.${fraction.toString().padStart(fractionDigits, "0")}`;
+    fractionDigits === 0 ? "" : `.${fraction.toString().padStart(fractionDigits, "0")}`;
   return `${negative ? "-" : ""}${whole}${digits}`;
 }
 

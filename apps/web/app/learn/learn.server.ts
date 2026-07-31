@@ -13,12 +13,7 @@
 //   structurally (§12.1); loader data is serializable (BigInt is converted
 //   to display strings here, server-side).
 
-import {
-  LcdClient,
-  NvhashContractClient,
-  VaultClient,
-  type FetchLike,
-} from "@nvhash/chain-client";
+import { LcdClient, NvhashContractClient, VaultClient, type FetchLike } from "@nvhash/chain-client";
 
 import {
   epochsEnvelopeSchema,

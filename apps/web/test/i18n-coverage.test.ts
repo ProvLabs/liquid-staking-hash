@@ -161,7 +161,10 @@ function resolveKeys(expr: string, allKeys: readonly string[]): string[] | null 
     const body = template[1]!;
     if (!body.includes("${")) return [body];
     const pattern = new RegExp(
-      `^${body.split(/\$\{[^}]*\}/).map(escapeRegExp).join("[a-z0-9-]+")}$`,
+      `^${body
+        .split(/\$\{[^}]*\}/)
+        .map(escapeRegExp)
+        .join("[a-z0-9-]+")}$`,
     );
     return allKeys.filter((k) => pattern.test(k));
   }

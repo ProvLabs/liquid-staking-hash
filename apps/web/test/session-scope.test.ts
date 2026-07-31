@@ -228,7 +228,10 @@ describe("operator/export joins the standing gate (M6.4 §2.3)", () => {
 // would turn a public audit trail into a members-only one without anyone
 // deciding to; this asserts it has not.
 describe("governance routes must NOT join the personal-route list (M7.2 invariant 9)", () => {
-  const GOVERNANCE_ROUTE_MODULES = ["app/routes/governance.tsx", "app/routes/governance.$proposalId.tsx"];
+  const GOVERNANCE_ROUTE_MODULES = [
+    "app/routes/governance.tsx",
+    "app/routes/governance.$proposalId.tsx",
+  ];
 
   it("neither governance route imports or calls requireSession", () => {
     for (const path of GOVERNANCE_ROUTE_MODULES) {
