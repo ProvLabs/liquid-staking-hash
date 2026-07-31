@@ -29,6 +29,9 @@ import {
   guardOperatorExecute,
   intentToProtoJson,
   MSG_EXECUTE_CONTRACT,
+  MSG_GOV_EXEC,
+  MSG_GOV_SUBMIT_PROPOSAL,
+  MSG_GOV_VOTE,
   MSG_SWAP_IN,
   MSG_SWAP_OUT,
   operatorInnerJson,
@@ -129,9 +132,19 @@ describe("byte-golden: re-encoded operator txs hash to their chain tx ids", () =
 });
 
 describe("the allowlist and the variant set are closed", () => {
-  it("the allowlist is exactly the two vault messages plus the guarded execute", () => {
+  it("the allowlist is exactly the two vault messages, the guarded execute, and the three governance types", () => {
+    // AMENDED BY M7.3–7.4 (app-spec §12.3), and deliberately still an EXACT-SET
+    // assertion rather than a `toContain`: extending the allowlist is a
+    // design-review event, so a seventh entry must be an edit to this line.
     expect([...ALLOWED_MSG_TYPE_URLS].sort()).toEqual(
-      [MSG_SWAP_IN, MSG_SWAP_OUT, MSG_EXECUTE_CONTRACT].sort(),
+      [
+        MSG_SWAP_IN,
+        MSG_SWAP_OUT,
+        MSG_EXECUTE_CONTRACT,
+        MSG_GOV_VOTE,
+        MSG_GOV_EXEC,
+        MSG_GOV_SUBMIT_PROPOSAL,
+      ].sort(),
     );
   });
 

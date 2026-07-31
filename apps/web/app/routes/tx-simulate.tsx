@@ -6,8 +6,10 @@
 import { z } from "zod";
 
 import { getBootedConfig } from "~/config/config.server";
+import { describeTemplateError, parseTemplateValues } from "~/governance/templates";
 import { VALOPER_RE } from "~/lib/bech32";
 import { requireSession } from "~/lib/services/session.server";
+import { governancePreflightRequestSchema } from "~/tx/preflight.server";
 import { AuthClient, LcdClient } from "@nvhash/chain-client";
 import {
   FUNDED_VARIANTS,
@@ -54,6 +56,22 @@ const operatorBodySchema = z
     "a payment requires a positive amount; every other action must carry none",
   );
 
+/**
+ * M7.3–7.4 governance actions. A third bounded schema, on the same terms as the
+ * operator one: the client names the proposal, the option and the template; the
+ * SIGNER and the CONTRACT are filled server-side, so it cannot name another
+ * voter, another proposer, or a different contract for a proposal's messages.
+ *
+ * The policy address IS client-supplied — the program has 1..n policies (D1) and
+ * only the composer knows which one the user chose — and it is re-checked
+ * server-side twice: by preflight against the discovered set, and by the relay
+ * guard's condition 3 over the signed bytes.
+ */
+const governanceBodySchema = z.intersection(
+  governancePreflightRequestSchema,
+  z.object({ pubkey: pubkeySchema }),
+);
+
 export async function action({ request }: Route.ActionArgs) {
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
@@ -61,6 +79,11 @@ export async function action({ request }: Route.ActionArgs) {
   const config = await getBootedConfig();
   const session = await requireSession(config, request);
   const payload: unknown = await request.json().catch(() => null);
+
+  const governance = governanceBodySchema.safeParse(payload);
+  if (governance.success) {
+    return simulateGovernance(config, session.address, governance.data);
+  }
 
   const operator = operatorBodySchema.safeParse(payload);
   const swap = operator.success ? null : bodySchema.safeParse(payload);
@@ -125,6 +148,88 @@ export async function action({ request }: Route.ActionArgs) {
   } catch (error) {
     // Simulation failure is a would-fail surfaced BEFORE signing — an
     // honest 422 with the chain's reason, never a pass-through to sign.
+    return Response.json(
+      { error: "simulation failed", detail: error instanceof Error ? error.message : "unknown" },
+      { status: 422 },
+    );
+  }
+}
+
+/**
+ * Simulate a governance intent (§2.5 would-fail simulation before sign).
+ *
+ * A full `MsgExec` simulation EXECUTES the proposal's inner messages in the
+ * node's simulation context (§7 Q5, confirmed as the intended depth): it is
+ * side-effect-free — the node discards the simulated state — and it is the only
+ * way to surface "passed, but will fail to execute", which is exactly what
+ * 7.1's `executorResult` column exists to make visible. Surfacing that reason
+ * BEFORE the wallet is asked to sign is the whole point of §10.2 step 3.
+ */
+async function simulateGovernance(
+  config: Awaited<ReturnType<typeof getBootedConfig>>,
+  address: string,
+  body: z.infer<typeof governanceBodySchema>,
+): Promise<Response> {
+  const lcd = new LcdClient(config.lcdUrl);
+  const account = await new AuthClient(lcd).account(address);
+  if (account === null) {
+    return Response.json({ error: "account not on chain" }, { status: 409 });
+  }
+  const signer = {
+    chainId: config.chainId,
+    accountNumber: account.accountNumber,
+    sequence: account.sequence,
+    pubkeyBase64: body.pubkey,
+  };
+
+  let intent: TxIntent;
+  if (body.kind === "gov_vote") {
+    intent = {
+      kind: "gov_vote",
+      voter: address,
+      proposalId: BigInt(body.proposalId),
+      option: body.option,
+    };
+  } else if (body.kind === "gov_exec") {
+    intent = { kind: "gov_exec", signer: address, proposalId: BigInt(body.proposalId) };
+  } else {
+    // The template's values are parsed by the REGISTRY, so a value the composer
+    // could not build is a 400 here rather than a throw inside the encoder.
+    const parsed = parseTemplateValues(body.templateId, body.values);
+    if (!parsed.ok) {
+      return Response.json(
+        { error: "invalid request", detail: parsed.errors.map(describeTemplateError).join("; ") },
+        { status: 400 },
+      );
+    }
+    intent = {
+      kind: "gov_submit",
+      proposer: address,
+      policyAddress: body.policyAddress,
+      contractAddress: config.contractAddress,
+      templates: [{ id: body.templateId, values: parsed.values }],
+      title: body.title,
+      summary: body.summary,
+      metadata: body.metadata,
+    };
+  }
+
+  try {
+    const result = await simulateIntent(config, intent, signer);
+    return Response.json({
+      gas_used: result.gasUsed,
+      fee: {
+        gas_limit: result.fee.gasLimit.toString(),
+        amount: result.fee.amount.toString(),
+        denom: result.fee.denom,
+      },
+      signer: {
+        account_number: signer.accountNumber.toString(),
+        sequence: signer.sequence.toString(),
+        chain_id: signer.chainId,
+      },
+    });
+  } catch (error) {
     return Response.json(
       { error: "simulation failed", detail: error instanceof Error ? error.message : "unknown" },
       { status: 422 },

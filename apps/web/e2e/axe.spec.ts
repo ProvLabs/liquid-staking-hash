@@ -17,6 +17,10 @@ const ROUTES = [
   // The proposal detail (M7.2). A concrete id from the mirrored corpus: the
   // detail page has table, disclosure and time semantics the list does not.
   "/governance/4",
+  // The template composer (M7.4). Offline it renders its anonymous gate rather
+  // than the form, which is the state a scan can reach without a session — the
+  // `/validators/mine` precedent for an authenticated surface.
+  "/governance/new",
 ];
 
 for (const route of ROUTES) {

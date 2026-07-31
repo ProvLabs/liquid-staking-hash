@@ -220,6 +220,79 @@ End-user web interface. Production quality.
   standing gates: `test/governance-{decode,tally,data,compose}.test.ts`, offline
   `e2e/governance.spec.ts`, skip-clean `e2e-live/governance.spec.ts`, both
   routes in the axe list, and the governance case in `session-scope`.
+- **Governance write path + the governance broadcast allowlist** (PRs 7.3–7.4,
+  app-spec §8.7/§12.3 amendment/§14.6): vote, execute and the template composer
+  run through the **unmodified** 5.2 lifecycle. **THE convention to know:
+  `ALLOWED_MSG_TYPE_URLS` is TWO-LEVEL and the three `cosmos.group.v1` types are
+  guarded STRUCTURALLY** — type URL → signer ↔ session binding (`voter`,
+  `signer`, the single `proposers` entry) → closed field set with bounded values
+  → the `exec` pin → canonical re-encode. For `MsgSubmitProposal` the re-encode
+  covers the ENVELOPE and the inner `Any` bytes ride **verbatim**.
+  **READ THIS BEFORE RE-TIGHTENING IT.** The guard first shipped with six
+  conditions on `MsgSubmitProposal` — a closed template match per inner message,
+  a per-element re-encode, and a live policy sweep that made `guardSignedTx`
+  async with a 503 failure mode. A security review of the branch cut all three
+  (2026-07-30). The rationale they rested on (overview D7: carrying
+  `messages []Any` is "strictly worse than the `MsgExecuteContract` hole") was
+  **backwards**: an unguarded `MsgExecuteContract` executes ON INCLUSION under
+  the signer's own authority, while a `MsgSubmitProposal` executes NOTHING until
+  the group's decision policy is satisfied by other members voting. **The
+  group's threshold is the enforcement boundary**, and what protects members
+  from a hostile proposal is READING it before voting — 7.2's decoder. The
+  matrix in `test/broadcast-guard.test.ts` now asserts the permissive cases as
+  **acceptances** on purpose, so re-adding the conditions means editing named
+  test cases rather than sliding them back in.
+  **The `exec` pin is retained but is a CONFIRMATION-RIGOR control, not an
+  authorization one** (`EXEC_UNSPECIFIED`, enforced as "field 5 absent" since
+  proto3 omits a zero): it means executing is a second, separately-confirmed
+  signature. It is not load-bearing against an adversary — submit/vote/exec in
+  three separate relayed txs reaches the same state. The confirm disclosure
+  shows `exec: EXEC_UNSPECIFIED` even though the bytes omit it, deliberately.
+  **`app/governance/templates.ts` is the COMPOSER's vocabulary** — one
+  vocabulary, three consumers (7.2's decoder reads, the confirm step discloses,
+  the composer builds) — and is **not** a relay-guard input. Its type-only
+  imports still matter: `build.ts` imports `templateInnerJson` at runtime and
+  keeps a narrow import surface because the relay decodes untrusted bytes
+  through it, so `templateSummaryKey` returns a KEY plus params, never a string.
+  Templates stay **total in both directions** against the committed
+  `cargo schema` output — now a PRODUCT completeness gate (a new admin
+  capability must be reachable from the composer), not a security one. Bridge
+  config is **absent, not stubbed**. Write-side wire bounds
+  (`MAX_PROPOSAL_MESSAGES`, `MAX_PROPOSAL_METADATA_LEN`, title/summary) are ONE
+  declaration in `packages/api-types/src/bounds.ts`.
+  **Affordances come from the LIVE plane alone** (`app/governance/actions.ts`,
+  decided in the LOADER, never in JSX). `ProposalDetailVM.liveState` is
+  SEPARATE from `plane`: `plane` says which read produced the figures (the
+  mirror, honestly, for anything closed), `liveState` says whether the chain
+  just confirmed the state an action would operate on. That is why
+  `loadGovernanceProposalData` live-reads **accepted** proposals too — and why a
+  failed read on an accepted proposal is itself evidence not to offer execute
+  (x/group prunes a successful exec in its own transaction). The execution
+  window is `submit_time + min_execution_period`, x/group's own rule — NOT the
+  voting-period end — and `min_execution_period` comes from the **LIVE policy**,
+  which is why it sits inside `liveState` rather than beside it. **The
+  asymmetry to hold in your head:** `voting_period_end` IS snapshotted on the
+  chain's `Proposal`; `min_execution_period` is NOT, so the module reads the
+  policy account at exec time. Using the mirror's `decision_policy` snapshot for
+  the window let the button and the preflight gating it disagree after a policy
+  change (PR #25 review) — the snapshot is for rendering a historical
+  THRESHOLD (D3), never the execution window. Not yet drilled: devnet runs
+  `min_execution_period: 0`. **And an UNRESOLVED window is not a zero window**: a
+  policy with no waiting period serializes `"0s"`, so `null` means only that it
+  could not be determined (policy outside the discovered set, or a decision rule
+  this build does not model) — both preflight and the affordance treat it as
+  *disabled, we cannot say when*, never as executable. Reachable because
+  `/governance/:proposalId` accepts any proposal id and the live read is
+  unscoped, so another group's proposal resolves a `liveState` with no policy in
+  our set. Voting is member-only; **execution is permissionless** and
+  the UI says so. New standing gates: `test/governance-templates.test.ts`,
+  `test/governance-flows.test.ts` (one case per C4 row), the governance blocks
+  in `broadcast-guard.test.ts` / `tx-preflight.test.ts` / `tx-confirm.test.ts`,
+  `/governance/new` in the axe list, offline `e2e/governance.spec.ts` affordance
+  sweep, skip-clean `e2e-live/governance-write.spec.ts` (needs
+  `E2E_LIVE_GOV_MEMBER_KEY` — a funded throwaway devnet key that is ALSO a group
+  member, since proposing and voting are membership-gated; the generic signer
+  key cannot cover them, the `E2E_LIVE_OPERATOR_KEY` precedent).
 - The **notifier** is a separate worker entrypoint in this codebase (ADR-001
   Decision 3); its indexed-fact reads go through `services/api` (public
   endpoints plus the `internal:notifier`-scoped read-only surface).

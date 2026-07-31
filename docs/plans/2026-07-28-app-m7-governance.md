@@ -138,7 +138,7 @@ are resolved.
 | # | Decision | Recorded in |
 | --- | --- | --- |
 | **D3** | **gov schema columns.** The 7.1 §3.2 table is approved as a design-review event: `decisionPolicy` snapshot (a historical proposal's threshold is otherwise unrenderable once the live policy changes), nullable `GovVote.height`/`txhash` plus `weight` (null is the honest value for a state-recovered vote), and `proposers String[]` replacing `proposer` (one column is a lie when x/group allows several). | app-spec §9.1 forward note |
-| **D7** | **Governance relay guard shape.** `MsgSubmitProposal` carries `messages []Any`, so a plain type-URL allowlist entry would open the relay to **arbitrary messages from the policy account** — strictly worse than the `MsgExecuteContract` hole M6.4 closed. The guard is **three-level**: type URL → proposer/signer ↔ session-address binding → each inner `Any` against a closed template set → **byte-identical canonical re-encode per inner message** (M6.4's condition 5, which takes it out of a parser arms race). **Constrains 7.1:** proposal `messages` are stored verbatim. <br><br>*Staging superseded 2026-07-28 by the §3 consolidation:* D7 originally had 7.3 land the §12.3 amendment with `MsgSubmitProposal` present-but-provably-rejected and 7.4 flip it on. With 7.3 and 7.4 merged there is no intervening PR to stage across, so all three types are admitted together under one amendment. **The guard shape is unchanged** — only the two-step rollout disappears. | 7.3–7.4 plan §2; app-spec §12.3 amendment at 7.3–7.4 |
+| **D7** | **Governance relay guard shape.** `MsgSubmitProposal` carries `messages []Any`, so a plain type-URL allowlist entry would open the relay to **arbitrary messages from the policy account** — strictly worse than the `MsgExecuteContract` hole M6.4 closed. The guard is **three-level**: type URL → proposer/signer ↔ session-address binding → each inner `Any` against a closed template set → **byte-identical canonical re-encode per inner message** (M6.4's condition 5, which takes it out of a parser arms race). **Constrains 7.1:** proposal `messages` are stored verbatim. <br><br>*Staging superseded 2026-07-28 by the §3 consolidation:* D7 originally had 7.3 land the §12.3 amendment with `MsgSubmitProposal` present-but-provably-rejected and 7.4 flip it on. With 7.3 and 7.4 merged there is no intervening PR to stage across, so all three types are admitted together under one amendment. **The guard shape is unchanged** — only the two-step rollout disappears. <br><br>*__SUPERSEDED IN SUBSTANCE 2026-07-30, at 7.3–7.4 closure.__ The three-level shape shipped and was then REDUCED to a structural guard within the same PR, after review found this row's own rationale backwards. "Strictly worse than the `MsgExecuteContract` hole" compares two things that are not comparable: an unguarded `MsgExecuteContract` executes ON INCLUSION under the signer's own authority, whereas a `MsgSubmitProposal` executes NOTHING until the group's decision policy is satisfied by other members voting. __The group's threshold is the enforcement boundary__, so the closed template set, the per-inner-message re-encode and the live policy sweep reduced no authority available to anyone — while costing a chain read on every submission, a 503 failure mode, and a registry the relay had to keep in lockstep with `contracts/src/msg.rs`. What protects members from a hostile proposal is READING it before voting (§8.7's decoder, delivered at 7.2), which does not involve this relay at all. __Retained:__ the three-type allowlist closure, the session binding, the closed field set, the `exec` pin (a confirmation-rigor control, explicitly not an authorization one), and an envelope re-encode with the inner `Any` bytes passed through verbatim. The template registry survives as the COMPOSER's vocabulary, which is what §8.7 actually asks for.* | 7.3–7.4 plan §2 and §10.4; app-spec §12.3 amendment at 7.3–7.4, corrected in the same PR |
 | **D9** | **`services/api` authorization for admin endpoints.** A new `admin:<bech32>` scope joins the union. The only option that keeps `services/api` DB-only (it has no chain client, by design) and keeps "re-verify group membership on-chain per session refresh" in the web tier where the LCD client lives. Minting **must bypass** the 60 s `ROLE_CACHE_TTL_SECONDS` cache — a 60 s stale admin is a privilege, whereas a stale operator only affects a read view. | ADR-001 Decision 2 amendment |
 | **D10** | **§14.10 analytics taxonomy.** Per-`(stage, day)` integer counters in an `app`-schema table, incremented **server-side in the loader**, closed page-class enum, funnel stages per §8.8, stated retention window, **no cookie and no client script** — the latter because §12.3 requires transacting pages to work with third-party scripts blocked, and because there is nothing to consent to when nothing is keyed to a person. | app-spec §14.10 |
 
@@ -440,3 +440,38 @@ live plane would have rendered "nobody has voted". It was found by building
 against the corpus, which is the same lesson 7.1 closed with — the app side's
 missing discovery phase is the real gap, and §4b's contribution is telling the
 discovery where to aim.*
+
+*2026-07-30: PRs 7.3 and 7.4 delivered together, closing branch 3. The app-spec
+§12.3 amendment admitting all three `cosmos.group.v1` types under one review is
+the design-review event §6's "no custody, no signing in services" row scheduled.
+__§4's D7 is superseded in substance rather than discharged__ — see its row: the
+three-level shape shipped, and a security review of the branch found its
+rationale backwards, so the guard was reduced to a structural one in the same
+PR. That is the sharpest single result of this milestone and it is recorded in
+the row and in the 7.3–7.4 plan §10.4. D19 is discharged in the
+[7.3–7.4 plan](2026-07-28-app-m7.3-7.4-governance-write-path.md) §7 Q1 and §2.3.
+§2's F2 gains a consequence rather than a correction: because there is no
+admin-rotation path, the policy the guard checks against must be DISCOVERED at
+request time, which is what forced the relay guard async (that plan §10.1).*
+
+*__C4 comes off probation with a verdict, and it is the opposite of 7.2's.__ 7.2
+filled C4, every row read "read only", and it changed nothing — the honest
+reading recorded above was that its value was a forward obligation on 7.3–7.4.
+That obligation paid: the table became `app/governance/actions.ts`, a pure
+function over a closed input with a case-per-row suite, instead of conditions in
+JSX where the M6.4 P1 was originally made. Two cells exist only because the table
+was walked — membership-__unknown__ as distinct from not-a-member, and
+disabled-with-an-unknown-time for an unparseable waiting period. So the format's
+value is now measured at two points: worthless in a read-only PR, load-bearing in
+the PR that adds affordances. That is a sharper claim than "C4 is useful" and it
+is the one the evidence supports.*
+
+*__C5 changed the implementation a third time, and in a way its own wording did
+not anticipate.__ "Affordances are decided from the live plane only" turned out
+to be unanswerable from the `plane` field C5 itself had produced at 7.2: for a
+closed proposal the honest display plane is the mirror, so deriving affordances
+from it would have hidden execute permanently. The remedy is a SECOND field —
+`liveState` — separating "which read produced these figures" from "did the chain
+just confirm the state we are about to act on". Worth recording because it is an
+instance of §7.5's own warning in a new form: a filled cell can be right about
+the rule and still leave the mechanism to be discovered by building.*

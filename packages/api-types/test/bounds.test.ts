@@ -18,9 +18,13 @@ import {
   MAX_GOV_PROPOSALS_PAGE,
   MAX_GOV_PROPOSERS,
   MAX_GOV_VOTES_PER_PROPOSAL,
+  MAX_GOV_METADATA_LENGTH,
+  MAX_PROPOSAL_MESSAGES,
+  MAX_PROPOSAL_METADATA_LEN,
   MAX_YIELD_POINTS,
   MAX_YIELD_POINTS_WIRE,
   WIRE_BOUNDS,
+  WRITE_READ_BOUNDS,
 } from "../src/bounds.ts";
 
 describe("wire bounds: producer inside consumer", () => {
@@ -64,6 +68,35 @@ describe("wire bounds: producer inside consumer", () => {
   });
 });
 
+describe("governance write bounds sit inside the read bounds (PR 7.3–7.4)", () => {
+  it.each(WRITE_READ_BOUNDS)("$field: write $write <= read $read", (bound) => {
+    // The write side is what the App composes and its relay carries; the read
+    // side is what `services/api` will serialize back. A write bound ABOVE the
+    // read bound means the App can submit a proposal it can only ever render
+    // truncated — PR #19's defect one boundary further along.
+    expect(bound.write).toBeLessThanOrEqual(bound.read);
+  });
+
+  it.each(WRITE_READ_BOUNDS)("$field: both bounds are positive safe integers", (bound) => {
+    for (const value of [bound.write, bound.read]) {
+      expect(Number.isSafeInteger(value)).toBe(true);
+      expect(value).toBeGreaterThan(0);
+    }
+  });
+
+  it("has no duplicate field entries", () => {
+    const fields = WRITE_READ_BOUNDS.map((b) => b.field);
+    expect(new Set(fields).size).toBe(fields.length);
+  });
+
+  it("pins the metadata pair the composer and the reader share", () => {
+    // Named explicitly, not only covered by the table: the composer's optional
+    // public rationale (§7 Q3) is the one free-text field a PROPOSER controls,
+    // and it must survive the round trip through the mirror unshortened.
+    expect(MAX_PROPOSAL_METADATA_LEN).toBeLessThanOrEqual(MAX_GOV_METADATA_LENGTH);
+  });
+});
+
 describe("the M6.1 pairs this file adopted", () => {
   it("keeps the PR #19 pair correct, now by import rather than by comment", () => {
     // The literal defect: 2 000 producer against a 20 000 consumer. Correct, and
@@ -92,6 +125,13 @@ describe("governance bounds are sized for the producing system, not the happy pa
 
   it("bounds the policy set above 1, since the admin/ops split is still open", () => {
     expect(MAX_GOV_POLICIES).toBeGreaterThan(1);
+  });
+
+  it("bounds a composed proposal's messages above one but inside the read cap", () => {
+    // v1 composes ONE template per proposal, but the guard validates
+    // element-wise and the wire permits several, so the cap is a real N>1
+    // (§4b C1) rather than a disguised "exactly one".
+    expect(MAX_PROPOSAL_MESSAGES).toBeGreaterThan(1);
   });
 
   it("keeps the proposals page within the shared pagination ceiling", () => {

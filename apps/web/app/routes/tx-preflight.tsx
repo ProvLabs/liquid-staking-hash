@@ -6,8 +6,10 @@
 import { getBootedConfig } from "~/config/config.server";
 import { requireSession } from "~/lib/services/session.server";
 import {
+  governancePreflightRequestSchema,
   operatorPreflightRequestSchema,
   preflightRequestSchema,
+  runGovernancePreflight,
   runOperatorPreflight,
   runPreflight,
 } from "~/tx/preflight.server";
@@ -26,6 +28,11 @@ export async function action({ request }: Route.ActionArgs) {
   const operator = operatorPreflightRequestSchema.safeParse(payload);
   if (operator.success) {
     return Response.json(await runOperatorPreflight(config, session.address, operator.data));
+  }
+  // M7.3–7.4: the three governance actions, on the same terms.
+  const governance = governancePreflightRequestSchema.safeParse(payload);
+  if (governance.success) {
+    return Response.json(await runGovernancePreflight(config, session.address, governance.data));
   }
   const swap = preflightRequestSchema.safeParse(payload);
   if (!swap.success) {

@@ -53,8 +53,15 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-12">
       <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "governance.title")}</h1>
       <p className="text-sm text-muted-foreground">{t(locale, "governance.lede")}</p>
-      {/* Said once, plainly, rather than implied by the absence of buttons. */}
-      <p className="text-sm text-muted-foreground">{t(locale, "governance.read-only-note")}</p>
+      {/* Said once, plainly, rather than implied by the presence of buttons.
+          The composer is member-gated at the route, not hidden here: hiding a
+          nav target is a different lie from explaining who it is for (§8.0). */}
+      <p className="text-sm text-muted-foreground">{t(locale, "governance.write-note")}</p>
+      <p>
+        <Link className="text-sm underline underline-offset-4" to="/governance/new">
+          {t(locale, "governance.new-proposal")}
+        </Link>
+      </p>
 
       <PolicyPanel
         locale={locale}

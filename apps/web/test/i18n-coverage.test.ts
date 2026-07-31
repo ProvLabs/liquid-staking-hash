@@ -267,7 +267,21 @@ function scanApp(): Scan {
 // supplies `valoper`. `test/governance-decode.test.ts` asserts the substituted
 // output of all six against golden strings, so an unfilled placeholder here
 // fails that suite rather than reaching a user.
+//
+// `governance.msg-update-config` (M7.4) joins for a stronger reason than the
+// six above: `templateSummaryKey` in `app/governance/templates.ts` returns the
+// key AND its params as ONE value, so a caller cannot take the key without the
+// params — the pairing is enforced by the return type rather than by review.
+// The registry deliberately holds no runtime i18n import (it is imported by the
+// relay guard's module graph), which is why it returns a key at all.
+//
+// HAND-VERIFIED: both call sites spread `.params` into `t()`
+// (`app/routes/governance.new.tsx`'s confirm line and the round-trip case in
+// `test/governance-templates.test.ts`). That round trip asserts the SUBSTITUTED
+// output equals `decode.ts`'s own summary for the same message, so a dropped
+// `fields` param fails there rather than reaching a user.
 const INDIRECT_KEY_ALLOWLIST: ReadonlySet<string> = new Set([
+  "governance.msg-update-config",
   "governance.msg-pay-commission",
   "governance.msg-pay-tip",
   "governance.msg-register-participation",

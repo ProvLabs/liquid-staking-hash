@@ -380,6 +380,27 @@ export default {
     "The program's fund-moving cranks are halted, so a purge cannot run right now.",
   "tx.reason-too-many-validators":
     "The program is at its limit of {max} enrolled validators, so no new one can enroll right now.",
+  // M7.3–7.4 governance would-fail reasons (§2.5).
+  "tx.reason-proposal-not-found": "This proposal could not be read from the chain.",
+  "tx.reason-proposal-pruned":
+    "The chain no longer holds this proposal, so no action can reference it.",
+  "tx.reason-proposal-not-open": "This proposal's voting period is over.",
+  "tx.reason-already-voted":
+    "You already voted {option}. x/group records one vote per member and does not accept a change.",
+  "tx.reason-not-group-member": "Only members of this group can vote on its proposals.",
+  "tx.reason-proposal-not-passed": "This proposal has not passed, so it cannot be executed.",
+  "tx.reason-voting-period-open":
+    "Voting is still open until {endsAt}. A proposal can only be executed after its voting period closes.",
+  "tx.reason-min-execution-pending":
+    "This policy requires a waiting period after passage. This proposal becomes executable at {readyAt}.",
+  "tx.reason-min-execution-unknown":
+    "This proposal's policy requires a waiting period after passage, and this build could not read it — so we cannot confirm the proposal is executable yet.",
+  "tx.reason-already-executed": "This proposal has already been executed.",
+  "tx.reason-policy-not-found":
+    "That group policy is not one of this program's, so a proposal cannot be submitted to it.",
+  "tx.reason-template-invalid": "This action cannot be composed as entered: {detail}",
+  "tx.reason-governance-unavailable":
+    "The program's governance could not be read right now, so this action cannot be prepared.",
   "tx.reconnect-to-sign": "Reconnect your wallet to sign — the session is active but the signing connection was lost.",
   "tx.status-signing": "Approve the transaction in your wallet…",
   "tx.view-explorer": "View on explorer",
@@ -658,8 +679,10 @@ export default {
   "governance.title": "Governance",
   "governance.lede":
     "Proposals for the program's group policies, with what each one would do, where its tally stands, and how it ended.",
-  "governance.read-only-note":
-    "This page is read-only. Casting a vote and executing a passed proposal arrive in a later release.",
+  // M7.3–7.4 shipped voting, execution and the template composer, so the
+  // read-only note this page carried since 7.2 would now be false.
+  "governance.write-note":
+    "Members vote and execute from each proposal's page. Proposals are composed from the program's own admin actions.",
 
   "governance.policies-title": "Policies",
   "governance.policies-empty": "No group policy has been observed for this program yet.",
@@ -824,6 +847,136 @@ export default {
     "An unrecognized action on the program contract. The exact message is below.",
   "governance.msg-malformed":
     "This message could not be read as its declared type. The exact payload is below.",
+
+  // ── M7.3–7.4 write path: vote, execute, compose ────────────────────────
+  "governance.actions-title": "Your actions",
+  "governance.actions-live-down":
+    "Actions are hidden because the current on-chain state could not be read. What is shown above is the mirrored record, and acting on it could submit a transaction that is certain to fail.",
+  "governance.actions-connect": "Connect a wallet to vote or execute.",
+
+  "governance.vote-title": "Cast your vote",
+  "governance.vote-option-label": "Your vote",
+  "governance.vote-submit": "Review and sign",
+  "governance.vote-not-member":
+    "Voting is limited to this group's members, and the connected wallet is not one.",
+  // Placeholder-free on purpose: this key reaches `t()` through the hidden-reason
+  // table in `proposal-actions.tsx`, where the i18n scan cannot verify that a
+  // placeholder was supplied. `governance.members-changed` says the same thing
+  // WITH the two version numbers, and it is rendered from a literal call site.
+  "governance.vote-membership-changed":
+    "Group membership has changed since this proposal was submitted, so it is no longer open to a vote from today's members.",
+  "governance.vote-already":
+    "You voted {option} on this proposal. x/group records one vote per member and does not accept a change.",
+  "governance.vote-metadata-note":
+    "Votes carry no note. Only the option above is recorded on chain.",
+  "governance.confirm-vote-1": "You are voting {option} on proposal {id}.",
+  "governance.confirm-vote-2":
+    "This vote is recorded on chain permanently and cannot be changed.",
+  "governance.confirm-vote-3":
+    "This signature votes only. If the proposal passes, executing it is a separate transaction you sign separately.",
+
+  "governance.execute-title": "Execute this proposal",
+  "governance.execute-submit": "Review and sign",
+  "governance.execute-permissionless":
+    "Execution is permissionless: once a proposal has passed, any wallet may execute it. You do not need to be a member.",
+  "governance.execute-pending": "This proposal becomes executable at {readyAt}.",
+  "governance.execute-pending-unknown":
+    "This proposal is not executable yet — its policy requires a waiting period after passage, and its end could not be read.",
+  "governance.execute-failed-note":
+    "Execution has already been attempted and failed. x/group does not permit another attempt.",
+  "governance.confirm-exec-1": "You are executing proposal {id}.",
+  "governance.confirm-exec-2": "If it succeeds, the following happens on chain:",
+  "governance.confirm-exec-3":
+    "Execution is final. The program's own admin actions take effect immediately, and this transaction cannot be undone.",
+  "governance.confirm-exec-unknown":
+    "This build cannot summarize every message in this proposal. Read the exact payload below before signing.",
+
+  "governance.new-proposal": "New proposal",
+  "governance.new-title": "Propose an admin action",
+  "governance.new-lede":
+    "Proposals are composed from the program's own admin actions. Free-form message building is deliberately not offered here.",
+  "governance.new-not-member":
+    "Submitting a proposal is limited to this group's members, and the connected wallet is not one.",
+  "governance.new-connect": "Connect a wallet to compose a proposal.",
+  "governance.new-not-governed":
+    "This deployment has no group policy, so there is nothing to propose to.",
+  "governance.new-unavailable":
+    "The program's governance could not be read right now, so a proposal cannot be composed.",
+  "governance.new-policy-label": "Policy",
+  "governance.new-submit": "Review and sign",
+
+  "governance.template-picker-label": "Admin action",
+  "governance.template-update-config": "Update program configuration",
+  "governance.template-set-halted": "Halt or resume the fund-moving cranks",
+  "governance.template-pause-vault": "Pause the managed vault",
+  "governance.template-unpause-vault": "Unpause the managed vault",
+  "governance.template-clear-pending-delegations": "Abort a stuck epoch continuation",
+  "governance.template-no-bridge-note":
+    "Bridge configuration has no template: no contract action backs it yet.",
+
+  "governance.param-max-delegations-per-run": "Max delegations per epoch run",
+  "governance.param-aum-fee-bps": "AUM fee (bps)",
+  "governance.param-performance-threshold-bps": "Uptime eligibility threshold (bps)",
+  "governance.param-min-capture-interval-secs": "Minimum uptime capture interval (seconds)",
+  "governance.param-max-concentration-multiple-bps": "Concentration multiple (bps)",
+  "governance.param-min-bonded-cap-bps": "Minimum bonded cap (bps)",
+  "governance.param-max-bonded-cap-bps": "Maximum bonded cap (bps)",
+  "governance.param-concentration-safety-offset-bps": "Concentration safety offset (bps)",
+  "governance.param-commission-bps": "Program commission rate (bps)",
+  "governance.param-jail-unbond-delay-secs": "Jail report cooldown (seconds)",
+  "governance.param-halted": "Halt the fund-moving cranks",
+  "governance.param-pause-reason": "Reason",
+  "governance.param-include": "Change this",
+  "governance.param-range": "Allowed range {min} to {max}",
+  "governance.param-length-range": "Between {min} and {max} characters",
+
+  "governance.diff-title": "What changes",
+  "governance.diff-field": "Setting",
+  "governance.diff-current": "Current",
+  "governance.diff-proposed": "Proposed",
+  "governance.diff-untouched": "unchanged (not in this proposal)",
+  "governance.diff-same": "supplied, but identical to the current value",
+  "governance.diff-current-unknown": "could not be read",
+  "governance.diff-note":
+    "Only the settings marked as proposed are changed. Every other setting keeps its current value.",
+
+  "governance.compose-title-label": "Title",
+  "governance.compose-summary-label": "Rationale",
+  "governance.compose-metadata-label": "Additional notes (optional)",
+  "governance.compose-public-note":
+    "The title, rationale and notes are written to the chain. They are public and permanent.",
+
+  "governance.confirm-submit-1": "You are proposing: {summary}",
+  "governance.confirm-submit-2":
+    "Submitting is not the same as doing it. If this proposal passes and is then executed, the action above takes effect.",
+  "governance.confirm-submit-3":
+    "Submitting is not idempotent: signing twice creates two separate proposals, not one.",
+  "governance.confirm-submit-min-execution":
+    "This policy requires {period} between passage and execution, so the earliest this can take effect is that long after the voting period ends.",
+  "governance.confirm-submit-voting-period":
+    "The voting period for this policy is {period}.",
+
+  "governance.confirm-update-config-1":
+    "This proposes a change to the program's configuration. Only the settings listed are changed.",
+  "governance.confirm-update-config-2":
+    "The contract re-checks every value; a value outside its allowed range makes execution fail rather than take partial effect.",
+  "governance.confirm-set-halted-1":
+    "Halting stops the fund-moving permissionless cranks — the epoch run and redemption servicing.",
+  "governance.confirm-set-halted-2":
+    "It does NOT pause the vault itself. Deposits and redemptions keep their own pause state.",
+  "governance.confirm-pause-vault-1":
+    "Pausing the managed vault stops deposits and redemptions for everyone.",
+  "governance.confirm-pause-vault-2":
+    "The reason you give is shown to users on the affected pages.",
+  "governance.confirm-unpause-vault-1":
+    "Unpausing the managed vault restores deposits and redemptions.",
+  "governance.confirm-clear-pending-1":
+    "This drops the persisted delegation targets of a stuck epoch continuation and returns the program to Idle.",
+  "governance.confirm-clear-pending-2":
+    "No value is lost: the withdrawn HASH stays in the contract balance and the next epoch settles the matching receipt.",
+
+  "governance.submitted-note":
+    "Your proposal was submitted. It appears in the list once the chain has it; do not sign again — a second signature creates a second proposal.",
 
   "theme.toggle-label": "Theme",
   "theme.auto": "Auto",

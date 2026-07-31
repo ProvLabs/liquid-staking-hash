@@ -18,6 +18,7 @@
 
 import type { FreshnessMeta, GovExecutorResult, GovProposalStatus, GovVoteOption } from "@nvhash/api-types";
 
+import type { LiveProposalState } from "./actions";
 import type { DecodedMessage } from "./decode";
 
 /**
@@ -143,6 +144,23 @@ export interface ProposalDetailVM extends ProposalSummaryVM {
   /** The rule's windows, from the proposal's own snapshot (never the live policy). */
   votingPeriod: string | null;
   minExecutionPeriod: string | null;
+  /**
+   * The LIVE plane's own view of this proposal, when a live read succeeded.
+   *
+   * SEPARATE FROM `plane` on purpose (M7.3–7.4 §4b C5). `plane` answers "where
+   * did the figures on this page come from", and for a CLOSED proposal the
+   * honest answer is the mirror — x/group prunes, so the mirror is the record.
+   * This answers a different question: "did the chain, just now, confirm this
+   * proposal is in the state we are about to offer an action against". Only
+   * this one may decide an affordance. Deriving affordances from `plane` would
+   * either hide execute on every accepted proposal (its plane is `indexed`) or
+   * offer it from a stale row — the two failure modes C5 exists to separate.
+   */
+  liveState: LiveProposalState | null;
+  /** True when the session address is in the LIVE member set; null = not read. */
+  sessionIsMember: boolean | null;
+  /** The session's recorded vote on this proposal, if any. */
+  sessionVote: VoteVM | null;
 }
 
 /** One group policy the program's governance runs through. */
