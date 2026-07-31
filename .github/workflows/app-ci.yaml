@@ -52,8 +52,12 @@ jobs:
           changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
           echo "changed files:"
           echo "$changed"
-          # Everything outside contracts/ is app work by default.
-          outside="$(echo "$changed" | grep -vE '^contracts/' || true)"
+          # Everything outside contracts/ is app work by default — except the
+          # two contract-only files that happen to live outside it. Neither the
+          # contract CI workflow nor the Rust toolchain pin can affect a JS
+          # test, and treating them as app work made a one-line contracts-ci
+          # edit run Playwright, db-grants and the console typecheck.
+          outside="$(echo "$changed" | grep -vE '^(contracts/|rust-toolchain\.toml$|\.github/workflows/contracts-ci\.yaml$)' || true)"
           # TWO PARTS OF contracts/ ARE APP WORK, and both are easy to forget:
           #   * schema/ is the committed IDL that apps/web/test/governance-templates.test.ts
           #     asserts template totality against — a schema change can fail a WEB test;

@@ -102,16 +102,17 @@ jobs:
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         if: needs.changes.outputs.contracts == 'true'
         run: rustup show
-      - name: Restore cargo registry + target cache
+      - name: Cargo cache (Swatinem/rust-cache)
         if: needs.changes.outputs.contracts == 'true'
-        uses: actions/cache@v5
+        # Pinned by commit SHA, not tag: a third-party action is a supply-chain
+        # dependency (SECURITY.md), and a tag can be moved. This is v2.9.1.
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            contracts/target
-          key: cargo-static-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: cargo-static-${{ runner.os }}-
+          workspaces: contracts # the cargo workspace root is not the repo root
+          # A job that fails still leaves a useful cache. Without this the
+          # 918b7f9 failure discarded its whole wasm/optimizer build, so the
+          # next run paid for it again.
+          cache-on-failure: true
 
       - name: Formatting (cargo fmt --check)
         if: needs.changes.outputs.contracts == 'true'
@@ -153,26 +154,27 @@ jobs:
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         if: needs.changes.outputs.contracts == 'true'
         run: rustup show
-      # THIS JOB CACHES NO CARGO STATE, DELIBERATELY. Do not add a cache step
-      # here without reproducing the failure below first.
+      # CARGO CACHING HERE HAS A HISTORY — read before changing it.
       #
-      # `provwasm-test-tube`'s build script emits a Go-built shared library into
-      # a per-build-hash `OUT_DIR`, and the test binaries locate it — and the
-      # `libwasmvm.x86_64.so` it depends on — through paths fixed at link time.
-      # Restoring cargo state makes cargo relink against fresh build hashes
-      # while the runtime libraries stay where the restore put them, so every
-      # test binary dies at startup with "cannot open shared object file"
-      # (exit 127).
-      #
-      # This is measured, not theorised, and the A/B is exact: the two runs that
-      # restored NOTHING both passed, and the first run to restore a cargo cache
-      # failed this way on an unchanged commit range. Running with no cargo
-      # cache is therefore the only configuration this job has ever passed in.
-      #
-      # The time is bought back where it is safe: the artifact and optimizer
-      # caches below remove the ~5 minute wasm build. `static` and `soak` keep
-      # their target caches — they compile test-tube but never execute a binary
-      # that loads its shared library.
+      # A naive whole-`target` cache broke this job: provwasm-test-tube's build
+      # script emits a Go shared library into a per-build-hash OUT_DIR, and a
+      # restored tree relinked against a different hash than the runtime lookup
+      # resolved, so every test binary died with "cannot open shared object
+      # file" (exit 127). rust-cache prunes stale build output instead of
+      # restoring a whole tree, and the Test step below makes the library lookup
+      # independent of which hash won — belt and braces, because the failure
+      # only reproduces on Linux with a warm cache.
+      - name: Cargo cache (Swatinem/rust-cache)
+        if: needs.changes.outputs.contracts == 'true'
+        # Pinned by commit SHA, not tag: a third-party action is a supply-chain
+        # dependency (SECURITY.md), and a tag can be moved. This is v2.9.1.
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          workspaces: contracts # the cargo workspace root is not the repo root
+          # A job that fails still leaves a useful cache. Without this the
+          # 918b7f9 failure discarded its whole wasm/optimizer build, so the
+          # next run paid for it again.
+          cache-on-failure: true
 
       # The artifact itself, keyed on everything that decides its bytes. On a hit
       # the Docker build below skips its own work entirely (~5 min).
@@ -224,7 +226,13 @@ jobs:
 
       - name: Test (unit, property, and embedded-chain integration)
         if: needs.changes.outputs.contracts == 'true'
-        run: cargo test --locked
+        run: |
+          # Link first, so every build-script shared library exists, then put
+          # their directories on the loader path before any binary runs.
+          cargo test --locked --no-run
+          libdirs="$(find target "$HOME/.cargo/registry" -name 'lib*.so' -type f -printf '%h\n' 2>/dev/null | sort -u | tr '\n' ':' || true)"
+          export LD_LIBRARY_PATH="${libdirs}${LD_LIBRARY_PATH:-}"
+          cargo test --locked
 
   # The chain-free simulation soak. Bounded and fixed-seed so it terminates and
   # reproduces: SECURITY.md requires simulation failures to stay
@@ -242,16 +250,17 @@ jobs:
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         if: needs.changes.outputs.contracts == 'true'
         run: rustup show
-      - name: Restore cargo registry + target cache
+      - name: Cargo cache (Swatinem/rust-cache)
         if: needs.changes.outputs.contracts == 'true'
-        uses: actions/cache@v5
+        # Pinned by commit SHA, not tag: a third-party action is a supply-chain
+        # dependency (SECURITY.md), and a tag can be moved. This is v2.9.1.
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            contracts/target
-          key: cargo-soak-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: cargo-soak-${{ runner.os }}-
+          workspaces: contracts # the cargo workspace root is not the repo root
+          # A job that fails still leaves a useful cache. Without this the
+          # 918b7f9 failure discarded its whole wasm/optimizer build, so the
+          # next run paid for it again.
+          cache-on-failure: true
 
       - name: Soak (500 scenarios × 240 epochs, halt on first failure)
         if: needs.changes.outputs.contracts == 'true'
