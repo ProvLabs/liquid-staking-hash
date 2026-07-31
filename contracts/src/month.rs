@@ -163,10 +163,17 @@ mod tests {
             let (_y, m) = year_month(t);
             proptest::prop_assert!((1..=12).contains(&m));
             // first_of_next_month is strictly later and lands on a month start.
+            //
+            // The boundary is compared as SECONDS, never reconstructed through
+            // `Timestamp::from_seconds`: that multiplies by 1e9, and for a `t`
+            // in the top month of the u64 nanosecond domain the next month's
+            // start is past `u64::MAX` nanos, so the round trip overflows on an
+            // input this module itself handles. Production never makes it —
+            // `epoch.rs` carries the value as u64 seconds in `TooSoon { next }`.
             let next = first_of_next_month_secs(t);
-            let (_ny, _nm, nd) = ymd_from_days((next / SECS_PER_DAY) as i64);
+            let (ny, nm, nd) = ymd_from_days((next / SECS_PER_DAY) as i64);
             proptest::prop_assert_eq!(nd, 1);
-            proptest::prop_assert!(year_month(Timestamp::from_seconds(next)) > year_month(t));
+            proptest::prop_assert!((ny, nm) > year_month(t));
         }
     }
 }
