@@ -175,11 +175,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                     .collect(),
                 pending_redelegations: pending_redel
                     .into_iter()
-                    .map(|(src, dst, amount)| crate::msg::PendingRedelegation {
-                        src,
-                        dst,
-                        amount,
-                    })
+                    .map(|(src, dst, amount)| crate::msg::PendingRedelegation { src, dst, amount })
                     .collect(),
             })
         }
@@ -489,7 +485,10 @@ mod unit {
     #[test]
     fn instantiate_bounds_every_config_input() {
         let cases: Vec<(&str, Box<dyn Fn(&mut InstantiateMsg)>)> = vec![
-            ("aum_fee_bps over 100%", Box::new(|m| m.aum_fee_bps = 10_001)),
+            (
+                "aum_fee_bps over 100%",
+                Box::new(|m| m.aum_fee_bps = 10_001),
+            ),
             (
                 "performance_threshold_bps over 100%",
                 Box::new(|m| m.performance_threshold_bps = 10_001),
@@ -543,8 +542,8 @@ mod unit {
             let vault = deps.api.addr_make("vault");
             let mut msg = base_msg(&admin, &vault);
             mutate(&mut msg);
-            let err = instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg)
-                .unwrap_err();
+            let err =
+                instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg).unwrap_err();
             assert!(
                 matches!(err, ContractError::InvalidConfig { .. }),
                 "case '{label}' should be rejected as InvalidConfig, got: {err:?}"
@@ -665,8 +664,8 @@ mod unit {
             ExecuteMsg::SetHalted { halted: true },
             ExecuteMsg::ClearPendingDelegations {},
         ] {
-            let err = execute(deps.as_mut(), mock_env(), message_info(&stranger, &[]), msg)
-                .unwrap_err();
+            let err =
+                execute(deps.as_mut(), mock_env(), message_info(&stranger, &[]), msg).unwrap_err();
             assert!(matches!(err, ContractError::Unauthorized {}));
         }
     }
@@ -686,8 +685,8 @@ mod unit {
         .unwrap();
 
         for msg in [ExecuteMsg::RunEpoch {}, ExecuteMsg::ServiceRedemptions {}] {
-            let err = execute(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg)
-                .unwrap_err();
+            let err =
+                execute(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg).unwrap_err();
             assert!(matches!(err, ContractError::Halted {}));
         }
 
@@ -943,7 +942,9 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&admin, &[cosmwasm_std::coin(70, "nhash")]),
-            ExecuteMsg::PayCommission { valoper: valoper.clone() },
+            ExecuteMsg::PayCommission {
+                valoper: valoper.clone(),
+            },
         )
         .unwrap();
         execute(
@@ -977,7 +978,9 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[]),
-            ExecuteMsg::ReportJailedValidator { valoper: jailed.clone() },
+            ExecuteMsg::ReportJailedValidator {
+                valoper: jailed.clone(),
+            },
         )
         .unwrap();
         assert!(res.attributes.iter().any(|a| a.value == "not_jailed"));
@@ -988,7 +991,10 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[]),
-            ExecuteMsg::PurgeJailedValidator { valoper: jailed.clone(), claimant_valoper: None },
+            ExecuteMsg::PurgeJailedValidator {
+                valoper: jailed.clone(),
+                claimant_valoper: None,
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::JailReportMissing { .. }));
@@ -1026,7 +1032,10 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[]),
-            ExecuteMsg::PurgeJailedValidator { valoper: jailed.clone(), claimant_valoper: None },
+            ExecuteMsg::PurgeJailedValidator {
+                valoper: jailed.clone(),
+                claimant_valoper: None,
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::JailCooldownActive { .. }));
@@ -1103,7 +1112,10 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[]),
-            ExecuteMsg::PurgeJailedValidator { valoper: jailed.clone(), claimant_valoper: None },
+            ExecuteMsg::PurgeJailedValidator {
+                valoper: jailed.clone(),
+                claimant_valoper: None,
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::NotJailed { .. }));
@@ -1131,7 +1143,10 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[]),
-            ExecuteMsg::PurgeJailedValidator { valoper: jailed.clone(), claimant_valoper: None },
+            ExecuteMsg::PurgeJailedValidator {
+                valoper: jailed.clone(),
+                claimant_valoper: None,
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::Halted {}));
@@ -1176,14 +1191,18 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[cosmwasm_std::coin(50, "nhash")]),
-            ExecuteMsg::PayCommission { valoper: valoper.clone() },
+            ExecuteMsg::PayCommission {
+                valoper: valoper.clone(),
+            },
         )
         .unwrap();
         execute(
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[cosmwasm_std::coin(40, "nhash")]),
-            ExecuteMsg::PayTip { valoper: valoper.clone() },
+            ExecuteMsg::PayTip {
+                valoper: valoper.clone(),
+            },
         )
         .unwrap();
         let r = VALIDATORS.load(&deps.storage, &valoper).unwrap();
@@ -1195,7 +1214,9 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[]),
-            ExecuteMsg::PayCommission { valoper: valoper.clone() },
+            ExecuteMsg::PayCommission {
+                valoper: valoper.clone(),
+            },
         )
         .unwrap_err();
         assert!(err.to_string().contains("No funds"));
@@ -1205,7 +1226,9 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[cosmwasm_std::coin(50, "uusd")]),
-            ExecuteMsg::PayTip { valoper: valoper.clone() },
+            ExecuteMsg::PayTip {
+                valoper: valoper.clone(),
+            },
         )
         .unwrap_err();
         assert!(err.to_string().contains("nhash"));
@@ -1217,7 +1240,9 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&stranger, &[cosmwasm_std::coin(50, "nhash")]),
-            ExecuteMsg::PayCommission { valoper: "tpvaloper1ghost".to_string() },
+            ExecuteMsg::PayCommission {
+                valoper: "tpvaloper1ghost".to_string(),
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::NotEnrolled { .. }));
@@ -1360,7 +1385,9 @@ mod unit {
             deps.as_mut(),
             mock_env(),
             message_info(&admin, &[]),
-            ExecuteMsg::PauseVault { reason: "manual".to_string() },
+            ExecuteMsg::PauseVault {
+                reason: "manual".to_string(),
+            },
         )
         .unwrap();
         assert_eq!(res.messages.len(), 1);

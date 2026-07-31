@@ -37,7 +37,9 @@ fn main() {
         });
     let max_scenarios: u64 = arg("--scenarios").and_then(|v| v.parse().ok()).unwrap_or(0);
     let epochs: u32 = arg("--epochs").and_then(|v| v.parse().ok()).unwrap_or(240);
-    let report_secs: u64 = arg("--report-secs").and_then(|v| v.parse().ok()).unwrap_or(10);
+    let report_secs: u64 = arg("--report-secs")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
     let halt = std::env::args().any(|a| a == "--halt-on-failure");
     let trace_out = arg("--trace-out");
     if let Some(dir) = &trace_out {
@@ -46,8 +48,18 @@ fn main() {
 
     println!("nvHASH chain-free simulation soak (RC2 15.5)");
     println!("  master seed  : {master_seed}   (reproduce a scenario: --seed <scenario_seed> --scenarios 1)");
-    println!("  scenarios    : {}", if max_scenarios == 0 { "unbounded".to_string() } else { max_scenarios.to_string() });
-    println!("  epochs each  : {epochs} ({} simulated years, monthly)", epochs / 12);
+    println!(
+        "  scenarios    : {}",
+        if max_scenarios == 0 {
+            "unbounded".to_string()
+        } else {
+            max_scenarios.to_string()
+        }
+    );
+    println!(
+        "  epochs each  : {epochs} ({} simulated years, monthly)",
+        epochs / 12
+    );
     println!("  reporting    : every {report_secs}s; failures also appended to sim-failures.log");
     println!();
 

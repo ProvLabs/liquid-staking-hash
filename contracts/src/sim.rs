@@ -122,7 +122,11 @@ impl Scenario {
             reward_bps_per_epoch: 20 + r.below(120),
             commission_bps: r.below(3000),
             aum_fee_bps: r.below(30),
-            performance_threshold_bps: if r.chance(1, 2) { 0 } else { 9_000 + r.below(900) },
+            performance_threshold_bps: if r.chance(1, 2) {
+                0
+            } else {
+                9_000 + r.below(900)
+            },
             deposit_ceiling: r.range(1_000_000_000, 1_000_000_000_000_000_000_000),
             min_deposit: 1_000_000,
             p_deposit: 10 + r.below(40),
@@ -582,7 +586,9 @@ impl Sim {
 
     fn spawn_validator(&mut self) {
         let n = self.vals.len();
-        let bond = self.rng.range(1_000_000_000, self.sc.deposit_ceiling / 4 + 1);
+        let bond = self
+            .rng
+            .range(1_000_000_000, self.sc.deposit_ceiling / 4 + 1);
         self.vals.push(SimVal {
             valoper: format!("simvaloper1{n:05}"),
             third_party: bond,
@@ -742,8 +748,11 @@ impl Sim {
         );
         let v = self.val_mut(valoper);
         v.program = v.program.saturating_sub(amount);
-        self.unbonding
-            .push((self.block_time_secs + UNBOND_SECS, valoper.to_string(), amount));
+        self.unbonding.push((
+            self.block_time_secs + UNBOND_SECS,
+            valoper.to_string(),
+            amount,
+        ));
     }
 
     /// ServiceRedemptions keeper pass (runs every step), mirroring the
@@ -770,7 +779,10 @@ impl Sim {
         expedited.sort_unstable_by(|a, b| b.cmp(a));
         for idx in expedited {
             let payout = self.estimate(self.redemptions[idx].shares);
-            self.check(payout <= self.marker_liquid, "expedite past marker liquidity");
+            self.check(
+                payout <= self.marker_liquid,
+                "expedite past marker liquidity",
+            );
             let r = self.redemptions.remove(idx);
             self.record_mobilization(r.requested_at);
             self.marker_liquid = self.marker_liquid.saturating_sub(payout);
@@ -865,7 +877,10 @@ impl Sim {
         }
         let settle = ret.settle.u128();
         let write_down = ret.write_down.u128();
-        self.check(settle <= self.contract_liquid, "settle exceeds contract liquid");
+        self.check(
+            settle <= self.contract_liquid,
+            "settle exceeds contract liquid",
+        );
         self.check(
             settle + write_down <= self.receipt_in_marker,
             "burn exceeds receipt outstanding in marker",
@@ -941,7 +956,10 @@ impl Sim {
                     let d = self.val_mut(dst);
                     d.third_party + d.program
                 };
-                self.check(dst_tokens + amount <= cap, "redelegation would breach the chain cap");
+                self.check(
+                    dst_tokens + amount <= cap,
+                    "redelegation would breach the chain cap",
+                );
             }
             self.val_mut(src).program -= amount;
             self.val_mut(dst).program += amount;
@@ -955,7 +973,10 @@ impl Sim {
         // Fresh deploy: value-neutral settlement (marker nhash out, receipt in).
         let deployable: u128 = rb.delegations.iter().map(|(_, a)| a.u128()).sum();
         self.check(deployable <= budget, "deploy exceeds budget");
-        self.check(deployable <= self.marker_liquid, "deploy exceeds marker liquid");
+        self.check(
+            deployable <= self.marker_liquid,
+            "deploy exceeds marker liquid",
+        );
         self.marker_liquid -= deployable;
         self.receipt_in_marker += deployable;
         self.receipt_minted += deployable;
@@ -1480,7 +1501,11 @@ mod tests {
             timing: Timing::Jitter,
         };
         let (result, trace) = run_scenario_traced(sc);
-        assert!(result.violations.is_empty(), "golden scenario violations: {:#?}", result.violations);
+        assert!(
+            result.violations.is_empty(),
+            "golden scenario violations: {:#?}",
+            result.violations
+        );
         let json = serde_json::to_string_pretty(&trace).unwrap();
         assert_eq!(json, GOLDEN_TRACE_JSON);
     }
@@ -1496,13 +1521,24 @@ mod tests {
         for seed in [1u64, 4, 8] {
             let sc = Scenario::from_seed(seed, 24);
             let (result, trace) = run_scenario_traced(sc);
-            assert!(result.violations.is_empty(), "seed {seed} violations: {:#?}", result.violations);
+            assert!(
+                result.violations.is_empty(),
+                "seed {seed} violations: {:#?}",
+                result.violations
+            );
             let mut by_address: BTreeMap<&str, BTreeMap<EventKind, u64>> = BTreeMap::new();
             for e in &trace.events {
-                *by_address.entry(e.address.as_str()).or_default().entry(e.kind).or_insert(0) += 1;
+                *by_address
+                    .entry(e.address.as_str())
+                    .or_default()
+                    .entry(e.kind)
+                    .or_insert(0) += 1;
             }
             let pooled = |kind: EventKind| -> u64 {
-                by_address.values().map(|k| *k.get(&kind).unwrap_or(&0)).sum()
+                by_address
+                    .values()
+                    .map(|k| *k.get(&kind).unwrap_or(&0))
+                    .sum()
             };
             assert_eq!(
                 pooled(EventKind::SwapIn),
@@ -1535,7 +1571,10 @@ mod tests {
         for seed in [1u64, 4, 8, 9] {
             let untraced = run_scenario(Scenario::from_seed(seed, 24));
             let (traced, _trace) = run_scenario_traced(Scenario::from_seed(seed, 24));
-            assert_eq!(untraced.stats.deposits, traced.stats.deposits, "seed {seed}: deposits");
+            assert_eq!(
+                untraced.stats.deposits, traced.stats.deposits,
+                "seed {seed}: deposits"
+            );
             assert_eq!(
                 untraced.stats.redemption_requests, traced.stats.redemption_requests,
                 "seed {seed}: redemption_requests"
@@ -1548,8 +1587,14 @@ mod tests {
                 untraced.stats.redemption_refunds, traced.stats.redemption_refunds,
                 "seed {seed}: redemption_refunds"
             );
-            assert_eq!(untraced.stats.max_tvv, traced.stats.max_tvv, "seed {seed}: max_tvv");
-            assert_eq!(untraced.stats.max_shares, traced.stats.max_shares, "seed {seed}: max_shares");
+            assert_eq!(
+                untraced.stats.max_tvv, traced.stats.max_tvv,
+                "seed {seed}: max_tvv"
+            );
+            assert_eq!(
+                untraced.stats.max_shares, traced.stats.max_shares,
+                "seed {seed}: max_shares"
+            );
             assert_eq!(
                 untraced.violations.len(),
                 traced.violations.len(),

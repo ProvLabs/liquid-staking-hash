@@ -276,7 +276,9 @@ fn contract_can_pause_and_unpause_vault_as_asset_manager() {
 
     wasm.execute(
         contract.as_str(),
-        &ExecuteMsg::PauseVault { reason: "epoch".to_string() },
+        &ExecuteMsg::PauseVault {
+            reason: "epoch".to_string(),
+        },
         &[],
         &admin,
     )
@@ -302,7 +304,9 @@ fn non_admin_cannot_pause() {
     let err = Wasm::new(&app)
         .execute(
             contract.as_str(),
-            &ExecuteMsg::PauseVault { reason: "nope".to_string() },
+            &ExecuteMsg::PauseVault {
+                reason: "nope".to_string(),
+            },
             &[],
             &stranger,
         )
@@ -326,8 +330,13 @@ fn claim_and_service_are_noops_on_empty_vault() {
 
     wasm.execute(contract.as_str(), &ExecuteMsg::ClaimRewards {}, &[], &admin)
         .unwrap();
-    wasm.execute(contract.as_str(), &ExecuteMsg::ServiceRedemptions {}, &[], &admin)
-        .unwrap();
+    wasm.execute(
+        contract.as_str(),
+        &ExecuteMsg::ServiceRedemptions {},
+        &[],
+        &admin,
+    )
+    .unwrap();
 
     // An empty vault has nothing to claim and nothing queued to service, so
     // neither crank should move any observable state: the vault stays
@@ -341,10 +350,16 @@ fn claim_and_service_are_noops_on_empty_vault() {
         .unwrap();
     assert_eq!(status_after.phase, status_before.phase);
     assert_eq!(status_after.phase, "Idle");
-    assert_eq!(status_after.last_run_seconds, status_before.last_run_seconds);
+    assert_eq!(
+        status_after.last_run_seconds,
+        status_before.last_run_seconds
+    );
     assert_eq!(status_after.receipt_minted, status_before.receipt_minted);
     assert_eq!(status_after.receipt_minted, Uint128::zero());
-    assert_eq!(status_after.pending_delegations, status_before.pending_delegations);
+    assert_eq!(
+        status_after.pending_delegations,
+        status_before.pending_delegations
+    );
     assert!(status_after.pending_delegations.is_empty());
 }
 
@@ -445,7 +460,9 @@ fn validator_enrollment_eligibility_and_capture_flow() {
     let err = wasm
         .execute(
             contract.as_str(),
-            &ExecuteMsg::RegisterParticipation { valoper: valoper.clone() },
+            &ExecuteMsg::RegisterParticipation {
+                valoper: valoper.clone(),
+            },
             &[],
             &admin,
         )
@@ -455,7 +472,9 @@ fn validator_enrollment_eligibility_and_capture_flow() {
     // The operator can.
     wasm.execute(
         contract.as_str(),
-        &ExecuteMsg::RegisterParticipation { valoper: valoper.clone() },
+        &ExecuteMsg::RegisterParticipation {
+            valoper: valoper.clone(),
+        },
         &[],
         &operator,
     )
@@ -545,7 +564,9 @@ fn commission_and_tip_credit_and_query() {
     let valoper = create_validator(&app, &operator);
     wasm.execute(
         contract.as_str(),
-        &ExecuteMsg::RegisterParticipation { valoper: valoper.clone() },
+        &ExecuteMsg::RegisterParticipation {
+            valoper: valoper.clone(),
+        },
         &[],
         &operator,
     )
@@ -554,14 +575,18 @@ fn commission_and_tip_credit_and_query() {
     // Any payer (the admin here, not the operator) may attach funds.
     wasm.execute(
         contract.as_str(),
-        &ExecuteMsg::PayTip { valoper: valoper.clone() },
+        &ExecuteMsg::PayTip {
+            valoper: valoper.clone(),
+        },
         &[coin(100, FUNDING_DENOM)],
         &admin,
     )
     .unwrap();
     wasm.execute(
         contract.as_str(),
-        &ExecuteMsg::PayCommission { valoper: valoper.clone() },
+        &ExecuteMsg::PayCommission {
+            valoper: valoper.clone(),
+        },
         &[coin(55, FUNDING_DENOM)],
         &admin,
     )

@@ -39,9 +39,7 @@ pub fn plan_deploy_capped(
     let mut alloc: Vec<Uint128> = vec![Uint128::zero(); n];
     let mut remaining = budget;
     loop {
-        let open: Vec<usize> = (0..n)
-            .filter(|&i| alloc[i] < headrooms[i].1)
-            .collect();
+        let open: Vec<usize> = (0..n).filter(|&i| alloc[i] < headrooms[i].1).collect();
         if open.is_empty() || remaining.is_zero() {
             break;
         }
@@ -220,7 +218,10 @@ pub fn plan_rebalance(
     // stays within its bounds), and uniform wherever bounds do not bind;
     // largest-remainder units land on the highest-priority free seats.
     let n = eligible.len();
-    let caps: Vec<Uint128> = eligible.iter().map(|s| s.current + s.add_headroom).collect();
+    let caps: Vec<Uint128> = eligible
+        .iter()
+        .map(|s| s.current + s.add_headroom)
+        .collect();
     let floors: Vec<Uint128> = eligible
         .iter()
         .map(|s| {
@@ -481,7 +482,10 @@ mod tests {
     #[test]
     fn split_even_sums_and_spreads() {
         let parts = split_even(Uint128::new(10), 3);
-        assert_eq!(parts, vec![Uint128::new(4), Uint128::new(3), Uint128::new(3)]);
+        assert_eq!(
+            parts,
+            vec![Uint128::new(4), Uint128::new(3), Uint128::new(3)]
+        );
         assert_eq!(parts.iter().sum::<Uint128>(), Uint128::new(10));
         assert!(split_even(Uint128::new(10), 0).is_empty());
     }
@@ -510,7 +514,10 @@ mod tests {
         // valB can only take 2; its excess share flows to valA and valC.
         let rooms = vec![room("valA", 100), room("valB", 2), room("valC", 100)];
         let targets = plan_deploy_capped(Uint128::new(30), &rooms);
-        assert_eq!(targets, vec![tgt("valA", 14), tgt("valB", 2), tgt("valC", 14)]);
+        assert_eq!(
+            targets,
+            vec![tgt("valA", 14), tgt("valB", 2), tgt("valC", 14)]
+        );
         let total: Uint128 = targets.iter().map(|(_, a)| *a).sum();
         assert_eq!(total, Uint128::new(30));
     }
@@ -597,8 +604,14 @@ mod tests {
             fee_reserve(Uint128::new(1_000_000_000), 15, 2_592_000),
             Uint128::new(123_287)
         );
-        assert_eq!(fee_reserve(Uint128::new(1_000_000_000), 0, 2_592_000), Uint128::zero());
-        assert_eq!(fee_reserve(Uint128::new(1_000_000_000), 15, 0), Uint128::zero());
+        assert_eq!(
+            fee_reserve(Uint128::new(1_000_000_000), 0, 2_592_000),
+            Uint128::zero()
+        );
+        assert_eq!(
+            fee_reserve(Uint128::new(1_000_000_000), 15, 0),
+            Uint128::zero()
+        );
     }
 
     #[test]
@@ -616,9 +629,18 @@ mod tests {
         // from the front, spilling to the next only when a validator is
         // exhausted.
         let dels = vec![
-            DelegationView { valoper: "valB".into(), staked: Uint128::new(100) },
-            DelegationView { valoper: "valA".into(), staked: Uint128::new(300) },
-            DelegationView { valoper: "valC".into(), staked: Uint128::new(50) },
+            DelegationView {
+                valoper: "valB".into(),
+                staked: Uint128::new(100),
+            },
+            DelegationView {
+                valoper: "valA".into(),
+                staked: Uint128::new(300),
+            },
+            DelegationView {
+                valoper: "valC".into(),
+                staked: Uint128::new(50),
+            },
         ];
         assert_eq!(
             plan_unbond(&dels, Uint128::new(250), &[]),
@@ -639,7 +661,10 @@ mod tests {
         }
     }
     fn dv(v: &str, staked: u128) -> DelegationView {
-        DelegationView { valoper: v.to_string(), staked: Uint128::new(staked) }
+        DelegationView {
+            valoper: v.to_string(),
+            staked: Uint128::new(staked),
+        }
     }
     fn no_blocks() -> (BTreeSet<String>, BTreeSet<(String, String)>) {
         (BTreeSet::new(), BTreeSet::new())
@@ -650,7 +675,11 @@ mod tests {
         // 300 + 0 + 0 staked, 60 fresh: slot = 120 each.
         let (bs, bp) = no_blocks();
         let plan = plan_rebalance(
-            &[seat("valA", 300, 1000), seat("valB", 0, 1000), seat("valC", 0, 1000)],
+            &[
+                seat("valA", 300, 1000),
+                seat("valB", 0, 1000),
+                seat("valC", 0, 1000),
+            ],
             &[],
             Uint128::new(60),
             &bs,
@@ -664,7 +693,10 @@ mod tests {
                 ("valA".into(), "valC".into(), Uint128::new(60)),
             ]
         );
-        assert_eq!(plan.delegations, vec![("valC".to_string(), Uint128::new(60))]);
+        assert_eq!(
+            plan.delegations,
+            vec![("valC".to_string(), Uint128::new(60))]
+        );
         assert_eq!(plan.undeployable, Uint128::zero());
     }
 
@@ -706,7 +738,10 @@ mod tests {
         );
         assert_eq!(
             plan.delegations,
-            vec![("valA".to_string(), Uint128::new(130)), ("valB".to_string(), Uint128::new(10))]
+            vec![
+                ("valA".to_string(), Uint128::new(130)),
+                ("valB".to_string(), Uint128::new(10))
+            ]
         );
         assert_eq!(plan.undeployable, Uint128::new(60));
     }
@@ -782,8 +817,14 @@ mod tests {
     #[test]
     fn plan_unbond_skips_validators_at_entry_capacity() {
         let dels = vec![
-            DelegationView { valoper: "valA".into(), staked: Uint128::new(300) },
-            DelegationView { valoper: "valB".into(), staked: Uint128::new(100) },
+            DelegationView {
+                valoper: "valA".into(),
+                staked: Uint128::new(300),
+            },
+            DelegationView {
+                valoper: "valB".into(),
+                staked: Uint128::new(100),
+            },
         ];
         let plan = plan_unbond(&dels, Uint128::new(150), &["valA".to_string()]);
         assert_eq!(plan, vec![tgt("valB", 100)]);
@@ -791,7 +832,10 @@ mod tests {
 
     #[test]
     fn plan_service_expedites_only_from_marker_liquid() {
-        let dels = vec![DelegationView { valoper: "valA".into(), staked: Uint128::new(500) }];
+        let dels = vec![DelegationView {
+            valoper: "valA".into(),
+            staked: Uint128::new(500),
+        }];
         // 300 total counts toward coverage (need = 200, so no unbond), but only 50
         // is in the principal marker: nothing may be expedited. The vault EndBlocker
         // pays from the marker; expediting past it forces an unfunded maturity,
@@ -836,7 +880,10 @@ mod tests {
 
     #[test]
     fn plan_service_subtracts_inflight_unbonding_and_adds_margin() {
-        let dels = vec![DelegationView { valoper: "valA".into(), staked: Uint128::new(1000) }];
+        let dels = vec![DelegationView {
+            valoper: "valA".into(),
+            staked: Uint128::new(1000),
+        }];
         // need = 1000 * (1 + 100bps) = 1010; cover 200 + 700 already unbonding ->
         // unbond only the 110 increment; never re-unbond what is on its way back.
         let plan = plan_service(
@@ -865,24 +912,56 @@ mod tests {
     fn plan_return_splits_settle_and_write_down() {
         // nothing out: nothing to do.
         assert_eq!(
-            plan_return(Uint128::zero(), Uint128::zero(), Uint128::zero(), Uint128::new(100)),
-            ReturnPlan { settle: Uint128::zero(), write_down: Uint128::zero() }
+            plan_return(
+                Uint128::zero(),
+                Uint128::zero(),
+                Uint128::zero(),
+                Uint128::new(100)
+            ),
+            ReturnPlan {
+                settle: Uint128::zero(),
+                write_down: Uint128::zero()
+            }
         );
         // all matured and backed by returned liquid: settle everything.
         assert_eq!(
-            plan_return(Uint128::new(1000), Uint128::zero(), Uint128::zero(), Uint128::new(1000)),
-            ReturnPlan { settle: Uint128::new(1000), write_down: Uint128::zero() }
+            plan_return(
+                Uint128::new(1000),
+                Uint128::zero(),
+                Uint128::zero(),
+                Uint128::new(1000)
+            ),
+            ReturnPlan {
+                settle: Uint128::new(1000),
+                write_down: Uint128::zero()
+            }
         );
         // still unbonding: not matured, nothing moves.
         assert_eq!(
-            plan_return(Uint128::new(1000), Uint128::zero(), Uint128::new(1000), Uint128::zero()),
-            ReturnPlan { settle: Uint128::zero(), write_down: Uint128::zero() }
+            plan_return(
+                Uint128::new(1000),
+                Uint128::zero(),
+                Uint128::new(1000),
+                Uint128::zero()
+            ),
+            ReturnPlan {
+                settle: Uint128::zero(),
+                write_down: Uint128::zero()
+            }
         );
         // partial: 600 staked + 300 unbonding of 1000 out; liquid 150
         // (100 returned + 50 rewards): settle the 100, deposit the 50 as rewards.
         assert_eq!(
-            plan_return(Uint128::new(1000), Uint128::new(600), Uint128::new(300), Uint128::new(150)),
-            ReturnPlan { settle: Uint128::new(100), write_down: Uint128::zero() }
+            plan_return(
+                Uint128::new(1000),
+                Uint128::new(600),
+                Uint128::new(300),
+                Uint128::new(150)
+            ),
+            ReturnPlan {
+                settle: Uint128::new(100),
+                write_down: Uint128::zero()
+            }
         );
     }
 
@@ -891,14 +970,30 @@ mod tests {
         // 1000 deployed, validator slashed 5%: 950 staked, nothing unbonding.
         // No liquid: the whole 50 is an unbacked write-down THIS epoch.
         assert_eq!(
-            plan_return(Uint128::new(1000), Uint128::new(950), Uint128::zero(), Uint128::zero()),
-            ReturnPlan { settle: Uint128::zero(), write_down: Uint128::new(50) }
+            plan_return(
+                Uint128::new(1000),
+                Uint128::new(950),
+                Uint128::zero(),
+                Uint128::zero()
+            ),
+            ReturnPlan {
+                settle: Uint128::zero(),
+                write_down: Uint128::new(50)
+            }
         );
         // 30 of rewards on hand: 30 nets through the settlement leg, 20 writes down.
         // Either way settle + write_down == matured: loss recognition never defers.
         assert_eq!(
-            plan_return(Uint128::new(1000), Uint128::new(950), Uint128::zero(), Uint128::new(30)),
-            ReturnPlan { settle: Uint128::new(30), write_down: Uint128::new(20) }
+            plan_return(
+                Uint128::new(1000),
+                Uint128::new(950),
+                Uint128::zero(),
+                Uint128::new(30)
+            ),
+            ReturnPlan {
+                settle: Uint128::new(30),
+                write_down: Uint128::new(20)
+            }
         );
     }
 }

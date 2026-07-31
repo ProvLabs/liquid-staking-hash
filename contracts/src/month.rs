@@ -113,7 +113,10 @@ mod tests {
         // 2100 is NOT a leap year (divisible by 100, not 400): Feb has 28 days,
         // so "day 60" of 2100 is March 1, not Feb 29.
         assert_eq!(ymd_from_days(days_from_civil(2100, 2, 28)), (2100, 2, 28));
-        assert_eq!(ymd_from_days(days_from_civil(2100, 2, 28) + 1), (2100, 3, 1));
+        assert_eq!(
+            ymd_from_days(days_from_civil(2100, 2, 28) + 1),
+            (2100, 3, 1)
+        );
     }
 
     #[test]
