@@ -1,4 +1,4 @@
-// e2e-live Playwright project (plan 5.2 §2.4; master plan §4 "e2e (live)"):
+// e2e-live Playwright project:
 // runs against the REAL devnet stack (`infra/devnet/stack.sh up`, app
 // profile) — no MSW, no webServer here; the stack owns the processes.
 // Specs skip cleanly when E2E_LIVE_SIGNER_KEY is absent, so this config is

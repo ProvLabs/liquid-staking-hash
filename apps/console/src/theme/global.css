@@ -565,7 +565,7 @@ label.field {
 
 @media (prefers-reduced-motion: reduce) {
   * {
-    animation: none !important;
-    transition: none !important;
+    animation: none;
+    transition: none;
   }
 }

@@ -1,5 +1,5 @@
 // The reader port: the ONLY seam through which route handlers see indexed
-// data (app plan PR 3.1; the abstract-Store pattern the indexer's reducer
+// data (the abstract-Store pattern the indexer's reducer
 // established). Two implementations exist:
 //
 //   - reader-prisma.ts — @nvhash/db-indexed over the SELECT-only `api_reader`
@@ -11,7 +11,7 @@
 //     scaffold behavior), and the populated in-memory fake in
 //     test/reader-fake.ts.
 //
-// This split keeps `pnpm -r run test` Postgres-free (plan §4) while the
+// This split keeps `pnpm -r run test` Postgres-free while the
 // Postgres-backed integration gate exercises the real queries.
 
 import type {
@@ -59,19 +59,19 @@ export interface IndexedReader {
   /**
    * Latest pool sample (premium computed against the NAV current at the
    * sample's time, [R6]) + latest bridged supply per chain. Honest-empty
-   * `{ sample: null, bridged_supply: [] }` while the sampler (PR 2.4) is
+   * `{ sample: null, bridged_supply: [] }` while the sampler is
    * parked — the v1 "coming soon" state (app-spec §13 decision 4).
    */
   latestMarket(): Promise<MarketSummary>;
   /**
-   * Program-wide typical time-to-payout (PR 5.4; app-spec §9.5.3, §14.12).
+   * Program-wide typical time-to-payout (app-spec §9.5.3, §14.12).
    * Public + aggregate over the recent terminal-request cohort — no owner
    * keying, so no PII. Honest-empty (`sample_count: 0`, null stats,
    * `cold_start: true`) until data + a completed epoch exist.
    */
   payoutStats(): Promise<PayoutStats>;
   /**
-   * Address-scoped reads (PR 3.3). Callers reach these ONLY through routes
+   * Address-scoped reads. Callers reach these ONLY through routes
    * whose registry `auth: "address"` requirement passed the in-process
    * scope↔target check (ADR-001 Decision 2) — the reader itself has no
    * authorization role; the address arrives already authorized.
@@ -91,19 +91,23 @@ export interface IndexedReader {
   /** All epoch snapshots ascending by epochIndex, as the fold's step facts. */
   listEpochsAsc(): Promise<EpochStepFact[]>;
   /**
-   * Internal alert-facts reads (M6.2, `internal:notifier` scope; ADR-001
+   * Internal alert-facts reads (`internal:notifier` scope; ADR-001
    * Decision 3). Cross-address by nature — the notifier evaluates rules over
    * every present address — so they carry no `address:` scope and never touch
    * a personal endpoint. All three are bounded (a cursor + a page limit, or a
    * single latest-epoch snapshot); the cursor is efficiency, the notifier's
-   * unique constraint is correctness (plan §2.4).
+   * unique constraint is correctness.
    */
-  redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]>;
+  redemptionsChangedSince(
+    sinceHeight: number,
+    afterId: string,
+    limit: number,
+  ): Promise<AlertRedemptionFact[]>;
   incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]>;
   /** Validators with commission due in the latest sampled epoch (active only). */
   latestArrears(): Promise<AlertArrearsFact[]>;
   /**
-   * Operator-surface reads (M6.4). Like the other address-scoped reads these
+   * Operator-surface reads. Like the other address-scoped reads these
    * carry no authorization role — the address arrives already authorized by the
    * registry's `auth: "address"` declaration. What they DO carry is the
    * ownership mapping: `operatorValopers` is the only source of the valopers an
@@ -143,7 +147,7 @@ export interface IndexedReader {
   /** Epoch closing heights ascending — how a payment's epoch is derived. */
   epochBoundariesAsc(): Promise<EpochBoundary[]>;
   /**
-   * Governance reads (PR 7.1). PUBLIC: proposals and votes are public chain facts
+   * Governance reads. PUBLIC: proposals and votes are public chain facts
    * with no address keying, so these carry no scope and create no
    * `PERSONAL_PATHS` entry.
    *
@@ -159,7 +163,9 @@ export interface IndexedReader {
     filter: { policy?: string; status?: string },
   ): Promise<{ proposals: GovProposalFacts[]; indexedFromHeight: number | null }>;
   /** One proposal with its votes, or null when the mirror has never seen the id. */
-  govProposal(proposalId: bigint): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
+  govProposal(
+    proposalId: bigint,
+  ): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
   /** The HISTORICAL policy set observed in the mirror, newest activity first. */
   listGovPolicies(): Promise<GovPolicyFacts[]>;
 }

@@ -1,4 +1,4 @@
-// The `update_config` DIFF VIEW (§8.7's named requirement, D19).
+// The `update_config` DIFF VIEW (§8.7's named requirement).
 // Presentation-only over `configDiffRows`'s view models.
 //
 // THE THING THIS MUST GET RIGHT: the contract changes ONLY the fields a

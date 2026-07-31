@@ -4,7 +4,7 @@
 // shape change breaks THIS test, not production (app-spec §9.2).
 //
 // The assertions here are chosen to pin the four facts that CONTRADICTED the
-// M7.1 plan, because those are the ones a future reader is most likely to
+// Plan, because those are the ones a future reader is most likely to
 // "correct" back to the plan's wording:
 //   - EventVote carries no voter/option (they come from the MsgVote body);
 //   - a successful exec emits EventProposalPruned in its OWN transaction, with the
@@ -103,7 +103,7 @@ describe("governance decode — tx plane", () => {
     expect(vote.txhash).toBe(txhashOf(fx));
   });
 
-  // The M6.4 defect in a new place: one transaction, two votes, different
+  // The pair-by-msg_index rule under stress: one transaction, two votes, different
   // proposals. Keying discovery by txhash instead of (txhash, msgIndex) would
   // silently drop one of them.
   it("decodes TWO votes from ONE transaction at distinct msg_index values", () => {
@@ -210,10 +210,13 @@ describe("governance decode — state plane", () => {
   });
 
   it("decodes ACCEPTED + FAILURE and REJECTED", () => {
-    expect(decodeProposal(proposalOf("queries/group/proposal-exec-failure.json"), policyContext).executorResult).toBe(
-      "FAILURE",
-    );
-    expect(decodeProposal(proposalOf("queries/group/proposal-rejected.json"), policyContext).status).toBe("REJECTED");
+    expect(
+      decodeProposal(proposalOf("queries/group/proposal-exec-failure.json"), policyContext)
+        .executorResult,
+    ).toBe("FAILURE");
+    expect(
+      decodeProposal(proposalOf("queries/group/proposal-rejected.json"), policyContext).status,
+    ).toBe("REJECTED");
   });
 
   it("decodes a vote with the weight supplied from the member set", () => {
@@ -231,7 +234,19 @@ describe("governance decode — state plane", () => {
     );
     expect(v.option).toBe("NO_WITH_VETO");
     expect(v.weight).toBe("1");
-    expect(decodeVote({ ...{ proposal_id: "8", voter: "tp1v", option: "VOTE_OPTION_YES", submit_time: "2026-07-29T00:00:00Z" } }, null).weight).toBeNull();
+    expect(
+      decodeVote(
+        {
+          ...{
+            proposal_id: "8",
+            voter: "tp1v",
+            option: "VOTE_OPTION_YES",
+            submit_time: "2026-07-29T00:00:00Z",
+          },
+        },
+        null,
+      ).weight,
+    ).toBeNull();
   });
 
   it("decodes member weights through the nested `member` envelope", () => {

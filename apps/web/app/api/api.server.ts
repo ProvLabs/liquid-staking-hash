@@ -1,5 +1,5 @@
 // Shared services/api transport + boundary validation for the web tier
-// (extracted from chrome.server.ts in PR 4.2; consumers: chrome.server.ts,
+// (extracted from chrome.server.ts; consumers: chrome.server.ts,
 // learn.server.ts). @nvhash/api-types ships the shapes but, deliberately
 // zero-dep, no untrusted-input parser; the zod schemas here are this tier's
 // boundary validation (SECURITY.md: inputs validated and bounded at entry).
@@ -50,9 +50,9 @@ import type {
   ValidatorsPayload,
 } from "@nvhash/api-types";
 // The CONSUMER half of the wire bounds, imported rather than restated. Before
-// PR 7.1 these were literals here and the producer's caps were literals in
+// These were literals here and the producer's caps were literals in
 // services/api, coupled only by a comment in the row types — which is precisely
-// how PR #19's `yield_by_epoch` mismatch nulled a whole derived read. The pairing
+// how a `yield_by_epoch` mismatch nulls a whole derived read. The pairing
 // is now asserted in packages/api-types/test/bounds.test.ts.
 import {
   MARKER_CAP_WIRE,
@@ -117,18 +117,20 @@ export const incidentRowSchema = z.object({
 const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "expected a decimal string");
 
 /** Base-unit integer amount as a decimal string (fractions are a shape
- * error: consumers BigInt() these; PR #14 review). */
+ * error: consumers BigInt these). */
 const baseUnitString = z.string().regex(/^\d+$/, "expected a base-unit integer string");
 
 /** Signed base-unit integer amount (realized gain, the one signed nhash
  * figure; leading `-` allowed, fractions a shape error since consumers
  * BigInt() these). */
-const signedBaseUnitString = z.string().regex(/^-?\d+$/, "expected a signed base-unit integer string");
+const signedBaseUnitString = z
+  .string()
+  .regex(/^-?\d+$/, "expected a signed base-unit integer string");
 
 export const epochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
   ended_at: isoTimestamp,
-  // null since PR 3.1: an epoch settled with zero shares has no NAV. NAV is
+  // null: an epoch settled with zero shares has no NAV. NAV is
   // a fractional decimal (HASH per nvHASH); TVV is base units, integer-only.
   nav: decimalString.nullable(),
   tvv: baseUnitString,
@@ -141,7 +143,7 @@ export const programMetricsSchema = z.object({
   epoch_count: z.number().int().nonnegative().nullable(),
 }) satisfies z.ZodType<ProgramMetrics>;
 
-// PR 5.4: the §9.5.3 typical time-to-payout. Stats are null below the gates
+// The §9.5.3 typical time-to-payout. Stats are null below the gates
 // (the web tier then shows the guarantee alone); the band bounds are data.
 export const payoutStatsSchema = z.object({
   sample_count: z.number().int().nonnegative(),
@@ -152,7 +154,7 @@ export const payoutStatsSchema = z.object({
   cold_start: z.boolean(),
 }) satisfies z.ZodType<PayoutStats>;
 
-// PR 3.1 owns /validators: ValidatorsPayload = per-validator rows (registry
+// Owns /validators: ValidatorsPayload = per-validator rows (registry
 // enrollment joined to the latest sample) plus the set-health aggregates.
 export const apiValidatorRowSchema = z.object({
   valoper: z.string().max(90),
@@ -178,7 +180,7 @@ export const validatorsPayloadSchema = z.object({
   set_health: validatorSetHealthSchema,
 }) satisfies z.ZodType<ValidatorsPayload>;
 
-// PR 3.2's /market shapes: market data has no chain-canonical plane, so the
+// The /market shapes: market data has no chain-canonical plane, so the
 // venue + sample-time labeling rides IN the payload and is validated here
 // like any other boundary input.
 export const marketDepthBandSchema = z.object({
@@ -207,10 +209,10 @@ export const marketSummarySchema = z.object({
   bridged_supply: z.array(bridgedSupplyRowSchema).max(64),
 }) satisfies z.ZodType<MarketSummary>;
 
-// M6.1 personal surfaces (address-scoped /portfolio, /portfolio/metrics,
+// Personal surfaces (address-scoped /portfolio, /portfolio/metrics,
 // /transactions). Amounts are base-unit integer strings; only realized_gain_nhash
 // is signed (the accrual/marker legs are unsigned). Closed unions are pinned so
-// an unknown wire variant is a shape error, not a guess. The PR 5.4 redemption
+// an unknown wire variant is a shape error, not a guess. The redemption
 // tracker consumes the same /portfolio (active redemptions) and /transactions
 // (terminal payout/refund rows) shapes.
 export const redemptionStatusSchema = z.enum([
@@ -298,8 +300,8 @@ export const portfolioMetricsSchema = z.object({
   markers_truncated: z.boolean(),
 }) satisfies z.ZodType<PortfolioMetrics>;
 
-// M6.4 operator surface (address-scoped /operator/{summary,epochs,payments}).
-// Same posture as the M6.1 personal shapes: amounts are base-unit integer
+// Operator surface (address-scoped /operator/{summary,epochs,payments}).
+// Same posture as the personal shapes: amounts are base-unit integer
 // strings, closed unions pinned, every field bounded. `epoch_index` on a
 // payment is nullable BY DESIGN — the crediting epoch may still be open
 // (app-spec §9.1/§9.4), and null must survive the boundary as null.
@@ -361,7 +363,7 @@ export const operatorPaymentRowSchema = z.object({
   occurred_at: isoTimestamp,
 }) satisfies z.ZodType<OperatorPaymentRow>;
 
-// M6.2 internal alert-facts (the notifier's `internal:notifier` reads). Bounded
+// Internal alert-facts (the notifier's `internal:notifier` reads). Bounded
 // at the boundary like every other API input; amounts stay decimal strings.
 // `commission_due` is the one amount that rides (arrears), a decimal string.
 export const alertRedemptionFactSchema = z.object({
@@ -391,11 +393,11 @@ export const alertArrearsFactSchema = z.object({
   commission_due: baseUnitString,
 }) satisfies z.ZodType<AlertArrearsFact>;
 
-// M7.1 governance mirror (public /governance/{proposals,proposal,policies}).
+// Governance mirror (public /governance/{proposals,proposal,policies}).
 // Every array cap here IMPORTS its bound from `@nvhash/api-types/bounds.ts`
 // rather than restating a number — a locally-written `.max(N)` on a governance
-// array is the literal shape of the PR #19 defect, and the pairing is asserted
-// by `packages/api-types/test/bounds.test.ts` rather than by eye (M7.2 §4b C2).
+// array is the literal shape of that defect, and the pairing is asserted
+// by `packages/api-types/test/bounds.test.ts` rather than by eye (C2).
 //
 // Weights and tally counts are UNBOUNDED integers in the protocol (sums of
 // member weights, not token amounts), so they stay decimal strings and are never
@@ -539,8 +541,12 @@ export const govPoliciesEnvelopeSchema = envelopeSchema(
 );
 
 /** The notifier caps its fact page at 500 (MAX_ALERT_FACT_LIMIT); bound here. */
-export const alertRedemptionsEnvelopeSchema = envelopeSchema(z.array(alertRedemptionFactSchema).max(500));
-export const alertIncidentsEnvelopeSchema = envelopeSchema(z.array(alertIncidentFactSchema).max(500));
+export const alertRedemptionsEnvelopeSchema = envelopeSchema(
+  z.array(alertRedemptionFactSchema).max(500),
+);
+export const alertIncidentsEnvelopeSchema = envelopeSchema(
+  z.array(alertIncidentFactSchema).max(500),
+);
 export const alertArrearsEnvelopeSchema = envelopeSchema(z.array(alertArrearsFactSchema).max(500));
 
 /** Collections stay bounded at the boundary, mirroring the API's page cap. */
@@ -555,14 +561,18 @@ export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
 export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);
 export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));
 export const operatorSummaryEnvelopeSchema = envelopeSchema(operatorSummarySchema);
-export const operatorEpochsEnvelopeSchema = envelopeSchema(z.array(operatorEpochRowSchema).max(200));
-export const operatorPaymentsEnvelopeSchema = envelopeSchema(z.array(operatorPaymentRowSchema).max(200));
+export const operatorEpochsEnvelopeSchema = envelopeSchema(
+  z.array(operatorEpochRowSchema).max(200),
+);
+export const operatorPaymentsEnvelopeSchema = envelopeSchema(
+  z.array(operatorPaymentRowSchema).max(200),
+);
 
 /**
  * Bounded-timeout GET returning parsed JSON. Throws on non-OK status,
  * timeout, or non-JSON; callers degrade the failure to their own null path.
  * `headers` carries the `internal:notifier` (or personal) assertion where a
- * route requires it (M6.2); public reads pass none.
+ * route requires it; public reads pass none.
  */
 export async function fetchApiJson(
   url: string,

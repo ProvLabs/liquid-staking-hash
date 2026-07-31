@@ -1,4 +1,4 @@
-// Auto/Light/Dark theming (app plan PR 1.3). The preference is a cookie so SSR
+// Auto/Light/Dark theming. The preference is a cookie so SSR
 // renders the right theme on first paint; "auto" means no `data-theme`
 // attribute and the CSS `color-scheme: light dark` + `light-dark()` tokens
 // follow the OS preference. The cookie holds one of three enum values and
@@ -41,5 +41,6 @@ export function nextTheme(current: Theme): Theme {
 export function applyTheme(theme: Theme) {
   if (theme === "auto") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = theme;
+  // biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API is not available in every supported browser, and this is one non-sensitive theme preference the SSR layer reads back.
   document.cookie = `${THEME_COOKIE}=${theme}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }

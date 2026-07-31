@@ -1,4 +1,4 @@
-// POST /session/logout (plan 5.1 §3): destroy the server-side session row
+// POST /session/logout: destroy the server-side session row
 // (logout everywhere — the row IS the session) and clear the cookie.
 // Idempotent: logging out an already-dead session is still a 200 with a
 // cleared cookie.

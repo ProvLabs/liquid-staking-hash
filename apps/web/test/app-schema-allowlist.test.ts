@@ -1,5 +1,5 @@
-// Security-executable gate (plan 5.1 §4.8): the `app` schema carries ONLY
-// the PR 5.1 scope — sessions, single-use nonces, and the SECURITY.md
+// Security-executable gate: the `app` schema carries ONLY
+// the accepted scope — sessions, single-use nonces, and the SECURITY.md
 // accepted first/last-seen exception. No PII, no IP/device identifiers, and
 // deliberately NO role column anywhere (roles are live chain facts, spec §4).
 // The indexer's schema-allowlist pattern, pointed at apps/web/prisma.
@@ -28,6 +28,7 @@ function parseModels(): PrismaModel[] {
   const models: PrismaModel[] = [];
   const modelRe = /model\s+(\w+)\s*\{([^}]*)\}/g;
   let match: RegExpExecArray | null;
+  // biome-ignore lint/suspicious/noAssignInExpressions: the canonical `exec` iteration idiom; `match` is explicitly typed and compared to null.
   while ((match = modelRe.exec(source)) !== null) {
     const fields: string[] = [];
     for (const rawLine of match[2]!.split("\n")) {
@@ -41,21 +42,21 @@ function parseModels(): PrismaModel[] {
   return models;
 }
 
-/** The complete allowed column set — PR 5.1 scope + the M6.2 alert domain. */
+/** The complete allowed column set — session scope + the alert domain. */
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   Session: ["id", "address", "createdAt", "expiresAt", "lastRefreshAt"],
   SessionNonce: ["nonce", "address", "createdAt", "expiresAt"],
   // SECURITY.md accepted exception (Ira, 2026-07-13): first/last-seen only.
   AddressActivity: ["address", "firstSeenAt", "lastSeenAt"],
-  // M6.2 alert domain (plan §2.1 design review). Every column is public chain
+  // Alert domain (design review). Every column is public chain
   // data (`address`), a closed enum (`kind`), a preference bit (`enabled`), a
   // replay-stable event id (`dedupeKey`), a minimal identifier-only payload,
   // an ordinal cursor, or operational metadata — nothing identity/device/IP-
-  // shaped. A column beyond these lists is a stop-and-ask event (plan §8).
+  // shaped. A column beyond these lists is a stop-and-ask event.
   AlertRule: ["address", "kind", "enabled", "createdAt", "updatedAt"],
   Notification: ["id", "address", "kind", "dedupeKey", "payload", "deliveredAt", "readAt"],
   NotifierCheckpoint: ["stream", "cursor", "updatedAt"],
-  // M6.3 Web Push channel (plan §2.1 design review) — the ONE accepted
+  // Web Push channel (design review) — the ONE accepted
   // SECURITY.md exception (Ira, 2026-07-13): opt-in, opaque, revocable push
   // tokens deleted on opt-out/session removal. `address`/`sessionId` are the
   // existing public/scoping identifiers; the `endpoint`/`p256dh`/`auth` triple
@@ -86,7 +87,7 @@ const FORBIDDEN_FIELD_SUBSTRINGS = [
 const models = parseModels();
 
 describe("app schema field allowlist (SECURITY.md data minimization)", () => {
-  it("parses exactly the app-schema models (PR 5.1 + M6.2 alert domain + M6.3 push)", () => {
+  it("parses exactly the app-schema models (sessions + alert domain + push)", () => {
     expect(models.map((m) => m.name).sort()).toEqual([
       "AddressActivity",
       "AlertRule",
@@ -126,7 +127,8 @@ describe("app schema field allowlist (SECURITY.md data minimization)", () => {
       for (const field of model.fields) {
         const lowered = field.toLowerCase();
         for (const forbidden of FORBIDDEN_FIELD_SUBSTRINGS) {
-          if (lowered.includes(forbidden)) violations.push(`${model.name}.${field} ("${forbidden}")`);
+          if (lowered.includes(forbidden))
+            violations.push(`${model.name}.${field} ("${forbidden}")`);
         }
       }
     }

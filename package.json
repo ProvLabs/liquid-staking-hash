@@ -5,5 +5,13 @@
   "packageManager": "pnpm@11.13.0",
   "engines": {
     "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "format": "biome format --write"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.6"
   }
 }

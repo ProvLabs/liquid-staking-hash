@@ -3,7 +3,13 @@
 // input is rejected, not clamped; defaults fill in when omitted.
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_PAGE_OFFSET, paginationSchema, searchParamsToRecord } from "../src/query.ts";
+import {
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+  MAX_PAGE_OFFSET,
+  paginationSchema,
+  searchParamsToRecord,
+} from "../src/query.ts";
 
 function parse(input: Record<string, string>) {
   return paginationSchema.safeParse(input);

@@ -4,9 +4,9 @@ import { useRouteLoaderData } from "react-router";
 import type { ClientConfig } from "~/config/client";
 import { t, type Locale } from "~/i18n";
 
-// Push settings (app-spec §10.4; plan 6.3 §2.2) — the per-browser "Push
+// Push settings (app-spec §10.4) — the per-browser "Push
 // notifications on this device" block inside the alert-settings section. The
-// browser permission states render HONESTLY (plan §2.2, invariant 7): no
+// browser permission states render HONESTLY (invariant 7): no
 // silent no-ops.
 //
 //   * unsupported     — no Push/Notification API in this browser.
@@ -136,10 +136,14 @@ export function PushSettings({ locale }: { locale: Locale }) {
       return <p className="text-sm text-muted-foreground">{t(locale, "alerts.push.checking")}</p>;
     }
     if (support === "unsupported") {
-      return <p className="text-sm text-muted-foreground">{t(locale, "alerts.push.unsupported")}</p>;
+      return (
+        <p className="text-sm text-muted-foreground">{t(locale, "alerts.push.unsupported")}</p>
+      );
     }
     if (vapidKey === undefined) {
-      return <p className="text-sm text-muted-foreground">{t(locale, "alerts.push.not-configured")}</p>;
+      return (
+        <p className="text-sm text-muted-foreground">{t(locale, "alerts.push.not-configured")}</p>
+      );
     }
     if (permission === "denied") {
       return <p className="text-sm text-muted-foreground">{t(locale, "alerts.push.denied")}</p>;
@@ -161,7 +165,9 @@ export function PushSettings({ locale }: { locale: Locale }) {
     }
     return (
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">{t(locale, "alerts.push.per-browser")}</span>
+        <span className="text-sm text-muted-foreground">
+          {t(locale, "alerts.push.per-browser")}
+        </span>
         <button
           type="button"
           className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"

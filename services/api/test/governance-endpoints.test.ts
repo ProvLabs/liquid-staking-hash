@@ -1,4 +1,4 @@
-// The governance endpoints' own gate (App PR 7.1 commit C).
+// The governance endpoints' own gate (App).
 //
 // The registry-driven harnesses already cover these routes for the envelope
 // shape, GET-only/405, query bounds, rate limits and credential-free access — a
@@ -80,7 +80,14 @@ function vote(over: Partial<GovVoteFacts> & { proposalId: bigint; voter: string 
 const FACTS: FakeFacts = {
   govIndexedFromHeight: 1,
   govProposals: [
-    proposal({ proposalId: 1n, status: "ACCEPTED", executorResult: "SUCCESS", prunedAtHeight: 496n, yesCount: 2n, abstainCount: 1n }),
+    proposal({
+      proposalId: 1n,
+      status: "ACCEPTED",
+      executorResult: "SUCCESS",
+      prunedAtHeight: 496n,
+      yesCount: 2n,
+      abstainCount: 1n,
+    }),
     proposal({ proposalId: 2n, status: "ACCEPTED", executorResult: "FAILURE", yesCount: 2n }),
     proposal({ proposalId: 3n, status: "REJECTED", groupPolicyAddress: POLICY_B, noCount: 1n }),
     proposal({ proposalId: 4n, status: "SUBMITTED", groupPolicyAddress: POLICY_B }),
@@ -88,11 +95,30 @@ const FACTS: FakeFacts = {
   govVotes: [
     vote({ proposalId: 2n, voter: "tp1votera" }),
     // The state-recovered case: no provenance, no weight. Both stay null.
-    vote({ proposalId: 2n, voter: "tp1voterb", option: "ABSTAIN", weight: null, height: null, txhash: null }),
+    vote({
+      proposalId: 2n,
+      voter: "tp1voterb",
+      option: "ABSTAIN",
+      weight: null,
+      height: null,
+      txhash: null,
+    }),
   ],
   govPolicies: [
-    { address: POLICY_A, groupId: 1n, proposalCount: 2, lastSeenHeight: 500n, decisionPolicy: THRESHOLD_POLICY },
-    { address: POLICY_B, groupId: 1n, proposalCount: 2, lastSeenHeight: 490n, decisionPolicy: null },
+    {
+      address: POLICY_A,
+      groupId: 1n,
+      proposalCount: 2,
+      lastSeenHeight: 500n,
+      decisionPolicy: THRESHOLD_POLICY,
+    },
+    {
+      address: POLICY_B,
+      groupId: 1n,
+      proposalCount: 2,
+      lastSeenHeight: 490n,
+      decisionPolicy: null,
+    },
   ],
 };
 
@@ -131,7 +157,10 @@ describe("GET /governance/proposals", () => {
 
   it("reports indexed_from_height as NULL when no height certifies the window", async () => {
     // Null, not 0. A 0 would claim the mirror covers everything from genesis.
-    const { body } = await get("/api/v1/governance/proposals", { ...FACTS, govIndexedFromHeight: null });
+    const { body } = await get("/api/v1/governance/proposals", {
+      ...FACTS,
+      govIndexedFromHeight: null,
+    });
     expect((body.data as GovProposalsPayload).indexed_from_height).toBeNull();
   });
 
@@ -157,7 +186,10 @@ describe("GET /governance/proposals", () => {
 
   it("filters by policy", async () => {
     const { body } = await get(`/api/v1/governance/proposals?policy=${POLICY_B}`);
-    expect((body.data as GovProposalsPayload).proposals.map((p) => p.proposal_id)).toEqual(["4", "3"]);
+    expect((body.data as GovProposalsPayload).proposals.map((p) => p.proposal_id)).toEqual([
+      "4",
+      "3",
+    ]);
   });
 
   it("filters by status", async () => {
@@ -223,7 +255,7 @@ describe("GET /governance/proposal", () => {
   });
 
   it("rejects a missing or malformed id with 400, never a coerced number", async () => {
-    for (const q of ["", "id=", "id=abc", "id=-1", "id=1.5", "id=01", "id=" + "9".repeat(21)]) {
+    for (const q of ["", "id=", "id=abc", "id=-1", "id=1.5", "id=01", `id=${"9".repeat(21)}`]) {
       const { status } = await get(`/api/v1/governance/proposal?${q}`);
       expect(status, q).toBe(400);
     }
@@ -269,7 +301,7 @@ describe("GET /governance/proposal", () => {
     expect(detail.proposal.messages_truncated).toBe(true);
   });
 
-  it("FLAGS a truncated proposer list (PR #23 review, P2)", async () => {
+  it("FLAGS a truncated proposer list", async () => {
     const many = Array.from({ length: 40 }, (_, i) => `tp1proposer${String(i).padStart(3, "0")}`);
     const { body } = await get("/api/v1/governance/proposal?id=2", {
       ...FACTS,
@@ -288,7 +320,9 @@ describe("GET /governance/proposal", () => {
   });
 
   it("carries messages VERBATIM when under the bound", async () => {
-    const messages = [{ "@type": "/cosmwasm.wasm.v1.MsgExecuteContract", msg: { set_halted: { halted: false } } }];
+    const messages = [
+      { "@type": "/cosmwasm.wasm.v1.MsgExecuteContract", msg: { set_halted: { halted: false } } },
+    ];
     const { body } = await get("/api/v1/governance/proposal?id=2", {
       ...FACTS,
       govProposals: [proposal({ proposalId: 2n, messages })],

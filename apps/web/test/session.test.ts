@@ -1,4 +1,4 @@
-// Session gates (plan 5.1 §4.3–4.4): cookie properties, single-use nonces
+// Session gates (–4.4): cookie properties, single-use nonces
 // (replay → 401-shaped failure), ADR-36 verification correctness, absolute +
 // sliding expiry, logout-destroys-row. Runs entirely on the in-memory store
 // with an injected clock — Postgres-free, deterministic.

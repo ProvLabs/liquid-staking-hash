@@ -11,7 +11,9 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use bech32::{Bech32, Hrp};
-use cosmwasm_std::{Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{
+    Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage, Uint128,
+};
 use prost::Message;
 use provwasm_std::types::cosmos::base::query::v1beta1::PageRequest;
 use provwasm_std::types::cosmos::crypto::ed25519::PubKey as Ed25519PubKey;
@@ -220,11 +222,7 @@ fn program_stake_on(
 /// reports while still jailed keep the ORIGINAL timestamp (so spam cannot
 /// push the purge window out); an observation of an unjailed validator clears
 /// any report (the validator recovered and keeps its stake).
-pub fn report_jailed(
-    deps: DepsMut,
-    env: &Env,
-    valoper: String,
-) -> Result<Response, ContractError> {
+pub fn report_jailed(deps: DepsMut, env: &Env, valoper: String) -> Result<Response, ContractError> {
     validate_valoper(&valoper)?;
     let resp = Response::new()
         .add_attribute("action", "report_jailed_validator")
@@ -302,13 +300,20 @@ pub fn purge_jailed(
     if let Some(cv) = &claimant_valoper {
         validate_valoper(cv)?;
         if *cv == valoper {
-            return Err(ContractError::ClaimantNotEligible { valoper: cv.clone() });
+            return Err(ContractError::ClaimantNotEligible {
+                valoper: cv.clone(),
+            });
         }
-        let rec = VALIDATORS
-            .may_load(deps.storage, cv)?
-            .ok_or_else(|| ContractError::NotEnrolled { valoper: cv.clone() })?;
+        let rec =
+            VALIDATORS
+                .may_load(deps.storage, cv)?
+                .ok_or_else(|| ContractError::NotEnrolled {
+                    valoper: cv.clone(),
+                })?;
         if info.sender != rec.operator {
-            return Err(ContractError::NotOperator { valoper: cv.clone() });
+            return Err(ContractError::NotOperator {
+                valoper: cv.clone(),
+            });
         }
     }
 
@@ -366,9 +371,13 @@ pub fn purge_jailed(
             let assessment = assess_validators(deps.as_ref(), &cfg)?
                 .into_iter()
                 .find(|a| a.valoper == *cv)
-                .ok_or_else(|| ContractError::NotEnrolled { valoper: cv.clone() })?;
+                .ok_or_else(|| ContractError::NotEnrolled {
+                    valoper: cv.clone(),
+                })?;
             if !assessment.eligible {
-                return Err(ContractError::ClaimantNotEligible { valoper: cv.clone() });
+                return Err(ContractError::ClaimantNotEligible {
+                    valoper: cv.clone(),
+                });
             }
             redelegated = staked.min(assessment.headroom);
             if !redelegated.is_zero() {
@@ -594,11 +603,7 @@ pub fn assess_validators(deps: Deps, cfg: &Config) -> StdResult<Vec<Assessment>>
     }
     let sq = StakingQuerier::new(&deps.querier);
     let (bonded_map, active_count) = bonded_validators(deps)?;
-    let total_bonded = sq
-        .pool()?
-        .pool
-        .map(|p| p.bonded_tokens)
-        .unwrap_or_default();
+    let total_bonded = sq.pool()?.pool.map(|p| p.bonded_tokens).unwrap_or_default();
     let total_bonded = Uint128::from_str(&total_bonded).unwrap_or_default();
     let max_bond = max_bond_adjusted(
         total_bonded,
@@ -744,10 +749,7 @@ fn bonded_validators(deps: Deps) -> StdResult<(BTreeMap<String, Validator>, u64)
         for v in resp.validators {
             map.insert(v.operator_address.clone(), v);
         }
-        key = resp
-            .pagination
-            .and_then(|p| p.next_key)
-            .unwrap_or_default();
+        key = resp.pagination.and_then(|p| p.next_key).unwrap_or_default();
         if key.is_empty() {
             break;
         }
@@ -813,10 +815,8 @@ mod tests {
         // Same 20-byte payload under account and valoper HRPs.
         let payload = [7u8; 20];
         let acct = bech32::encode::<Bech32>(Hrp::parse("tp").unwrap(), &payload).unwrap();
-        let valoper =
-            bech32::encode::<Bech32>(Hrp::parse("tpvaloper").unwrap(), &payload).unwrap();
-        let other =
-            bech32::encode::<Bech32>(Hrp::parse("tpvaloper").unwrap(), &[8u8; 20]).unwrap();
+        let valoper = bech32::encode::<Bech32>(Hrp::parse("tpvaloper").unwrap(), &payload).unwrap();
+        let other = bech32::encode::<Bech32>(Hrp::parse("tpvaloper").unwrap(), &[8u8; 20]).unwrap();
         assert!(is_operator(&acct, &valoper));
         assert!(!is_operator(&acct, &other));
         assert!(!is_operator("garbage", &valoper));
@@ -871,7 +871,13 @@ mod tests {
         }
     }
 
-    fn assessment(valoper: &str, tip: u128, uptime: Option<u64>, enrolled_at: u64, eligible: bool) -> Assessment {
+    fn assessment(
+        valoper: &str,
+        tip: u128,
+        uptime: Option<u64>,
+        enrolled_at: u64,
+        eligible: bool,
+    ) -> Assessment {
         let mut record = rec(enrolled_at);
         record.tip_epoch = Uint128::new(tip);
         Assessment {
@@ -890,10 +896,10 @@ mod tests {
     #[test]
     fn priority_sorts_tip_then_uptime_then_enrollment() {
         let mut v = vec![
-            assessment("valD", 0, Some(9900), 5, true),  // no tip, high uptime
+            assessment("valD", 0, Some(9900), 5, true), // no tip, high uptime
             assessment("valA", 100, Some(9000), 9, true), // top tip wins outright
-            assessment("valB", 0, Some(9900), 2, true),  // ties valD on uptime, older
-            assessment("valC", 0, None, 1, true),        // unknown uptime sorts as 0
+            assessment("valB", 0, Some(9900), 2, true), // ties valD on uptime, older
+            assessment("valC", 0, None, 1, true),       // unknown uptime sorts as 0
         ];
         sort_by_priority(&mut v);
         let order: Vec<&str> = v.iter().map(|a| a.valoper.as_str()).collect();
@@ -915,10 +921,22 @@ mod tests {
         assert!(ranks["valB"] < ranks["valA"]);
 
         let dels = vec![
-            crate::plan::DelegationView { valoper: "valA".into(), staked: Uint128::new(1) },
-            crate::plan::DelegationView { valoper: "zz-unenrolled".into(), staked: Uint128::new(1) },
-            crate::plan::DelegationView { valoper: "valB".into(), staked: Uint128::new(1) },
-            crate::plan::DelegationView { valoper: "valC".into(), staked: Uint128::new(1) },
+            crate::plan::DelegationView {
+                valoper: "valA".into(),
+                staked: Uint128::new(1),
+            },
+            crate::plan::DelegationView {
+                valoper: "zz-unenrolled".into(),
+                staked: Uint128::new(1),
+            },
+            crate::plan::DelegationView {
+                valoper: "valB".into(),
+                staked: Uint128::new(1),
+            },
+            crate::plan::DelegationView {
+                valoper: "valC".into(),
+                staked: Uint128::new(1),
+            },
         ];
         let ordered: Vec<String> = order_for_drain(dels, &ranks)
             .into_iter()
@@ -935,7 +953,9 @@ mod tests {
         r.uptime_sum_bps = 20_000;
         r.uptime_count = 2;
         r.commission_accrued = Uint128::new(1_000);
-        VALIDATORS.save(deps.as_mut().storage, "tpvaloper1x", &r).unwrap();
+        VALIDATORS
+            .save(deps.as_mut().storage, "tpvaloper1x", &r)
+            .unwrap();
 
         // Completion of epoch N: billed snapshots the accrual; nothing due yet.
         epoch_rollover(deps.as_mut().storage).unwrap();
@@ -955,7 +975,9 @@ mod tests {
     #[test]
     fn accrue_commission_charges_enrolled_only() {
         let mut deps = cosmwasm_std::testing::mock_dependencies();
-        VALIDATORS.save(deps.as_mut().storage, "tpvaloper1a", &rec(1)).unwrap();
+        VALIDATORS
+            .save(deps.as_mut().storage, "tpvaloper1a", &rec(1))
+            .unwrap();
         accrue_commission(
             deps.as_mut().storage,
             &[
@@ -1007,7 +1029,7 @@ mod tests {
     }
 }
 
-/// Regression tests for the jail-episode fingerprint (PR #2 review): a report
+/// Regression tests for the jail-episode fingerprint: a report
 /// recorded during one jail episode must not authorize a purge in a LATER
 /// episode, and reports are only recorded where the program has stake.
 #[cfg(test)]
@@ -1018,12 +1040,10 @@ mod jail_episode_tests {
         Binary, Coin as CwCoin, ContractResult, Decimal, FullDelegation, SystemResult,
         Validator as CwValidator,
     };
-    use prost::Message as _;
     use provwasm_common::MockableQuerier;
     use provwasm_mocks::{mock_provenance_dependencies, MockProvenanceQuerier};
     use provwasm_std::types::cosmos::staking::v1beta1::{
-        QueryDelegatorUnbondingDelegationsResponse, QueryValidatorResponse,
-        Validator as PValidator,
+        QueryDelegatorUnbondingDelegationsResponse, QueryValidatorResponse, Validator as PValidator,
     };
 
     const VALOPER: &str = "tpvaloper1epi0000000000000000000000000000000000";
@@ -1142,11 +1162,14 @@ mod jail_episode_tests {
         env1.block.time = env0.block.time.plus_seconds(delay + 1_000);
         set_validator(&mut deps.querier, true, 200);
         let info = message_info(&deps.api.addr_make("keeper"), &[]);
-        let err =
-            purge_jailed(deps.as_mut(), &env1, &info, VALOPER.to_string(), None).unwrap_err();
+        let err = purge_jailed(deps.as_mut(), &env1, &info, VALOPER.to_string(), None).unwrap_err();
         match err {
             ContractError::JailCooldownActive { ready } => {
-                assert_eq!(ready, env1.block.time.seconds() + delay, "cooldown must restart NOW");
+                assert_eq!(
+                    ready,
+                    env1.block.time.seconds() + delay,
+                    "cooldown must restart NOW"
+                );
             }
             other => panic!("expected restarted cooldown, got {other:?}"),
         }

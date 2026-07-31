@@ -39,9 +39,11 @@ function ThemeToggle() {
   const [choice, setChoice] = useTheme();
   const opts: ThemeChoice[] = ["auto", "light", "dark"];
   return (
+    // biome-ignore lint/a11y/useSemanticElements: <fieldset> is for form controls; this is a button toolbar, where role="group" is correct.
     <div role="group" aria-label="theme" style={{ display: "flex", gap: 2 }}>
       {opts.map((o) => (
         <button
+          type="button"
           key={o}
           className={`btn btn--sm ${choice === o ? "btn--secondary" : "btn--ghost"}`}
           aria-pressed={choice === o}
@@ -61,16 +63,31 @@ function WalletButton() {
   if (!wallet.address) {
     return (
       <div style={{ position: "relative" }}>
-        <button className="btn btn--secondary btn--sm" onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          className="btn btn--secondary btn--sm"
+          onClick={() => setOpen((v) => !v)}
+        >
           Connect wallet
         </button>
         {open && (
-          <div className="panel" style={{ position: "absolute", right: 0, top: "110%", zIndex: 30, padding: 8, width: 200 }}>
+          <div
+            className="panel"
+            style={{
+              position: "absolute",
+              right: 0,
+              top: "110%",
+              zIndex: 30,
+              padding: 8,
+              width: 200,
+            }}
+          >
             <div className="muted-3" style={{ fontSize: 11, padding: "2px 6px" }}>
               {config.mock ? "mock identities" : "wallet"}
             </div>
             {MOCK_IDENTITIES.map((m) => (
               <button
+                type="button"
                 key={m.label}
                 className="sidenav__link"
                 onClick={() => {
@@ -87,7 +104,12 @@ function WalletButton() {
     );
   }
   return (
-    <button className="btn btn--secondary btn--sm" onClick={() => wallet.disconnect()} title="disconnect">
+    <button
+      type="button"
+      className="btn btn--secondary btn--sm"
+      onClick={() => wallet.disconnect()}
+      title="disconnect"
+    >
       <span className="mono">{wallet.address.slice(0, 10)}…</span>
       <span className="muted-3" style={{ fontSize: 11 }}>
         {role}
@@ -97,7 +119,7 @@ function WalletButton() {
 }
 
 export function TopBar() {
-  const { block, nowSecs, stale } = useStore();
+  const { block, stale } = useStore();
   const age = block.fetchedAt ? Math.floor((Date.now() - block.fetchedAt) / 1000) : null;
   return (
     <header className="topbar">
@@ -105,7 +127,10 @@ export function TopBar() {
       <Pill tone={isMainnet ? "neutral" : "warning"}>{config.chainId}</Pill>
       {wallet_devnet_chip()}
       <span className="topbar__spacer" />
-      <span className={`freshness${stale ? " stale" : ""}`} title={block.data ? `block ${block.data.height}` : ""}>
+      <span
+        className={`freshness${stale ? " stale" : ""}`}
+        title={block.data ? `block ${block.data.height}` : ""}
+      >
         {stale ? "STALE" : age === null ? "…" : `fetched ${age}s ago`}
       </span>
       <ThemeToggle />
@@ -114,20 +139,39 @@ export function TopBar() {
   );
 
   function wallet_devnet_chip() {
-    return config.devnetKeyMode || config.mock ? <Pill tone="warning">{config.mock ? "mock data" : "devnet key mode"}</Pill> : null;
+    return config.devnetKeyMode || config.mock ? (
+      <Pill tone="warning">{config.mock ? "mock data" : "devnet key mode"}</Pill>
+    ) : null;
   }
-  void nowSecs;
 }
 
 export function BannerStack() {
   const { epoch, vault, jail, stale } = useStore();
   const banners: { tone: "critical" | "serious" | "warning"; icon: string; text: string }[] = [];
-  if (epoch.data?.halted) banners.push({ tone: "critical", icon: "■", text: "Contract HALTED. RunEpoch, continuations, ServiceRedemptions, and purge are stopped." });
+  if (epoch.data?.halted)
+    banners.push({
+      tone: "critical",
+      icon: "■",
+      text: "Contract HALTED. RunEpoch, continuations, ServiceRedemptions, and purge are stopped.",
+    });
   if (vault.data?.paused)
-    banners.push({ tone: "serious", icon: "⏸", text: `Vault PAUSED${vault.data.pause_reason ? `: ${vault.data.pause_reason}` : ""}. User swaps and pending payouts are blocked.` });
+    banners.push({
+      tone: "serious",
+      icon: "⏸",
+      text: `Vault PAUSED${vault.data.pause_reason ? `: ${vault.data.pause_reason}` : ""}. User swaps and pending payouts are blocked.`,
+    });
   if ((jail.data?.reports.length ?? 0) > 0)
-    banners.push({ tone: "warning", icon: "▲", text: `${jail.data!.reports.length} open jail report(s). See Jail Watch.` });
-  if (stale) banners.push({ tone: "warning", icon: "◷", text: "Data is stale; writes are disabled until reads recover." });
+    banners.push({
+      tone: "warning",
+      icon: "▲",
+      text: `${jail.data!.reports.length} open jail report(s). See Jail Watch.`,
+    });
+  if (stale)
+    banners.push({
+      tone: "warning",
+      icon: "◷",
+      text: "Data is stale; writes are disabled until reads recover.",
+    });
   return (
     <div className="bannerstack">
       {banners.slice(0, 2).map((b, i) => (
@@ -146,7 +190,11 @@ export function SideNav() {
   const { role } = useStore();
   const wallet = useWallet();
   const link = (to: string, label: string) => (
-    <NavLink to={to} end={to === "/"} className={({ isActive }) => `sidenav__link${isActive ? " active" : ""}`}>
+    <NavLink
+      to={to}
+      end={to === "/"}
+      className={({ isActive }) => `sidenav__link${isActive ? " active" : ""}`}
+    >
       {label}
     </NavLink>
   );
@@ -174,9 +222,11 @@ export function Footer() {
   return (
     <footer className="footer">
       <span>block {block.data?.height ?? "—"}</span>
-      <span>{block.fetchedAt ? relTime(Math.floor(block.fetchedAt / 1000), nowSecs) : "—"} fetched</span>
+      <span>
+        {block.fetchedAt ? relTime(Math.floor(block.fetchedAt / 1000), nowSecs) : "—"} fetched
+      </span>
       <span className="mono">{config.contractAddress.slice(0, 16)}…</span>
-      <span>vault {cfg.data ? cfg.data.vault_address.slice(0, 12) + "…" : "—"}</span>
+      <span>vault {cfg.data ? `${cfg.data.vault_address.slice(0, 12)}…` : "—"}</span>
       <span>console spec v2.0-RC1</span>
     </footer>
   );

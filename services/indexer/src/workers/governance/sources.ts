@@ -213,7 +213,7 @@ export async function collectWindow(
   //    return was submitted AND pruned inside this window — the normal outcome for
   //    a promptly executed proposal, since a successful exec prunes in its own
   //    transaction. Without this the row is never created and every event-derived
-  //    UPDATE below silently affects nothing (PR #23 review, P1).
+  // UPDATE below silently affects nothing.
   const present = new Set(sweep.proposals.map((p) => p.proposalId.toString()));
 
   // Which height to pin is the whole correctness of this pass, and the two signals
@@ -250,11 +250,14 @@ export async function collectWindow(
       // recover it; the tx BODY could, and doing so is a recorded follow-on rather
       // than a silent gap.
       if (terminal !== undefined && terminal <= submitted) {
-        logger.warn("governance proposal submitted and finished in one block: not recoverable by a pinned read", {
-          stream: "governance",
-          height: submitted,
-          error: `proposal ${key} has no height at which it was alive`,
-        });
+        logger.warn(
+          "governance proposal submitted and finished in one block: not recoverable by a pinned read",
+          {
+            stream: "governance",
+            height: submitted,
+            error: `proposal ${key} has no height at which it was alive`,
+          },
+        );
         continue;
       }
       absent.push({ proposalId: BigInt(key), pinHeight: submitted });

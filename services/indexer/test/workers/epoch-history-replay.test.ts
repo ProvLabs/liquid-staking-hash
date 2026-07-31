@@ -45,7 +45,11 @@ interface BuiltCrank {
   aprBps: number;
 }
 
-function snapshotJson(epochIndex: number, endHeight: bigint, tvvAfter: bigint): Record<string, unknown> {
+function snapshotJson(
+  epochIndex: number,
+  endHeight: bigint,
+  tvvAfter: bigint,
+): Record<string, unknown> {
   return {
     epoch_index: epochIndex,
     started_at_seconds: 1,
@@ -98,11 +102,17 @@ function fakeChain(cranks: readonly BuiltCrank[]): { rpc: RpcClient; pinned: Pin
   } as unknown as RpcClient;
 
   const pinned = {
-    smartAtHeight: async (_contract: string, query: Record<string, unknown>, height: bigint | number) => {
+    smartAtHeight: async (
+      _contract: string,
+      query: Record<string, unknown>,
+      height: bigint | number,
+    ) => {
       const c = byHeight.get(BigInt(height).toString());
       if (!c) throw new Error(`no crank at height ${height}`);
-      if ("epoch_snapshot" in query) return { snapshot: snapshotJson(c.epochIndex, c.height, c.tvvAfter) };
-      if ("apr" in query) return { epoch_index: c.epochIndex, gross_apr_bps: c.aprBps, net_apr_bps: c.aprBps };
+      if ("epoch_snapshot" in query)
+        return { snapshot: snapshotJson(c.epochIndex, c.height, c.tvvAfter) };
+      if ("apr" in query)
+        return { epoch_index: c.epochIndex, gross_apr_bps: c.aprBps, net_apr_bps: c.aprBps };
       throw new Error("unexpected query");
     },
   } as unknown as PinnedLcdClient;
@@ -112,7 +122,11 @@ function fakeChain(cranks: readonly BuiltCrank[]): { rpc: RpcClient; pinned: Pin
 
 const chainArb = fc.record({
   cranks: fc.array(
-    fc.record({ gap: fc.integer({ min: 1, max: 20 }), tvvAfter: fc.bigInt({ min: 0n, max: 10n ** 24n }), aprBps: fc.nat(20000) }),
+    fc.record({
+      gap: fc.integer({ min: 1, max: 20 }),
+      tvvAfter: fc.bigInt({ min: 0n, max: 10n ** 24n }),
+      aprBps: fc.nat(20000),
+    }),
     { maxLength: 15 },
   ),
   splitFraction: fc.double({ min: 0, max: 1, noNaN: true }),

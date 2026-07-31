@@ -4,7 +4,7 @@ import { t, type Locale } from "~/i18n";
 
 // §8.1.7 CTA. Honest about the milestone: wallet flows are M5, so this
 // routes to the Stake page (today a stub that says so) rather than
-// pretending a connect flow exists. Funnel counters are PR 7.6 (§14.10),
+// pretending a connect flow exists. Funnel counters (§14.10) are not built,
 // deliberately absent here.
 export function Cta({ locale }: { locale: Locale }) {
   const { lang } = useParams();

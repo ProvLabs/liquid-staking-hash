@@ -1,4 +1,4 @@
-// Stake-page data assembly (plan 5.3; app-spec §8.3, §10.3 SwapIn). All
+// Stake-page data assembly (app-spec §8.3, §10.3 SwapIn). All
 // live reads (§5.1 canonical plane): the vault record for swap gates, min/
 // max bounds, and the NAV inputs (total value / total shares), the epoch
 // status for the next-expected-epoch date, and — when a session exists —
@@ -36,21 +36,19 @@ export interface StakeContext {
   /** null = the connected session address, or null when anonymous. */
   address: string | null;
   /** Live vault swap gating; null when the vault read failed. */
-  vault:
-    | {
-        underlyingDenom: string;
-        shareDenom: string;
-        paused: boolean;
-        pausedReason: string;
-        swapInEnabled: boolean;
-        /** base-unit strings; "" = no bound (client parses accordingly). */
-        minSwapIn: string;
-        maxSwapIn: string;
-        /** NAV inputs (base units) for the client-side preview. */
-        totalValueNhash: string;
-        totalShares: string;
-      }
-    | null;
+  vault: {
+    underlyingDenom: string;
+    shareDenom: string;
+    paused: boolean;
+    pausedReason: string;
+    swapInEnabled: boolean;
+    /** base-unit strings; "" = no bound (client parses accordingly). */
+    minSwapIn: string;
+    maxSwapIn: string;
+    /** NAV inputs (base units) for the client-side preview. */
+    totalValueNhash: string;
+    totalShares: string;
+  } | null;
   /** ISO next-epoch date, or null when epoch status was unreadable. */
   nextEpochIso: string | null;
   /** Spendable HASH (base units, vesting-net), null when anonymous/unread. */
@@ -71,9 +69,7 @@ export async function loadStakeContext(
   const [vaultState, epochStatus, spendable] = await Promise.all([
     vaultClient.getVault(config.vaultAddress).catch(() => null),
     contract.epochStatus().catch(() => null),
-    address === null
-      ? Promise.resolve(null)
-      : bank.spendableBalances(address).catch(() => null),
+    address === null ? Promise.resolve(null) : bank.spendableBalances(address).catch(() => null),
   ]);
 
   const record = vaultState?.vault ?? null;

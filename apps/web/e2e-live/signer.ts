@@ -1,4 +1,4 @@
-// e2e-live test signer (plan 5.2 §2.4) — a throwaway DEVNET key living
+// e2e-live test signer — a throwaway DEVNET key living
 // ENTIRELY in the Playwright test process. It is NOT a wallet adapter and
 // is never imported by anything under `app/`: the App keeps no devnet key
 // mode (app-spec §10.1) and needed no test-injection seam — the live suite

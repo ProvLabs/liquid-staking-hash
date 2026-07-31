@@ -1,4 +1,4 @@
-// Localize preflight block reasons (plan 5.3; §10.2 step 2 "disabled
+// Localize preflight block reasons (§10.2 step 2 "disabled
 // controls always carry the reason"). The reducer's machine-readable
 // `PreflightReason` codes map 1:1 to i18n keys here, shared by /stake and
 // /exit so the honesty copy is identical across flows.
@@ -9,11 +9,7 @@ import type { PreflightReason } from "./lifecycle";
 
 /** One localized sentence per reason. `denomExponent` scales amount details
  * (HASH for swap-in, shares for swap-out). */
-export function reasonText(
-  locale: Locale,
-  reason: PreflightReason,
-  denomExponent: number,
-): string {
+export function reasonText(locale: Locale, reason: PreflightReason, denomExponent: number): string {
   switch (reason.code) {
     case "vault-paused":
       return reason.detail
@@ -44,7 +40,7 @@ export function reasonText(
       return t(locale, "tx.reason-account-missing");
     case "chain-unavailable":
       return t(locale, "tx.reason-chain-unavailable");
-    // M6.4 operator predicates (§2.4).
+    // Operator predicates (§2.4).
     case "not-validator-operator":
       return t(locale, "tx.reason-not-validator-operator");
     case "validator-not-found":
@@ -63,7 +59,7 @@ export function reasonText(
       return t(locale, "tx.reason-program-halted");
     case "too-many-validators":
       return t(locale, "tx.reason-too-many-validators", { max: String(reason.max) });
-    // M7.3–7.4 governance predicates (§2.5).
+    // Governance predicates.
     case "proposal-not-found":
       return t(locale, "tx.reason-proposal-not-found");
     case "proposal-pruned":

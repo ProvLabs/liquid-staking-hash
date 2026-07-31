@@ -1,4 +1,4 @@
-// Web Push subscription persistence — the models layer (plan 6.3 §2.1). The
+// Web Push subscription persistence — the models layer. The
 // `session.server.ts` / `alerts.server.ts` port split: one contract, two
 // implementations (test/push-subscription.test.ts runs the in-memory one; the
 // Prisma one runs in production over the `app` schema as `app_writer`).
@@ -6,11 +6,11 @@
 // The row is the ONE accepted SECURITY.md exception (opaque, revocable push
 // tokens). The mechanisms this store enforces:
 //   * created ONLY on explicit opt-in (the route calls upsertForSession only
-//     behind requireSession — plan §2.1);
+// behind requireSession);
 //   * replace-by-session, never accumulate — a new endpoint for a session
 //     replaces its older ones (`endpoint` @unique + the delete in upsert);
 //   * a per-address cap (oldest evicted) so a hostile client cannot grow the
-//     table through repeated re-subscription (plan §7 Q4);
+// table through repeated re-subscription (Q4);
 //   * revocability: deleteForSession (opt-out + the session-removal deletion
 //     chain, Commit B) and deleteForEndpoint (404/410 pruning, Commit B);
 //   * the invariant itself: sweepOrphans (the notifier tick) deletes every
@@ -25,7 +25,7 @@
 import { SESSION_IDLE_SECONDS } from "./session.server.ts";
 
 /** Cap on active subscriptions per address; the oldest is evicted past it
- *  (plan §7 Q4 — cheap, bounded, and blunts re-subscription table growth). */
+ * (Q4 — cheap, bounded, and blunts re-subscription table growth). */
 export const PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP = 5;
 
 /** Serializable-upsert attempts before surfacing the conflict (see below). */
@@ -98,7 +98,11 @@ export class InMemoryPushStore implements PushStore {
     this.isSessionLive = isSessionLive;
   }
 
-  async upsertForSession(address: string, sessionId: string, sub: PushSubscriptionInput): Promise<void> {
+  async upsertForSession(
+    address: string,
+    sessionId: string,
+    sub: PushSubscriptionInput,
+  ): Promise<void> {
     // Idempotent on endpoint: re-home an existing endpoint rather than duplicate.
     const existing = this.rows.find((r) => r.endpoint === sub.endpoint);
     if (existing !== undefined) {
@@ -107,7 +111,14 @@ export class InMemoryPushStore implements PushStore {
       existing.p256dh = sub.p256dh;
       existing.auth = sub.auth;
     } else {
-      this.rows.push({ id: this.nextId++, address, sessionId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth });
+      this.rows.push({
+        id: this.nextId++,
+        address,
+        sessionId,
+        endpoint: sub.endpoint,
+        p256dh: sub.p256dh,
+        auth: sub.auth,
+      });
     }
     // Replace-by-session: the session keeps only this endpoint.
     for (let i = this.rows.length - 1; i >= 0; i--) {
@@ -163,7 +174,9 @@ export class InMemoryPushStore implements PushStore {
   }
 
   private evict(address: string): void {
-    const owned = this.rows.filter((r) => r.address === address).sort((a, b) => (a.id < b.id ? 1 : -1)); // newest first
+    const owned = this.rows
+      .filter((r) => r.address === address)
+      .sort((a, b) => (a.id < b.id ? 1 : -1)); // newest first
     for (const victim of owned.slice(PUSH_SUBSCRIPTIONS_PER_ADDRESS_CAP)) {
       const idx = this.rows.indexOf(victim);
       if (idx >= 0) this.rows.splice(idx, 1);
@@ -180,17 +193,27 @@ interface PushPrismaLike {
   pushSubscription: {
     upsert(args: unknown): Promise<unknown>;
     deleteMany(args: unknown): Promise<{ count: number }>;
-    findMany(args: unknown): Promise<Array<{ id?: bigint; endpoint?: string; p256dh?: string; auth?: string }>>;
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ id?: bigint; endpoint?: string; p256dh?: string; auth?: string }>>;
     count(args: unknown): Promise<number>;
   };
-  $transaction<T>(fn: (tx: PushPrismaLike) => Promise<T>, options?: { isolationLevel?: string }): Promise<T>;
+  $transaction<T>(
+    fn: (tx: PushPrismaLike) => Promise<T>,
+    options?: { isolationLevel?: string },
+  ): Promise<T>;
   /** Tagged-template raw statement (the sweep's anti-join DELETE). Row count. */
   $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<number>;
 }
 
 /** Prisma surfaces a serialization failure as P2034 ("transaction conflict"). */
 function isSerializationConflict(err: unknown): boolean {
-  return err !== null && typeof err === "object" && "code" in err && (err as { code: unknown }).code === "P2034";
+  return (
+    err !== null &&
+    typeof err === "object" &&
+    "code" in err &&
+    (err as { code: unknown }).code === "P2034"
+  );
 }
 
 export class PrismaPushStore implements PushStore {
@@ -203,7 +226,11 @@ export class PrismaPushStore implements PushStore {
     this.prisma = prisma;
   }
 
-  async upsertForSession(address: string, sessionId: string, sub: PushSubscriptionInput): Promise<void> {
+  async upsertForSession(
+    address: string,
+    sessionId: string,
+    sub: PushSubscriptionInput,
+  ): Promise<void> {
     // SERIALIZABLE + bounded retry: under read committed, two concurrent
     // upserts can each miss the other's uncommitted row, defeating BOTH
     // replace-by-session and the per-address cap (parallel authenticated
@@ -217,11 +244,19 @@ export class PrismaPushStore implements PushStore {
             // Idempotent on endpoint (re-home a re-subscribed endpoint, never duplicate).
             await tx.pushSubscription.upsert({
               where: { endpoint: sub.endpoint },
-              create: { address, sessionId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+              create: {
+                address,
+                sessionId,
+                endpoint: sub.endpoint,
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              },
               update: { address, sessionId, p256dh: sub.p256dh, auth: sub.auth },
             });
             // Replace-by-session: drop this session's other endpoints.
-            await tx.pushSubscription.deleteMany({ where: { sessionId, endpoint: { not: sub.endpoint } } });
+            await tx.pushSubscription.deleteMany({
+              where: { sessionId, endpoint: { not: sub.endpoint } },
+            });
             // Per-address cap: keep the newest CAP, evict the rest (oldest first).
             const owned = await tx.pushSubscription.findMany({
               where: { address },
@@ -295,7 +330,9 @@ async function createPushStore(config: {
   if (config.databaseUrl !== undefined) {
     const { PrismaClient } = await import("@prisma/client");
     return new PrismaPushStore(
-      new PrismaClient({ datasources: { db: { url: config.databaseUrl } } }) as unknown as PushPrismaLike,
+      new PrismaClient({
+        datasources: { db: { url: config.databaseUrl } },
+      }) as unknown as PushPrismaLike,
     );
   }
   if (config.appEnv !== "development") {

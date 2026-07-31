@@ -1,4 +1,4 @@
-// Brand-token gate (app-spec §11 / §14.8 brand pass, plan §4 visual/design +
+// Brand-token gate (app-spec §11 / §14.8 brand pass,
 // security-executable layer). The categorical dataviz palette is gated by
 // check-palette.mjs; the two brand-pass additions that script does not cover —
 // the mint-green primary accent and the semantic UI status set — are gated
@@ -26,7 +26,8 @@ function pair(name: string): { light: string; dark: string } {
   );
   const light = m?.[1];
   const dark = m?.[2];
-  if (!light || !dark) throw new Error(`token --${name} not found as a light-dark(#hex, #hex) pair`);
+  if (!light || !dark)
+    throw new Error(`token --${name} not found as a light-dark(#hex, #hex) pair`);
   return { light: light.toLowerCase(), dark: dark.toLowerCase() };
 }
 
@@ -93,6 +94,8 @@ describe("semantic UI status set (fixed family, icon + label)", () => {
     // icon + label pairing (dataviz relief rule) is their mitigation, so they
     // are NOT asserted here — asserting it would contradict the design.
     expect(contrast(tokens.good, background.light), "good on light").toBeGreaterThanOrEqual(3.0);
-    expect(contrast(tokens.critical, background.light), "critical on light").toBeGreaterThanOrEqual(3.0);
+    expect(contrast(tokens.critical, background.light), "critical on light").toBeGreaterThanOrEqual(
+      3.0,
+    );
   });
 });

@@ -1,4 +1,4 @@
-// Chrome-state gates (plan 4.1 §3, SECURITY.md "never lie about state",
+// Chrome-state gates (SECURITY.md "never lie about state",
 // app-spec §12.1): a banner renders only from a true program state read this
 // request; a failed read degrades its own surface honestly and never
 // fabricates. Chain reads come from the @nvhash/fixtures corpus via the MSW
@@ -10,10 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import vaultGet from "@nvhash/fixtures/queries/vault/get";
 
-import {
-  DEGRADED_LAG_BLOCKS,
-  loadChromeState,
-} from "~/chrome/chrome.server";
+import { DEGRADED_LAG_BLOCKS, loadChromeState } from "~/chrome/chrome.server";
 import { describeFreshness, formatAge } from "~/chrome/freshness";
 import { loadConfig } from "~/config/config.server";
 import {
@@ -98,7 +95,9 @@ describe("banner honesty (§12.1: a banner mirrors a true state, never an assump
 
   it("a failed live read is not health: liveStatusOk=false and NO banner", async () => {
     server.use(
-      http.get("*/vault/v1/vaults/:id", () => HttpResponse.json({ message: "down" }, { status: 503 })),
+      http.get("*/vault/v1/vaults/:id", () =>
+        HttpResponse.json({ message: "down" }, { status: 503 }),
+      ),
     );
     const state = await loadChromeState(config());
     expect(state.liveStatusOk).toBe(false);
@@ -114,7 +113,7 @@ describe("banner honesty (§12.1: a banner mirrors a true state, never an assump
 });
 
 describe("freshness honesty (§9.4/§12.1: null heights are n/a, never fabricated)", () => {
-  it("the real PR 1.2 scaffold envelope (null heights) yields n/a", async () => {
+  it("the scaffold envelope (null heights) yields n/a", async () => {
     const state = await loadChromeState(config());
     expect(state.freshness).not.toBeNull();
     expect(state.freshness?.chain_height).toBeNull();

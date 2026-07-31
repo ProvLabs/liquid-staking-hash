@@ -1,5 +1,5 @@
-// Grant-boundary integration test (ADR-001 Decision 1, action item 4; app plan
-// PR 1.5). This is the mechanism — not a caller/topology assumption — that
+// Grant-boundary integration test (ADR-001 Decision 1, action item 4).
+// This is the mechanism — not a caller/topology assumption — that
 // makes the two-domain ownership split a control SECURITY.md can rely on. It
 // runs against a live Postgres that infra/dev/postgres/roles.sql has bootstrapped
 // and the indexer's Prisma migration has populated, then asserts the exact
@@ -24,8 +24,7 @@ import { Client } from "pg";
 // A superuser connection is required to SET ROLE across the three roles. Defaults
 // to the dev/CI Postgres superuser; override via ADMIN_DATABASE_URL.
 const ADMIN_URL =
-  process.env.ADMIN_DATABASE_URL ??
-  "postgresql://nvhash:nvhash-dev@postgres:5432/nvhash";
+  process.env.ADMIN_DATABASE_URL ?? "postgresql://nvhash:nvhash-dev@postgres:5432/nvhash";
 
 // A known indexed table the migration creates (app-spec §9.1). Fully qualified
 // so the assertions do not depend on any role's search_path.
@@ -85,9 +84,9 @@ describe("indexed/app grant boundary (ADR-001 Decision 1)", () => {
 
   it("api_reader may NOT UPDATE indexed (read-only role)", async () => {
     await asRole("api_reader", async () => {
-      await expect(
-        client.query(`UPDATE ${INDEXED_TABLE} SET "address" = 'tp1y'`),
-      ).rejects.toThrow(/permission denied/i);
+      await expect(client.query(`UPDATE ${INDEXED_TABLE} SET "address" = 'tp1y'`)).rejects.toThrow(
+        /permission denied/i,
+      );
     });
   });
 

@@ -6,14 +6,14 @@
 // This tier consumes only what it uses: the client-safe identity subset
 // (app-spec §7) plus the server-only LCD endpoint and console profile chain id
 // needed by the boot checks, the server-only services/api base URL for the
-// chrome's indexed-plane reads (PR 4.1), and — since PR 5.1 — the wallet and
+// chrome's indexed-plane reads, and — — the wallet and
 // session configuration: `WALLETCONNECT_PROJECT_ID` (client-safe: a WC v2
 // project id is public by design, §7 allowlist amendment), plus the
 // server-only `DATABASE_URL` (the `app_writer` role) and
 // `API_SERVICE_ASSERTION_KEY` (ADR-001 Decision 2 minting key).
-// `WEB_PUSH_VAPID_*` remains documented-but-unconsumed until PR 6.3, so
+// `WEB_PUSH_VAPID_*` is optional, so
 // config never claims to consume a secret the code does not use.
-// (`SESSION_SECRET` was retired in PR 5.1: sessions are opaque random ids
+// (`SESSION_SECRET` was retired: sessions are opaque random ids
 // resolved against a server-side row — nothing to sign, no key to hold.)
 //
 // Boot checks (app-spec §7, §12.2) — both fail startup loudly:
@@ -35,116 +35,123 @@ const bech32Address = z
   .string()
   .regex(/^(tp|pb)1[02-9ac-hj-np-z]{38,90}$/, "expected a bech32 Provenance address");
 
-export const configSchema = z.object({
-  /** App environment, drives the environment badge (app-spec §7). */
-  appEnv: z.enum(["development", "staging", "production"]).default("development"),
-  /** Chain id this deployment serves; rendered in the footer and env badge. */
-  chainId: z.string().min(1).max(64),
-  /** LCD endpoint for server-side live reads (browser never needs LCD CORS). */
-  lcdUrl: z.string().url(),
-  /** nvHASH asset-manager contract address. */
-  contractAddress: bech32Address,
-  /** Vault marker address; cross-checked against `Config {}` at boot. */
-  vaultAddress: bech32Address,
-  /** Same-environment Console origin — verify-link base (app-spec §12.2). */
-  consoleUrl: z.string().url(),
-  /**
-   * services/api base URL for indexed-plane reads (app-spec §7, PR 4.1).
-   * Server-only: the browser reads indexed data only through this server's
-   * loaders, never the API directly (classified in scripts/server-only-env.json).
-   */
-  apiUrl: z.string().url().refine((u) => /^https?:\/\//.test(u), "expected an http(s) URL"),
-  /**
-   * Chain id of the configured console profile (app-spec §7, revision
-   * 2026-07-15). Must equal `chainId` or boot fails: one console per
-   * environment, links never cross environments (§12.2).
-   */
-  consoleChainId: z.string().min(1).max(64),
-  /**
-   * WalletConnect v2 project id (app-spec §7, PR 5.1) — CLIENT-SAFE: a WC
-   * project id is public by design (it rides in every pairing URI), amended
-   * into the §7 allowlist in the same change. Null disables the WC transport
-   * (the injected Figure extension still works); the WC vendors render a
-   * "not configured" state rather than a broken pairing flow.
-   */
-  walletConnectProjectId: z
-    .string()
-    .regex(/^[0-9a-zA-Z]{8,64}$/, "expected a WalletConnect project id")
-    .nullable()
-    .default(null),
-  /**
-   * Block-explorer base URL for transaction verify-links (M6.1 Portfolio
-   * history). CLIENT-SAFE: an explorer URL is public by construction (§7
-   * allowlist amendment). Optional: absent, history rows render without a
-   * verify-link rather than a broken one.
-   */
-  explorerUrl: z.string().url().optional(),
-  /**
-   * PostgreSQL URL for the `app` schema, connecting as `app_writer`
-   * (ADR-001 Decision 1; server-only). Optional: absent, the session layer
-   * runs on a non-durable in-memory store (dev/mock posture, the services/api
-   * optional-DATABASE_URL precedent) — production profiles set it.
-   */
-  databaseUrl: z
-    .string()
-    .regex(/^postgres(ql)?:\/\//, "expected a postgres:// URL")
-    .optional(),
-  /**
-   * HMAC key for minting the short-lived service assertions services/api
-   * verifies (ADR-001 Decision 2; server-only, never past the client-config
-   * projection). Optional: absent, no assertion can be minted and personal
-   * indexed-plane reads degrade honestly (the API fails closed on its side).
-   * Bounded below at 32 chars — a shorter key is a misconfiguration, not a
-   * weaker deployment.
-   */
-  apiServiceAssertionKey: z.string().min(32).max(512).optional(),
-  /**
-   * Web Push VAPID credentials (app-spec §7, §10.4, §14.7; plan 6.3 §2.2).
-   * The three are ALL-OR-NONE (the `.superRefine` below): a deployment either
-   * configures push fully or renders the honest "not configured for this
-   * environment" state — a partial VAPID config is a boot error, never a
-   * best-effort continue (SECURITY.md: bound at the boundary; reject).
-   *
-   *   * `webPushVapidPublicKey`  — CLIENT-SAFE: a VAPID public key is public by
-   *     construction (it ships in `pushManager.subscribe`); amended into the
-   *     §7 client-safe allowlist in the same change (client.ts).
-   *   * `webPushVapidPrivateKey` / `webPushVapidSubject` — SERVER-ONLY: the
-   *     signing key and the VAPID `sub` contact, never past the client
-   *     projection (classified in scripts/server-only-env.json).
-   *
-   * Devnet default is none (the honest not-configured state).
-   */
-  webPushVapidPublicKey: z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{80,200}$/, "expected a base64url VAPID public key")
-    .optional(),
-  webPushVapidPrivateKey: z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{20,120}$/, "expected a base64url VAPID private key")
-    .optional(),
-  webPushVapidSubject: z
-    .string()
-    .max(256)
-    .refine(
-      (s) => /^mailto:.+@.+/.test(s) || /^https:\/\//.test(s),
-      "expected a mailto: or https:// VAPID subject",
-    )
-    .optional(),
-}).superRefine((cfg, ctx) => {
-  // All-or-none: a partial VAPID config is a boot error (plan §2.2, §4.4).
-  const present = [cfg.webPushVapidPublicKey, cfg.webPushVapidPrivateKey, cfg.webPushVapidSubject].filter(
-    (v) => v !== undefined,
-  ).length;
-  if (present !== 0 && present !== 3) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "WEB_PUSH_VAPID_* must be all set (public key, private key, subject) or all unset — " +
-        "a partial Web Push config is refused (plan 6.3 §2.2).",
-      path: ["webPushVapidPublicKey"],
-    });
-  }
-});
+export const configSchema = z
+  .object({
+    /** App environment, drives the environment badge (app-spec §7). */
+    appEnv: z.enum(["development", "staging", "production"]).default("development"),
+    /** Chain id this deployment serves; rendered in the footer and env badge. */
+    chainId: z.string().min(1).max(64),
+    /** LCD endpoint for server-side live reads (browser never needs LCD CORS). */
+    lcdUrl: z.string().url(),
+    /** nvHASH asset-manager contract address. */
+    contractAddress: bech32Address,
+    /** Vault marker address; cross-checked against `Config {}` at boot. */
+    vaultAddress: bech32Address,
+    /** Same-environment Console origin — verify-link base (app-spec §12.2). */
+    consoleUrl: z.string().url(),
+    /**
+     * services/api base URL for indexed-plane reads (app-spec §7).
+     * Server-only: the browser reads indexed data only through this server's
+     * loaders, never the API directly (classified in scripts/server-only-env.json).
+     */
+    apiUrl: z
+      .string()
+      .url()
+      .refine((u) => /^https?:\/\//.test(u), "expected an http(s) URL"),
+    /**
+     * Chain id of the configured console profile (app-spec §7, revision
+     * 2026-07-15). Must equal `chainId` or boot fails: one console per
+     * environment, links never cross environments (§12.2).
+     */
+    consoleChainId: z.string().min(1).max(64),
+    /**
+     * WalletConnect v2 project id (app-spec §7) — CLIENT-SAFE: a WC
+     * project id is public by design (it rides in every pairing URI), amended
+     * into the §7 allowlist in the same change. Null disables the WC transport
+     * (the injected Figure extension still works); the WC vendors render a
+     * "not configured" state rather than a broken pairing flow.
+     */
+    walletConnectProjectId: z
+      .string()
+      .regex(/^[0-9a-zA-Z]{8,64}$/, "expected a WalletConnect project id")
+      .nullable()
+      .default(null),
+    /**
+     * Block-explorer base URL for transaction verify-links (Portfolio
+     * history). CLIENT-SAFE: an explorer URL is public by construction (§7
+     * allowlist amendment). Optional: absent, history rows render without a
+     * verify-link rather than a broken one.
+     */
+    explorerUrl: z.string().url().optional(),
+    /**
+     * PostgreSQL URL for the `app` schema, connecting as `app_writer`
+     * (ADR-001 Decision 1; server-only). Optional: absent, the session layer
+     * runs on a non-durable in-memory store (dev/mock posture, the services/api
+     * optional-DATABASE_URL precedent) — production profiles set it.
+     */
+    databaseUrl: z
+      .string()
+      .regex(/^postgres(ql)?:\/\//, "expected a postgres:// URL")
+      .optional(),
+    /**
+     * HMAC key for minting the short-lived service assertions services/api
+     * verifies (ADR-001 Decision 2; server-only, never past the client-config
+     * projection). Optional: absent, no assertion can be minted and personal
+     * indexed-plane reads degrade honestly (the API fails closed on its side).
+     * Bounded below at 32 chars — a shorter key is a misconfiguration, not a
+     * weaker deployment.
+     */
+    apiServiceAssertionKey: z.string().min(32).max(512).optional(),
+    /**
+     * Web Push VAPID credentials (app-spec §7, §10.4, §14.7).
+     * The three are ALL-OR-NONE (the `.superRefine` below): a deployment either
+     * configures push fully or renders the honest "not configured for this
+     * environment" state — a partial VAPID config is a boot error, never a
+     * best-effort continue (SECURITY.md: bound at the boundary; reject).
+     *
+     *   * `webPushVapidPublicKey`  — CLIENT-SAFE: a VAPID public key is public by
+     *     construction (it ships in `pushManager.subscribe`); amended into the
+     *     §7 client-safe allowlist in the same change (client.ts).
+     *   * `webPushVapidPrivateKey` / `webPushVapidSubject` — SERVER-ONLY: the
+     *     signing key and the VAPID `sub` contact, never past the client
+     *     projection (classified in scripts/server-only-env.json).
+     *
+     * Devnet default is none (the honest not-configured state).
+     */
+    webPushVapidPublicKey: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{80,200}$/, "expected a base64url VAPID public key")
+      .optional(),
+    webPushVapidPrivateKey: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{20,120}$/, "expected a base64url VAPID private key")
+      .optional(),
+    webPushVapidSubject: z
+      .string()
+      .max(256)
+      .refine(
+        (s) => /^mailto:.+@.+/.test(s) || /^https:\/\//.test(s),
+        "expected a mailto: or https:// VAPID subject",
+      )
+      .optional(),
+  })
+  .superRefine((cfg, ctx) => {
+    // All-or-none: a partial VAPID config is a boot error (§4.4).
+    const present = [
+      cfg.webPushVapidPublicKey,
+      cfg.webPushVapidPrivateKey,
+      cfg.webPushVapidSubject,
+    ].filter((v) => v !== undefined).length;
+    if (present !== 0 && present !== 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "WEB_PUSH_VAPID_* must be all set (public key, private key, subject) or all unset — " +
+          "a partial Web Push config is refused (plan 6.3 §2.2).",
+        path: ["webPushVapidPublicKey"],
+      });
+    }
+  });
 
 export type WebConfig = z.infer<typeof configSchema>;
 
@@ -227,7 +234,7 @@ export async function runBootChecks(
         `profile points at the wrong vault or the wrong contract; refusing to start.`,
     );
   }
-  // Underlying-denom cross-check (M6.4 §2.5, added 2026-07-28). The relay's
+  // Underlying-denom cross-check (added 2026-07-28). The relay's
   // operator guard bounds a payment's denom against the CONSTANT
   // `PROGRAM_UNDERLYING_DENOM`, which is deliberately code and not
   // configuration — but a constant that must match chain reality and is never

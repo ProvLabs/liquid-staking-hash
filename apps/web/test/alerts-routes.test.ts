@@ -1,4 +1,4 @@
-// Alert resource-route behavior (plan 6.2 §3 commit C, §4.6). Exercises the
+// Alert resource-route behavior (§4.6). Exercises the
 // alerts feature-server (the seam the `/alerts/*` routes call after
 // requireSession) over the in-memory store singleton: mark-read is
 // address-scoped (never crosses addresses), the body/query schemas reject
@@ -52,8 +52,18 @@ describe("mark-read is address-scoped (§2.6)", () => {
   it("marking {all} for A never touches B's notifications", async () => {
     const store = await seededStore();
     await store.commitTick("s", "1", [
-      { address: A, kind: "redemption_update", dedupeKey: "r1", payload: { request_id: "r1", event: "matured" } },
-      { address: B, kind: "redemption_update", dedupeKey: "r1", payload: { request_id: "r1", event: "matured" } },
+      {
+        address: A,
+        kind: "redemption_update",
+        dedupeKey: "r1",
+        payload: { request_id: "r1", event: "matured" },
+      },
+      {
+        address: B,
+        kind: "redemption_update",
+        dedupeKey: "r1",
+        payload: { request_id: "r1", event: "matured" },
+      },
     ]);
     const result = await markNotificationsRead(config, A, { all: true });
     expect(result.marked).toBe(1);
@@ -84,7 +94,9 @@ describe("notifications listing + unread count", () => {
       { address: B, kind: "nav_step_posted", dedupeKey: "e1", payload: { epoch_index: 1 } },
     ]);
     const { notifications, unread } = await loadNotifications(config, A, 0);
-    expect(notifications.map((n) => (n.payload as { epoch_index: number }).epoch_index)).toEqual([2, 1]);
+    expect(notifications.map((n) => (n.payload as { epoch_index: number }).epoch_index)).toEqual([
+      2, 1,
+    ]);
     expect(unread).toBe(2);
     // JSON-safe: id is a string, timestamps are ISO.
     expect(typeof notifications[0]!.id).toBe("string");
@@ -117,15 +129,24 @@ describe("route boundary schemas (reject, never clamp)", () => {
     expect(markReadBodySchema.safeParse({ ids: ["1", "2"] }).success).toBe(true);
     expect(markReadBodySchema.safeParse({ ids: [] }).success).toBe(false); // min 1
     expect(markReadBodySchema.safeParse({ ids: ["x"] }).success).toBe(false); // non-numeric
-    expect(markReadBodySchema.safeParse({ ids: Array.from({ length: 101 }, (_, i) => String(i)) }).success).toBe(false);
+    expect(
+      markReadBodySchema.safeParse({ ids: Array.from({ length: 101 }, (_, i) => String(i)) })
+        .success,
+    ).toBe(false);
     expect(markReadBodySchema.safeParse({ all: false }).success).toBe(false);
   });
 
   it("rule upsert body: closed kind enum + boolean, unknown kind → invalid", () => {
-    expect(ruleUpsertBodySchema.safeParse({ kind: "vault_status", enabled: true }).success).toBe(true);
-    expect(ruleUpsertBodySchema.safeParse({ kind: "not_a_kind", enabled: true }).success).toBe(false);
+    expect(ruleUpsertBodySchema.safeParse({ kind: "vault_status", enabled: true }).success).toBe(
+      true,
+    );
+    expect(ruleUpsertBodySchema.safeParse({ kind: "not_a_kind", enabled: true }).success).toBe(
+      false,
+    );
     expect(ruleUpsertBodySchema.safeParse({ kind: "vault_status" }).success).toBe(false); // missing enabled
-    expect(ruleUpsertBodySchema.safeParse({ kind: "vault_status", enabled: "yes" }).success).toBe(false);
+    expect(ruleUpsertBodySchema.safeParse({ kind: "vault_status", enabled: "yes" }).success).toBe(
+      false,
+    );
   });
 
   it("page query: non-negative integer, reject-never-clamp, bounded ceiling", () => {
@@ -137,6 +158,8 @@ describe("route boundary schemas (reject, never clamp)", () => {
     // The ceiling keeps the offset (pages × 30) inside the cross-system
     // MAX_PAGE_OFFSET posture — deep-pagination is rejected, never served.
     expect(notificationsPageSchema.safeParse(String(MAX_NOTIFICATIONS_PAGE)).success).toBe(true);
-    expect(notificationsPageSchema.safeParse(String(MAX_NOTIFICATIONS_PAGE + 1)).success).toBe(false);
+    expect(notificationsPageSchema.safeParse(String(MAX_NOTIFICATIONS_PAGE + 1)).success).toBe(
+      false,
+    );
   });
 });

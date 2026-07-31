@@ -1,4 +1,4 @@
-// Reconciler alarm — the M2.5 acceptance gate (app-spec §9.6/§12.1, plan §2):
+// Reconciler alarm — the acceptance gate (app-spec §9.6/§12.1):
 // feed a deliberately corrupted indexed row and observe the incident open,
 // end-to-end against real Postgres. Seeds an `epoch_snapshots` row whose
 // `total_shares` diverges from what the (faked) live chain reports for the same
@@ -78,7 +78,9 @@ const deps: ReconcilerDeps = {
 
 async function cleanup(): Promise<void> {
   await prisma.reconcilerRun.deleteMany({ where: { chainHeight: 1000n } });
-  await prisma.incident.deleteMany({ where: { kind: "reconciler_divergence", dedupeKey: "latest" } });
+  await prisma.incident.deleteMany({
+    where: { kind: "reconciler_divergence", dedupeKey: "latest" },
+  });
   await prisma.epochSnapshot.deleteMany({ where: { epochIndex: TEST_EPOCH } });
 }
 

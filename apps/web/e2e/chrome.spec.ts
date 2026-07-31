@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { LIVE_DOWN_ORIGIN } from "../playwright.config";
 import { manifest } from "./fixture-manifest";
 
-// Global chrome (plan 4.1, app-spec §8.0): nav that never 404s, environment
+// Global chrome (app-spec §8.0): nav that never 404s, environment
 // badge, banner slot honesty, and the footer freshness line, against the
 // fixture-backed server (pristine corpus) and the live-down server instance.
 
@@ -49,9 +49,7 @@ test("footer renders the honest n/a freshness line (null heights)", async ({ pag
   await expect(footer).not.toContainText("Program status unavailable");
 });
 
-test("failed live reads degrade honestly: no banner, footer says unavailable", async ({
-  page,
-}) => {
+test("failed live reads degrade honestly: no banner, footer says unavailable", async ({ page }) => {
   await page.goto(`${LIVE_DOWN_ORIGIN}/`);
   await expect(page.getByRole("status")).toHaveCount(0);
   await expect(page.locator("footer")).toContainText("Program status unavailable");

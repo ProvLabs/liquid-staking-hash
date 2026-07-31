@@ -36,6 +36,9 @@ impl Rng {
     pub fn new(seed: u64) -> Self {
         Rng(seed)
     }
+    // Not `Iterator::next`: an RNG stream is unbounded and infallible, so the
+    // Option-returning contract would force an `unwrap` at every call site.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
         let mut z = self.0;
@@ -122,7 +125,11 @@ impl Scenario {
             reward_bps_per_epoch: 20 + r.below(120),
             commission_bps: r.below(3000),
             aum_fee_bps: r.below(30),
-            performance_threshold_bps: if r.chance(1, 2) { 0 } else { 9_000 + r.below(900) },
+            performance_threshold_bps: if r.chance(1, 2) {
+                0
+            } else {
+                9_000 + r.below(900)
+            },
             deposit_ceiling: r.range(1_000_000_000, 1_000_000_000_000_000_000_000),
             min_deposit: 1_000_000,
             p_deposit: 10 + r.below(40),
@@ -323,7 +330,7 @@ struct SimVal {
 }
 
 struct Redemption {
-    /// Trace-only owner tag (plan §7 Q1); a plain label carried alongside the
+    /// Trace-only owner tag (Q1); a plain label carried alongside the
     /// pooled entry, never a factor in the payout math or entry shape.
     address: String,
     shares: u128,
@@ -334,7 +341,7 @@ struct Redemption {
     requested_at: u64,
 }
 
-/// Synthetic per-user identities (plan §7 Q1): the sim otherwise models a
+/// Synthetic per-user identities (Q1): the sim otherwise models a
 /// single pooled depositor, so these label that pool purely for trace
 /// attribution. Deposits/redemption requests are tagged with a round-robin
 /// owner (no rng draw), one tag per pooled event; the pooled amounts, entry
@@ -381,8 +388,8 @@ pub struct TraceEvent {
     pub epoch_index: u64,
 }
 
-/// A full scenario trace for the derived-metrics property harness (M6.1 plan
-/// commit A). `packages/fixtures/fixtures/sim-traces/manifest.json` records
+/// A full scenario trace for the derived-metrics property harness.
+/// `packages/fixtures/fixtures/sim-traces/manifest.json` records
 /// how the committed traces were regenerated.
 #[derive(Serialize, Clone, Debug)]
 pub struct Trace {
@@ -562,7 +569,7 @@ impl Sim {
             // late→prompt pair squeezes the next inter-crank gap below the
             // unbonding period, exercising the never-rejected guards live.
             Timing::Compressed => {
-                if self.stats.epochs % 2 == 0 {
+                if self.stats.epochs.is_multiple_of(2) {
                     26 * DAY_SECS
                 } else {
                     DAY_SECS
@@ -582,7 +589,9 @@ impl Sim {
 
     fn spawn_validator(&mut self) {
         let n = self.vals.len();
-        let bond = self.rng.range(1_000_000_000, self.sc.deposit_ceiling / 4 + 1);
+        let bond = self
+            .rng
+            .range(1_000_000_000, self.sc.deposit_ceiling / 4 + 1);
         self.vals.push(SimVal {
             valoper: format!("simvaloper1{n:05}"),
             third_party: bond,
@@ -742,8 +751,11 @@ impl Sim {
         );
         let v = self.val_mut(valoper);
         v.program = v.program.saturating_sub(amount);
-        self.unbonding
-            .push((self.block_time_secs + UNBOND_SECS, valoper.to_string(), amount));
+        self.unbonding.push((
+            self.block_time_secs + UNBOND_SECS,
+            valoper.to_string(),
+            amount,
+        ));
     }
 
     /// ServiceRedemptions keeper pass (runs every step), mirroring the
@@ -770,7 +782,10 @@ impl Sim {
         expedited.sort_unstable_by(|a, b| b.cmp(a));
         for idx in expedited {
             let payout = self.estimate(self.redemptions[idx].shares);
-            self.check(payout <= self.marker_liquid, "expedite past marker liquidity");
+            self.check(
+                payout <= self.marker_liquid,
+                "expedite past marker liquidity",
+            );
             let r = self.redemptions.remove(idx);
             self.record_mobilization(r.requested_at);
             self.marker_liquid = self.marker_liquid.saturating_sub(payout);
@@ -865,7 +880,10 @@ impl Sim {
         }
         let settle = ret.settle.u128();
         let write_down = ret.write_down.u128();
-        self.check(settle <= self.contract_liquid, "settle exceeds contract liquid");
+        self.check(
+            settle <= self.contract_liquid,
+            "settle exceeds contract liquid",
+        );
         self.check(
             settle + write_down <= self.receipt_in_marker,
             "burn exceeds receipt outstanding in marker",
@@ -941,7 +959,10 @@ impl Sim {
                     let d = self.val_mut(dst);
                     d.third_party + d.program
                 };
-                self.check(dst_tokens + amount <= cap, "redelegation would breach the chain cap");
+                self.check(
+                    dst_tokens + amount <= cap,
+                    "redelegation would breach the chain cap",
+                );
             }
             self.val_mut(src).program -= amount;
             self.val_mut(dst).program += amount;
@@ -955,7 +976,10 @@ impl Sim {
         // Fresh deploy: value-neutral settlement (marker nhash out, receipt in).
         let deployable: u128 = rb.delegations.iter().map(|(_, a)| a.u128()).sum();
         self.check(deployable <= budget, "deploy exceeds budget");
-        self.check(deployable <= self.marker_liquid, "deploy exceeds marker liquid");
+        self.check(
+            deployable <= self.marker_liquid,
+            "deploy exceeds marker liquid",
+        );
         self.marker_liquid -= deployable;
         self.receipt_in_marker += deployable;
         self.receipt_minted += deployable;
@@ -1123,7 +1147,7 @@ impl Sim {
             self.shares += minted;
             self.user_shares += minted;
             self.stats.deposits += 1;
-            // Trace attribution only (plan §7 Q1): round-robin owner tag, no
+            // Trace attribution only (Q1): round-robin owner tag, no
             // rng draw, no change to the pooled deposit math above.
             let owner = ACTORS[self.next_actor % ACTORS.len()];
             self.next_actor += 1;
@@ -1289,7 +1313,7 @@ pub fn run_scenario(sc: Scenario) -> SimResult {
 }
 
 /// Same execution as `run_scenario`, plus the full deposit/redemption/epoch
-/// trace (M6.1 plan commit A) for the derived-metrics property harness.
+/// trace for the derived-metrics property harness.
 pub fn run_scenario_traced(sc: Scenario) -> (SimResult, Trace) {
     let (result, trace) = run_scenario_impl(sc, true);
     (result, trace.expect("trace requested"))
@@ -1453,7 +1477,7 @@ mod tests {
         }
     }
 
-    /// Golden test (M6.1 plan commit A): a tiny fixed scenario (one validator,
+    /// Golden test: a tiny fixed scenario (one validator,
     /// no rewards/fees/slashes/churn, a fixed deposit every step, one epoch)
     /// serializes to the exact expected trace JSON.
     #[test]
@@ -1480,12 +1504,16 @@ mod tests {
             timing: Timing::Jitter,
         };
         let (result, trace) = run_scenario_traced(sc);
-        assert!(result.violations.is_empty(), "golden scenario violations: {:#?}", result.violations);
+        assert!(
+            result.violations.is_empty(),
+            "golden scenario violations: {:#?}",
+            result.violations
+        );
         let json = serde_json::to_string_pretty(&trace).unwrap();
         assert_eq!(json, GOLDEN_TRACE_JSON);
     }
 
-    /// Regression for the actor-attribution split bug (M6.1 review): grouping
+    /// Regression for the actor-attribution split bug: grouping
     /// trace events by address and summing back across addresses must
     /// reproduce the pooled scenario totals exactly, one event per pooled
     /// occurrence. A regression that splits a pooled deposit/redemption
@@ -1496,13 +1524,24 @@ mod tests {
         for seed in [1u64, 4, 8] {
             let sc = Scenario::from_seed(seed, 24);
             let (result, trace) = run_scenario_traced(sc);
-            assert!(result.violations.is_empty(), "seed {seed} violations: {:#?}", result.violations);
+            assert!(
+                result.violations.is_empty(),
+                "seed {seed} violations: {:#?}",
+                result.violations
+            );
             let mut by_address: BTreeMap<&str, BTreeMap<EventKind, u64>> = BTreeMap::new();
             for e in &trace.events {
-                *by_address.entry(e.address.as_str()).or_default().entry(e.kind).or_insert(0) += 1;
+                *by_address
+                    .entry(e.address.as_str())
+                    .or_default()
+                    .entry(e.kind)
+                    .or_insert(0) += 1;
             }
             let pooled = |kind: EventKind| -> u64 {
-                by_address.values().map(|k| *k.get(&kind).unwrap_or(&0)).sum()
+                by_address
+                    .values()
+                    .map(|k| *k.get(&kind).unwrap_or(&0))
+                    .sum()
             };
             assert_eq!(
                 pooled(EventKind::SwapIn),
@@ -1535,7 +1574,10 @@ mod tests {
         for seed in [1u64, 4, 8, 9] {
             let untraced = run_scenario(Scenario::from_seed(seed, 24));
             let (traced, _trace) = run_scenario_traced(Scenario::from_seed(seed, 24));
-            assert_eq!(untraced.stats.deposits, traced.stats.deposits, "seed {seed}: deposits");
+            assert_eq!(
+                untraced.stats.deposits, traced.stats.deposits,
+                "seed {seed}: deposits"
+            );
             assert_eq!(
                 untraced.stats.redemption_requests, traced.stats.redemption_requests,
                 "seed {seed}: redemption_requests"
@@ -1548,8 +1590,14 @@ mod tests {
                 untraced.stats.redemption_refunds, traced.stats.redemption_refunds,
                 "seed {seed}: redemption_refunds"
             );
-            assert_eq!(untraced.stats.max_tvv, traced.stats.max_tvv, "seed {seed}: max_tvv");
-            assert_eq!(untraced.stats.max_shares, traced.stats.max_shares, "seed {seed}: max_shares");
+            assert_eq!(
+                untraced.stats.max_tvv, traced.stats.max_tvv,
+                "seed {seed}: max_tvv"
+            );
+            assert_eq!(
+                untraced.stats.max_shares, traced.stats.max_shares,
+                "seed {seed}: max_shares"
+            );
             assert_eq!(
                 untraced.violations.len(),
                 traced.violations.len(),

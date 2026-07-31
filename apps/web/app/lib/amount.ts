@@ -16,9 +16,7 @@ export type AmountParseError =
   | "too-precise" // more fraction digits than the exponent allows
   | "zero";
 
-export type AmountParseResult =
-  | { ok: true; base: bigint }
-  | { ok: false; error: AmountParseError };
+export type AmountParseResult = { ok: true; base: bigint } | { ok: false; error: AmountParseError };
 
 /**
  * Parse a decimal string to base units at `exponent` (e.g. 9 for HASH, 15

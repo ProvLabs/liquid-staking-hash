@@ -1,28 +1,25 @@
-// Indexer entrypoint (scaffold shell, app plan PR 1.1; made runnable in the
-// full-stack wiring, PR 1.5).
+// Indexer entrypoint and worker supervisor.
 //
 // The indexer is a set of long-running worker loops (chain-events,
-// epoch-history, validator-sampler, market-sampler) each with a durable cursor
-// in `indexer_checkpoints` (app-spec §6, §9.2). Those workers, the reconciler,
-// and incident derivation land in M2 (PRs 2.1–2.5). This scaffold establishes
-// the process shell only: it connects to the `indexed` schema as the
-// `indexer_writer` role (ADR-001 Decision 1), proves the connection stays live,
-// and idles until a signal — the shape M2 workers slot into.
+// epoch-history, validator-sampler, governance) each with a durable cursor in
+// `indexer_checkpoints` (app-spec §6, §9.2). The supervisor connects to the
+// `indexed` schema as the `indexer_writer` role (ADR-001 Decision 1), builds
+// the RPC head source, and starts the worker loops. Each worker trails the
+// head, pages the un-processed range, and commits per window (`src/runtime/*`).
 //
-// Boundary invariants (plan §1 ownership table): the indexer serves NO HTTP to
-// users, holds NO keys, and signs NOTHING. There is deliberately no server,
-// listener, or signer here — liveness is proven by a database ping written to a
-// heartbeat file the container healthcheck reads (scripts/healthcheck.mjs), not
-// by exposing a port.
+// Boundary invariants: the indexer serves NO HTTP to users, holds NO keys, and
+// signs NOTHING. There is deliberately no server, listener, or signer here —
+// liveness is proven by a database ping written to a heartbeat file the
+// container healthcheck reads (`scripts/healthcheck.mjs`), not by exposing a
+// port.
 //
-// M2.0 added the per-(chain_id, contract) isolation boot check (spec §9.3): the
-// process fails closed if the database holds a history from a different
-// chain/contract than config. M2.1 wires the first worker (chain-events): the
-// supervisor now builds the RPC head source, starts the worker loop(s), and
-// keeps the DB-ping heartbeat. Each worker trails the head, pages the
-// un-processed range, and commits per window (src/runtime/*). A worker crash is
-// fatal: it aborts the others and exits non-zero so compose restarts from the
-// last committed cursor.
+// Two fail-closed properties:
+//   * The per-(chain_id, contract) isolation boot check (spec §9.3) aborts
+//     startup if the database holds a history from a different chain or
+//     contract than config names.
+//   * A worker crash is fatal: it aborts the others and exits non-zero, so
+//     compose restarts the process from the last committed cursor rather than
+//     letting the surviving streams drift ahead of the dead one.
 
 import { writeFileSync } from "node:fs";
 import { loadConfig } from "./config.ts";
@@ -104,7 +101,7 @@ export async function run(): Promise<void> {
     }),
     createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
     createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),
-    // Governance (PR 7.1). Starts on every chain, including one with no x/group
+    // Governance. Starts on every chain, including one with no x/group
     // substrate at all: policy discovery then resolves to the empty set and the
     // worker commits empty windows, which is the honest no-governance state
     // rather than a crash or a silently disabled stream.
@@ -131,14 +128,16 @@ export async function run(): Promise<void> {
   touchHeartbeat(Date.now());
   logger.info("indexer started", { count: workers.length });
 
-  const onLoopCrash = (stream: string) => (cause: unknown): void => {
-    logger.error("worker crashed", {
-      stream,
-      error: cause instanceof Error ? cause.message : String(cause),
-    });
-    process.exitCode = 1;
-    controller.abort();
-  };
+  const onLoopCrash =
+    (stream: string) =>
+    (cause: unknown): void => {
+      logger.error("worker crashed", {
+        stream,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      process.exitCode = 1;
+      controller.abort();
+    };
 
   // Start each worker; a crash is fatal (abort siblings, exit non-zero).
   const loops = workers.map((worker) => runWorker(worker, deps).catch(onLoopCrash(worker.stream)));

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Stake page (plan 5.3, app-spec §8.3) against the fixture-backed server.
+// Stake page (app-spec §8.3) against the fixture-backed server.
 // The anonymous surface: inline education, the next-epoch date, and the
 // connect prompt — the wallet-driven amount/preview/sign path is exercised
 // by the e2e-live drill (needs a real signer), not offline.

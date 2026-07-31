@@ -3,8 +3,8 @@
 // lives here, never in the shared path (app-spec §10.1).
 //
 // PROVISIONAL until the §14.1 certification checklist runs against the real
-// extension on devnet (the PR 5.1 acceptance gate,
-// docs/plans/2026-07-23-m5.1-wallet-certification-runbook.md): the injected
+// extension on devnet (the acceptance gate,
+// the §14.1 certification runbook): the injected
 // surface below — `window.figure.provenance` with connect/signAmino — is the
 // interface this adapter certifies AGAINST; a divergence found by the
 // checklist run is fixed HERE and recorded in app-spec §14.1, exactly the
@@ -22,7 +22,9 @@ import type {
 
 /** The injected provider surface this adapter certifies against (§14.1). */
 interface InjectedFigureProvider {
-  connect(args: { chainId: string }): Promise<{ address: string; pubKey?: string; pubkey?: string }>;
+  connect(args: {
+    chainId: string;
+  }): Promise<{ address: string; pubKey?: string; pubkey?: string }>;
   signAmino(args: {
     chainId: string;
     signerAddress: string;
@@ -68,10 +70,7 @@ export class FigureExtensionAdapter implements WalletAdapter {
     return { address: account.address, pubkeyBase64: pubkey };
   }
 
-  async signArbitrary(
-    signerAddress: string,
-    challengeText: string,
-  ): Promise<SignArbitraryResult> {
+  async signArbitrary(signerAddress: string, challengeText: string): Promise<SignArbitraryResult> {
     if (this.provider === null) throw new Error("not connected");
     const signDoc = buildAdr36SignDoc(signerAddress, utf8ToBase64(challengeText));
     const response = await this.provider.signAmino({

@@ -27,12 +27,23 @@ export interface FlowStatusProps {
   onReset: () => void;
 }
 
-export function FlowStatus({ locale, state, amountExponent, explorerTxBase, onReset }: FlowStatusProps) {
+export function FlowStatus({
+  locale,
+  state,
+  amountExponent,
+  explorerTxBase,
+  onReset,
+}: FlowStatusProps) {
   if (state.phase === "blocked") {
     return (
-      <ul className="flex flex-col gap-1 rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm" role="alert">
+      <ul
+        className="flex flex-col gap-1 rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm"
+        role="alert"
+      >
         {state.reasons.map((reason) => (
-          <li key={reason.code + JSON.stringify(reason)}>{reasonText(locale, reason, amountExponent)}</li>
+          <li key={reason.code + JSON.stringify(reason)}>
+            {reasonText(locale, reason, amountExponent)}
+          </li>
         ))}
       </ul>
     );
@@ -49,9 +60,14 @@ export function FlowStatus({ locale, state, amountExponent, explorerTxBase, onRe
   if (state.phase === "pending" || state.phase === "reconciling") {
     const explorer = explorerTxBase ? `${explorerTxBase}/${state.row.txhash}` : null;
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm" role="status">
+      <div
+        className="flex flex-col gap-2 rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm"
+        role="status"
+      >
         <span className="font-medium">{t(locale, "tx.pending-label")}</span>
-        <span className="break-all font-mono text-xs text-muted-foreground">{state.row.txhash}</span>
+        <span className="break-all font-mono text-xs text-muted-foreground">
+          {state.row.txhash}
+        </span>
         {explorer ? (
           <a className="text-xs underline" href={explorer} target="_blank" rel="noreferrer">
             {t(locale, "tx.view-explorer")}
@@ -63,7 +79,10 @@ export function FlowStatus({ locale, state, amountExponent, explorerTxBase, onRe
 
   if (state.phase === "confirmed") {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-[var(--status-good)] bg-card p-4 text-sm" role="status">
+      <div
+        className="flex flex-col gap-2 rounded-lg border border-[var(--status-good)] bg-card p-4 text-sm"
+        role="status"
+      >
         <span className="font-medium">{t(locale, "tx.status-confirmed")}</span>
         <Link className="text-xs underline" to="/portfolio">
           {t(locale, "tx.go-portfolio")}
@@ -74,7 +93,10 @@ export function FlowStatus({ locale, state, amountExponent, explorerTxBase, onRe
 
   if (state.phase === "failed") {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-[var(--status-serious)] bg-card p-4 text-sm" role="alert">
+      <div
+        className="flex flex-col gap-2 rounded-lg border border-[var(--status-serious)] bg-card p-4 text-sm"
+        role="alert"
+      >
         <span className="font-medium">{t(locale, `tx.failed-${state.stage}`)}</span>
         {state.detail ? (
           <span className="break-all text-xs text-muted-foreground">{state.detail}</span>

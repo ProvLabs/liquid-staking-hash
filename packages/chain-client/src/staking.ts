@@ -10,7 +10,7 @@ import {
   parseUint128,
   type Coin,
 } from "./amounts.ts";
-import { LcdClient, type QueryParams } from "./lcd.ts";
+import type { LcdClient, QueryParams } from "./lcd.ts";
 import { parsePagination, type Pagination } from "./types.ts";
 
 export interface StakingValidator {
@@ -49,7 +49,9 @@ export function parseStakingValidator(value: unknown, path = "$"): StakingValida
 export class StakingClient {
   constructor(private readonly lcd: LcdClient) {}
 
-  async validators(params?: QueryParams): Promise<{ validators: StakingValidator[]; pagination: Pagination }> {
+  async validators(
+    params?: QueryParams,
+  ): Promise<{ validators: StakingValidator[]; pagination: Pagination }> {
     const o = expectObject(await this.lcd.get("cosmos/staking/v1beta1/validators", params));
     return {
       validators: expectArray(o["validators"], "$.validators").map((v, i) =>
@@ -59,7 +61,9 @@ export class StakingClient {
     };
   }
 
-  async delegations(delegator: string): Promise<{ delegations: Delegation[]; pagination: Pagination }> {
+  async delegations(
+    delegator: string,
+  ): Promise<{ delegations: Delegation[]; pagination: Pagination }> {
     const o = expectObject(await this.lcd.get(`cosmos/staking/v1beta1/delegations/${delegator}`));
     return {
       delegations: expectArray(o["delegation_responses"], "$.delegation_responses").map((r, i) => {

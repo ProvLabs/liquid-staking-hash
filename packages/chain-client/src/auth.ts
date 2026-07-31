@@ -1,10 +1,10 @@
-// x/auth account reads (app plan PR 5.2): account number + sequence for the
+// x/auth account reads: account number + sequence for the
 // SIGN_MODE_DIRECT sign doc, and the account TYPE for the §8.3 vesting-lock
 // preflight — a vesting account's locked HASH cannot fund a SwapIn, so the
 // preflight must know before the wallet is ever asked to sign.
 
 import { expectObject, expectString, parseU64String } from "./amounts.ts";
-import { LcdClient, LcdError } from "./lcd.ts";
+import { type LcdClient, LcdError } from "./lcd.ts";
 
 export interface AccountInfo {
   address: string;
@@ -44,9 +44,9 @@ export class AuthClient {
             ],
             "$.account.base_vesting_account.base_account",
           )
-        : (account["base_account"] !== undefined
-            ? expectObject(account["base_account"], "$.account.base_account")
-            : account);
+        : account["base_account"] !== undefined
+          ? expectObject(account["base_account"], "$.account.base_account")
+          : account;
     return {
       address: expectString(base["address"], "$.account…address"),
       accountNumber: parseU64String(base["account_number"], "$.account…account_number"),

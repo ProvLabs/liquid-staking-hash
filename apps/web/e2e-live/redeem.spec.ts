@@ -25,16 +25,27 @@ test.skip(
   "e2e-live env not set (E2E_LIVE_SIGNER_KEY / _VAULT_ADDRESS / _LCD_URL)",
 );
 
-async function login(request: import("@playwright/test").APIRequestContext, signer: DevnetTestSigner) {
+async function login(
+  request: import("@playwright/test").APIRequestContext,
+  signer: DevnetTestSigner,
+) {
   const { nonce, challenge } = (await (
     await request.post("/session/nonce", { data: { address: signer.address } })
   ).json()) as { nonce: string; challenge: string };
   await request.post("/session/login", {
-    data: { address: signer.address, nonce, pubkey: signer.pubkeyBase64, signature: signer.signChallenge(challenge) },
+    data: {
+      address: signer.address,
+      nonce,
+      pubkey: signer.pubkeyBase64,
+      signature: signer.signChallenge(challenge),
+    },
   });
 }
 
-test("redeem enqueues a SwapOut and the tracker renders it from the chain queue", async ({ request, browser }) => {
+test("redeem enqueues a SwapOut and the tracker renders it from the chain queue", async ({
+  request,
+  browser,
+}) => {
   const signer = new DevnetTestSigner(KEY!);
   const lcd = new LcdClient(LCD!);
   const bank = new BankClient(lcd);
@@ -48,15 +59,26 @@ test("redeem enqueues a SwapOut and the tracker renders it from the chain queue"
   await login(request, signer);
 
   const pf = (await (
-    await request.post("/tx/preflight", { data: { kind: "swap_out", amount: redeemShares.toString() } })
+    await request.post("/tx/preflight", {
+      data: { kind: "swap_out", amount: redeemShares.toString() },
+    })
   ).json()) as { reasons: unknown[]; denom: string };
   expect(pf.reasons).toEqual([]);
 
   const sim = (await (
     await request.post("/tx/simulate", {
-      data: { kind: "swap_out", amount: redeemShares.toString(), denom: pf.denom, pubkey: signer.pubkeyBase64, redeemDenom: "" },
+      data: {
+        kind: "swap_out",
+        amount: redeemShares.toString(),
+        denom: pf.denom,
+        pubkey: signer.pubkeyBase64,
+        redeemDenom: "",
+      },
     })
-  ).json()) as { fee: { gas_limit: string; amount: string; denom: string }; signer: { account_number: string; sequence: string; chain_id: string } };
+  ).json()) as {
+    fee: { gas_limit: string; amount: string; denom: string };
+    signer: { account_number: string; sequence: string; chain_id: string };
+  };
 
   const intent: TxIntent = {
     kind: "swap_out",
@@ -76,14 +98,19 @@ test("redeem enqueues a SwapOut and the tracker renders it from the chain queue"
       pubkeyBase64: signer.pubkeyBase64,
     },
   );
-  const txRaw = encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [signer.signDirect(plan.signDocBytes)]);
+  const txRaw = encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [
+    signer.signDirect(plan.signDocBytes),
+  ]);
   const broadcast = (await (
     await request.post("/tx/broadcast", { data: { tx_raw: Buffer.from(txRaw).toString("base64") } })
   ).json()) as { txhash: string; code: number };
   expect(broadcast.code).toBe(0);
 
   for (let i = 0; i < 30; i += 1) {
-    const status = (await (await request.get(`/tx/status?hash=${broadcast.txhash}`)).json()) as { included: boolean; code?: number };
+    const status = (await (await request.get(`/tx/status?hash=${broadcast.txhash}`)).json()) as {
+      included: boolean;
+      code?: number;
+    };
     if (status.included) {
       expect(status.code).toBe(0);
       break;
@@ -96,7 +123,13 @@ test("redeem enqueues a SwapOut and the tracker renders it from the chain queue"
   const cookie = (await request.storageState()).cookies.find((c) => c.name === "nvhash_session");
   const context = await browser.newContext();
   if (cookie) {
-    await context.addCookies([{ name: "nvhash_session", value: cookie.value, url: process.env.E2E_LIVE_BASE_URL ?? "http://localhost:3000" }]);
+    await context.addCookies([
+      {
+        name: "nvhash_session",
+        value: cookie.value,
+        url: process.env.E2E_LIVE_BASE_URL ?? "http://localhost:3000",
+      },
+    ]);
   }
   const page = await context.newPage();
   await page.goto("/exit");

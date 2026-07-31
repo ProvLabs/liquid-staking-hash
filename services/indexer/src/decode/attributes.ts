@@ -35,7 +35,9 @@ export class DecodeError extends Error {
     readonly reason: string,
     readonly value?: unknown,
   ) {
-    super(`decode ${path}: ${reason}${value === undefined ? "" : ` (got ${JSON.stringify(value)})`}`);
+    super(
+      `decode ${path}: ${reason}${value === undefined ? "" : ` (got ${JSON.stringify(value)})`}`,
+    );
     this.name = "DecodeError";
   }
 }

@@ -1,4 +1,4 @@
-// Stake-context loader gate (plan 5.3; app-spec §8.3, §12.1 never-lie):
+// Stake-context loader gate (app-spec §8.3, §12.1 never-lie):
 // the live-read context degrades each figure independently and never throws.
 // Chain reads come from the fixture corpus via MSW; overrides drive the
 // paused / anonymous / unavailable branches (the roles-test pattern).
@@ -10,7 +10,11 @@ import vaultGet from "@nvhash/fixtures/queries/vault/get";
 
 import { loadConfig } from "~/config/config.server";
 import { loadStakeContext } from "~/stake/stake.server";
-import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
+import {
+  FIXTURE_CHAIN_ID,
+  FIXTURE_CONTRACT_ADDRESS,
+  FIXTURE_VAULT_ADDRESS,
+} from "~/mocks/handlers";
 import { server } from "~/mocks/node";
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

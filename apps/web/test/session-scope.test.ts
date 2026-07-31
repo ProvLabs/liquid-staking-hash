@@ -1,5 +1,5 @@
 // Personal-route session-scope enforcement — THE STANDING WEB CI GATE from
-// PR 5.1 on (master plan §4; plan 5.1 §4.6). The acting address on a
+// On. The acting address on a
 // personal surface comes ONLY from the session; a query parameter naming
 // another address must never influence it, and an anonymous request gets a
 // prompt-and-explain (page) or a reasonless 401 (resource route) — never
@@ -220,7 +220,7 @@ describe("operator/export joins the standing gate (M6.4 §2.3)", () => {
   });
 });
 
-// The other direction of the same gate, and it is the one M7.2 needs: §8.7 is a
+// The other direction of the same gate: §8.7 is a
 // PUBLIC read. Proposals and votes are public chain facts with no address
 // keying, so there is nothing to scope — `services/api` creates no
 // `PERSONAL_PATHS` entry for them, and the web routes must not acquire a session
@@ -228,7 +228,10 @@ describe("operator/export joins the standing gate (M6.4 §2.3)", () => {
 // would turn a public audit trail into a members-only one without anyone
 // deciding to; this asserts it has not.
 describe("governance routes must NOT join the personal-route list (M7.2 invariant 9)", () => {
-  const GOVERNANCE_ROUTE_MODULES = ["app/routes/governance.tsx", "app/routes/governance.$proposalId.tsx"];
+  const GOVERNANCE_ROUTE_MODULES = [
+    "app/routes/governance.tsx",
+    "app/routes/governance.$proposalId.tsx",
+  ];
 
   it("neither governance route imports or calls requireSession", () => {
     for (const path of GOVERNANCE_ROUTE_MODULES) {

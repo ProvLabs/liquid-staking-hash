@@ -1,7 +1,7 @@
 // Client-config allowlist (SECURITY.md: everything shipped to the browser is
 // public; app-spec §7 client-safe subset). Together with the bundle-secret
 // gate (scripts/check-bundle-secrets.mjs) this is the standing
-// security-executable check of plan §4 for the web component.
+// security-executable check for the web component.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -51,12 +51,12 @@ describe("client-safe config subset (§7)", () => {
   it("the VAPID public key is client-safe; private key/subject never cross (M6.3)", () => {
     const withPush = loadConfig({
       ...SAMPLE_ENV,
-      WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86),
+      WEB_PUSH_VAPID_PUBLIC_KEY: `B${"x".repeat(86)}`,
       WEB_PUSH_VAPID_PRIVATE_KEY: "y".repeat(43),
       WEB_PUSH_VAPID_SUBJECT: "mailto:ops@example.com",
     } as NodeJS.ProcessEnv);
     const client = toClientConfig(withPush);
-    expect(client.webPushVapidPublicKey).toBe("B" + "x".repeat(86));
+    expect(client.webPushVapidPublicKey).toBe(`B${"x".repeat(86)}`);
     const serialized = JSON.stringify(client);
     expect(serialized).not.toContain("y".repeat(43)); // private key
     expect(serialized).not.toContain("mailto:ops@example.com"); // subject
@@ -71,12 +71,15 @@ describe("client-safe config subset (§7)", () => {
 
   it("a PARTIAL VAPID config is a boot error (all-or-none, plan §2.2)", () => {
     expect(() =>
-      loadConfig({ ...SAMPLE_ENV, WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86) } as NodeJS.ProcessEnv),
+      loadConfig({
+        ...SAMPLE_ENV,
+        WEB_PUSH_VAPID_PUBLIC_KEY: `B${"x".repeat(86)}`,
+      } as NodeJS.ProcessEnv),
     ).toThrow(/Invalid web configuration/);
     expect(() =>
       loadConfig({
         ...SAMPLE_ENV,
-        WEB_PUSH_VAPID_PUBLIC_KEY: "B" + "x".repeat(86),
+        WEB_PUSH_VAPID_PUBLIC_KEY: `B${"x".repeat(86)}`,
         WEB_PUSH_VAPID_PRIVATE_KEY: "y".repeat(43),
         // subject missing → partial
       } as NodeJS.ProcessEnv),

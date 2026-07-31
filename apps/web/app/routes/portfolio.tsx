@@ -16,7 +16,7 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "Portfolio · nvHASH" }];
 }
 
-// Personal-route session scope (PR 5.1, the standing gate): the acting address
+// Personal-route session scope (standing gate): the acting address
 // comes ONLY from the session (there is no query param to read another
 // address), and an anonymous request renders the connect prompt (never blank,
 // never someone else's data). The page loads its data only for a real session.

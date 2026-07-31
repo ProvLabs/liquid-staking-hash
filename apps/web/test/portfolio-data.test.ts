@@ -1,4 +1,4 @@
-// Portfolio loader degradation matrix (M6.1 §2.6; SECURITY.md "never lie about
+// Portfolio loader degradation matrix (SECURITY.md "never lie about
 // state", app-spec §12.1): live plane down falls back to the indexed plane
 // with an honest plane label; the API down (or no minting key) leaves a
 // live-only summary with personalReadsAvailable false; has_transfers /
@@ -39,7 +39,11 @@ const BASE_ENV = {
 const withKey = () => loadConfig({ ...BASE_ENV, API_SERVICE_ASSERTION_KEY: KEY });
 const withoutKey = () => loadConfig(BASE_ENV);
 const withExplorer = () =>
-  loadConfig({ ...BASE_ENV, API_SERVICE_ASSERTION_KEY: KEY, EXPLORER_URL: "https://explorer.test/" });
+  loadConfig({
+    ...BASE_ENV,
+    API_SERVICE_ASSERTION_KEY: KEY,
+    EXPLORER_URL: "https://explorer.test/",
+  });
 
 const SESSION = { address: "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad" };
 
@@ -84,9 +88,15 @@ describe("plane composition and fallback", () => {
       vaultDown(),
       http.get("*/api/v1/portfolio/metrics", () =>
         HttpResponse.json(
-          envelope(metrics({ indexed_share_balance: (7n * SHARE).toString(), accrual: [
-            { time: "2026-07-20T00:00:00Z", height: 100, value_nhash: (42n * HASH).toString() },
-          ] }), { source: "indexed" }),
+          envelope(
+            metrics({
+              indexed_share_balance: (7n * SHARE).toString(),
+              accrual: [
+                { time: "2026-07-20T00:00:00Z", height: 100, value_nhash: (42n * HASH).toString() },
+              ],
+            }),
+            { source: "indexed" },
+          ),
         ),
       ),
     );
@@ -102,7 +112,9 @@ describe("plane composition and fallback", () => {
       balanceOverride((5n * SHARE).toString()),
       http.get("*/api/v1/portfolio/metrics", () =>
         HttpResponse.json(
-          envelope(metrics({ indexed_share_balance: (5n * SHARE).toString() }), { source: "indexed" }),
+          envelope(metrics({ indexed_share_balance: (5n * SHARE).toString() }), {
+            source: "indexed",
+          }),
         ),
       ),
     );
@@ -118,7 +130,9 @@ describe("plane composition and fallback", () => {
       balanceOverride((5n * SHARE).toString()),
       http.get("*/api/v1/portfolio/metrics", () =>
         HttpResponse.json(
-          envelope(metrics({ indexed_share_balance: (4n * SHARE).toString() }), { source: "indexed" }),
+          envelope(metrics({ indexed_share_balance: (4n * SHARE).toString() }), {
+            source: "indexed",
+          }),
         ),
       ),
     );
@@ -157,9 +171,12 @@ describe("history-state honesty", () => {
     server.use(
       http.get("*/api/v1/portfolio/metrics", () =>
         HttpResponse.json(
-          envelope(metrics({ history_state: "has_transfers", cost_basis_nhash: (10n * HASH).toString() }), {
-            source: "indexed",
-          }),
+          envelope(
+            metrics({ history_state: "has_transfers", cost_basis_nhash: (10n * HASH).toString() }),
+            {
+              source: "indexed",
+            },
+          ),
         ),
       ),
     );
@@ -195,20 +212,23 @@ describe("history-state honesty", () => {
 describe("metrics boundary validation", () => {
   // A fractional realized gain violates the base-unit-integer schema; the read
   // degrades to null metrics (never crashes on BigInt("1.5")).
-  it.each(["1.5", "-1.5"])("rejects a fractional realized_gain_nhash (%s) to null metrics", async (bad) => {
-    server.use(
-      http.get("*/api/v1/portfolio/metrics", () =>
-        HttpResponse.json(envelope(metrics({ realized_gain_nhash: bad }), { source: "indexed" })),
-      ),
-    );
-    const data = await loadPortfolioData(withKey(), SESSION, 0);
-    // The metrics envelope failed to parse -> indexed-derived figures are null.
-    expect(data.summary.costBasisHash).toBeNull();
-    expect(data.summary.realizedGainHash).toBeNull();
-    expect(data.accrual).toBeNull();
-    // The live plane still answers, so the summary is not blank.
-    expect(data.summary.valuePlane).toBe("live");
-  });
+  it.each(["1.5", "-1.5"])(
+    "rejects a fractional realized_gain_nhash (%s) to null metrics",
+    async (bad) => {
+      server.use(
+        http.get("*/api/v1/portfolio/metrics", () =>
+          HttpResponse.json(envelope(metrics({ realized_gain_nhash: bad }), { source: "indexed" })),
+        ),
+      );
+      const data = await loadPortfolioData(withKey(), SESSION, 0);
+      // The metrics envelope failed to parse -> indexed-derived figures are null.
+      expect(data.summary.costBasisHash).toBeNull();
+      expect(data.summary.realizedGainHash).toBeNull();
+      expect(data.accrual).toBeNull();
+      // The live plane still answers, so the summary is not blank.
+      expect(data.summary.valuePlane).toBe("live");
+    },
+  );
 });
 
 describe("empty history and pagination", () => {
@@ -217,7 +237,12 @@ describe("empty history and pagination", () => {
     expect(data.firstActivityAt).toBeNull();
     expect(data.activeRedemptions).toEqual([]);
     expect(data.yieldByEpoch).toEqual([]);
-    expect(data.accrual).toEqual({ points: [], markers: [], truncated: false, historyTruncated: false });
+    expect(data.accrual).toEqual({
+      points: [],
+      markers: [],
+      truncated: false,
+      historyTruncated: false,
+    });
     expect(data.history).toEqual({ rows: [], page: 0, pageSize: 50, hasMore: false });
     expect(data.effectiveAprBps).toBeNull();
   });

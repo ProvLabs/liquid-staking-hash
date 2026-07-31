@@ -1,9 +1,9 @@
-// Byte-golden message-builder gate (plan 5.2 §4; app-spec §14.2 stage 1).
+// Byte-golden message-builder gate (app-spec §14.2 stage 1).
 // The encoder must reproduce the EXACT bytes the chain accepted for the
 // captured corpus transactions: TxRaw re-encoded from the fixture's
 // proto-JSON must hash to the fixture's txhash (sha256, the chain's tx id).
 // This pins every assumed field number and canonical-encoding rule — a
-// wrong assumption cannot produce the right hash. PR 8.0 re-vets the corpus
+// wrong assumption cannot produce the right hash. The corpus is re-vetted
 // against the formal vault release.
 
 import { describe, expect, it } from "vitest";
@@ -139,10 +139,10 @@ describe("builder ↔ decoder round trip (the relay guard reads what we write)",
     expect(() => decodeTxRaw(new Uint8Array([]))).toThrow(); // no body/auth
   });
 
-  it("the allowlist holds the two vault messages (M6.4 + M7.3–7.4 add guarded entries)", () => {
-    // `MsgExecuteContract` joined in M6.4 and the three `cosmos.group.v1` types
-    // in M7.3–7.4; each is safe only because the relay runs a second-level
-    // guard for it. The closed-set assertions live in
+  it("the allowlist holds the two vault messages, plus guarded entries", () => {
+    // `MsgExecuteContract` and the three `cosmos.group.v1` types are each safe
+    // only because the relay runs a second-level guard for them. The closed-set
+    // assertions live in
     // test/tx-operator-build.test.ts and the rejection matrices in
     // test/broadcast-guard.test.ts. Here we only pin that the VAULT pair is
     // unchanged and that the total has not grown beyond the amended set.
@@ -164,7 +164,7 @@ describe("disclosure JSON mirrors the encoded message (single site)", () => {
   });
 });
 
-// ── M7.3–7.4: canonical-encoding goldens for the three governance messages ──
+// ── Canonical-encoding goldens for the three governance messages ──────────
 //
 // WHY HEX RATHER THAN A ROUND TRIP. The operator messages have byte-goldens
 // against CAPTURED DEVNET TRANSACTIONS (`tx-operator-build.test.ts`) — the
@@ -199,9 +199,7 @@ describe("governance messages encode to exactly one canonical byte string", () =
     // 12 29 <41 bytes> field 2 string = the voter
     // 18 01            field 3 varint = VOTE_OPTION_YES
     // …and no field 4 (metadata) or field 5 (exec): the pins are ABSENCE.
-    expect(hex(value)).toBe(
-      `080c1229${Buffer.from(GOV_VOTER, "utf8").toString("hex")}1801`,
-    );
+    expect(hex(value)).toBe(`080c1229${Buffer.from(GOV_VOTER, "utf8").toString("hex")}1801`);
   });
 
   it("MsgVote's option byte is the module's enum value, per option", () => {
@@ -302,9 +300,7 @@ describe("governance messages encode to exactly one canonical byte string", () =
       proposer: GOV_VOTER,
       policyAddress: GOV_POLICY_ADDR,
       contractAddress: GOV_CONTRACT_ADDR,
-      templates: [
-        { id: "update_config", values: { commission_bps: 1_000n, aum_fee_bps: 25n } },
-      ],
+      templates: [{ id: "update_config", values: { commission_bps: 1_000n, aum_fee_bps: 25n } }],
       title: "Retune",
       summary: "Adjust two parameters.",
       metadata: "",
@@ -312,9 +308,7 @@ describe("governance messages encode to exactly one canonical byte string", () =
     // Input key order differs; the canonical output must not.
     const other = {
       ...intent,
-      templates: [
-        { id: "update_config", values: { aum_fee_bps: 25n, commission_bps: 1_000n } },
-      ],
+      templates: [{ id: "update_config", values: { aum_fee_bps: 25n, commission_bps: 1_000n } }],
     };
     expect(hex(encodeIntentMsg(intent).value)).toBe(hex(encodeIntentMsg(other).value));
   });

@@ -39,11 +39,14 @@ const completed: RawEvent = {
     { key: "mode", value: "EndBlock" },
   ],
 };
-const transfer: RawEvent = { type: TRANSFER_EVENT, attributes: [{ key: "amount", value: "1nhash" }] };
+const transfer: RawEvent = {
+  type: TRANSFER_EVENT,
+  attributes: [{ key: "amount", value: "1nhash" }],
+};
 const mint: RawEvent = { type: "mint", attributes: [{ key: "amount", value: "0" }] };
 
 /** A PayTip execute against our contract: the wasm event plus the funds
- * transfer the amount is decoded from (M6.4 §2.1). */
+ * transfer the amount is decoded from. */
 const payTipFunds: RawEvent = {
   type: TRANSFER_EVENT,
   attributes: [

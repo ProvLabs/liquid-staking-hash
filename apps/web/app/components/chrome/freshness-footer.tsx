@@ -8,7 +8,7 @@ import { t, type Locale } from "~/i18n";
 // console link. A null height or null meta renders "n/a", never a number
 // (§9.4/§12.1); a failed live read adds "program status unavailable" instead
 // of pretending health. The docs link in the §8.0 diagram is deliberately
-// absent: no docs URL exists yet (plan 4.1, recorded follow-on).
+// absent: no docs URL exists yet (recorded follow-on).
 export function FreshnessFooter({
   locale,
   chainId,

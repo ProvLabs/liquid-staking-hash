@@ -1,4 +1,4 @@
-// Byte-golden operator-message gate (M6.4 §3 commit D; app-spec §14.2 stage 1).
+// Byte-golden operator-message gate (app-spec §14.2 stage 1).
 //
 // The same discipline as the vault messages: re-encode the CAPTURED devnet
 // transactions from their proto-JSON and require sha256(TxRaw) to equal the
@@ -8,8 +8,7 @@
 // hash. That is what lets the relay's deep guard demand canonical form: the
 // canonical form is provably the one the chain accepted.
 //
-// Fixtures: packages/fixtures/fixtures/operator/ (captured 2026-07-27, the
-// §7 Q1 drill). PR 8.0 re-vets the corpus.
+// Fixtures: packages/fixtures/fixtures/operator/ (captured 2026-07-27).
 
 import { describe, expect, it } from "vitest";
 
@@ -82,7 +81,10 @@ function intentFromFixture(fixture: ExecuteFixture): OperatorIntent {
 function reencodedHash(fixture: ExecuteFixture): string {
   const signerInfo = fixture.tx.auth_info.signer_infos[0]!;
   const fee = fixture.tx.auth_info.fee;
-  const bodyBytes = encodeTxBody([encodeIntentMsg(intentFromFixture(fixture))], fixture.tx.body.memo);
+  const bodyBytes = encodeTxBody(
+    [encodeIntentMsg(intentFromFixture(fixture))],
+    fixture.tx.body.memo,
+  );
   const authInfoBytes = encodeAuthInfo(
     {
       chainId: "irrelevant-for-txraw",
@@ -133,7 +135,7 @@ describe("byte-golden: re-encoded operator txs hash to their chain tx ids", () =
 
 describe("the allowlist and the variant set are closed", () => {
   it("the allowlist is exactly the two vault messages, the guarded execute, and the three governance types", () => {
-    // AMENDED BY M7.3–7.4 (app-spec §12.3), and deliberately still an EXACT-SET
+    // Amended by the §12.3 governance types, and deliberately still an EXACT-SET
     // assertion rather than a `toContain`: extending the allowlist is a
     // design-review event, so a seventh entry must be an edit to this line.
     expect([...ALLOWED_MSG_TYPE_URLS].sort()).toEqual(
@@ -221,7 +223,9 @@ describe("builder ↔ decoder round trip for operator messages", () => {
 
   it("decodeTxRaw recovers the sender, contract, payload and funds", () => {
     const plan = buildTxPlan(base, fee, signer);
-    const decoded = decodeTxRaw(encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]));
+    const decoded = decodeTxRaw(
+      encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]),
+    );
     expect(decoded.messages).toHaveLength(1);
     const msg = decoded.messages[0]!;
     expect(msg.typeUrl).toBe(MSG_EXECUTE_CONTRACT);
@@ -234,8 +238,14 @@ describe("builder ↔ decoder round trip for operator messages", () => {
   });
 
   it("a fundless variant encodes NO funds field at all", () => {
-    const plan = buildTxPlan({ ...base, variant: "unregister_participation", amount: 0n }, fee, signer);
-    const decoded = decodeTxRaw(encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]));
+    const plan = buildTxPlan(
+      { ...base, variant: "unregister_participation", amount: 0n },
+      fee,
+      signer,
+    );
+    const decoded = decodeTxRaw(
+      encodeTxRaw(plan.bodyBytes, plan.authInfoBytes, [new Uint8Array(64)]),
+    );
     expect(decoded.messages[0]!.execFunds).toEqual([]);
   });
 

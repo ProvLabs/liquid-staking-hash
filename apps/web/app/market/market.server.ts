@@ -1,8 +1,8 @@
-// Market-page data assembly (plan 4.4 §2 tranche 2; app-spec §8.5, §12.1,
-// §13 decision 4). The market plane is rendered VERBATIM from PR 3.2's
+// Market-page data assembly (app-spec §8.5, §12.1,
+// §13 decision 4). The market plane is rendered VERBATIM 's
 // sample — the web tier never recomputes market math (the §9.5(4) premium
 // formula lives in the API); it only converts base-unit integers to display
-// strings. Local supply is the one live read (PR 3.2's §8.5 amendment: the
+// strings. Local supply is the one live read (§8.5: the
 // API serves the bridged side; the page composes local from the live plane).
 //
 // Honesty rules, gated by test/market-data.test.ts:
@@ -57,7 +57,11 @@ export async function loadMarketData(
                 ? null
                 : {
                     venue: summary.data.sample.venue,
-                    priceHash: formatBaseAmount(BigInt(summary.data.sample.price), HASH_EXPONENT, 4),
+                    priceHash: formatBaseAmount(
+                      BigInt(summary.data.sample.price),
+                      HASH_EXPONENT,
+                      4,
+                    ),
                     premiumPercent:
                       summary.data.sample.premium_discount_bps === null
                         ? null

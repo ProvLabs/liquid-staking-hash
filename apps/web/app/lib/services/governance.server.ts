@@ -1,5 +1,5 @@
-// The LIVE x/group plane for the governance center (app-spec §8.7, §12.1.1;
-// M7.2 §2.1). Server-only: the LCD is never reached from the browser.
+// The LIVE x/group plane for the governance center (app-spec §8.7, §12.1.1).
+// Server-only: the LCD is never reached from the browser.
 //
 // `services/api` is DB-only by design (ADR-001 Decision 1), so it serves the
 // durable MIRROR. Everything that must be true RIGHT NOW — an open proposal's
@@ -119,7 +119,7 @@ async function pageAll<T>(
   read: (key: string | undefined) => Promise<{ items: T[]; nextKey: string | null }>,
 ): Promise<{ items: T[]; truncated: boolean }> {
   const items: T[] = [];
-  let key: string | undefined = undefined;
+  let key: string | undefined;
   for (let page = 0; page < GROUP_MAX_PAGES; page++) {
     const result: { items: T[]; nextKey: string | null } = await read(key);
     items.push(...result.items);

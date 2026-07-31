@@ -1,5 +1,5 @@
 // e2e-live: session establishment against the REAL devnet stack (plan 5.2
-// §2.4; master plan §4 "e2e (live)" layer). Requires `stack.sh up` with the
+// §2.4). Requires `stack.sh up` with the
 // web tier reachable at E2E_LIVE_BASE_URL and a funded devnet key in
 // E2E_LIVE_SIGNER_KEY (throwaway material; SECURITY.md devnet rules).
 //
@@ -67,7 +67,7 @@ test("nonce → ADR-36 login → HttpOnly session; replay refused; logout kills 
   // Logout destroys the row: the same cookie is dead server-side.
   const logoutRes = await request.post("/session/logout", { data: {} });
   expect(logoutRes.ok()).toBe(true);
-  const status = await request.get("/tx/status?hash=" + "0".repeat(64));
+  const status = await request.get(`/tx/status?hash=${"0".repeat(64)}`);
   expect(status.status()).toBe(401);
   await context.close();
 });

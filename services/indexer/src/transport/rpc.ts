@@ -13,7 +13,7 @@
 // Zero runtime dependencies (SECURITY.md supply chain), fetch-based with an
 // injectable impl and a request deadline, mirroring chain-client's LcdClient.
 // Config/compose wiring (RPC_URL, LCD base) lands with the first worker that
-// constructs these (PR 2.1); here they take an explicit base URL like
+// constructs these; here they take an explicit base URL like
 // LcdClient does, so the classes are unit-testable in isolation.
 
 import type { RawEvent } from "../decode/attributes.ts";
@@ -84,7 +84,9 @@ async function fetchJson(
   try {
     const res = await fetchImpl(
       url,
-      headers === undefined ? { signal: controller.signal } : { signal: controller.signal, headers },
+      headers === undefined
+        ? { signal: controller.signal }
+        : { signal: controller.signal, headers },
     );
     const text = await res.text();
     if (!res.ok) throw new RpcError(res.status, path, text);
@@ -163,7 +165,8 @@ export class RpcClient {
       throw new RpcError(0, "block", `expected header.time string, got ${JSON.stringify(time)}`);
     }
     const parsed = new Date(time);
-    if (Number.isNaN(parsed.getTime())) throw new RpcError(0, "block", `unparseable header.time: ${time}`);
+    if (Number.isNaN(parsed.getTime()))
+      throw new RpcError(0, "block", `unparseable header.time: ${time}`);
     return parsed;
   }
 
@@ -200,7 +203,11 @@ export class RpcClient {
   }
 
   /** Paged block-search (EndBlocker event index) → matching block heights. */
-  async blockSearch(query: string, page = 1, perPage = 100): Promise<{ totalCount: number; heights: bigint[] }> {
+  async blockSearch(
+    query: string,
+    page = 1,
+    perPage = 100,
+  ): Promise<{ totalCount: number; heights: bigint[] }> {
     const result = resultOf(
       await this.get("block_search", { query: `"${query}"`, page, per_page: perPage }),
       "block_search",
@@ -210,7 +217,9 @@ export class RpcClient {
       totalCount: Number(result["total_count"] ?? blocks.length),
       heights: blocks.map((b) => {
         const header = asRecord(
-          asRecord((b as Record<string, unknown>)["block"], "block_search.result.blocks[].block")["header"],
+          asRecord((b as Record<string, unknown>)["block"], "block_search.result.blocks[].block")[
+            "header"
+          ],
           "block_search.result.blocks[].block.header",
         );
         return toBigint(header["height"], "block_search.result.blocks[].block.header.height");
@@ -218,7 +227,10 @@ export class RpcClient {
     };
   }
 
-  private get(path: string, params: Record<string, string | number | bigint | undefined>): Promise<unknown> {
+  private get(
+    path: string,
+    params: Record<string, string | number | bigint | undefined>,
+  ): Promise<unknown> {
     return fetchJson(this.base, path, params, this.fetchImpl, this.timeoutMs);
   }
 }
@@ -235,7 +247,7 @@ function toBase64(s: string): string {
  * matching chain-client decoder (e.g. `parseEpochSnapshot`). This is what makes
  * single-snapshot backfill (spec §9.3/§13) possible.
  *
- * Home decision deferred to PR 2.2: promote into @nvhash/chain-client (shared)
+ * Home is undecided: promote into @nvhash/chain-client (shared)
  * or keep App-local here. Kept App-local for now to keep the shared package
  * REST-only and dependency-minimal.
  */
@@ -264,7 +276,11 @@ export class PinnedLcdClient {
   }
 
   /** Smart query `contract` with `query` as it was AT `height`; returns `data`. */
-  async smartAtHeight(contract: string, query: Record<string, unknown>, height: bigint | number): Promise<unknown> {
+  async smartAtHeight(
+    contract: string,
+    query: Record<string, unknown>,
+    height: bigint | number,
+  ): Promise<unknown> {
     const b64 = toBase64(JSON.stringify(query));
     const path = `cosmwasm/wasm/v1/contract/${contract}/smart/${encodeURIComponent(b64)}`;
     const body = await this.getAtHeight(path, {}, height);

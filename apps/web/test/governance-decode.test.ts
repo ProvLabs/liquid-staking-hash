@@ -1,4 +1,4 @@
-// Proposal-message decoding — M7.2 §4 invariant 2 and 3 (app-spec §8.7, §12.1).
+// Proposal-message decoding (app-spec §8.7, §12.1).
 //
 // WHAT THIS SUITE IS REALLY GUARDING. A member reads a summary and votes. A
 // summary that is confidently WRONG is therefore the worst failure this page
@@ -112,7 +112,12 @@ describe("MsgSend — the one type the corpus pins", () => {
   });
 
   it("a malformed coin makes the whole message unknown, not a partial summary", () => {
-    for (const amount of [[{ denom: "nhash", amount: "1.5" }], [{ denom: "", amount: "1" }], "x", [{}]]) {
+    for (const amount of [
+      [{ denom: "nhash", amount: "1.5" }],
+      [{ denom: "", amount: "1" }],
+      "x",
+      [{}],
+    ]) {
       const decoded = decodeMessage(
         { "@type": MSG_SEND_TYPE_URL, from_address: "tp1a", to_address: "tp1b", amount },
         CONTRACT,
@@ -170,7 +175,10 @@ describe("program actions — golden summaries against contracts/src/msg.rs", ()
       summary: "Update program configuration: aum_fee_bps, commission_bps",
     },
     // "pause the managed vault (manual override / emergency stop)"
-    pause_vault: { msg: { pause_vault: { reason: "incident" } }, summary: "Pause the managed vault" },
+    pause_vault: {
+      msg: { pause_vault: { reason: "incident" } },
+      summary: "Pause the managed vault",
+    },
     unpause_vault: { msg: { unpause_vault: {} }, summary: "Unpause the managed vault" },
     // "abort a stuck epoch continuation by dropping the persisted delegation targets"
     clear_pending_delegations: {
@@ -191,7 +199,7 @@ describe("program actions — golden summaries against contracts/src/msg.rs", ()
 
   it("every variant in the shared vocabulary has a golden summary here", () => {
     // The totality gate. `OPERATOR_VARIANTS`, `ADMIN_VARIANTS` and
-    // `KEEPER_VARIANTS` are the ONE vocabulary (M7.2 §2.2): a variant added
+    // `KEEPER_VARIANTS` are the ONE vocabulary: a variant added
     // there is a variant this page must be able to describe, and this assertion
     // is what makes that a build failure instead of a silent "unrecognized".
     const vocabulary = [...OPERATOR_VARIANTS, ...ADMIN_VARIANTS, ...KEEPER_VARIANTS];

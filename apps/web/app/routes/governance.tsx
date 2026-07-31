@@ -80,7 +80,12 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
       )}
 
       <nav aria-label={t(locale, "governance.filter-label")} className="flex flex-wrap gap-2">
-        <FilterLink locale={locale} label={t(locale, "governance.filter-all")} to="/governance" active={data.statusFilter === null} />
+        <FilterLink
+          locale={locale}
+          label={t(locale, "governance.filter-all")}
+          to="/governance"
+          active={data.statusFilter === null}
+        />
         {GOV_STATUS_FILTERS.map((status) => (
           <FilterLink
             key={status}
@@ -92,7 +97,7 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
         ))}
       </nav>
 
-      {/* Open above history (§7 Q1): what can still be influenced, then what
+      {/* Open above history: what can still be influenced, then what
           happened. Both sections render even when empty, so an empty "open" is
           a statement rather than a missing section. */}
       <ProposalList
@@ -117,9 +122,15 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
       </p>
 
       {data.page > 0 || data.hasMore ? (
-        <nav aria-label={t(locale, "governance.page-position", { page: data.page + 1 })} className="flex gap-3 text-sm">
+        <nav
+          aria-label={t(locale, "governance.page-position", { page: data.page + 1 })}
+          className="flex gap-3 text-sm"
+        >
           {data.page > 0 ? (
-            <Link className="underline underline-offset-4" to={pageHref(data.statusFilter, data.page - 1)}>
+            <Link
+              className="underline underline-offset-4"
+              to={pageHref(data.statusFilter, data.page - 1)}
+            >
               {t(locale, "governance.page-previous")}
             </Link>
           ) : null}
@@ -127,7 +138,10 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
             {t(locale, "governance.page-position", { page: data.page + 1 })}
           </span>
           {data.hasMore ? (
-            <Link className="underline underline-offset-4" to={pageHref(data.statusFilter, data.page + 1)}>
+            <Link
+              className="underline underline-offset-4"
+              to={pageHref(data.statusFilter, data.page + 1)}
+            >
               {t(locale, "governance.page-next")}
             </Link>
           ) : null}

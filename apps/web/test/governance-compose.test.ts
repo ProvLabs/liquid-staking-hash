@@ -1,5 +1,5 @@
 // Pure composition + route-boundary bounding for the governance center
-// (M7.2 §3.2). The degradation matrix lives in `governance-data.test.ts`; what
+//. The degradation matrix lives in `governance-data.test.ts`; what
 // is here is the arithmetic and the parsing that matrix rests on, tested
 // directly so a failure names the cause rather than a symptom two layers up.
 

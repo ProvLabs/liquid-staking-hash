@@ -4,7 +4,7 @@ import { VerifyLink } from "~/components/verify-link";
 import type { SetHealthPublic } from "~/validators/types";
 import type { FreshnessMeta } from "@nvhash/api-types";
 
-// §8.6 set-health aggregates: the live eligible count plus PR 3.1's indexed
+// §8.6 set-health aggregates: the live eligible count plus the indexed
 // set-health projection (total enrollments ever / active / eligible). A null
 // projection (API unreachable or off-shape) renders "n/a" on the indexed
 // tiles, never a number (§12.1). The per-settlement eligible-count TREND has

@@ -1,4 +1,4 @@
-// GET /operator/export?valoper= (M6.4 §2.3, app-spec §14.11): the session
+// GET /operator/export?valoper= (app-spec §14.11): the session
 // operator's FULL commission/TIP payment history streamed as CSV — a statement
 // of fact for their own tax analysis. Session-gated (the standing session-scope
 // gate): the acting address comes ONLY from requireSession. `valoper` selects

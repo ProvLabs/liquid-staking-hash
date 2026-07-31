@@ -78,10 +78,9 @@ describe("validator-sampler decode against the fixture corpus", () => {
     };
     expect(deriveFailingReasons(base)).toEqual([]);
     expect(deriveFailingReasons({ ...base, jailed: true, eligible: false })).toEqual(["jailed"]);
-    expect(deriveFailingReasons({ ...base, inArrears: true, headroom: 0n, eligible: false })).toEqual([
-      "arrears",
-      "no_concentration_headroom",
-    ]);
+    expect(
+      deriveFailingReasons({ ...base, inArrears: true, headroom: 0n, eligible: false }),
+    ).toEqual(["arrears", "no_concentration_headroom"]);
     // eligible=false with no explaining flag → generic "ineligible".
     expect(deriveFailingReasons({ ...base, eligible: false })).toEqual(["ineligible"]);
   });

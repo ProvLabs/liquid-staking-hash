@@ -1,4 +1,4 @@
-// Policy-set discovery (M7.1 §2.1, decision D1).
+// Policy-set discovery (decision D1).
 //
 // The program's governance authority is a SET, never "the admin policy".
 // `contracts/IMPLEMENTATION-STATUS.md` carries an open item to split the single
@@ -14,7 +14,7 @@
 // fixture corpus CONTAINS the n>1 case rather than the code merely claiming to
 // handle it.
 //
-// A PLAIN-ACCOUNT `Config.admin` — every devnet before PR 7.1 commit A — yields
+// A PLAIN-ACCOUNT `Config.admin` — any chain with no x/group substrate — yields
 // an EMPTY SET, empty committed windows, and honest-empty read surfaces. That is
 // the no-governance state, not a crash and not a reason to fall back to a guess.
 //
@@ -157,7 +157,10 @@ export async function discoverGovernance(
         });
       }
     } catch {
-      logger.warn("configured governance policy could not be read", { stream: "governance", height });
+      logger.warn("configured governance policy could not be read", {
+        stream: "governance",
+        height,
+      });
     }
   }
 
@@ -211,7 +214,7 @@ export const PAGE_LIMIT = 100;
  * Follow `pagination.next_key` to exhaustion under a page cap.
  *
  * Hitting the cap THROWS rather than returning a short list, and that choice is
- * the whole point (M7.1 §4 invariant 14): a silently truncated sweep is
+ * the whole point (invariant 14): a silently truncated sweep is
  * indistinguishable from a prune, and the write path treats absence from a
  * successful sweep as evidence the chain dropped a proposal. Truncation would
  * therefore mark live proposals pruned — corrupting the mirror in exactly the

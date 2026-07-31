@@ -18,11 +18,11 @@ model RedemptionRequest {
 
   @@index([owner])
   @@index([status])
-  // Terminal-timestamp indexes (PR 5.4): the §9.5.3 payout-stats query
+  // Terminal-timestamp indexes: the §9.5.3 payout-stats query
   // filters the recent terminal cohort by expeditedAt/maturedAt >= cutoff.
   @@index([maturedAt])
   @@index([expeditedAt])
-  // Height cursor index (M6.2): the notifier's `/internal/alert-facts/redemptions`
+  // Height cursor index: the notifier's `/internal/alert-facts/redemptions`
   // reads `lastHeight > since_height` ascending each tick — index-only, no
   // column added (schema-allowlist unaffected; rebuildable).
   @@index([lastHeight])

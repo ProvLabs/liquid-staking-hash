@@ -1,4 +1,4 @@
-// POST /tx/preflight (PR 5.2, §10.2 step 2): session-scoped guard context.
+// POST /tx/preflight (§10.2 step 2): session-scoped guard context.
 // The acting address comes ONLY from the session (standing session-scope
 // gate); the body carries just kind + amount, zod-bounded — reject, never
 // clamp.
@@ -23,13 +23,13 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(config, request);
   const payload: unknown = await request.json().catch(() => null);
 
-  // M6.4: operator actions preflight through the same route and the same
+  // Operator actions preflight through the same route and the same
   // session binding — a separate bounded schema, never a widened one.
   const operator = operatorPreflightRequestSchema.safeParse(payload);
   if (operator.success) {
     return Response.json(await runOperatorPreflight(config, session.address, operator.data));
   }
-  // M7.3–7.4: the three governance actions, on the same terms.
+  // The three governance actions, on the same terms.
   const governance = governancePreflightRequestSchema.safeParse(payload);
   if (governance.success) {
     return Response.json(await runGovernancePreflight(config, session.address, governance.data));

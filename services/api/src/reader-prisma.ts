@@ -1,4 +1,4 @@
-// Prisma-backed IndexedReader over @nvhash/db-indexed (app plan PR 3.1).
+// Prisma-backed IndexedReader over @nvhash/db-indexed.
 //
 // A thin query-and-convert shell: every mapping to API shapes lives in the
 // pure derive.ts layer; this file only runs SELECTs and converts Prisma
@@ -10,7 +10,7 @@
 // grants (grant-boundary CI gate), not trusted to this code; this module
 // still contains no write call of any kind. Loaded via dynamic import from
 // main() so the DB-free unit/contract suite never touches the generated
-// client (plan §4: `pnpm -r run test` stays Postgres-free).
+// client (: `pnpm -r run test` stays Postgres-free).
 
 import { Prisma, PrismaClient } from "@nvhash/db-indexed";
 import {
@@ -92,15 +92,17 @@ function toBigint(value: { toFixed(dp: number): string }): bigint {
 //
 // Tagged templates throughout — every value is a bound parameter, no string
 // interpolation reaches the query (SECURITY.md input handling), the
-// `programMetrics` precedent. The matching composite indexes ship in
-// `20260728000000_keyset_indexes`; without them the row comparison is correct
-// but unindexed.
+// `programMetrics` precedent. The row comparison is correct but unindexed
+// unless the walked sort key is covered to its tie-break column — the
+// `@@index([valoper, height, msgIndex, ordinal])` and
+// `@@index([address, height, msgIndex])` declared in the indexer's
+// `operator_payments.prisma` and `transactions.prisma`.
 
 /**
  * A cursor on an export's sort key. `ordinal` completes it for
  * `operator_payments`, where one message can carry several payments — without
  * it a cursor at `(height, msgIndex)` would step straight over the siblings
- * (PR #22 review). `transactions` has one row per message, so it passes 0.
+ *. `transactions` has one row per message, so it passes 0.
  */
 interface KeysetCursor {
   readonly height: bigint;
@@ -131,7 +133,10 @@ const KEYSET_CHUNK = 1000;
  * regardless of history size. `operator_payments` and `transactions` are both
  * append-only, so a keyset walk cannot skip a row.
  */
-async function* keysetStream<Row extends { height: bigint; msgIndex: number; ordinal?: number }, Fact>(
+async function* keysetStream<
+  Row extends { height: bigint; msgIndex: number; ordinal?: number },
+  Fact,
+>(
   page: (cursor: KeysetCursor | null, take: number) => Promise<Row[]>,
   toFact: (row: Row) => Fact,
 ): AsyncIterable<readonly Fact[]> {
@@ -343,7 +348,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
   }
 
   return {
-    // --- governance (PR 7.1) ------------------------------------------------
+    // --- governance ------------------------------------------------
 
     async listGovProposals(page, filter) {
       // Newest first by id: x/group assigns ids monotonically chain-global, so id
@@ -434,13 +439,18 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     async programMetrics(): Promise<ProgramMetrics> {
       const indexed = (await maxWorkerCheckpoint()) !== null;
       if (!indexed) {
-        return deriveMetrics({ indexed: false, participantCount: 0, firstActivityAt: null, epochCount: 0 });
+        return deriveMetrics({
+          indexed: false,
+          participantCount: 0,
+          firstActivityAt: null,
+          epochCount: 0,
+        });
       }
       // COUNT(DISTINCT …) stays in SQL so the row set never crosses the wire
       // (a groupBy would materialize every address). Tagged template — no
       // string interpolation reaches the query (SECURITY.md input handling).
-      // The three reads are independent, so they run concurrently (PR #13
-      // review): /metrics latency is the slowest of them, not their sum.
+      // The three reads are independent, so they run concurrently:
+      // /metrics latency is the slowest of them, not their sum.
       const [distinct, first, epochCount] = await Promise.all([
         prisma.$queryRaw<Array<{ count: bigint }>>(
           Prisma.sql`SELECT COUNT(DISTINCT "address")::bigint AS count FROM "indexed"."transactions"`,
@@ -560,7 +570,9 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           select: { tvvAfter: true, totalShares: true },
         });
         const nav =
-          navEpoch === null ? null : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
+          navEpoch === null
+            ? null
+            : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
         sample = toMarketSample(
           {
             venue: raw.venue,
@@ -575,7 +587,11 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return {
         sample,
         bridged_supply: bridged.map((row) =>
-          toBridgedSupplyRow({ chain: row.chain, remoteSupply: toBigint(row.remoteSupply), sampledAt: row.sampledAt }),
+          toBridgedSupplyRow({
+            chain: row.chain,
+            remoteSupply: toBigint(row.remoteSupply),
+            sampledAt: row.sampledAt,
+          }),
         ),
       };
     },
@@ -702,7 +718,11 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return facts;
     },
 
-    async redemptionsChangedSince(sinceHeight: number, afterId: string, limit: number): Promise<AlertRedemptionFact[]> {
+    async redemptionsChangedSince(
+      sinceHeight: number,
+      afterId: string,
+      limit: number,
+    ): Promise<AlertRedemptionFact[]> {
       // Compound keyset pagination: `(lastHeight, requestId) > (sinceHeight,
       // afterId)` in `(lastHeight asc, requestId asc)` order, so a same-height
       // burst larger than one page (mass maturation at an epoch settlement)
@@ -712,10 +732,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       const height = BigInt(sinceHeight);
       const rows = await prisma.redemptionRequest.findMany({
         where: {
-          OR: [
-            { lastHeight: { gt: height } },
-            { lastHeight: height, requestId: { gt: afterId } },
-          ],
+          OR: [{ lastHeight: { gt: height } }, { lastHeight: height, requestId: { gt: afterId } }],
         },
         orderBy: [{ lastHeight: "asc" }, { requestId: "asc" }],
         take: limit,
@@ -737,7 +754,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     },
 
     async incidentsSince(sinceId: number, limit: number): Promise<AlertIncidentFact[]> {
-      // Ascending by id past the cursor. No payload passthrough (plan §2.3):
+      // Ascending by id past the cursor. No payload passthrough:
       // the notifier needs identity, so only id + (kind, dedupeKey) + open
       // facts are selected — never the incident payload.
       const rows = await prisma.incident.findMany({
@@ -778,7 +795,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           select: { valoper: true, epochIndex: true, commissionDue: true },
         }),
         // Active registry rows only: an unregistered validator has no operator
-        // session to alert (plan §2.3 — the join excludes unregisteredAt rows).
+        // session to alert (— the join excludes unregisteredAt rows).
         prisma.validatorRegistry.findMany({
           where: { unregisteredAt: null },
           select: { valoper: true, operator: true },
@@ -801,7 +818,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return facts;
     },
 
-    // --- operator surface (M6.4) --------------------------------------------
+    // --- operator surface --------------------------------------------
 
     async operatorValopers(address: string): Promise<OperatorRegistryFacts[]> {
       // THE ownership mapping. Every other operator read is called with a
@@ -884,7 +901,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       const rows = await prisma.operatorPayment.findMany({
         where: { valoper },
         // The ordinal completes the sort key: without it siblings from one
-        // batched message have no defined order between pages (PR #22 review).
+        // batched message have no defined order between pages.
         orderBy: [{ height: "desc" }, { msgIndex: "desc" }, { ordinal: "desc" }],
         skip: page.offset,
         take: page.limit,

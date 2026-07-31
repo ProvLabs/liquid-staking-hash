@@ -1,530 +1,273 @@
 # CLAUDE.md — web app
 
-End-user web interface. Production quality.
+End-user web interface. Production quality. Rationale and recorded decisions:
+[`docs/architecture/web-design-notes.md`](../../docs/architecture/web-design-notes.md).
+Measured chain behavior: [`docs/specs/chain-facts.md`](../../docs/specs/chain-facts.md).
+Read both before changing a session boundary, the tx lifecycle, the broadcast
+allowlist, or a live/indexed composition.
 
 ## Conventions
 
-- Audience is end users: clear language, guarded flows, and graceful error
-  handling. Raw contract/debug detail belongs in `apps/console/`, not here.
+- Audience is end users: clear language, guarded flows, graceful error handling.
+  Raw contract/debug detail belongs in `apps/console/`.
+- **Two planes.** The *live* plane is an LCD read from this server (canonical);
+  the *indexed* plane is `services/api` (durable mirror, as of a height). Every
+  composed figure carries a §12.1 honesty label; a mirrored figure is never
+  shown as current. **Every figure is "n/a" when null, never 0.**
+- **Live decides membership; indexed only enriches** — and decides membership
+  only when the live read failed. A live read failure is never evidence of a
+  prune.
+- **The acting address comes only from the session.** Personal loaders use
+  `getSessionContext` / `requireSession`, never a query param. Public surfaces
+  (governance) deliberately do *not* join the personal-route list.
+- **Layering is strict:** `app/lib/models/*.server.ts` are the only Prisma
+  import sites; `app/lib/services/*.server.ts` hold logic with no Prisma, no
+  fetch, no clock. Routes and tests run storeless.
+- **Amounts never touch floats.** User input parses through `app/lib/amount.ts`
+  (decimal string → base-unit BigInt, float-rejecting); display formats at
+  render only.
 - **Owns the `app` schema** (ADR-001 Decision 1,
-  [`docs/architecture/2026-07-14-adr-001-app-component-architecture.md`](../../docs/architecture/2026-07-14-adr-001-app-component-architecture.md)):
-  sessions, users, alert rules, notifications, push subscriptions, aggregate
-  counters, and incident acknowledgments, with their Prisma schema and
-  migrations, running as the `app_writer` role — which has **no grants on the
-  `indexed` schema**. Indexed history is read only through `services/api`;
-  live LCD reads (the canonical plane) happen in this server directly.
-  Concrete since PR 5.1: multi-file schema in `prisma/` (sessions,
-  single-use session nonces, the accepted first/last-seen exception —
-  nothing else; `test/app-schema-allowlist.test.ts` gates additions and
-  forbids any role/identity/device column). `migrate:dev|deploy|status`
-  scripts; dev database `./dev pg up` (port 5433). `DATABASE_URL` is
-  optional — absent, sessions run on a non-durable in-memory store
-  (dev/mock posture).
-- **Wallet & session layer** (PR 5.1, app-spec §3 decision 5 / §10.1 /
-  §12.3): signing exists only behind the closed vendor registry in
-  `app/wallet/` (Figure WC v2 mobile + injected extension, Arculus WC v2
-  mobile — §14.1; vendor workarounds live only in that vendor's adapter
-  module). Session login is nonce → ADR-36 (`app/lib/adr36.ts` is the ONE
-  sign-doc construction site for client and server) → HttpOnly opaque-id
-  cookie over a server row; models layer (`app/lib/models/session.server.ts`)
-  is the only Prisma import; services layer
-  (`app/lib/services/{session,roles,assertion}.server.ts`) holds the logic.
-  Roles are live chain reads per refresh, never persisted. Personal loaders
-  reach the acting address ONLY through
-  `getSessionContext`/`requireSession` — never a query param. The §14.1
-  certification runbook
-  ([`docs/plans/2026-07-23-m5.1-wallet-certification-runbook.md`](../../docs/plans/2026-07-23-m5.1-wallet-certification-runbook.md))
-  is the per-vendor acceptance gate.
-- **Transaction lifecycle** (PR 5.2, app-spec §10.2/§12.3): `app/tx/` —
-  pure reducer (`lifecycle.ts`; signing only through confirm, confirmed
-  only after inclusion), dependency-free proto layer (`proto.ts` +
-  `build.ts`, **byte-golden to the fixtures corpus** — re-encoded fixture
-  txs must hash to their captured tx ids), one serialization site for the
-  confirm disclosure and the sign doc, server-side
-  preflight/simulate/broadcast/status/recent resource routes (all
-  session-gated; the browser never talks to the LCD or the API). Broadcast
-  is the §12.3 **guarded signed-tx relay** — closed msg allowlist, sole
-  signer must derive the session address, size + rate caps
-  (`test/broadcast-guard.test.ts`). **Fee basis — read this before touching
-  `simulate.server.ts`.** Under Provenance flat fees the required fee is a
-  deterministic PER-MESSAGE cost, unrelated to gas consumed, and `Simulate`
-  returns **that fee amount** in the gas-wanted field — hence the chain's
-  1nhash guidance (provenance `internal/antewrapper/utils.go` `GetGasWanted`;
-  the antewrapper substitutes a real gas limit for execution). So the simulate
-  result is used **verbatim**: price 1nhash (**not a tunable** — the protocol
-  rejects a tx priced off the old `price × gas estimate` model, on purpose),
-  **no adjustment buffer** (padding a deterministic cost buys no out-of-gas
-  headroom, because the number is not gas), and `gasLimit == amount`, matching
-  captured devnet txs (`fee: 2nhash`, `gas_limit: "2"`, ~201k gas consumed).
-  `FEE_PROVISION_NHASH` is only preflight's pre-simulation reserve and stays
-  small, since an inflated reserve reports `insufficient-balance` for
-  affordable transactions. Pinned by `test/tx-fee.test.ts` — this shipped wrong
-  (1905nhash × 1.3, inherited from the pre-flat-fee console) precisely because
-  no test held it. `[RESOLVED 2026-07-27, Ira]`, retiring `[VERIFY §14.3]`.
-  `apps/console` was corrected in the same change (its `VITE_GAS_PRICE` knob is
-  gone — see its `CLAUDE.md` and console-spec §7/§10.2).
-- **Transacting pages** (PR 5.3, app-spec §8.3; PR 5.4, §8.4): pages drive
-  the lifecycle through **`useTxFlow`** (`app/tx/use-tx-flow.ts`) —
-  preflight → simulate → confirm → sign → broadcast → track — never calling
-  the resource routes ad hoc. Signing reaches the wallet only via
-  `useWallet().signDirect` (throws `ReconnectToSignError` when the cookie
-  session outlived the in-memory adapter). User amounts parse through
-  `app/lib/amount.ts` (decimal string → base-unit BigInt, float-rejecting);
-  display uses `app/learn/amounts.ts`. Preflight block reasons localize via
-  `app/tx/reasons.ts`; shared status/confirm surfaces are `app/tx/flow-status.tsx`.
-  Live preview math is pure and testable (`app/stake/preview.ts`) — never
-  `estimate_swap_in` (gRPC-only, §14.2). The `/exit` page (PR 5.4, §8.4)
-  opens with the comparison table (normative guaranteed-vs-typical framing;
-  `app/exit/typical.ts` decides whether a typical figure exists), a DEX
-  coming-soon shell (§14.4), the native SwapOut flow (warning-tier confirm,
-  three §10.3 timing facts), and the redemption tracker composed from live
-  `pendingSwapOuts` + `/portfolio` + `/transactions` (`app/exit/exit.server.ts`).
-- **Portfolio page** (PR 6.1 commit C, app-spec §8.2): `app/routes/portfolio.tsx`
-  loads its data only for the session address (`getSessionContext`; anonymous
-  renders the connect prompt, never blank; the standing session-scope gate)
-  and zod-bounds `?page=` at entry (int 0–10 000; malformed → 400, reject
-  never clamp). `app/portfolio/portfolio.server.ts` composes the live plane
-  (canonical chain read) and the indexed plane (`services/api`) with §12.1
-  honesty labels; components under `app/components/portfolio/` are
-  presentation-only over the `types.ts` view models. Every figure is "n/a"
-  when null, never 0. The **CSV export** is a plain `<a href="/portfolio/export">`
-  to a resource route registered **outside** the `:lang?` segment
-  (`app/routes/portfolio-export.tsx`, the `tx/*` precedent):
-  `requireSession` → `personalApiHeaders` → the API's CSV streamed back with
-  only its `content-type`/`content-disposition`/`x-*` freshness headers; the
-  browser never sees the assertion or talks to the API. **StepChart extension**
-  (`app/components/charts/step-chart.tsx`): optional `markers` (event dots on
-  the primary series — filled "in", hollow ring "out", their data mirrored
-  into the table toggle) and an optional `compare` second series in
-  `--viz-cat-2` with a naming legend; all new props are optional so existing
-  callers compile unchanged, and no new tokens are introduced (`check:palette`
-  unaffected). Load the `dataviz` skill before touching the chart.
-- **Operator view** (PR 6.4 commit C, app-spec §8.6): `/validators/mine`
-  (`app/routes/validators-mine.tsx` under `:lang?`, registered AFTER
-  `validators` so the public page keeps the bare path) over
-  `app/validators/mine.server.ts`, with view models in `mine-types.ts` and
-  presentation-only components under `app/components/validators/mine/`. The
-  route gates on THREE states before any figure loads — anonymous (connect
-  prompt), roles `degraded` (an explicit "we could not check"; the App never
-  renders a privileged surface from a failed read), and connected non-operator —
-  then loads for the session address only.
-  **MEMBERSHIP comes from the LIVE contract set, never the indexed registry**
-  (PR #22 review): `validator_registry` is written by the validator-sampler,
-  which is anchored to epoch cranks, and epochs are calendar-monthly — so the
-  indexed set can lag by up to a month. It previously decided ownership, which
-  made a just-enrolled validator absent from the operator's own page and a
-  just-unregistered one still active with its action buttons, contradicting the
-  action the operator had just taken on this very page. Live decides membership
-  and `active`; the indexed plane only enriches (lifetime totals, moniker), and
-  it decides membership ONLY when the live read failed (a stale list beats an
-  empty page). A validator with no indexed row yet reports NULL totals, never
-  `0` — "not sampled yet" is not "nothing paid". Gated by the three
-  live-is-canonical cases in `test/operator-data.test.ts`.
-  **An unregistered validator is kept but NOT manageable**: it stays in the
-  list so its history is reachable, is badged `unregistered` in the switcher,
-  and the action panel is replaced by an enrol-only affordance — every other
-  program action would be rejected by the contract for a validator no longer
-  in the set, so offering it invites a transaction guaranteed to fail. The
-  rule is `selectedActive`, decided in the LOADER rather than in JSX so it is
-  unit-testable, and the default selection prefers an enrolled validator (an
-  explicit `?valoper=` still reaches an unregistered one). `ownedValopers` —
-  which seeds the purge claimant, itself required to be enrolled — carries
-  ACTIVE valopers only.
-  `?valoper=` selects among the
-  operator's OWN validators and is shape-bounded at the route; ownership is
-  enforced by `services/api` against the asserted address.
-  **The load-bearing fact** (verified against `contracts/src/validators.rs`,
-  not assumed): program commission is CUMULATIVE and an overpayment carries
-  forward indefinitely, while TIP resets at every epoch rollover — so the
-  commission banner has THREE states (in-arrears / current / **prepaid**), and
-  the prepaid credit comes from the LIVE plane alone (`commission_paid −
-  commission_accrued`) because `pay_commission`'s `outstanding` attribute
-  saturates at 0 and cannot express it. Net-benefit's earnings term is a
-  labeled ESTIMATE (§7 Q2); when it cannot be computed the net is withheld too.
-  Peer-rank context is deliberately absent (§7 Q5 unapproved). The CSV export is
-  `app/routes/operator-export.tsx` outside `:lang?` (the `portfolio-export`
-  precedent). New standing gates: `test/operator-data.test.ts` (degradation +
-  honesty matrix incl. all three standing states), `test/operator-compose.test.ts`
-  (BigInt goldens for the estimate; a missing input yields null, never 0),
-  `test/session-scope.test.ts` (the export joins it), offline
-  `e2e/validators-mine.spec.ts`, and `/validators/mine` in the axe route list.
-- **Operator flows + the two-level broadcast allowlist** (PR 6.4 commit D,
-  app-spec §10.3/§12.3/§14.6): the five operator actions run through the
-  **unmodified** 5.2 lifecycle (`useTxFlow`) as `MsgExecuteContract` intents;
-  `app/components/validators/mine/operator-flows.tsx` is the only UI, and the
-  enroll flow is also offered on the non-operator state (an operator becomes
-  one by enrolling). **THE convention to know: `ALLOWED_MSG_TYPE_URLS` is
-  TWO-LEVEL.** `MsgExecuteContract` is in it only because
-  `guardOperatorExecute` (in `app/tx/build.ts`, wired in
-  `broadcast.server.ts`) runs for that type URL alone — on its own the entry
-  would carry any call to any contract. The guard checks the configured
-  contract, a single top-level key from the closed six-variant operator set
-  (no admin/keeper variant), the per-variant body, funds discipline, and
-  finally **canonical byte equality** with `operatorInnerJson`, which is what
-  keeps it out of a parser arms race. **Extending either level — a new type
-  URL or a new variant — is a design-review event, never an edit.** Gates:
-  `test/broadcast-guard.test.ts` (the rejection matrix, incl. every admin
-  variant, mixed batches, duplicate proto fields, and non-canonical
-  encodings), `test/tx-operator-build.test.ts` (byte-goldens against three
-  captured devnet txs — the proof the canonical form is the accepted form),
-  `test/tx-confirm.test.ts` (the disclosure equals the signed bytes for every
-  variant), `test/tx-preflight.test.ts` (the predicate matrix; note payments
-  carry NO operator check — paying is permissionless).
-  **The preflight fact rule:** every fact in `OperatorPreflightFacts` is
-  nullable (a failed live read), and a variant MUST short-circuit to
-  `chain-unavailable` on every fact IT consumes — `validators`/`chainValidator`
-  up front for all variants, `spendableNhash` in the payment branch,
-  `jailReports` + `halted` in the purge branch. Skipping a check on a null
-  instead returns an empty (green) reason list for an action the contract then
-  rejects, which is the "silently hiding it" the module forbids; a variant is
-  equally forbidden from blocking on a fact it does NOT consume. Both
-  directions are gated in `test/tx-preflight.test.ts`. The
-  `register_participation` operator check needs no chain read: the contract's
-  `is_operator` compares the decoded bech32 payloads of caller and valoper, so
-  `sameBech32Payload` (in `lib/adr36-verify.server.ts`, which holds the app's
-  bech32 primitives) restates it locally. `MAX_PROGRAM_VALIDATORS` mirrors the
-  contract's `MAX_VALIDATORS` and moves with it in the same change.
-- **Governance center** (PR 7.2, app-spec §8.7): `/governance` +
-  `/governance/:proposalId` under `:lang?` (detail registered AFTER the list),
-  over `app/governance/` — `governance.server.ts` is the composition seam,
-  `types.ts` the view models, `decode.ts` + `tally.ts` + `format.ts` +
-  `labels.ts` + `params.ts` pure, and `app/lib/services/governance.server.ts`
-  the live `x/group` reads. Components under `app/components/governance/` are
-  presentation-only. **PUBLIC READ — and it must stay one:** proposals and votes
-  are public chain facts with no address keying, so these routes do NOT join the
-  personal-route list; they use `getSessionContext` (null for anonymous) purely
-  to highlight the connected member's own row, never `requireSession`. Gated by
-  the governance block in `test/session-scope.test.ts`.
-  **The load-bearing fact** (measured, not assumed): a proposal's
-  `final_tally_result` is ZEROS until the module tallies it, so an OPEN
-  proposal's live tally comes from x/group's own `TallyResult` query
-  (`GroupClient.tallyResult`, added in this PR) and never from the state read —
-  rendering those zeros would assert "nobody has voted". Every proposal carries
-  a `plane` (`live` / `indexed-fallback` / `indexed` / `pruned` / `live-only`)
-  and the `PlaneBadge` renders it wherever a status or tally appears, so a
-  mirrored figure can never be shown as current; `indexed-fallback` carries the
-  `observed_height`. **A live read failure is never a prune** (the LCD answers
-  500 for a pruned id, an unknown id and an outage alike) — `pruned_at_height`
-  from the mirror is the only source, and a pruned proposal is never live-read.
-  **`not-governed` and `unavailable` are different answers** and only an LCD 404
-  decides the first. Decoding is a CLOSED union — `MsgSend` plus
-  `MsgExecuteContract` against the configured contract, whose variant vocabulary
-  is IMPORTED from `app/tx/build.ts` (`OPERATOR_VARIANTS` / `ADMIN_VARIANTS` /
-  `KEEPER_VARIANTS`, the last two named there for this reader and the rejection
-  matrix; naming them admits nothing, the allowlist is unchanged) — and anything
-  else is a tagged `unknown` with the exact JSON, which rides on every message
-  either way. **The offline corpus is UNGOVERNED** (its contract predates its
-  group; M7 F2 has no admin-rotation path), so offline e2e exercises the mirror
-  plus the honest live-unresolved state and the governed plane is covered by
-  MSW overrides in `test/governance-data.test.ts` and by `e2e-live`. New
-  standing gates: `test/governance-{decode,tally,data,compose}.test.ts`, offline
-  `e2e/governance.spec.ts`, skip-clean `e2e-live/governance.spec.ts`, both
-  routes in the axe list, and the governance case in `session-scope`.
-- **Governance write path + the governance broadcast allowlist** (PRs 7.3–7.4,
-  app-spec §8.7/§12.3 amendment/§14.6): vote, execute and the template composer
-  run through the **unmodified** 5.2 lifecycle. **THE convention to know:
-  `ALLOWED_MSG_TYPE_URLS` is TWO-LEVEL and the three `cosmos.group.v1` types are
-  guarded STRUCTURALLY** — type URL → signer ↔ session binding (`voter`,
-  `signer`, the single `proposers` entry) → closed field set with bounded values
-  → the `exec` pin → canonical re-encode. For `MsgSubmitProposal` the re-encode
-  covers the ENVELOPE and the inner `Any` bytes ride **verbatim**.
-  **READ THIS BEFORE RE-TIGHTENING IT.** The guard first shipped with six
-  conditions on `MsgSubmitProposal` — a closed template match per inner message,
-  a per-element re-encode, and a live policy sweep that made `guardSignedTx`
-  async with a 503 failure mode. A security review of the branch cut all three
-  (2026-07-30). The rationale they rested on (overview D7: carrying
-  `messages []Any` is "strictly worse than the `MsgExecuteContract` hole") was
-  **backwards**: an unguarded `MsgExecuteContract` executes ON INCLUSION under
-  the signer's own authority, while a `MsgSubmitProposal` executes NOTHING until
-  the group's decision policy is satisfied by other members voting. **The
-  group's threshold is the enforcement boundary**, and what protects members
-  from a hostile proposal is READING it before voting — 7.2's decoder. The
-  matrix in `test/broadcast-guard.test.ts` now asserts the permissive cases as
-  **acceptances** on purpose, so re-adding the conditions means editing named
-  test cases rather than sliding them back in.
-  **The `exec` pin is retained but is a CONFIRMATION-RIGOR control, not an
-  authorization one** (`EXEC_UNSPECIFIED`, enforced as "field 5 absent" since
-  proto3 omits a zero): it means executing is a second, separately-confirmed
-  signature. It is not load-bearing against an adversary — submit/vote/exec in
-  three separate relayed txs reaches the same state. The confirm disclosure
-  shows `exec: EXEC_UNSPECIFIED` even though the bytes omit it, deliberately.
-  **`app/governance/templates.ts` is the COMPOSER's vocabulary** — one
-  vocabulary, three consumers (7.2's decoder reads, the confirm step discloses,
-  the composer builds) — and is **not** a relay-guard input. Its type-only
-  imports still matter: `build.ts` imports `templateInnerJson` at runtime and
-  keeps a narrow import surface because the relay decodes untrusted bytes
-  through it, so `templateSummaryKey` returns a KEY plus params, never a string.
-  Templates stay **total in both directions** against the committed
-  `cargo schema` output — now a PRODUCT completeness gate (a new admin
-  capability must be reachable from the composer), not a security one. Bridge
-  config is **absent, not stubbed**. Write-side wire bounds
-  (`MAX_PROPOSAL_MESSAGES`, `MAX_PROPOSAL_METADATA_LEN`, title/summary) are ONE
-  declaration in `packages/api-types/src/bounds.ts`.
-  **Affordances come from the LIVE plane alone** (`app/governance/actions.ts`,
-  decided in the LOADER, never in JSX). `ProposalDetailVM.liveState` is
-  SEPARATE from `plane`: `plane` says which read produced the figures (the
-  mirror, honestly, for anything closed), `liveState` says whether the chain
-  just confirmed the state an action would operate on. That is why
-  `loadGovernanceProposalData` live-reads **accepted** proposals too — and why a
-  failed read on an accepted proposal is itself evidence not to offer execute
-  (x/group prunes a successful exec in its own transaction). The execution
-  window is `submit_time + min_execution_period`, x/group's own rule — NOT the
-  voting-period end — and `min_execution_period` comes from the **LIVE policy**,
-  which is why it sits inside `liveState` rather than beside it. **The
-  asymmetry to hold in your head:** `voting_period_end` IS snapshotted on the
-  chain's `Proposal`; `min_execution_period` is NOT, so the module reads the
-  policy account at exec time. Using the mirror's `decision_policy` snapshot for
-  the window let the button and the preflight gating it disagree after a policy
-  change (PR #25 review) — the snapshot is for rendering a historical
-  THRESHOLD (D3), never the execution window. Not yet drilled: devnet runs
-  `min_execution_period: 0`. **And an UNRESOLVED window is not a zero window**: a
-  policy with no waiting period serializes `"0s"`, so `null` means only that it
-  could not be determined (policy outside the discovered set, or a decision rule
-  this build does not model) — both preflight and the affordance treat it as
-  *disabled, we cannot say when*, never as executable. Reachable because
-  `/governance/:proposalId` accepts any proposal id and the live read is
-  unscoped, so another group's proposal resolves a `liveState` with no policy in
-  our set. Voting is member-only; **execution is permissionless** and
-  the UI says so. New standing gates: `test/governance-templates.test.ts`,
-  `test/governance-flows.test.ts` (one case per C4 row), the governance blocks
-  in `broadcast-guard.test.ts` / `tx-preflight.test.ts` / `tx-confirm.test.ts`,
-  `/governance/new` in the axe list, offline `e2e/governance.spec.ts` affordance
-  sweep, skip-clean `e2e-live/governance-write.spec.ts` (needs
-  `E2E_LIVE_GOV_MEMBER_KEY` — a funded throwaway devnet key that is ALSO a group
-  member, since proposing and voting are membership-gated; the generic signer
-  key cannot cover them, the `E2E_LIVE_OPERATOR_KEY` precedent).
-- The **notifier** is a separate worker entrypoint in this codebase (ADR-001
-  Decision 3); its indexed-fact reads go through `services/api` (public
-  endpoints plus the `internal:notifier`-scoped read-only surface).
-  **Delivered PR 6.2 commit B:** `notifier/index.ts` (`pnpm notifier` →
-  `node notifier/index.ts`) lives **outside `app/`** so the React Router build
-  never bundles it (`check:bundle` confirms). It uses **relative** imports, not
-  the `~` alias, because `node`'s strip-only TS runs it directly — for the same
-  reason, files it loads at runtime must avoid **parameter properties** (use
-  explicit field assignment) and `enum`/`namespace`. Its config
-  (`notifier/config.ts`) is zod-bounded and **fail-fast**: `DATABASE_URL` and
-  `API_SERVICE_ASSERTION_KEY` (≥ 32) are required. **`app/lib/models/alerts.server.ts`**
-  is the AlertStore port — the **sole new Prisma import site** (the
-  `session.server.ts` split: Prisma + in-memory behind one contract, so routes
-  and tests run storeless). The exactly-once mechanism is `commitTick` (insert
-  `skipDuplicates` + cursor advance in one transaction). The redemptions
-  stream cursors on the compound `<height>:<request_id>` keyset (the API's
-  `after_id` tie-break) so a same-height burst larger than one fact page pages
-  through completely; the nav-step stream clamps its public `/epochs` page to
-  `EPOCHS_PAGE_LIMIT` (200) since `factLimit` may lawfully be up to 500. The pure evaluation
-  core, effective-settings merge (absence-means-default), payload zod shapes,
-  and incident→kind mapping live in **`app/lib/services/alerts.server.ts`** (no
-  Prisma, no fetch, no clock). `mintInternalAssertion` (in
-  `assertion.server.ts`) mints the `internal:notifier` scope, golden-vector
-  cross-pinned with `services/api`. New standing gates: `test/notifier.test.ts`
-  (exactly-once, presence filter, opt-out suppression, opt-in fan-out, incident
-  mapping, failure isolation, retention sweep), `test/notification-payload.test.ts`
-  (closed identifier-only payloads, no amount keys), `test/alerts-models.test.ts`
-  (store contract, both impls), `test/notifier-config.test.ts` (config bounds);
-  the app-schema allowlist now covers the three alert tables.
-  **Bell + settings + rule CRUD (PR 6.2 commit C):** two session-gated resource
-  routes **outside `:lang?`** (`app/routes/alerts-{notifications,rules}.tsx`,
-  the `portfolio/export` precedent) over `app/alerts/alerts.server.ts` (the seam
-  that wraps the store + the pure effective-settings merge, and holds the
-  route boundary schemas). The acting address is ALWAYS `requireSession`'s
-  address; mark-read is store-scoped by address. The chrome **bell**
-  (`components/chrome/alerts-bell.tsx`) keeps the anonymous advert verbatim and,
-  for a session, renders the bell + unread badge (the count rides the `root.tsx`
-  loader — only the integer crosses; the popover fetches notifications via
-  `useFetcher` on open). The Portfolio **Alert settings** section
-  (`components/portfolio/alert-settings.tsx`, id `alert-settings`) toggles the
-  closed kind list (default-on annotated, `operator_arrears` operator-only,
-  market-spread absent). Both client components consume JSON with **string
-  kinds** — they never import the `.server` alert modules — and every
-  user-visible string is an `alerts.*` i18n key (hyphenated, no underscores).
-  New standing gates: `test/alerts-routes.test.ts`, `test/session-scope.test.ts`
-  (alerts join it), offline `e2e/alerts.spec.ts`, skip-clean
-  `e2e-live/alerts.spec.ts`. Offline e2e has no session, so the authenticated
-  settings section is not offline-axe'd (the portfolio precedent).
-- **Web Push channel (PR 6.3, app-spec §10.4/§12.3/§14.7):** the ONE accepted
-  SECURITY.md exception — opt-in, opaque, revocable push tokens. **Service
-  worker** `public/push-sw.js` is a **static file served straight from `public/`
-  with NO bundler involvement** (auditable as one small file): it holds no keys,
-  performs **no fetches** (no `fetch` handler), caches nothing, and renders a
-  notification from the closed `{ kind, url }` payload using a built-in generic
-  per-kind copy map (identifier-free; v1 `en`-only, revisited with the first
-  added locale). The `push_subscriptions` model (`prisma/push_subscriptions.prisma`)
-  is exactly the W3C `PushSubscription.toJSON()` triple plus `address`/`sessionId`/
-  `createdAt` — gated by `test/app-schema-allowlist.test.ts`; the triple is opaque
-  and **never logged**. **Models port** `app/lib/models/push.server.ts` (`PushStore`,
-  Prisma + in-memory) enforces opt-in-only creation, replace-by-session (never
-  accumulate), and a per-address cap (oldest evicted). The session-gated resource
-  route `app/routes/push-subscription.tsx` (outside `:lang?`, the `alerts-*`
-  precedent) POST-upserts / DELETE-removes scoped to the session id; the acting
-  address and session id come only from `requireSession` + the cookie, never a
-  body field. **Config:** `WEB_PUSH_VAPID_PUBLIC_KEY` is client-safe (§7 allowlist);
-  private key/subject stay server-only; the three are all-or-none at boot. New
-  standing gates: `test/push-subscription.test.ts`, the extended allowlist +
-  `session-scope` + `client-config` suites. **Notifier fan-out + deletion chain
-  (PR 6.3 commit B):** after a stream's `commitTick` (now returning the
-  NEWLY-INSERTED candidates via `createManyAndReturn` = `INSERT … ON CONFLICT DO
-  NOTHING RETURNING`), the tick's delivery phase — OUTSIDE the DB transaction —
-  fans them out (`notifier/push.ts`) to the recipient's subscriptions via the
-  **`web-push`** package (the milestone's single new dependency, lockfile-pinned,
-  imported ONLY in the notifier so it never bundles; the client is unaffected).
-  The push body is the closed `{ kind, url }` from `toPushPayload(kind)` (derived
-  from the kind alone — no amounts/addresses/ids can leak, invariant 3). Push is
-  never load-bearing: a failed send logs (endpoint SCRUBBED) and drops (no retry
-  queue, at-most-once); a `404`/`410` prunes the row. The **deletion chain** is
-  wired in `app/lib/services/session.server.ts` (`destroySession`): logout and
-  the stale-cookie expiry sweep remove the session's push subscriptions (a
-  two-step delete, not one transaction — 5.1/6.2 use separate Prisma clients;
-  push rows are deleted FIRST so a failure strands a session remnant, never a
-  token). The "no token outlives its session" property is enforced by the
-  notifier tick's **invariant sweep** (`PushStore.sweepOrphans`: one anti-join
-  DELETE mirroring the session liveness rule) — it removes tokens of expired
-  sessions whose browser never returns and any crash remnant, and runs whether
-  or not VAPID is configured; subscription upserts run **Serializable** with a
-  bounded P2034 retry so concurrent POSTs cannot defeat replace-by-session or
-  the per-address cap. New standing gates:
-  **`test/push-token-deletion.test.ts`** (all deletion paths incl. the sweep) and
-  `test/push-payload.test.ts` (the closed `{ kind, url }` body); the notifier +
-  notifier-config suites gain fan-out/VAPID cases.
-- The session layer mints the short-lived scoped service assertions
-  `services/api` requires for address-scoped reads (ADR-001 Decision 2);
-  `API_SERVICE_ASSERTION_KEY` is server-only and never reaches the client
-  bundle.
-- Design tokens are web-local for v1 (spec §14.8); every token change re-runs
-  the shared validation method on both themes in CI — the categorical chart
-  palette via `check:palette` and the brand accent/status contrast via
-  `test/brand-tokens.test.ts` (both call `scripts/validate_palette.js`). The
-  program accent is the NUVA mint-green primary CTA / focus ring; the semantic
-  UI status set (`--status-good`/`-warning`/`-serious`/`-critical`) is a fixed
-  family, never themed, always paired with an icon + label. The §11 type stack
-  (Funnel Sans / Space Grotesk / Geist Mono) is not yet self-hosted — its
-  webfonts are a separate change (no committed binaries).
+  [ADR](../../docs/architecture/2026-07-14-adr-001-app-component-architecture.md))
+  as `app_writer`, which has **no grants on `indexed`**. Indexed history is read
+  only through `services/api`. `DATABASE_URL` is optional — absent, sessions run
+  on a non-durable in-memory store. `test/app-schema-allowlist.test.ts` gates
+  additions and forbids any role/identity/device column.
+- **The schema is ONE baseline migration, not a history.** Nothing runs this
+  schema outside dev and CI, so a schema change edits the models and is
+  regenerated into `prisma/migrations/20260723000000_init_sessions` rather than
+  appended to. Regenerate with `prisma migrate diff --from-empty
+  --to-schema-datamodel prisma --script`, keeping the file's hand-written
+  header, and rebuild the database (`./dev pg reset`, `migrate:deploy`).
+  Unlike `indexed`, this schema is NOT rebuildable from chain — a rebuild drops
+  sessions, notifications and push subscriptions — so the first environment
+  whose contents must survive is the point at which incremental migrations
+  start.
 - Accessibility and responsive layout are requirements, not nice-to-haves.
 - Security ([`SECURITY.md`](../../SECURITY.md)): never touch private keys or
-  mnemonics — wallet adapters own signing; everything in the client bundle
-  and `VITE_*` env is public; UI guards are convenience, the contract is the
+  mnemonics — wallet adapters own signing; everything in the client bundle and
+  `VITE_*` env is public; UI guards are convenience, the contract is the
   enforcement boundary.
+
+## Layout
+
+- **`app/wallet/`** — signing behind a **closed vendor registry** (Figure WC v2
+  mobile + injected extension, Arculus WC v2 mobile). Vendor workarounds live
+  only in that vendor's adapter module. Signing reaches the wallet only via
+  `useWallet().signDirect`.
+- **`app/lib/adr36.ts`** — the **one** sign-doc construction site for client and
+  server. `app/lib/adr36-verify.server.ts` holds the app's bech32 primitives.
+- **`app/tx/`** — the transaction lifecycle. `lifecycle.ts` is a pure reducer
+  (signing only through confirm; confirmed only after inclusion);
+  `proto.ts` + `build.ts` are dependency-free and **byte-golden to the fixtures
+  corpus** — re-encoded fixture txs must hash to their captured tx ids. Pages
+  drive it through **`useTxFlow`** (preflight → simulate → confirm → sign →
+  broadcast → track), never calling the resource routes ad hoc.
+- **`app/config/`** — `config.server.ts` validates and bounds at the boundary;
+  `client.ts` is the §7 client-safe allowlist. Boot checks (chain-id match,
+  vault-address cross-check) run at startup and fail loudly.
+- **Feature seams** — `app/{portfolio,market,validators,exit,stake,governance,learn,chrome,alerts}/`
+  each hold a `*.server.ts` composition seam, a `types.ts` of view models, and
+  pure helpers. Components under `app/components/<feature>/` are
+  presentation-only over those view models.
+- **`notifier/`** — a separate worker entrypoint (ADR-001 Decision 3), **outside
+  `app/`** so the React Router build never bundles it. Uses **relative** imports
+  and avoids parameter properties, `enum`, and `namespace` (Node's strip-only TS
+  runs it directly). Its indexed-fact reads go through `services/api`.
+- **Resource routes** (CSV exports, alerts, push) are registered **outside the
+  `:lang?` segment**. Detail routes register **after** their list route.
+
+### Load-bearing rules
+
+**Fee basis — read before touching `simulate.server.ts`.** The simulate result
+**is** the fee (chain-facts §flatfees): used verbatim, price 1nhash and **not a
+tunable**, **no adjustment buffer**, `gasLimit == amount`. A tx priced off the
+old `price × gas` model is *rejected* by the protocol. Pinned by
+`test/tx-fee.test.ts`.
+
+**`ALLOWED_MSG_TYPE_URLS` is TWO-LEVEL.** `MsgExecuteContract` is in it only
+because `guardOperatorExecute` runs for that type URL alone — on its own the
+entry would authorize any call to any contract. The guard checks the configured
+contract, a single top-level key from the closed six-variant operator set (no
+admin/keeper variant), the per-variant body, funds discipline, and finally
+**canonical byte equality** with `operatorInnerJson`. **Extending either level —
+a new type URL or a new variant — is a design-review event, never an edit.**
+
+The three `cosmos.group.v1` types are guarded **structurally**: type URL →
+signer ↔ session binding (`voter`, `signer`, the single `proposers` entry) →
+closed field set with bounded values → the `exec` pin → canonical re-encode. For
+`MsgSubmitProposal` the re-encode covers the **envelope**; the inner `Any` bytes
+ride verbatim.
+
+**Read this before re-tightening the `MsgSubmitProposal` guard.** It once
+carried three further conditions — a closed template match per inner message, a
+per-element re-encode, and a live policy sweep that made `guardSignedTx` async
+with a 503 failure mode — and they are deliberately gone. The reasoning they
+rested on is backwards: an unguarded `MsgExecuteContract` executes **on
+inclusion** under the signer's own authority, while a `MsgSubmitProposal`
+executes **nothing** until the group's decision policy is satisfied by other
+members voting. The group's threshold is the enforcement boundary, and what
+protects members from a hostile proposal is **reading** it before voting —
+7.2's decoder. `test/broadcast-guard.test.ts` asserts the permissive cases as
+**acceptances** on purpose, so restoring the conditions means editing named test
+cases rather than sliding them back in.
+
+**The `exec` pin is a confirmation-rigor control, not an authorization one**
+(`EXEC_UNSPECIFIED`, enforced as "field 5 absent" since proto3 omits a zero): it
+makes executing a second, separately confirmed signature. It is not load-bearing
+against an adversary — submit/vote/exec as three relayed txs reaches the same
+state. The confirm disclosure shows `exec: EXEC_UNSPECIFIED` even though the
+bytes omit it, deliberately.
+
+**The preflight fact rule.** Every fact in `OperatorPreflightFacts` is nullable,
+and a variant must short-circuit to `chain-unavailable` on every fact **it
+consumes** — and is equally forbidden from blocking on one it does not. Skipping
+a check on a null returns a green reason list for an action the contract then
+rejects.
+
+**Governance decoding is a closed union** — `MsgSend` plus `MsgExecuteContract`
+against the configured contract, with the variant vocabulary **imported** from
+`app/tx/build.ts`. Anything else is a tagged `unknown` carrying the exact JSON.
+
+**`app/governance/templates.ts` is the COMPOSER's vocabulary, not a relay-guard
+input** — one vocabulary, three consumers (the 7.2 decoder reads it, the confirm
+step discloses through it, the composer builds from it). It stays **total in
+both directions** against the committed `cargo schema` output, which is a
+**product** completeness gate — a new admin capability must be reachable from
+the composer — not a security one. Bridge config is **absent, not stubbed**
+(§14.3 unresolved, no contract variant backs it). `build.ts` imports
+`templateInnerJson` at runtime and keeps a narrow import surface because the
+relay decodes untrusted bytes through it, so `templateSummaryKey` returns a
+**key plus params**, never a string. Write-side wire bounds
+(`MAX_PROPOSAL_MESSAGES`, `MAX_PROPOSAL_METADATA_LEN`, title/summary) are one
+declaration in `packages/api-types/src/bounds.ts`.
+
+**Governance affordances come from the LIVE plane alone** — decided in the
+loader (`app/governance/actions.ts`), never in JSX. `ProposalDetailVM.liveState`
+is **separate from `plane`**: `plane` says which read produced the figures (the
+mirror, honestly, for anything closed), `liveState` says whether the chain just
+confirmed the state an action would operate on. That is why
+`loadGovernanceProposalData` live-reads **accepted** proposals too, and why a
+failed read on an accepted proposal is itself evidence *not* to offer execute —
+x/group prunes a successful exec in its own transaction.
+
+The execution window is `submit_time + min_execution_period`, x/group's own
+rule — **not** the voting-period end — and `min_execution_period` comes from the
+**live policy**, which is why it sits inside `liveState`. The asymmetry to hold
+in your head: `voting_period_end` **is** snapshotted on the chain's `Proposal`;
+`min_execution_period` is **not**, so the module reads the policy account at exec
+time. Taking the window from the mirror's `decision_policy` snapshot lets the
+button and the preflight gating it disagree after a policy change; that snapshot
+is for rendering a historical **threshold**, never the execution window. Not yet
+drilled — devnet runs `min_execution_period: 0`.
+
+**An unresolved window is not a zero window.** A policy with no waiting period
+serializes `"0s"`, so `null` means only that it could not be determined (a policy
+outside the discovered set, or a decision rule this build does not model). Both
+preflight and the affordance treat null as *disabled, we cannot say when* —
+never as executable. It is reachable: `/governance/:proposalId` accepts any
+proposal id and the live read is unscoped, so another group's proposal resolves a
+`liveState` with no policy in our set. Voting is member-only; **execution is
+permissionless**, and the UI says so.
+
+**Web Push is the one accepted SECURITY.md exception** — opt-in, opaque,
+revocable. `public/push-sw.js` is served straight from `public/` with no bundler
+involvement; it holds no keys, performs no fetches, and renders from the closed
+`{ kind, url }` payload. No token outlives its session (four deletion paths, see
+design notes).
+
+**Load the `dataviz` skill before touching `app/components/charts/`.**
 
 ## Commands
 
 Part of the root pnpm workspace (ADR-001 Decision 4); all JS tasks run in the
 containerized toolchain (ADR-002): `./dev pnpm --filter @nvhash/web <script>`.
-Playwright e2e runs in the official Playwright image on the same compose file:
-`./dev pw --filter @nvhash/web run test:e2e` (image tag and the exact
-`@playwright/test` pin move in lockstep — bump both in one change).
-
-Package scripts (`./dev pnpm --filter @nvhash/web run <script>`):
+Playwright runs in the official Playwright image on the same compose file:
+`./dev pw --filter @nvhash/web run test:e2e` — image tag and the
+`@playwright/test` pin move in lockstep, bump both in one change.
 
 - `typecheck` — `react-router typegen && tsc --noEmit` (strict).
-- `test` — Vitest (node env): i18n key coverage, config bounding + boot-check
-  behavior (against the MSW fixture harness), client-config allowlist, theme
-  cookie parsing, brand-token contrast (`test/brand-tokens.test.ts`),
-  chrome-state banner/freshness honesty (`test/chrome-state.test.ts`, MSW
-  harness with fixture overrides), the environment-locked verify-link map
-  (`test/verify-link.test.ts`), Learn-page per-figure degradation and
-  envelope bounding (`test/learn-data.test.ts`), BigInt amount display
-  golden values (`test/amounts.test.ts`; floats never touch amounts), and
-  the Validators public projection (`test/validators-data.test.ts`: honest
-  degradation plus the closed no-operator-economics key set), and the Market
-  shell honesty (`test/market-data.test.ts`: forthcoming vs unavailable,
-  verbatim sample rendering, null premium never fabricated). Charts share
-  `app/components/charts/step-chart.tsx` (presentation-only step-after,
-  dataviz method).
-- `test:e2e:live` — the **e2e (live)** layer (PR 5.2; master plan §4):
-  Playwright against the REAL devnet stack. Bring it up first
-  (`infra/devnet/stack.sh up`, app profile, migrated app schema), then run
-  with `E2E_LIVE_BASE_URL` (web origin), `E2E_LIVE_VAULT_ADDRESS`,
-  `E2E_LIVE_LCD_URL` (for the stake drill's balance cross-check), and
-  `E2E_LIVE_SIGNER_KEY` (a funded THROWAWAY devnet key, 32 hex bytes —
+- `test` — Vitest (node env), over the MSW fixture harness.
+- `test:e2e` — production build + Playwright against `react-router-serve` with
+  `NVHASH_MOCK=1` (fully offline, chain reads from `@nvhash/fixtures`). Includes
+  the axe scans on both themes, the server-only-leak assertion, and a second
+  instance with `NVHASH_MOCK_LIVE_DOWN=1` proving failed live reads degrade
+  honestly. Run via `./dev pw`, not `./dev pnpm` (needs browsers).
+- `test:e2e:live` — Playwright against the **real devnet stack**. Bring it up
+  first (`infra/devnet/stack.sh up`, app profile, migrated app schema), then set
+  `E2E_LIVE_BASE_URL`, `E2E_LIVE_VAULT_ADDRESS`, `E2E_LIVE_LCD_URL`, and
+  `E2E_LIVE_SIGNER_KEY` (a funded **throwaway** devnet key, 32 hex bytes —
   SECURITY.md devnet rules; specs skip cleanly when unset). The test signer
-  lives only in the test process (`e2e-live/signer.ts`); `check:bundle`
-  scans for its sentinel so it can never ship. Runs on the stack schedule,
-  not in the offline CI lane.
-  **`E2E_LIVE_OPERATOR_KEY` (optional, M6.4)** — the VALIDATOR's own operator
-  key, which unlocks `operator.spec.ts`'s enroll/unregister leg. The funded
-  throwaway key cannot cover it: the contract's `is_operator` compares the
-  bech32 payloads of caller and valoper, so enrolment is authorization-gated,
-  not funding-gated. Absent, that leg skips loudly and the permissionless
-  payment legs still run — which is the honest test of preflight applying no
-  operator check to payments.
-  **Re-run trap, learned the hard way:** the compose `web` service builds at
-  container START, so a long-running stack serves a stale bundle. A live run
-  against it can pass for the wrong reason — the M6.4 guard assertions "passed"
-  against a build where `MsgExecuteContract` was not in the allowlist at all,
-  a first-level rejection indistinguishable from the deep guard's. Restart the
-  service (`docker compose --profile app --profile db restart web` from
-  `infra/dev/`) before trusting a green live run.
-- `test:e2e` — production build + Playwright against `react-router-serve`
-  with `NVHASH_MOCK=1` (chain reads served from `@nvhash/fixtures` via MSW —
-  fully offline). Includes the axe accessibility scans on both themes (route
-  list covers `/` plus the PR 4.1 stub routes `/stake`, `/portfolio`,
-  `/market`, `/validators`, `/governance`; new routes join the list), the
-  runtime server-only-leak assertion, and a second server instance with
-  `NVHASH_MOCK_LIVE_DOWN=1` that proves failed live reads degrade honestly
-  (`e2e/chrome.spec.ts`). Run via `./dev pw`, not `./dev pnpm` (needs
-  browsers).
+  lives only in the test process (`e2e-live/signer.ts`) and `check:bundle` scans
+  for its sentinel so it can never ship. Optional `E2E_LIVE_OPERATOR_KEY`
+  unlocks the enroll/unregister leg, and `E2E_LIVE_GOV_MEMBER_KEY` the
+  governance write leg — the latter must be a funded throwaway key that is
+  **also a group member**, since proposing and voting are membership-gated and
+  the generic signer key cannot reach them. Runs on the stack schedule, not
+  offline CI.
+  **Restart the compose `web` service before trusting a green live run** — it
+  builds at container start, so a long-running stack serves a stale bundle.
 - `check:palette` — the shared dataviz validation method
-  (`scripts/validate_palette.js`) over both theme token sets in
-  `app/theme/tokens.css` (ADR-001 Decision 4 gate).
-- `check:bundle` — bundle-secret gate: builds with sentinel values in every
-  server-only env var (`scripts/server-only-env.json`) and fails if any
-  reaches `build/client`.
-- `dev` / `build` / `start` — standard React Router dev server / build /
-  serve. `NVHASH_MOCK=1` makes the server read chain state from the fixture
-  corpus (dev without a devnet). The full stack against a real dev node is
-  `infra/devnet/stack.sh up` (PR 1.5): it resolves the deployed contract/vault
-  addresses from chain, points this tier at `http://dev-node:1317` with
-  `NVHASH_MOCK` unset, and waits for the `GET /healthz` readiness probe —
-  `app/routes/healthz.tsx`, a locale-independent resource route that runs the
-  same boot checks (console chain-id match, vault-address cross-check) and
-  returns 503 on failure.
+  (`scripts/validate_palette.js`) over both theme token sets.
+- `check:bundle` — builds with sentinel values in every server-only env var
+  (`scripts/server-only-env.json`) and fails if any reaches `build/client`.
+- `dev` / `build` / `start` — standard React Router. `NVHASH_MOCK=1` serves
+  chain state from the fixture corpus (dev without a devnet). Full stack against
+  a real dev node: `infra/devnet/stack.sh up`, which resolves deployed
+  contract/vault addresses from chain and waits on `GET /healthz`
+  (`app/routes/healthz.tsx`, locale-independent, runs the boot checks, 503 on
+  failure).
 
-Config is validated and bounded at the boundary (`app/config/config.server.ts`);
-copy `.env.example` to `.env` for local values. Boot checks (console chain-id
-match, vault-address cross-check against `Config {}`) run at server startup
-and fail it loudly on mismatch.
+Copy `.env.example` to `.env` for local values.
 
-### CI gates (standing from PR 1.3)
+## CI gates
 
-`pnpm -r run typecheck/test` in `app-ci` picks up the unit suite; the
-`web-gates` job runs `check:palette` + `check:bundle`, and `web-e2e` runs the
-Playwright suite in the pinned Playwright image. Security-executable gates
-(SECURITY.md, plan §4), all CI-failing:
+`app-ci` runs `pnpm -r run typecheck/test`; the `web-gates` job runs
+`check:palette` + `check:bundle`; `web-e2e` runs Playwright in the pinned image.
+All fail CI on violation.
 
 - **Bundle-secret check** (`check:bundle` + `test/client-config.test.ts` +
-  `e2e/leaks.spec.ts`): nothing beyond the app-spec §7 client-safe subset
-  (`app/config/client.ts` allowlist) appears in the client bundle or the
-  served page. Adding an env var without classifying it in
+  `e2e/leaks.spec.ts`): nothing beyond the §7 client-safe subset appears in the
+  client bundle or the served page. Adding an env var without classifying it in
   `scripts/server-only-env.json` fails the unit suite.
+- **Personal-route session scope** (`test/session-scope.test.ts` +
+  `test/session.test.ts`): the acting address comes only from the session (query
+  params have no effect); anonymous requests prompt-and-explain (page) or 401
+  (resource route); cookie flags, nonce single-use/replay, and expiry bounds are
+  pinned. **Every new personal or public-by-design route joins this suite.**
+- **App-schema allowlist** (`test/app-schema-allowlist.test.ts`) — the
+  data-minimization gate; forbids any role/identity/device column.
+- **Push-token deletion** (`test/push-token-deletion.test.ts`) — makes the
+  SECURITY.md accepted exception's *condition* mechanical: a token is deleted on
+  opt-out, logout, session expiry/removal, dead-endpoint (404/410) pruning, and
+  the notifier tick's invariant sweep. `test/push-payload.test.ts` pins the
+  closed `{ kind, url }` body — never amounts, addresses, or ids.
+- **Broadcast guard** (`test/broadcast-guard.test.ts`) — the rejection matrix
+  including every admin variant, mixed batches, duplicate proto fields, and
+  non-canonical encodings, plus the governance blocks: the admitted
+  `cosmos.group.v1` set pinned to **exactly** three, every other group type and
+  the authz wrapper rejected by name, and the deliberately permissive
+  `MsgSubmitProposal` cases asserted as acceptances.
+  `test/tx-operator-build.test.ts` holds byte-goldens against captured devnet
+  txs; `test/tx-confirm.test.ts` asserts the disclosure equals the signed bytes
+  for every variant; `test/tx-preflight.test.ts` holds the predicate matrix in
+  both directions.
+- **Governance write path** — `test/governance-templates.test.ts` (totality
+  against the committed `cargo schema` output, both directions) and
+  `test/governance-flows.test.ts` (one case per affordance state, including
+  membership-unknown as distinct from not-a-member, and
+  disabled-with-an-unknown-time for an unresolvable waiting period). Offline
+  `e2e/governance.spec.ts` sweeps affordances; `e2e-live/governance-write.spec.ts`
+  skips clean without `E2E_LIVE_GOV_MEMBER_KEY`.
+- **Assertion vectors** (`test/assertion.test.ts`) — ADR-001 Decision 2 golden
+  vectors, cross-pinned with `services/api/test/assertion-vectors.test.ts`.
+- **Wallet registry** (`test/wallet-adapter.test.ts`) — keeps the vendor
+  registry closed. `test/roles.test.ts` pins live role re-check.
 - **i18n key coverage** (`test/i18n-coverage.test.ts`): locale catalogs are
-  key-identical to `en`; every `t()` call site resolves.
-- **Palette validation** (`check:palette`): both theme token sets pass the
-  shared dataviz method (categorical chart palette) on every change.
-- **Brand-token contrast** (`test/brand-tokens.test.ts`): the mint-green
-  primary CTA / focus ring clear their WCAG floors and the fixed status set
-  stays on its family values in both themes — computed with the shared
-  `validate_palette.js` `contrast`, so a token edit that fails AA fails CI.
-- **axe** (`e2e/axe.spec.ts`): WCAG A/AA scans on both themes; new routes are
-  added to its route list.
-
-- **Personal-route session scope** (standing from PR 5.1,
-  `test/session-scope.test.ts` + `test/session.test.ts`): the acting address
-  on personal surfaces comes only from the session (query params have no
-  effect); anonymous requests prompt-and-explain (page) or 401 (resource
-  route); cookie flags, nonce single-use/replay, and expiry bounds are
-  pinned. `test/roles.test.ts` pins live role re-check (membership loss on
-  refresh; degraded chain reads → no roles). `test/assertion.test.ts` holds
-  the ADR-001 Decision 2 golden vectors cross-pinned with
-  `services/api/test/assertion-vectors.test.ts`.
-  `test/app-schema-allowlist.test.ts` is the app-schema data-minimization
-  gate. `test/wallet-adapter.test.ts` keeps the vendor registry closed.
-
-- **Push-token deletion** (standing from PR 6.3, `test/push-token-deletion.test.ts`):
-  the SECURITY.md accepted exception's condition made mechanical — an opt-in,
-  opaque, revocable Web Push token is deleted on ALL of opt-out, logout, session
-  expiry/removal (the deletion chain), dead-endpoint (404/410) pruning, and the
-  notifier tick's invariant sweep (any token whose session is missing or expired,
-  covering never-returning browsers and crash remnants); the
-  push body is the closed `{ kind, url }` (`test/push-payload.test.ts`), never
-  amounts/addresses/ids.
-
-Later standing gates attach here per plan §4: aggregate-counter keying (PR 7.6).
+  key-identical to `en`; every `t()` call site resolves. User-visible strings
+  are i18n keys, hyphenated.
+- **Palette + brand-token contrast** (`check:palette`,
+  `test/brand-tokens.test.ts`): both theme token sets pass the shared dataviz
+  method; the mint-green CTA/focus ring clear their WCAG floors and the fixed
+  status family stays on its values in both themes.
+- **axe** (`e2e/axe.spec.ts`): WCAG A/AA on both themes. **New routes join its
+  route list.**

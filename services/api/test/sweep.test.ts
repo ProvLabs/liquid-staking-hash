@@ -1,4 +1,4 @@
-// Regression (PR #7 review P1): the rate limiter's window map grew unbounded
+// Regression: the rate limiter's window map grew unbounded
 // because nothing in the long-lived entry point ever called `sweep()`. The fix
 // wires `scheduleWindowSweep` into `main()`. This proves the helper actually
 // sweeps on its interval and returns an unref'd timer (so it never by itself

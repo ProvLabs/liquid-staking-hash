@@ -1,4 +1,4 @@
-// Amount-input parsing gate (plan 5.3; SECURITY.md validate-and-bound,
+// Amount-input parsing gate (SECURITY.md validate-and-bound,
 // reject-never-clamp; spec §3 decision 8 no-floats). The one place user
 // text becomes an on-chain amount must be strict at the boundary.
 

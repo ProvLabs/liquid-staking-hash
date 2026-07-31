@@ -9,7 +9,7 @@
 // The runtime is injectable (head source, clock, sleep, abort signal) so the
 // pure pieces and one guarded loop pass are unit-testable without Postgres or a
 // live chain. Full supervisor wiring of the head source lands with the first
-// worker (PR 2.1); this PR ships the runtime and its tests.
+// worker; this PR ships the runtime and its tests.
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { logger } from "../logger.ts";

@@ -36,7 +36,10 @@ export function OutcomeHistory({
       ) : (
         <ul className="flex flex-col gap-2">
           {votes.map((vote) => (
-            <li key={`${vote.voter}:${vote.submitTime}`} className="rounded-lg border bg-card p-3 text-sm">
+            <li
+              key={`${vote.voter}:${vote.submitTime}`}
+              className="rounded-lg border bg-card p-3 text-sm"
+            >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-mono text-xs" title={vote.voter}>
                   {shortAddress(vote.voter)}

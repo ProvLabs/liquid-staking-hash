@@ -1,4 +1,4 @@
-// Preflight boundary-matrix gate (plan 5.2 §4.10): amount inputs validated
+// Preflight boundary-matrix gate: amount inputs validated
 // and bounded at the boundary — 0, 1 base unit, min−1, max+1, > balance,
 // non-numeric, float strings — rejected with machine-readable reasons,
 // never clamped. Vault gates (paused / disabled), vesting honesty, and the
@@ -27,7 +27,11 @@ import {
 } from "~/tx/preflight.server";
 import { MAX_PROPOSAL_METADATA_LEN } from "@nvhash/api-types";
 import { executeAffordance } from "~/governance/actions";
-import { FIXTURE_CHAIN_ID, FIXTURE_CONTRACT_ADDRESS, FIXTURE_VAULT_ADDRESS } from "~/mocks/handlers";
+import {
+  FIXTURE_CHAIN_ID,
+  FIXTURE_CONTRACT_ADDRESS,
+  FIXTURE_VAULT_ADDRESS,
+} from "~/mocks/handlers";
 import { server } from "~/mocks/node";
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -64,23 +68,32 @@ function fundedHandlers(options: {
           base_account: { address: ADDRESS, account_number: "12", sequence: "4" },
         },
       }
-    : { "@type": "/cosmos.auth.v1beta1.BaseAccount", address: ADDRESS, account_number: "12", sequence: "4" };
+    : {
+        "@type": "/cosmos.auth.v1beta1.BaseAccount",
+        address: ADDRESS,
+        account_number: "12",
+        sequence: "4",
+      };
   const balances = [
     { denom: "nhash", amount: options.nhash ?? "0" },
     { denom: "nvhash", amount: options.nvhash ?? "0" },
   ].filter((c) => c.amount !== "0");
   return [
     http.get("*/vault/v1/vaults/:id", () => HttpResponse.json(vault)),
-    http.get("*/cosmos/auth/v1beta1/accounts/:address", () =>
-      HttpResponse.json({ account }),
-    ),
+    http.get("*/cosmos/auth/v1beta1/accounts/:address", () => HttpResponse.json({ account })),
     http.get("*/cosmos/bank/v1beta1/spendable_balances/:address", () =>
-      HttpResponse.json({ balances, pagination: { next_key: null, total: String(balances.length) } }),
+      HttpResponse.json({
+        balances,
+        pagination: { next_key: null, total: String(balances.length) },
+      }),
     ),
     http.get("*/cosmos/bank/v1beta1/balances/:address/by_denom", ({ request }) => {
       const denom = new URL(request.url).searchParams.get("denom") ?? "nhash";
       return HttpResponse.json({
-        balance: { denom, amount: denom === "nhash" ? (options.totalNhash ?? options.nhash ?? "0") : "0" },
+        balance: {
+          denom,
+          amount: denom === "nhash" ? (options.totalNhash ?? options.nhash ?? "0") : "0",
+        },
       });
     }),
   ];
@@ -111,7 +124,11 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
     server.use(...fundedHandlers({ nhash: AMPLE }));
     const result = await runPreflight(config, ADDRESS, { kind: "swap_in", amount: "1000000000" });
     expect(result.reasons).toEqual([]);
-    expect(result.signer).toEqual({ accountNumber: "12", sequence: "4", chainId: FIXTURE_CHAIN_ID });
+    expect(result.signer).toEqual({
+      accountNumber: "12",
+      sequence: "4",
+      chainId: FIXTURE_CHAIN_ID,
+    });
   });
 
   it("amount 0 → amount-invalid", async () => {
@@ -211,7 +228,7 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
   });
 });
 
-// ── M6.4: the operator predicate matrix (§2.4) ───────────────────────────
+// ── The operator predicate matrix (§2.4) ───────────────────────────
 //
 // Pure over live facts, so every branch is drivable. Two properties matter
 // beyond the individual rules:
@@ -221,7 +238,7 @@ describe("preflight matrix (live vault reads; reasons on every block)", () => {
 //     ("anyone, nhash attached") and pretending otherwise would block a
 //     co-op partner from doing something the contract allows.
 
-describe("operator preflight predicates (M6.4 §2.4)", () => {
+describe("operator preflight predicates", () => {
   const ADDRESS = "tp18kkn20p7dphkal2x84t30cv7z6v9rf9cvykjhk";
   const VALOPER = "tpvaloper1l39wu7cht0zcycc5rkcd90sdd4ksjmxwjqvnjp";
   /** The valoper ADDRESS actually operates: same bech32 payload, `valoper` HRP
@@ -499,19 +516,28 @@ describe("operator preflight predicates (M6.4 §2.4)", () => {
   });
 
   it("bounds its inputs at the boundary (valoper shape, amount shape)", () => {
-    expect(operatorPreflightRequestSchema.safeParse({ kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "1" }).success).toBe(true);
+    expect(
+      operatorPreflightRequestSchema.safeParse({
+        kind: "operator",
+        variant: "pay_tip",
+        valoper: VALOPER,
+        amount: "1",
+      }).success,
+    ).toBe(true);
     for (const bad of [
       { kind: "operator", variant: "pay_tip", valoper: ADDRESS, amount: "1" }, // account, not valoper
       { kind: "operator", variant: "set_halted", valoper: VALOPER, amount: "1" }, // not a variant
       { kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "1.5" }, // float
       { kind: "operator", variant: "pay_tip", valoper: VALOPER, amount: "-1" }, // negative
     ]) {
-      expect(operatorPreflightRequestSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+      expect(operatorPreflightRequestSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(
+        false,
+      );
     }
   });
 });
 
-// ── M7.3–7.4: the governance predicate matrix (§2.5) ─────────────────────
+// ── The governance predicate matrix ──────────────────────────────────────
 //
 // Same contract as the operator matrix above, including its two-directional
 // rule: a variant MUST short-circuit on every fact IT consumes, and is equally
@@ -612,24 +638,32 @@ describe("governance preflight — vote", () => {
   it("BLOCKS on every fact it consumes, and on no other", () => {
     // Consumed by the vote branch: the member set and the vote list.
     for (const missing of [{ memberAddresses: null }, { voters: null }] as const) {
-      expect(govCodes(governancePreflightReasons(vote, govFacts(missing))), JSON.stringify(missing)).toEqual([
-        "governance-unavailable",
-      ]);
+      expect(
+        govCodes(governancePreflightReasons(vote, govFacts(missing))),
+        JSON.stringify(missing),
+      ).toEqual(["governance-unavailable"]);
     }
     // NOT consumed by the vote branch: the policy set. Blocking on it would be
     // the other half of the two-directional rule.
-    expect(
-      govCodes(governancePreflightReasons(vote, govFacts({ policyAddresses: null }))),
-    ).toEqual([]);
+    expect(govCodes(governancePreflightReasons(vote, govFacts({ policyAddresses: null })))).toEqual(
+      [],
+    );
   });
 });
 
 describe("governance preflight — exec", () => {
   const exec = { kind: "gov_exec", proposalId: "12" } as const;
-  const accepted = { status: "ACCEPTED", executorResult: "NOT_RUN", submitTime: "2026-07-29T12:00:00Z", votingPeriodEnd: "2026-07-31T12:00:00Z" };
+  const accepted = {
+    status: "ACCEPTED",
+    executorResult: "NOT_RUN",
+    submitTime: "2026-07-29T12:00:00Z",
+    votingPeriodEnd: "2026-07-31T12:00:00Z",
+  };
 
   it("an accepted, elapsed-window proposal → no reasons", () => {
-    expect(govCodes(governancePreflightReasons(exec, govFacts({ proposal: accepted })))).toEqual([]);
+    expect(govCodes(governancePreflightReasons(exec, govFacts({ proposal: accepted })))).toEqual(
+      [],
+    );
   });
 
   it("still open → proposal-not-passed AND the voting-period-open detail", () => {
@@ -650,7 +684,7 @@ describe("governance preflight — exec", () => {
   });
 
   it("an UNDETERMINED window BLOCKS — an unresolved window is not a zero window", () => {
-    // The preflight half of the PR #25 review finding. `minExecutionPeriod` is
+    // The preflight half of the same rule. `minExecutionPeriod` is
     // null only when it could not be determined (policy outside the discovered
     // set, or a decision rule this build does not model); x/group serializes
     // `"0s"` for a policy that genuinely has no waiting period. Passing null
@@ -665,11 +699,14 @@ describe("governance preflight — exec", () => {
     expect(reasons).toContainEqual({ code: "min-execution-pending", readyAtIso: null });
   });
 
-  it("a ZERO window still passes — `\"0s\"` is a value, not an absence", () => {
+  it('a ZERO window still passes — `"0s"` is a value, not an absence', () => {
     // The fix must not block a legitimately-executable proposal.
     expect(
       govCodes(
-        governancePreflightReasons(exec, govFacts({ proposal: accepted, minExecutionPeriod: "0s" })),
+        governancePreflightReasons(
+          exec,
+          govFacts({ proposal: accepted, minExecutionPeriod: "0s" }),
+        ),
       ),
     ).toEqual([]);
   });
@@ -708,10 +745,7 @@ describe("governance preflight — exec", () => {
     for (const executorResult of ["SUCCESS", "FAILURE"]) {
       expect(
         govCodes(
-          governancePreflightReasons(
-            exec,
-            govFacts({ proposal: { ...accepted, executorResult } }),
-          ),
+          governancePreflightReasons(exec, govFacts({ proposal: { ...accepted, executorResult } })),
         ),
         executorResult,
       ).toContain("already-executed");
@@ -727,7 +761,7 @@ describe("governance preflight — exec", () => {
     }
   });
 
-  it("does NOT require membership — execution is permissionless (§7 Q2)", () => {
+  it("does NOT require membership — execution is permissionless", () => {
     expect(
       govCodes(
         governancePreflightReasons(
@@ -818,9 +852,9 @@ describe("governance preflight — submit", () => {
       ),
     ).toEqual(["chain-unavailable"]);
     // A proposal touching neither must not block on a read it does not use.
-    expect(
-      govCodes(governancePreflightReasons(submit, govFacts({ currentConfig: null }))),
-    ).toEqual([]);
+    expect(govCodes(governancePreflightReasons(submit, govFacts({ currentConfig: null })))).toEqual(
+      [],
+    );
   });
 
   it("BLOCKS on the policy set and the member set — both consumed here", () => {
@@ -860,7 +894,12 @@ describe("governance preflight — the shared rules", () => {
 
   it("the fee is checked on all three, and an unreadable balance blocks", () => {
     const request = { kind: "gov_exec", proposalId: "12" } as const;
-    const accepted = { status: "ACCEPTED", executorResult: "NOT_RUN", submitTime: "2026-07-29T12:00:00Z", votingPeriodEnd: "2026-07-31T12:00:00Z" };
+    const accepted = {
+      status: "ACCEPTED",
+      executorResult: "NOT_RUN",
+      submitTime: "2026-07-29T12:00:00Z",
+      votingPeriodEnd: "2026-07-31T12:00:00Z",
+    };
     expect(
       govCodes(
         governancePreflightReasons(request, govFacts({ proposal: accepted, spendableNhash: 0n })),

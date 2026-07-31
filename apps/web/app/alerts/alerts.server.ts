@@ -1,9 +1,9 @@
-// Alerts feature-server module (plan 6.2 §2.6): the seam the two `/alerts/*`
+// Alerts feature-server module: the seam the two `/alerts/*`
 // resource routes and the root loader's unread count use. Wraps the AlertStore
 // (models layer) with the pure effective-settings merge (services layer) and
 // the route boundary schemas. The acting address is ALWAYS the session address
 // (the routes pass `session.address`); nothing here reads an address from user
-// input (the standing session-scope gate, plan §4.6).
+// input (standing session-scope gate).
 
 import { z } from "zod";
 import type { WebConfig } from "~/config/config.server";
@@ -31,7 +31,9 @@ export const notificationsPageSchema = z.coerce.number().int().min(0).max(MAX_NO
 
 /** POST /alerts/notifications body: explicit ids or the whole unread set. */
 export const markReadBodySchema = z.union([
-  z.object({ ids: z.array(z.string().regex(/^\d+$/, "expected a numeric id")).min(1).max(MAX_MARK_READ_IDS) }),
+  z.object({
+    ids: z.array(z.string().regex(/^\d+$/, "expected a numeric id")).min(1).max(MAX_MARK_READ_IDS),
+  }),
   z.object({ all: z.literal(true) }),
 ]);
 export type MarkReadBody = z.infer<typeof markReadBodySchema>;
@@ -78,7 +80,10 @@ export async function loadNotifications(
 ): Promise<{ notifications: NotificationView[]; unread: number }> {
   const store = await getAlertStore(config);
   const [rows, unread] = await Promise.all([
-    store.listNotifications(address, { limit: NOTIFICATIONS_PAGE_SIZE, offset: page * NOTIFICATIONS_PAGE_SIZE }),
+    store.listNotifications(address, {
+      limit: NOTIFICATIONS_PAGE_SIZE,
+      offset: page * NOTIFICATIONS_PAGE_SIZE,
+    }),
     store.countUnread(address),
   ]);
   return { notifications: rows.map(toView), unread };
@@ -100,7 +105,8 @@ export async function markNotificationsRead(
   body: MarkReadBody,
 ): Promise<{ marked: number; unread: number }> {
   const store = await getAlertStore(config);
-  const selector: MarkReadSelector = "all" in body ? { all: true } : { ids: body.ids.map((id) => BigInt(id)) };
+  const selector: MarkReadSelector =
+    "all" in body ? { all: true } : { ids: body.ids.map((id) => BigInt(id)) };
   const marked = await store.markRead(address, selector, new Date());
   const unread = await store.countUnread(address);
   return { marked, unread };

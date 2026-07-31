@@ -9,10 +9,10 @@
 // Attribute VALUES are JSON-string-quoted; decoding goes through
 // src/decode/attributes.ts (the one place that fact lives).
 //
-// M6.4 adds a third provenance on the tx-search plane: the program CONTRACT's
-// own `wasm` events for PayCommission/PayTip. Those attribute values arrive
-// BARE (the contract is not the vault module) — `dequote` tolerates both, so
-// the decode path is unchanged.
+// A third provenance rides the tx-search plane: the program CONTRACT's own
+// `wasm` events for PayCommission/PayTip. Those attribute values arrive BARE
+// (the contract is not the vault module) — `dequote` tolerates both, so one
+// decode path serves all three.
 
 /** Vault module event type URLs (provlabs.vault.v1). */
 export const VAULT_EVENT = {
@@ -28,7 +28,7 @@ export const NAV_EVENT = "provenance.marker.v1.EventSetNetAssetValue";
 
 /** CosmWasm's contract-emitted event type, and the bank event carrying a
  * message's attached funds. Operator payments are decoded from the PAIR
- * (M6.4 §2.1): `pay_tip`'s wasm event reports the epoch-cumulative
+ *: `pay_tip`'s wasm event reports the epoch-cumulative
  * `tip_epoch`, never the payment's own nhash. */
 export const WASM_EVENT = "wasm";
 export const TRANSFER_EVENT = "transfer";
@@ -103,7 +103,7 @@ export interface OperatorPaymentEvent extends TxBase {
   readonly kind: "operator_payment";
   /** Position within this (txhash, msgIndex); 0 unless the message batched
    * several payments. Part of the row's natural key — without it siblings
-   * overwrite each other (PR #22 review). */
+   * overwrite each other. */
   readonly ordinal: number;
   readonly paymentType: OperatorPaymentType;
   readonly valoper: string;

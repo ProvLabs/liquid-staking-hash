@@ -1,4 +1,4 @@
-// notifier_checkpoints (plan 6.2 §2.1) — one row per notifier stream. The
+// notifier_checkpoints — one row per notifier stream. The
 // cursor is an **efficiency device, never the correctness mechanism** (that is
 // the notifications unique constraint): streams cursor on different monotonic
 // values (height, incident id, epoch index), each stream zod-parses its own

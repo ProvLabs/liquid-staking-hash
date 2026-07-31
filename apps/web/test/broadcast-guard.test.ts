@@ -1,4 +1,4 @@
-// Broadcast-relay guard gate (plan 5.2 §4.9; §12.3 amendment): the relay
+// Broadcast-relay guard gate (§12.3 amendment): the relay
 // accepts ONLY a fully-signed tx whose sole signer is the session address,
 // whose messages are the closed vault set against the configured vault,
 // size-capped and rate-limited. Every guard has its case here — wrong
@@ -17,7 +17,6 @@ import {
   encodeAuthInfo,
   encodeTxBody,
   encodeTxRaw,
-  templateExecuteAny,
   ADMIN_VARIANTS,
   ALLOWED_MSG_TYPE_URLS,
   GOVERNANCE_VOTE_OPTIONS,
@@ -165,17 +164,13 @@ describe("relay guards (each an enforced mechanism)", () => {
 
   // ── The §12.3 amendment, asserted on the CONSTANT ─────────────────────
   //
-  // Through PR 7.1 this suite held the opposite assertion — "the allowlist
-  // carries no x/group type URL" — precisely so that admitting one would be a
-  // line someone had to delete. THIS PR is that deliberate design-review event,
-  // and the replacement is not weaker: it pins the admitted set to EXACTLY the
-  // three named types, so a fourth is still an edit to this line.
+  // The admitted set is pinned to EXACTLY the three named types, so admitting
+  // a fourth is an edit to this line — a deliberate design-review event, never
+  // a widening that passes unnoticed.
   it("the allowlist admits EXACTLY three x/group types and no others", () => {
     const group = ALLOWED_MSG_TYPE_URLS.filter((url) => url.startsWith("/cosmos.group."));
-    expect([...group].sort()).toEqual(
-      [MSG_GOV_VOTE, MSG_GOV_EXEC, MSG_GOV_SUBMIT_PROPOSAL].sort(),
-    );
-    // …and the M6.4 entries are untouched by the extension.
+    expect([...group].sort()).toEqual([MSG_GOV_VOTE, MSG_GOV_EXEC, MSG_GOV_SUBMIT_PROPOSAL].sort());
+    // …and the operator entry is untouched by the extension.
     expect(ALLOWED_MSG_TYPE_URLS).toContain(MSG_EXECUTE_CONTRACT);
     expect(ALLOWED_MSG_TYPE_URLS).toHaveLength(6);
   });
@@ -195,14 +190,17 @@ describe("relay guards (each an enforced mechanism)", () => {
       "/cosmos.group.v1.MsgCreateGroup",
       "/cosmos.authz.v1beta1.MsgExec",
     ]) {
-      const inner = new ProtoWriter().string(1, SESSION_ADDRESS).string(2, SESSION_ADDRESS).finish();
+      const inner = new ProtoWriter()
+        .string(1, SESSION_ADDRESS)
+        .string(2, SESSION_ADDRESS)
+        .finish();
       const anyMsg = new ProtoWriter().string(1, typeUrl).bytes(2, inner).finish();
       const body = new ProtoWriter().message(1, anyMsg, true).finish();
       const tx = encodeTxRaw(body, authInfoBytes(), [new Uint8Array(64)]);
-      expect(
-        guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
-        typeUrl,
-      ).toMatchObject({ ok: false, status: 400 });
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toMatchObject({
+        ok: false,
+        status: 400,
+      });
     }
   });
 
@@ -221,9 +219,9 @@ describe("relay guards (each an enforced mechanism)", () => {
   });
 
   it("malformed bytes → 400", async () => {
-    expect(guardSignedTx(config, SESSION_ADDRESS, new Uint8Array([0xff, 0x01, 0x02]))).toMatchObject(
-      { ok: false, status: 400 },
-    );
+    expect(
+      guardSignedTx(config, SESSION_ADDRESS, new Uint8Array([0xff, 0x01, 0x02])),
+    ).toMatchObject({ ok: false, status: 400 });
   });
 
   it("multiple signatures → 400 (sole-signer rule)", async () => {
@@ -262,11 +260,13 @@ describe("relay guards (each an enforced mechanism)", () => {
       ok: false,
       status: 429,
     });
-    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 61_000)).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, signedTx(), nowMs + 61_000)).toEqual({
+      ok: true,
+    });
   });
 });
 
-// ── M6.4 §2.5: the operator-execute DEEP guard ───────────────────────────
+// ── The operator-execute DEEP guard ───────────────────────────
 //
 // `MsgExecuteContract` is in the allowlist, so on the first level this type
 // URL is "allowed". Everything below is an attempt to reach the chain with it
@@ -426,8 +426,8 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
 
   // The variants that halt the program, rewrite its config, pause the vault, or
   // drive the cranks. None is in the relay's set; each must be refused. The
-  // bodies are a TOTAL map over `ADMIN_VARIANTS ∪ KEEPER_VARIANTS` (M7.2 §3.4
-  // R4), so a variant added to either list without a case here is a type error
+  // bodies are a TOTAL map over `ADMIN_VARIANTS ∪ KEEPER_VARIANTS`, so a
+  // variant added to either list without a case here is a type error
   // rather than a silently unrejected message — before this the matrix was
   // string literals that could drift from the vocabulary it was proving closed.
   const REJECTED_VARIANT_BODIES = {
@@ -632,7 +632,13 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
     // Per-message enforcement, not first-message enforcement.
     const good = new ProtoWriter()
       .string(1, MSG_EXECUTE_CONTRACT)
-      .bytes(2, rawExecute({ msg: `{"pay_tip":{"valoper":"${VALOPER}"}}`, funds: [{ denom: "nhash", amount: "5" }] }))
+      .bytes(
+        2,
+        rawExecute({
+          msg: `{"pay_tip":{"valoper":"${VALOPER}"}}`,
+          funds: [{ denom: "nhash", amount: "5" }],
+        }),
+      )
       .finish();
     const bad = new ProtoWriter()
       .string(1, MSG_EXECUTE_CONTRACT)
@@ -659,7 +665,7 @@ describe("operator execute — the rejection matrix (§2.5)", () => {
   });
 });
 
-// ── M7.3–7.4 §2.2: the GOVERNANCE guards ─────────────────────────────────
+// ── The GOVERNANCE guards ────────────────────────────────────────────────
 //
 // The three `cosmos.group.v1` types are on the allowlist, so on the first level
 // they are "allowed". Everything below is an attempt to reach the chain with
@@ -840,7 +846,9 @@ const submitIntent = (
 
 describe("governance — the three admitted types are accepted in canonical form", () => {
   it("accepts a vote for each of the four options", async () => {
-    for (const option of Object.keys(GOVERNANCE_VOTE_OPTIONS) as (keyof typeof GOVERNANCE_VOTE_OPTIONS)[]) {
+    for (const option of Object.keys(
+      GOVERNANCE_VOTE_OPTIONS,
+    ) as (keyof typeof GOVERNANCE_VOTE_OPTIONS)[]) {
       const tx = govTx({ kind: "gov_vote", voter: SESSION_ADDRESS, proposalId: 12n, option });
       expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), option).toEqual({
         ok: true,
@@ -873,7 +881,7 @@ describe("governance — the three admitted types are accepted in canonical form
   });
 
   it("accepts an update_config supplying ALL TEN optional fields", async () => {
-    // The 2^10 shape space (§4b C1) at its far end: the canonical builder emits
+    // The 2^10 shape space at its far end: the canonical builder emits
     // every supplied field in declaration order, and condition 5 makes the
     // shape space irrelevant rather than enumerated.
     const tx = govTx(
@@ -913,18 +921,16 @@ describe("governance — the three admitted types are accepted in canonical form
     // the devnet corpus carries two policies on one group precisely so this is
     // exercised by data rather than by belief.
     const tx = govTx(submitIntent({ policyAddress: OTHER_POLICY }));
-    expect(
-      guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
-    ).toEqual({ ok: true });
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock())).toEqual({ ok: true });
   });
 });
 
 describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
-  const reject = async (tx: Uint8Array, label: string, policies?: readonly string[]) => {
-    expect(
-      guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()),
-      label,
-    ).toMatchObject({ ok: false, status: 400 });
+  const reject = async (tx: Uint8Array, label: string, _policies?: readonly string[]) => {
+    expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), label).toMatchObject({
+      ok: false,
+      status: 400,
+    });
   };
 
   // ── invariant 4: the `exec` pin, on BOTH messages ──────────────────────
@@ -934,7 +940,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     // omits a zero varint, so writing it is a second encoding of the same
     // intent and there is exactly one accepted form.
     for (const exec of [0n, 1n, 2n, 255n]) {
-      await reject(signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n, exec })), `exec=${exec}`);
+      await reject(
+        signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n, exec })),
+        `exec=${exec}`,
+      );
     }
   });
 
@@ -958,15 +967,21 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   });
 
   it("a proposal whose proposer is not the session → 400", async () => {
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [OTHER_POLICY] })), "foreign proposer");
+    await reject(
+      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [OTHER_POLICY] })),
+      "foreign proposer",
+    );
   });
 
   it("a proposal whose SECOND proposer is not the session → 400", async () => {
-    // §4b C1's disproof, made executable: a verdict decided by ONE element of a
-    // collection while another rides along unchecked. Checking only
+    // A verdict decided by ONE element of a collection while another rides
+    // along unchecked. Checking only
     // `proposers[0]` would admit this; the count pin refuses it outright.
     await reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, OTHER_POLICY] })),
+      signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ proposers: [SESSION_ADDRESS, OTHER_POLICY] }),
+      ),
       "second proposer is foreign",
     );
   });
@@ -978,13 +993,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   // ── WHAT THE GUARD DELIBERATELY NO LONGER CHECKS ──────────────────────
   //
   // These cases assert ACCEPTANCE, and they are the load-bearing half of the
-  // 2026-07-30 revision. The original guard rejected each of them; the
-  // rationale for doing so did not survive review (a proposal executes nothing
-  // until the group's threshold is met, so restricting what may be PROPOSED
-  // reduced no authority). They are asserted rather than merely deleted so
-  // that re-tightening the guard is a deliberate edit to a named case, not a
-  // silent regression — the same reason the pre-7.3 suite asserted the
-  // allowlist carried no x/group type at all.
+  // guard: a proposal executes nothing until the group's threshold is met, so
+  // restricting what may be PROPOSED reduces no authority available to anyone.
+  // They are asserted rather than left unwritten so that re-tightening the
+  // guard is a deliberate edit to a named case, not a silent regression.
   it("a proposal to a policy this program did not discover → ACCEPTED", () => {
     // The relay no longer resolves the program's policy set. A proposal to
     // another group's policy is that group's business; it grants its proposer
@@ -1003,10 +1015,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
       ["keeper variant", `{"run_epoch":{}}`],
       ["unknown variant", `{"not_a_variant":{}}`],
     ] as const) {
-      const tx = signedGovTx(
-        MSG_GOV_SUBMIT_PROPOSAL,
-        rawSubmit({ messages: [innerAny({ msg })] }),
-      );
+      const tx = signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [innerAny({ msg })] }));
       expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), label).toEqual({ ok: true });
     }
   });
@@ -1015,9 +1024,15 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     const cases: { label: string; opts: Parameters<typeof innerAny>[0] }[] = [
       {
         label: "other contract",
-        opts: { contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0", msg: `{"unpause_vault":{}}` },
+        opts: {
+          contract: "tp1rxvcuzkn0zk4nwgclw2nf2wcc5pym3fjc7y4s0",
+          msg: `{"unpause_vault":{}}`,
+        },
       },
-      { label: "sender is the proposer", opts: { sender: SESSION_ADDRESS, msg: `{"unpause_vault":{}}` } },
+      {
+        label: "sender is the proposer",
+        opts: { sender: SESSION_ADDRESS, msg: `{"unpause_vault":{}}` },
+      },
       {
         label: "funds attached",
         opts: { msg: `{"unpause_vault":{}}`, funds: [{ denom: "nhash", amount: "1000" }] },
@@ -1044,7 +1059,9 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
         MSG_GOV_SUBMIT_PROPOSAL,
         rawSubmit({ messages: [innerAny({ typeUrl, msg: `{"unpause_vault":{}}` })] }),
       );
-      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toEqual({ ok: true });
+      expect(guardSignedTx(config, SESSION_ADDRESS, tx, freshClock()), typeUrl).toEqual({
+        ok: true,
+      });
     }
   });
 
@@ -1061,7 +1078,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   // ── What the guard still enforces on a proposal ───────────────────────
   it("a proposal with ZERO inner messages → 400", () => {
     // Legal on the wire, and still refused: a proposal to do nothing would
-    // consume the group's voting period regardless (§4b C1).
+    // consume the group's voting period regardless.
     reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ messages: [] })), "zero messages");
   });
 
@@ -1070,7 +1087,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     // These are the shapes the whole-message re-encode still refuses.
     reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ reorder: true })), "reordered fields");
     reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ proposers: [SESSION_ADDRESS, SESSION_ADDRESS] })),
+      signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ proposers: [SESSION_ADDRESS, SESSION_ADDRESS] }),
+      ),
       "duplicated proposer (a second spelling of one intent)",
     );
     reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })), "unknown field 9");
@@ -1101,7 +1121,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
     );
   });
 
-  it("a vote carrying metadata → 400 (votes carry none, §7 Q3)", async () => {
+  it("a vote carrying metadata → 400 (votes carry none)", async () => {
     for (const metadata of ["", "because"]) {
       await reject(
         signedGovTx(MSG_GOV_VOTE, rawVote({ proposalId: 1n, option: 1n, metadata })),
@@ -1112,7 +1132,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
 
   it("a proposal with over-long metadata, title or summary → 400", async () => {
     await reject(
-      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ metadata: "x".repeat(MAX_PROPOSAL_METADATA_LEN + 1) })),
+      signedGovTx(
+        MSG_GOV_SUBMIT_PROPOSAL,
+        rawSubmit({ metadata: "x".repeat(MAX_PROPOSAL_METADATA_LEN + 1) }),
+      ),
       "metadata too long",
     );
     await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ title: "" })), "no title");
@@ -1131,7 +1154,10 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
       ),
       "exec field 9",
     );
-    await reject(signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })), "submit field 9");
+    await reject(
+      signedGovTx(MSG_GOV_SUBMIT_PROPOSAL, rawSubmit({ extraField: 9 })),
+      "submit field 9",
+    );
   });
 
   it("a MsgSubmitProposal SHAPED to look like a vote → 400", async () => {
@@ -1150,7 +1176,7 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
   });
 
   it("a governance msg BESIDE an unguarded one in the same tx → 400", async () => {
-    // The guard runs over EVERY message in the body (§4b C1), so pairing a
+    // The guard runs over EVERY message in the body, so pairing a
     // legitimate vote with a message that would otherwise be refused does not
     // smuggle the second one through.
     const vote = new ProtoWriter()
@@ -1175,9 +1201,9 @@ describe("governance — the rejection matrix (§4 invariants 1–5)", () => {
 });
 
 describe("invariant 8 — the direct-admin path stays closed after the amendment", () => {
-  // THE INVARIANT MOST AT RISK OF ACCIDENTAL EROSION (plan §9). Admin ops reach
-  // the chain ONLY through governance, and the easiest way to lose that is to
-  // relax the older matrix while extending the newer one. So the M6.4 rows are
+  // THE INVARIANT MOST AT RISK OF ACCIDENTAL EROSION. Admin ops reach the
+  // chain ONLY through governance, and the easiest way to lose that is to
+  // relax the older matrix while extending the newer one. So the operator rows are
   // re-asserted HERE, after the governance guards exist, rather than trusted to
   // still be passing further up the file.
   it("every ADMIN variant is STILL refused as a direct MsgExecuteContract", async () => {

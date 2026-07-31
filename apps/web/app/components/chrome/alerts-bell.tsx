@@ -3,7 +3,7 @@ import { Link, useFetcher } from "react-router";
 
 import { t, type Locale } from "~/i18n";
 
-// §8.0 / M6.2: anonymous users see the alerting feature advertised (the 4.1
+// §8.0: anonymous users see the alerting feature advertised (the
 // advert, verbatim); a connected session sees the real bell + unread badge and
 // a popover that fetches /alerts/notifications and posts mark-read. Only the
 // unread integer arrives from the root loader; the notifications themselves are
@@ -55,16 +55,24 @@ function notificationText(locale: Locale, n: NotificationView): string {
       // Literal key per branch (not a computed key) so the i18n gate can verify
       // each message's {request} placeholder at the call site.
       const request = String(p.request_id);
-      if (p.event === "expedited") return t(locale, "alerts.notif.redemption-expedited", { request });
+      if (p.event === "expedited")
+        return t(locale, "alerts.notif.redemption-expedited", { request });
       if (p.event === "refunded") return t(locale, "alerts.notif.redemption-refunded", { request });
       return t(locale, "alerts.notif.redemption-matured", { request });
     }
     case "vault_status":
-      return t(locale, "alerts.notif.vault-status", { incident: incidentWord(locale, p.incident_kind) });
+      return t(locale, "alerts.notif.vault-status", {
+        incident: incidentWord(locale, p.incident_kind),
+      });
     case "validator_set_incident":
-      return t(locale, "alerts.notif.validator-set-incident", { incident: incidentWord(locale, p.incident_kind) });
+      return t(locale, "alerts.notif.validator-set-incident", {
+        incident: incidentWord(locale, p.incident_kind),
+      });
     case "operator_arrears":
-      return t(locale, "alerts.notif.operator-arrears", { valoper: String(p.valoper), epoch: String(p.epoch_index) });
+      return t(locale, "alerts.notif.operator-arrears", {
+        valoper: String(p.valoper),
+        epoch: String(p.epoch_index),
+      });
     default:
       return n.kind;
   }
@@ -99,7 +107,9 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
   const markFetcher = useFetcher();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const listData = listFetcher.data as { notifications?: NotificationView[]; unread?: number } | undefined;
+  const listData = listFetcher.data as
+    | { notifications?: NotificationView[]; unread?: number }
+    | undefined;
   const markData = markFetcher.data as { unread?: number } | undefined;
   const notifications = listData?.notifications ?? [];
   // The freshest unread wins: a completed mark-read supersedes the list load,
@@ -117,7 +127,11 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
   // honest (the ref guards against re-firing on the reload's own re-renders).
   const handledMark = useRef<unknown>(undefined);
   useEffect(() => {
-    if (markFetcher.state === "idle" && markData !== undefined && handledMark.current !== markData) {
+    if (
+      markFetcher.state === "idle" &&
+      markData !== undefined &&
+      handledMark.current !== markData
+    ) {
       handledMark.current = markData;
       listFetcher.load("/alerts/notifications");
     }
@@ -148,7 +162,10 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
     });
   };
 
-  const label = unread > 0 ? t(locale, "alerts.bell-aria", { count: unread }) : t(locale, "alerts.bell-aria-none");
+  const label =
+    unread > 0
+      ? t(locale, "alerts.bell-aria", { count: unread })
+      : t(locale, "alerts.bell-aria-none");
 
   return (
     <div ref={containerRef} className="relative">
@@ -170,9 +187,8 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
       </button>
 
       {open ? (
-        <div
+        <section
           id="alerts-popover"
-          role="region"
           aria-label={t(locale, "alerts.bell-label")}
           className="absolute right-0 z-50 mt-2 flex w-80 max-w-[90vw] flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-lg"
         >
@@ -203,7 +219,7 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
               ))}
             </ul>
           )}
-        </div>
+        </section>
       ) : null}
     </div>
   );

@@ -1,4 +1,4 @@
-// The template picker + parameter form (M7.4 §2.3, app-spec §8.7).
+// The template picker + parameter form (app-spec §8.7).
 //
 // PROPOSAL CREATION IS TEMPLATE-SCOPED, not free-form. §8.7 and the boundary
 // doc are explicit: the rich proposal workflow is the App's and free-form
@@ -38,7 +38,7 @@ export interface TemplateFormProps {
  * the values themselves — a key present IS the choice, which keeps the form's
  * state and the message's shape from being two different facts. */
 function isSupplied(values: WireTemplateValues, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(values, key);
+  return Object.hasOwn(values, key);
 }
 
 function ParamField({
@@ -175,7 +175,7 @@ export function TemplateForm({
           ))}
         </div>
         {/* An ABSENT template is stated, not stubbed as a disabled control
-            (§7 Q1): a disabled entry invites "when", and §14.3 has no answer. */}
+            a disabled entry invites "when", and §14.3 has no answer. */}
         <p className="text-xs text-muted-foreground">
           {t(locale, "governance.template-no-bridge-note")}
         </p>

@@ -38,22 +38,39 @@ export function RedemptionTracker({
           {active.map((r) => {
             const queueEntry = queue.find((q) => q.shares === r.shares) ?? queue[0];
             return (
-              <div key={r.request_id} className="flex flex-col gap-1 rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm">
+              <div
+                key={r.request_id}
+                className="flex flex-col gap-1 rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm"
+              >
                 <span className="font-medium">
-                  {t(locale, r.status === "expedited" ? "exit.tracker-expedited" : "exit.tracker-enqueued")}
+                  {t(
+                    locale,
+                    r.status === "expedited" ? "exit.tracker-expedited" : "exit.tracker-enqueued",
+                  )}
                 </span>
-                <span>{t(locale, "exit.tracker-shares", { shares: formatBaseAmount(BigInt(r.shares), SHARE_EXPONENT, 4) })}</span>
+                <span>
+                  {t(locale, "exit.tracker-shares", {
+                    shares: formatBaseAmount(BigInt(r.shares), SHARE_EXPONENT, 4),
+                  })}
+                </span>
                 {queueEntry ? (
                   <>
                     <span className="text-muted-foreground">
-                      {t(locale, "exit.tracker-queue-position", { position: queueEntry.position, total: queueEntry.queueLength })}
+                      {t(locale, "exit.tracker-queue-position", {
+                        position: queueEntry.position,
+                        total: queueEntry.queueLength,
+                      })}
                     </span>
                     <span className="text-muted-foreground">
-                      {t(locale, "exit.tracker-countdown", { days: daysUntil(queueEntry.timeoutIso, nowMs) })}
+                      {t(locale, "exit.tracker-countdown", {
+                        days: daysUntil(queueEntry.timeoutIso, nowMs),
+                      })}
                     </span>
                   </>
                 ) : null}
-                <span className="text-xs text-muted-foreground">{t(locale, "exit.tracker-expedite-note")}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t(locale, "exit.tracker-expedite-note")}
+                </span>
                 {/* 6.2: default-on redemption alerts resolve to copy under
                     absence-means-default — the owner is covered the moment the
                     redemption exists; no subscribe write at SwapOut time. */}
@@ -73,14 +90,27 @@ export function RedemptionTracker({
               className={`flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm ${leg.kind === "redemption_refund" ? "border-[var(--status-warning)]" : "border-[var(--status-good)]"}`}
             >
               <span className="font-medium">
-                {t(locale, leg.kind === "redemption_refund" ? "exit.tracker-refunded" : "exit.tracker-paid")}
+                {t(
+                  locale,
+                  leg.kind === "redemption_refund" ? "exit.tracker-refunded" : "exit.tracker-paid",
+                )}
               </span>
               {leg.kind === "redemption_payout" ? (
-                <span>{t(locale, "exit.tracker-payout-amount", { amount: formatBaseAmount(BigInt(leg.nhash), HASH_EXPONENT, 4) })}</span>
+                <span>
+                  {t(locale, "exit.tracker-payout-amount", {
+                    amount: formatBaseAmount(BigInt(leg.nhash), HASH_EXPONENT, 4),
+                  })}
+                </span>
               ) : (
-                <span>{t(locale, "exit.tracker-refund-shares", { shares: formatBaseAmount(BigInt(leg.shares), SHARE_EXPONENT, 4) })}</span>
+                <span>
+                  {t(locale, "exit.tracker-refund-shares", {
+                    shares: formatBaseAmount(BigInt(leg.shares), SHARE_EXPONENT, 4),
+                  })}
+                </span>
               )}
-              <span className="break-all font-mono text-xs text-muted-foreground">{leg.txhash}</span>
+              <span className="break-all font-mono text-xs text-muted-foreground">
+                {leg.txhash}
+              </span>
             </div>
           ))}
         </>

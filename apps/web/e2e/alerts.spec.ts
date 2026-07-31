@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Alerts, offline (plan 6.2 §3 commit C) against the fixture-backed server.
+// Alerts, offline, against the fixture-backed server.
 // Offline there is no session (no wallet), so the bell shows the 4.1 advert
 // verbatim and the personal `/alerts/*` resource routes answer 401. The
 // authenticated bell/settings/mark-read flow needs a real session — that is
@@ -29,7 +29,7 @@ test("the push-subscription route rejects anonymous requests (M6.3)", async ({ p
   // The per-browser opt-in is session-gated: POST and DELETE both 401 without
   // a session. The authenticated opt-in states (unsupported/not-configured/
   // enable/disable) need a real session + browser push and ride the live lane
-  // (the M6.2 authenticated-settings precedent — offline has no session).
+  // (authenticated-settings precedent — offline has no session).
   const post = await page.request.post("/push/subscription", {
     data: { endpoint: "https://push.example/ep", keys: { p256dh: "x", auth: "y" } },
   });

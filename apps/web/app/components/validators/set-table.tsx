@@ -10,10 +10,7 @@ import type { ValidatorRow } from "~/validators/types";
 
 type Reliability = "eligible" | "ineligible" | "jailed" | "tombstoned";
 
-const STATUS: Record<
-  Reliability,
-  { labelKey: MessageKey; token: string; iconPath: string }
-> = {
+const STATUS: Record<Reliability, { labelKey: MessageKey; token: string; iconPath: string }> = {
   eligible: {
     labelKey: "validators.status-eligible",
     token: "var(--status-good)",
@@ -68,7 +65,7 @@ export function SetTable({
   }
 
   // A brand-new program legitimately has zero enrollments; say so rather
-  // than rendering a headers-only table (PR #12 review).
+  // than rendering a headers-only table.
   if (rows.length === 0) {
     return (
       <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">

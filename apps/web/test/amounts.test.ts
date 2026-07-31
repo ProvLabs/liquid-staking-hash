@@ -1,6 +1,6 @@
-// Golden-value gate for the BigInt display math (plan 4.2 §3.3: a float in
+// Golden-value gate for the BigInt display math (a float in
 // the amount path is a review-rejectable defect). Expected values are
-// computed independently from the PR 0.2 fixture corpus numbers, not from
+// computed independently from the fixture corpus numbers, not from
 // the functions under test.
 
 import { describe, expect, it } from "vitest";

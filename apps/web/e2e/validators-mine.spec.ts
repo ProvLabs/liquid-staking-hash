@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Operator view (M6.4 §2.3, app-spec §8.6) against the fixture-backed server.
+// Operator view (app-spec §8.6) against the fixture-backed server.
 // Offline there is no session, so the page must render the connect prompt and
 // expose NOTHING operator-scoped — the same prompt-and-explain posture as
 // `/portfolio`. The authenticated states (arrears loudness, the three-state
@@ -18,7 +18,12 @@ test("anonymous operator view renders the connect prompt, never a blank page", a
 
 test("anonymous operator view exposes no operator data or actions", async ({ page }) => {
   await page.goto("/validators/mine");
-  for (const heading of ["Standing", "Net benefit after fees", "Payment history", "Per-epoch history"]) {
+  for (const heading of [
+    "Standing",
+    "Net benefit after fees",
+    "Payment history",
+    "Per-epoch history",
+  ]) {
     await expect(page.getByRole("heading", { name: heading })).toHaveCount(0);
   }
   // The export is session-gated; its link must not exist for an anonymous visitor.

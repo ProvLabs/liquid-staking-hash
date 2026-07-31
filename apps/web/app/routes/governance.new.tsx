@@ -1,4 +1,4 @@
-// `/governance/new` — the template composer (M7.4 §2.3, app-spec §8.7).
+// `/governance/new` — the template composer (app-spec §8.7).
 //
 // MEMBER-GATED, and gated on THREE states before any form renders, the
 // `/validators/mine` pattern: anonymous (connect prompt), the live plane
@@ -60,20 +60,36 @@ export async function loader({ request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
   const session = await getSessionContext(config, request);
   if (session === null) {
-    return { gate: { kind: "anonymous" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "anonymous" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
 
   const live = await loadLiveGovernance(config);
   if (live.state === "not-governed") {
-    return { gate: { kind: "not-governed" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "not-governed" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
   if (live.state === "unavailable" || live.members === null) {
     // "We could not check" is a different sentence from "you are not a member",
     // and only one of them may be shown to an actual member.
-    return { gate: { kind: "unavailable" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "unavailable" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
   if (!live.members.some((member) => member.address === session.address)) {
-    return { gate: { kind: "not-member" } as ComposerGate, currentConfig: null, contractAddress: "" };
+    return {
+      gate: { kind: "not-member" } as ComposerGate,
+      currentConfig: null,
+      contractAddress: "",
+    };
   }
 
   // The live `Config {}` read feeds the diff's CURRENT column. A failed read
@@ -132,7 +148,9 @@ export default function GovernanceNew({ loaderData }: Route.ComponentProps) {
 
   if (gate.kind === "anonymous") {
     return shell(
-      <p className="rounded-lg border bg-card p-4 text-sm">{t(locale, "governance.new-connect")}</p>,
+      <p className="rounded-lg border bg-card p-4 text-sm">
+        {t(locale, "governance.new-connect")}
+      </p>,
     );
   }
   if (gate.kind === "not-governed") {
@@ -144,7 +162,10 @@ export default function GovernanceNew({ loaderData }: Route.ComponentProps) {
   }
   if (gate.kind === "unavailable") {
     return shell(
-      <p className="rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm" role="alert">
+      <p
+        className="rounded-lg border border-[var(--status-warning)] bg-card p-4 text-sm"
+        role="alert"
+      >
         {t(locale, "governance.new-unavailable")}
       </p>,
     );
@@ -201,10 +222,7 @@ function Composer({
   }
 
   const ready =
-    parsed.ok &&
-    policyAddress !== "" &&
-    title.trim().length > 0 &&
-    summary.trim().length > 0;
+    parsed.ok && policyAddress !== "" && title.trim().length > 0 && summary.trim().length > 0;
 
   const template = templateById(templateId);
   const diffRows =
@@ -244,7 +262,7 @@ function Composer({
     // dangerous act — passage and execution are — and the confirmation says so
     // without using that framing to soften the disclosure.
     t(locale, "governance.confirm-submit-2"),
-    // §4b C3: submission is NOT idempotent. A second signature creates a
+    // Submission is NOT idempotent. A second signature creates a
     // SECOND proposal, which is a real hazard rather than a duplicate row.
     t(locale, "governance.confirm-submit-3"),
   ];
@@ -319,7 +337,7 @@ function Composer({
           {t(locale, "governance.compose-public-note")}
         </p>
         <div>
-          {/* Re-submit is disabled after broadcast (§4b C3): signing twice
+          {/* Re-submit is disabled after broadcast: signing twice
               creates two separate proposals, not one. */}
           <Button onClick={() => void start()} disabled={!ready || submitted}>
             {t(locale, "governance.new-submit")}

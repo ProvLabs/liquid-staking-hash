@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { LIVE_DOWN_ORIGIN } from "../playwright.config";
 
-// Learn page (plan 4.2, app-spec §8.1) against the fixture-backed server:
+// Learn page (app-spec §8.1) against the fixture-backed server:
 // all seven sections render, live figures show the corpus values, indexed
 // figures show honest cold-start states, and verify links stay under the
 // booted console origin (§12.2).

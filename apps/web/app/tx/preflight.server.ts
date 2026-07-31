@@ -1,4 +1,4 @@
-// §10.2 step-2 preflight (app plan PR 5.2 §3): server-supplied guard
+// §10.2 step-2 preflight: server-supplied guard
 // context from LIVE reads — vault swap gates, min/max bounds, balance
 // including fee, vesting lock, and the signer facts (account number /
 // sequence / chain id) the sign doc needs. Every disabled control carries a
@@ -39,11 +39,7 @@ import {
 import { VALOPER_RE } from "~/lib/bech32";
 import { sameBech32Payload } from "~/lib/adr36-verify.server";
 import type { WebConfig } from "~/config/config.server";
-import {
-  GOVERNANCE_VOTE_OPTION_NAMES,
-  OPERATOR_VARIANTS,
-  PROGRAM_UNDERLYING_DENOM,
-} from "./build";
+import { GOVERNANCE_VOTE_OPTION_NAMES, OPERATOR_VARIANTS, PROGRAM_UNDERLYING_DENOM } from "./build";
 import type { PreflightReason } from "./lifecycle";
 
 /**
@@ -81,26 +77,32 @@ export type PreflightRequest = z.infer<typeof preflightRequestSchema>;
 /** Valoper shape, bounded at the route boundary like every other input. */
 const valoperString = z.string().max(90).regex(VALOPER_RE);
 
-/** M6.4 operator preflight (§2.4). `amount` is required only for payments. */
+/** Operator preflight. `amount` is required only for payments. */
 export const operatorPreflightRequestSchema = z.object({
   kind: z.literal("operator"),
   variant: z.enum(OPERATOR_VARIANTS),
   valoper: valoperString,
   claimantValoper: valoperString.nullable().default(null),
-  amount: z.string().regex(/^[0-9]{1,39}$/, "expected a base-unit integer string").default("0"),
+  amount: z
+    .string()
+    .regex(/^[0-9]{1,39}$/, "expected a base-unit integer string")
+    .default("0"),
 });
 export type OperatorPreflightRequest = z.infer<typeof operatorPreflightRequestSchema>;
 
 /**
- * M7.3–7.4 governance preflight (§2.5). A separate BOUNDED schema, never a
- * widened one — the M6.4 precedent, and the reason a governance request can
- * never be parsed as a swap or an operator action by accident.
+ * Governance preflight. A separate BOUNDED schema, never a widened one — the
+ * operator precedent, and the reason a governance request can never be parsed
+ * as a swap or an operator action by accident.
  *
  * The proposal id stays a canonical DECIMAL STRING (`params.ts`'s rule): x/group
  * ids are u64 and the JSON number domain stops at 2^53, and one proposal must
  * not be addressable by two spellings.
  */
-const proposalIdString = z.string().max(20).regex(/^(0|[1-9][0-9]*)$/);
+const proposalIdString = z
+  .string()
+  .max(20)
+  .regex(/^(0|[1-9][0-9]*)$/);
 const bech32String = z.string().max(MAX_BECH32_LENGTH);
 
 export const governancePreflightRequestSchema = z.discriminatedUnion("kind", [
@@ -191,8 +193,7 @@ export async function runPreflight(
 
   // Balance including fee (§10.2 step 2). Spendable subtracts vesting locks;
   // the fee always needs the underlying (nhash) side.
-  const spend = (d: string): bigint =>
-    spendable.balances.find((c) => c.denom === d)?.amount ?? 0n;
+  const spend = (d: string): bigint => spendable.balances.find((c) => c.denom === d)?.amount ?? 0n;
   const total = (d: string): bigint => spend(d); // spendable is the honest bound
   if (request.kind === "swap_in") {
     const required = amount + FEE_PROVISION_NHASH;
@@ -248,7 +249,7 @@ export async function runPreflight(
   };
 }
 
-// ── M6.4 operator preflight (§2.4) ───────────────────────────────────────
+// ── Operator preflight (§2.4) ───────────────────────────────────────
 //
 // Every predicate below RESTATES one the contract already enforces. That is
 // the point and the limit: preflight is convenience (§12.1, SECURITY.md "UI
@@ -333,7 +334,8 @@ export function operatorPreflightReasons(
       // and has no admin persona, so an admin sees a reason that does not apply
       // to them rather than the App growing an admin path it does not serve.
       if (enrolled === null) reasons.push({ code: "not-enrolled" });
-      else if (enrolled.operator !== facts.address) reasons.push({ code: "not-validator-operator" });
+      else if (enrolled.operator !== facts.address)
+        reasons.push({ code: "not-validator-operator" });
       break;
     }
     case "pay_commission":
@@ -471,7 +473,7 @@ export async function runOperatorPreflight(
   };
 }
 
-// ── M7.3–7.4 governance preflight (§2.5) ─────────────────────────────────
+// ── Governance preflight ─────────────────────────────────────────────────
 //
 // Same contract as the operator matrix above, and the same limit. Every
 // predicate RESTATES one the x/group module or the contract already enforces,
@@ -663,7 +665,7 @@ export function governancePreflightReasons(
     // FAILURE is terminal too: x/group does not permit a second attempt.
     reasons.push({ code: "already-executed" });
   } else {
-    // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW (PR #25 review, 2026-07-30).
+    // AN UNRESOLVED WINDOW IS NOT A ZERO WINDOW.
     // `minExecutionPeriod` is null ONLY when it could not be determined — the
     // proposal's policy is outside the discovered set, or its decision rule is a
     // kind this build does not model. x/group serializes a Duration for both

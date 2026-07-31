@@ -78,12 +78,16 @@ describe("VaultClient transport", () => {
   it("hits /vault/v1 paths — never /provlabs/vault/v1 (pinned corpus fact)", async () => {
     const { lcd, calls } = fakeLcd({
       [`/vault/v1/vaults/${VAULT}`]: fixture("queries/vault/get.json"),
-      [`/vault/v1/vaults/${VAULT}/estimate_swap_out`]: fixture("queries/vault/estimate-swap-out.json"),
+      [`/vault/v1/vaults/${VAULT}/estimate_swap_out`]: fixture(
+        "queries/vault/estimate-swap-out.json",
+      ),
     });
     const client = new VaultClient(lcd);
     await client.getVault(VAULT);
     const est = await client.estimateSwapOut(VAULT, 1000000000000n);
-    const raw = expectObject(expectObject(fixture("queries/vault/estimate-swap-out.json"))["assets"]);
+    const raw = expectObject(
+      expectObject(fixture("queries/vault/estimate-swap-out.json"))["assets"],
+    );
     expect(est.assets.amount).toBe(BigInt(raw["amount"] as string));
     expect(calls.every((u) => !u.includes("/provlabs/"))).toBe(true);
     expect(calls[1]).toContain("estimate_swap_out?shares=1000000000000");

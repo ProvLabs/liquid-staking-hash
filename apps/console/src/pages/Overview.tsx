@@ -47,24 +47,35 @@ export function Overview() {
       <div>
         <h1 className="page-title">Overview</h1>
         <p className="page-sub">
-          Is this instance healthy, and are its invariants holding? Every figure is provable from chain.
+          Is this instance healthy, and are its invariants holding? Every figure is provable from
+          chain.
         </p>
       </div>
 
       {/* Rank 1: headline numbers */}
       <div className="grid-tiles">
-        <StatTile label="NAV per share" value={nav.toFixed(4)} caption={`${navSource} · HASH / nvHASH`} />
+        <StatTile
+          label="NAV per share"
+          value={nav.toFixed(4)}
+          caption={`${navSource} · HASH / nvHASH`}
+        />
         <StatTile
           label="Net APR"
           value={aprOk ? pct(apr.data!.net_apr_bps) : "n/a"}
-          caption={aprOk ? `gross ${pct(apr.data!.gross_apr_bps)}` : "window too short to annualize"}
+          caption={
+            aprOk ? `gross ${pct(apr.data!.gross_apr_bps)}` : "window too short to annualize"
+          }
         />
         <StatTile
           label="TVV"
           value={tvv > 0n ? hash(tvv, 2) : "—"}
           caption={vault.data ? `${shares(vault.data.total_shares)} nvHASH` : undefined}
         />
-        <StatTile label="Validators" value={`${eligible} eligible`} caption={`of ${enrolled} enrolled`} />
+        <StatTile
+          label="Validators"
+          value={`${eligible} eligible`}
+          caption={`of ${enrolled} enrolled`}
+        />
       </div>
 
       {/* Rank 2: proof row - the honesty surface, first-class (spec §17.1) */}
@@ -83,13 +94,19 @@ export function Overview() {
             return (
               <div className="row" style={{ gap: 8, alignItems: "center" }}>
                 <Pill tone="neutral">epoch #{snap.data?.epoch_index ?? "—"}</Pill>
-                <Pill tone={phaseTone}>{e.phase === "Releasing" ? "Releasing" : e.halted ? "Halted" : "Idle"}</Pill>
+                <Pill tone={phaseTone}>
+                  {e.phase === "Releasing" ? "Releasing" : e.halted ? "Halted" : "Idle"}
+                </Pill>
                 <Pill tone="neutral">last run {relTime(e.last_run_seconds, now)}</Pill>
                 <Pill tone={now >= nextAt ? "good" : "neutral"}>
                   next {now >= nextAt ? "eligible now" : `in ${humanDuration(nextAt - now)}`}
                 </Pill>
-                <Pill tone={vault.data?.paused ? "serious" : "good"}>vault {vault.data?.paused ? "paused" : "active"}</Pill>
-                <Pill tone={e.halted ? "critical" : "good"}>contract {e.halted ? "halted" : "active"}</Pill>
+                <Pill tone={vault.data?.paused ? "serious" : "good"}>
+                  vault {vault.data?.paused ? "paused" : "active"}
+                </Pill>
+                <Pill tone={e.halted ? "critical" : "good"}>
+                  contract {e.halted ? "halted" : "active"}
+                </Pill>
               </div>
             );
           }}
@@ -100,7 +117,10 @@ export function Overview() {
       <div className="grid-2">
         <StepLine
           title="NAV over time"
-          points={ledger.map((r) => ({ label: `#${r.epoch_index}`, y: navPerShare(toBig(r.tvv_after), toBig(r.total_shares)) }))}
+          points={ledger.map((r) => ({
+            label: `#${r.epoch_index}`,
+            y: navPerShare(toBig(r.tvv_after), toBig(r.total_shares)),
+          }))}
           fmt={(y) => y.toFixed(4)}
         />
         <Cell cell={apr}>
@@ -137,7 +157,9 @@ export function Overview() {
               caption={
                 <>
                   receipt invariant:{" "}
-                  {inv.matched ? "backed (backing ≥ receipt_minted)" : `skew ${hash(inv.delta)} HASH (in-flight legs, see Epoch)`}
+                  {inv.matched
+                    ? "backed (backing ≥ receipt_minted)"
+                    : `skew ${hash(inv.delta)} HASH (in-flight legs, see Epoch)`}
                 </>
               }
             />
@@ -148,7 +170,9 @@ export function Overview() {
       {/* Rank 5: epoch history */}
       <Panel title="Epoch history">
         {ledger.length === 0 ? (
-          <p className="muted">No epochs recorded yet in this browser. History accrues as epochs run.</p>
+          <p className="muted">
+            No epochs recorded yet in this browser. History accrues as epochs run.
+          </p>
         ) : (
           <div className="table-wrap">
             <table className="data">
@@ -202,7 +226,9 @@ export function Overview() {
         {identity === null ? (
           <Pill tone="neutral">epoch identity —</Pill>
         ) : (
-          <Pill tone={identity ? "good" : "critical"}>epoch identity {identity ? "pass" : "FAIL"}</Pill>
+          <Pill tone={identity ? "good" : "critical"}>
+            epoch identity {identity ? "pass" : "FAIL"}
+          </Pill>
         )}
         <span className="muted-3" style={{ fontSize: 12 }}>
           tvv_after == tvv_before + rewards_deposited − write_down

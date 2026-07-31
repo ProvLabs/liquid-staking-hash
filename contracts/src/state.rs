@@ -89,17 +89,13 @@ impl Config {
             return Err(invalid("max_bonded_cap_bps must be in 1..=10000"));
         }
         if self.min_bonded_cap_bps > self.max_bonded_cap_bps {
-            return Err(invalid(
-                "min_bonded_cap_bps must be <= max_bonded_cap_bps",
-            ));
+            return Err(invalid("min_bonded_cap_bps must be <= max_bonded_cap_bps"));
         }
         // An offset of 10000 bps (100% of max bond) would silently zero every
         // deploy target; disabling deploys is SetHalted's job, not a config
         // value that looks like a margin.
         if self.concentration_safety_offset_bps >= 10_000 {
-            return Err(invalid(
-                "concentration_safety_offset_bps must be < 10000",
-            ));
+            return Err(invalid("concentration_safety_offset_bps must be < 10000"));
         }
         Ok(())
     }
@@ -111,7 +107,8 @@ impl Config {
 fn validate_denom(denom: &str, field: &str) -> Result<(), crate::ContractError> {
     let mut chars = denom.chars();
     let head_ok = chars.next().is_some_and(|c| c.is_ascii_alphabetic());
-    let tail_ok = chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | ':' | '.' | '_' | '-'));
+    let tail_ok =
+        chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | ':' | '.' | '_' | '-'));
     if denom.len() < 3 || denom.len() > 128 || !head_ok || !tail_ok {
         return Err(crate::ContractError::InvalidConfig {
             reason: format!("{field} is not a valid denom: {denom:?}"),

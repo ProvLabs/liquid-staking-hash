@@ -20,8 +20,9 @@ derivation land in M2 (PRs 2.1–2.5).
 
 - `prisma/` — one `*.prisma` file per model (the nuva precedent). `schema.prisma`
   holds the datasource/generator; every table lives in the `indexed` schema.
-- `prisma/migrations/` — committed SQL migrations (`migrate deploy` on an empty
-  DB creates the `indexed` schema and all tables).
+- `prisma/migrations/` — one committed baseline migration, regenerated from the
+  models rather than appended to (`migrate deploy` on an empty DB creates the
+  `indexed` schema and all tables). See `CLAUDE.md`.
 - `src/` — process shell: `config.ts` (env validated at the boundary),
   `logger.ts` (safe-field-only structured logger), `db.ts` (Prisma client),
   `index.ts` (worker entrypoint stub).

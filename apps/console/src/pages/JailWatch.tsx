@@ -18,20 +18,23 @@ export function JailWatch() {
   const [claimant, setClaimant] = useState<Record<string, string>>({});
 
   const validators = vals.data?.validators ?? [];
-  const jailedNow = (valoper: string) => validators.find((v) => v.valoper === valoper)?.jailed ?? false;
+  const jailedNow = (valoper: string) =>
+    validators.find((v) => v.valoper === valoper)?.jailed ?? false;
   const myEligible = validators.filter((v) => v.operator === wallet.address && v.eligible);
 
   return (
     <div className="stack">
       <div>
         <h1 className="page-title">Jail Watch</h1>
-        <p className="page-sub">Open jail reports, purge countdowns, and the two-phase purge action.</p>
+        <p className="page-sub">
+          Open jail reports, purge countdowns, and the two-phase purge action.
+        </p>
       </div>
 
       {/* Rank 2: rule (placed high because it prevents a wrong action) */}
       <div className="callout callout--info">
-        Two-phase (contract §9.8): a report starts the cooldown; purge requires the target still jailed at execution. An
-        unjailed validator's report clears on the next report/purge.
+        Two-phase (contract §9.8): a report starts the cooldown; purge requires the target still
+        jailed at execution. An unjailed validator's report clears on the next report/purge.
       </div>
 
       {/* Rank 1: open reports */}
@@ -64,16 +67,26 @@ export function JailWatch() {
                         reportExists: true,
                         purgeReadyAt: rep.purge_ready_at_seconds,
                         jailedNow: live,
-                        claimantEligibleAndMine: claimant[rep.valoper] ? myEligible.some((v) => v.valoper === claimant[rep.valoper]) : undefined,
+                        claimantEligibleAndMine: claimant[rep.valoper]
+                          ? myEligible.some((v) => v.valoper === claimant[rep.valoper])
+                          : undefined,
                       });
                       return (
                         <tr key={rep.valoper}>
-                          <td><AddressChip addr={rep.valoper} /></td>
+                          <td>
+                            <AddressChip addr={rep.valoper} />
+                          </td>
                           <td>{absTime(rep.reported_at_seconds)}</td>
                           <td className="num tnum">
                             <Countdown target={rep.purge_ready_at_seconds} readyLabel="ready" />
                           </td>
-                          <td>{live ? <Pill tone="serious">jailed</Pill> : <Pill tone="good">unjailed</Pill>}</td>
+                          <td>
+                            {live ? (
+                              <Pill tone="serious">jailed</Pill>
+                            ) : (
+                              <Pill tone="good">unjailed</Pill>
+                            )}
+                          </td>
                           <td>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                               <select
@@ -81,7 +94,9 @@ export function JailWatch() {
                                 style={{ minHeight: 28 }}
                                 aria-label="claimant"
                                 value={claimant[rep.valoper] ?? ""}
-                                onChange={(e) => setClaimant((c) => ({ ...c, [rep.valoper]: e.target.value }))}
+                                onChange={(e) =>
+                                  setClaimant((c) => ({ ...c, [rep.valoper]: e.target.value }))
+                                }
                               >
                                 <option value="">no claimant (unbond full)</option>
                                 {myEligible.map((v) => (
@@ -95,8 +110,13 @@ export function JailWatch() {
                                 variant={claimant[rep.valoper] ? "secondary" : "warning"}
                                 onClick={() =>
                                   tx.submit({
-                                    title: claimant[rep.valoper] ? "Purge to claimant" : "Unbond full program stake",
-                                    message: msg.purgeJailed(rep.valoper, claimant[rep.valoper] || null),
+                                    title: claimant[rep.valoper]
+                                      ? "Purge to claimant"
+                                      : "Unbond full program stake",
+                                    message: msg.purgeJailed(
+                                      rep.valoper,
+                                      claimant[rep.valoper] || null,
+                                    ),
                                     tier: "warning",
                                     consequence: claimant[rep.valoper]
                                       ? "Redelegates up to the claimant's headroom; unbonds the remainder (~21 days)."
@@ -133,7 +153,13 @@ export function JailWatch() {
                   key={v.valoper}
                   guard={guardReportJailed(true)}
                   variant="secondary"
-                  onClick={() => tx.submit({ title: "Report jailed validator", message: msg.reportJailed(v.valoper), onDone: () => refresh(["jail"]) })}
+                  onClick={() =>
+                    tx.submit({
+                      title: "Report jailed validator",
+                      message: msg.reportJailed(v.valoper),
+                      onDone: () => refresh(["jail"]),
+                    })
+                  }
                 >
                   Report {v.valoper.slice(0, 14)}…
                 </GuardButton>

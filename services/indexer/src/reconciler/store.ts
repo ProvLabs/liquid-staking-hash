@@ -4,7 +4,7 @@
 // incident move together). The reconciler is the SOLE writer of `incidents`
 // (app-spec §9.6).
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type { IndexedPlane, ReconcileActions } from "./incidents.ts";
 
 function toBig(value: { toFixed(dp: number): string }): bigint {
@@ -12,7 +12,10 @@ function toBig(value: { toFixed(dp: number): string }): bigint {
 }
 
 /** Read the indexed plane; `chainEpoch` is the chain's latest epoch (or null). */
-export async function readIndexedPlane(prisma: PrismaClient, chainEpoch: bigint | null): Promise<IndexedPlane> {
+export async function readIndexedPlane(
+  prisma: PrismaClient,
+  chainEpoch: bigint | null,
+): Promise<IndexedPlane> {
   const maxRow = await prisma.epochSnapshot.findFirst({
     orderBy: { epochIndex: "desc" },
     select: { epochIndex: true },
@@ -24,7 +27,9 @@ export async function readIndexedPlane(prisma: PrismaClient, chainEpoch: bigint 
           where: { epochIndex: chainEpoch },
           select: { totalShares: true, tvvAfter: true },
         });
-  const checkpoints = await prisma.indexerCheckpoint.findMany({ select: { stream: true, cursorHeight: true } });
+  const checkpoints = await prisma.indexerCheckpoint.findMany({
+    select: { stream: true, cursorHeight: true },
+  });
   const writeDownRows = await prisma.epochSnapshot.findMany({
     where: { writeDown: { gt: 0 } },
     select: { epochIndex: true },
@@ -69,7 +74,11 @@ export async function applyActions(prisma: PrismaClient, actions: ReconcileActio
           payload: o.payload as Prisma.InputJsonValue,
         },
         // Reopen (clear closedAt) and refresh severity/payload; keep openedAt.
-        update: { severity: o.severity, closedAt: null, payload: o.payload as Prisma.InputJsonValue },
+        update: {
+          severity: o.severity,
+          closedAt: null,
+          payload: o.payload as Prisma.InputJsonValue,
+        },
         select: { id: true },
       });
       if (o.linkToRun) divergenceIncidentId = row.id;

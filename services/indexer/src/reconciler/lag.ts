@@ -42,6 +42,8 @@ export function computeLag(
   // (indexer_lag) incident — that banner means "was working, now behind", which
   // would be the wrong signal on a fresh deployment.
   const indexedHeight =
-    perStream.length === 0 ? 0n : perStream.reduce((min, s) => (s.indexedHeight < min ? s.indexedHeight : min), head);
+    perStream.length === 0
+      ? 0n
+      : perStream.reduce((min, s) => (s.indexedHeight < min ? s.indexedHeight : min), head);
   return { perStream, maxLag, indexedHeight, over: maxLag > tol.lagHeights };
 }

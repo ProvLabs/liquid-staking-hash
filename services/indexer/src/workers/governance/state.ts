@@ -59,18 +59,14 @@ export interface RecoveredProposal {
  * return, because their whole lifecycle — submit, vote, execute, prune — fell
  * inside ONE window.
  *
- * WITHOUT THIS THE MIRROR SILENTLY LOSES THEM (PR #23 review, P1). Every
- * event-derived write in `write.ts` is an UPDATE against `proposalId`, so with no
+ * WITHOUT THIS THE MIRROR SILENTLY LOSES THEM. Every event-derived write in
+ * `write.ts` is an UPDATE against `proposalId`, so with no
  * base row they all affect zero rows and the proposal, its provenance, its
  * execution result and its terminal tally are simply absent — while its votes,
  * which key on `(proposalId, voter)` and insert unconditionally, survive as
  * orphans. And this is the COMMON case, not an edge: a proposal executed promptly
  * is pruned in that same transaction (the drill's proposals 1 and 2 did exactly
  * this), and a 500-height window is roughly eight minutes.
- *
- * The M7.1 plan §2.2 specified this read. It was dropped in implementation when
- * the 404-means-pruned semantics were corrected — the mechanism went out with the
- * wrong error handling instead of being kept and re-based on the right one.
  *
  * WHICH HEIGHT TO PIN. A height at which the proposal was demonstrably alive:
  *   - the SUBMIT height when this window saw the submit (it was created there);
@@ -187,11 +183,14 @@ export async function sweepPolicies(
       // Includes the pagination-cap throw: a truncated sweep is exactly the
       // thing that must not be mistaken for a complete one.
       sweepOk = false;
-      logger.warn("governance sweep failed for a policy; prune detection is suspended this window", {
-        stream: "governance",
-        height,
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
+      logger.warn(
+        "governance sweep failed for a policy; prune detection is suspended this window",
+        {
+          stream: "governance",
+          height,
+          error: cause instanceof Error ? cause.message : String(cause),
+        },
+      );
       continue;
     }
     sweptPolicies.push(policy.address);

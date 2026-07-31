@@ -8,7 +8,7 @@
 //
 // Correctness-first: EndBlocker events are found by scanning block_results for
 // every height in the window. block_search-based height narrowing is a later
-// optimization (noted in the M2.1 plan); functionally this is complete.
+// optimization (noted in the plan); functionally this is complete.
 
 import { dequote, type RawEvent } from "../../decode/attributes.ts";
 import { logger } from "../../logger.ts";
@@ -63,7 +63,14 @@ export interface EventSource {
     query: string,
     page?: number,
     perPage?: number,
-  ): Promise<{ totalCount: number; txs: readonly { hash: string; height: bigint; events: readonly import("../../decode/attributes.ts").RawEvent[] }[] }>;
+  ): Promise<{
+    totalCount: number;
+    txs: readonly {
+      hash: string;
+      height: bigint;
+      events: readonly import("../../decode/attributes.ts").RawEvent[];
+    }[];
+  }>;
   blockResults(height: bigint | number): Promise<{
     finalizeBlockEvents: readonly import("../../decode/attributes.ts").RawEvent[];
   }>;
@@ -98,7 +105,11 @@ export async function collectWindow(
   // Phase 0 — tx-search across the window (swaps + expedite).
   let page = 1;
   for (;;) {
-    const res = await rpc.txSearch(`tx.height>=${window.from} AND tx.height<=${window.to}`, page, PER_PAGE);
+    const res = await rpc.txSearch(
+      `tx.height>=${window.from} AND tx.height<=${window.to}`,
+      page,
+      PER_PAGE,
+    );
     for (const tx of res.txs) {
       // Cheap type pre-pass: skip txs with no candidate event BEFORE fetching
       // the block time, so a height of purely non-vault txs costs no round-trip.
@@ -112,7 +123,7 @@ export async function collectWindow(
         if (de) ranked.push({ ev: de, phase: 0, seq: seq++ });
       }
       // Operator payments decode from the WHOLE tx: the amount rides the funds
-      // transfer, not the contract's own event (M6.4 §2.1).
+      // transfer, not the contract's own event.
       if (payments) {
         const decoded = decodeTxPayments(tx.events, ctx, scope);
         for (const de of decoded.payments) {

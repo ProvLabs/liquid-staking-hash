@@ -1,6 +1,6 @@
 // @nvhash/db-indexed — the read-only Prisma client over the `indexed` schema
-// for services/api (app plan PR 3.1; the seam services/indexer/src/db.ts and
-// services/api/CLAUDE.md have named since M1).
+// for services/api (the seam services/indexer/src/db.ts and
+// services/api/CLAUDE.md have named).
 //
 // This package is a typed VIEW, not an owner: the canonical schema and its
 // migrations live in services/indexer/prisma (ADR-001 Decision 1), and the

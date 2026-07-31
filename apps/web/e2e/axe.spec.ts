@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Accessibility gate (plan §4, app-spec §11: WCAG AA on both themes) —
+// Accessibility gate (app-spec §11: WCAG AA on both themes) —
 // standing in CI from the scaffold on. Pages added later are covered by
 // adding their routes here.
 
@@ -14,10 +14,10 @@ const ROUTES = [
   "/validators",
   "/validators/mine",
   "/governance",
-  // The proposal detail (M7.2). A concrete id from the mirrored corpus: the
+  // The proposal detail. A concrete id from the mirrored corpus: the
   // detail page has table, disclosure and time semantics the list does not.
   "/governance/4",
-  // The template composer (M7.4). Offline it renders its anonymous gate rather
+  // The template composer. Offline it renders its anonymous gate rather
   // than the form, which is the state a scan can reach without a session — the
   // `/validators/mine` precedent for an authenticated surface.
   "/governance/new",

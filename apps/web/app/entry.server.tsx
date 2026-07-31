@@ -11,7 +11,7 @@ import { getBootedConfig } from "~/config/config.server";
 
 // Offline mode for tests and the MSW-backed e2e suite: serve chain reads from
 // the @nvhash/fixtures corpus instead of a live LCD. Never a production
-// posture — it exists so the web lane builds offline (plan §3).
+// posture — it exists so the web lane builds offline.
 if (process.env.NVHASH_MOCK === "1") {
   const { server } = await import("./mocks/node");
   server.listen({ onUnhandledRequest: "bypass" });

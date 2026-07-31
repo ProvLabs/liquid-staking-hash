@@ -1,4 +1,4 @@
-// Service-assertion minting (ADR-001 Decision 2; plan 5.1 §3). The OTHER
+// Service-assertion minting (ADR-001 Decision 2). The OTHER
 // half of the one contract services/api verifies in `services/api/src/auth.ts`
 // — same wire format, same bounds:
 //
@@ -28,11 +28,7 @@ export const ASSERTION_LIFETIME_SECONDS = 60;
  * `nowSeconds`. Deterministic over its inputs (clock injected) — the golden
  * vectors pin exact output strings.
  */
-export function mintAddressAssertion(
-  key: string,
-  address: string,
-  nowSeconds: number,
-): string {
+export function mintAddressAssertion(key: string, address: string, nowSeconds: number): string {
   // Field order is fixed (scope, iat, exp) so the serialized payload — and
   // therefore the golden vectors — are byte-stable.
   const payload = JSON.stringify({
@@ -47,7 +43,7 @@ export function mintAddressAssertion(
 
 /**
  * Mint the Authorization header for the notifier's `internal:notifier` reads
- * (M6.2; ADR-001 Decision 3). Same wire format, field order, lifetime, and
+ * (ADR-001 Decision 3). Same wire format, field order, lifetime, and
  * key as {@link mintAddressAssertion} — only the scope literal differs
  * (`internal:notifier`, no address). Cross-address by nature and never granting
  * a personal endpoint (services/api enforces both). The internal golden vector

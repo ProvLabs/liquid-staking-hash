@@ -199,9 +199,27 @@ export const mockJailReports: JailReportsResponse = {
 };
 
 export const mockSwapOuts: PendingSwapOut[] = [
-  { id: 101, owner: PAT_OPERATOR, shares: "480000000000000000000", estimate_nhash: h(50_000), matures_at_seconds: NOW + 55 * DAY },
-  { id: 102, owner: "pb1holderaholderaholderaholderaholdera000", shares: "240000000000000000000", estimate_nhash: h(25_000), matures_at_seconds: NOW + 58 * DAY },
-  { id: 103, owner: "pb1holderbholderbholderbholderbholderb000", shares: "120000000000000000000", estimate_nhash: h(12_500), matures_at_seconds: NOW - 3600 },
+  {
+    id: 101,
+    owner: PAT_OPERATOR,
+    shares: "480000000000000000000",
+    estimate_nhash: h(50_000),
+    matures_at_seconds: NOW + 55 * DAY,
+  },
+  {
+    id: 102,
+    owner: "pb1holderaholderaholderaholderaholdera000",
+    shares: "240000000000000000000",
+    estimate_nhash: h(25_000),
+    matures_at_seconds: NOW + 58 * DAY,
+  },
+  {
+    id: 103,
+    owner: "pb1holderbholderbholderbholderbholderb000",
+    shares: "120000000000000000000",
+    estimate_nhash: h(12_500),
+    matures_at_seconds: NOW - 3600,
+  },
 ];
 
 // A 14-epoch ledger history for the trend charts, deterministic (no Math.random).
@@ -218,7 +236,7 @@ export const mockLedger: LedgerRow[] = Array.from({ length: 14 }, (_, i) => {
     end_height: 1_700_000 + i * 10_000,
     tvv_before: h(tvvBefore),
     tvv_after: h(tvvBefore + rewards),
-    total_shares: (BigInt(tvvBefore) * 1_000_000n * 10000n / BigInt(navBps) * HASH).toString(),
+    total_shares: (((BigInt(tvvBefore) * 1_000_000n * 10000n) / BigInt(navBps)) * HASH).toString(),
     rewards_claimed: h(rewards),
     commission_received: h(Math.floor(rewards / 10)),
     tips_received: h((i % 3) * 25),

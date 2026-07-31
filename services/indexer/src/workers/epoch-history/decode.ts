@@ -5,12 +5,7 @@
 // are bigint; heights/seconds/epoch index are BigInt columns, so u64 JSON
 // numbers are widened to bigint here; bps/counts stay Int.
 
-import {
-  expectObject,
-  parseInt128,
-  parseU64Number,
-  parseUint128,
-} from "../../decode/scalars.ts";
+import { expectObject, parseInt128, parseU64Number, parseUint128 } from "../../decode/scalars.ts";
 
 /** The §9.10 decomposition, typed for the `epoch_snapshots` row. */
 export interface EpochSnapshotFields {
@@ -67,7 +62,10 @@ export function parseEpochSnapshot(value: unknown, path = "$.snapshot"): EpochSn
     unbondedForRedemptions: u128("unbonded_for_redemptions"),
     aumFeeEstimate: u128("aum_fee_estimate"),
     netDeposits: parseInt128(o["net_deposits"], `${path}.net_deposits`),
-    redemptionsExpedited: parseU64Number(o["redemptions_expedited"], `${path}.redemptions_expedited`),
+    redemptionsExpedited: parseU64Number(
+      o["redemptions_expedited"],
+      `${path}.redemptions_expedited`,
+    ),
     validatorsPurged: parseU64Number(o["validators_purged"], `${path}.validators_purged`),
     eligibleCount: parseU64Number(o["eligible_count"], `${path}.eligible_count`),
   };

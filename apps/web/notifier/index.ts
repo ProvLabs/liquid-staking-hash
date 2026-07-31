@@ -1,4 +1,4 @@
-// The notifier worker (ADR-001 Decision 3; plan 6.2 §2.5). A SEPARATE
+// The notifier worker (ADR-001 Decision 3). A SEPARATE
 // entrypoint OUTSIDE `app/`, so the React Router build never bundles it — it
 // shares the web tier's models layer (AlertStore) and services layer
 // (the pure evaluation core) but is its own process (`pnpm notifier`).
@@ -58,8 +58,10 @@ export interface Logger {
 
 /** Structured stdout logger; addresses are public, no IP/device fields ever. */
 export const consoleLogger: Logger = {
-  info: (message, fields) => process.stdout.write(JSON.stringify({ level: "info", message, ...fields }) + "\n"),
-  error: (message, fields) => process.stdout.write(JSON.stringify({ level: "error", message, ...fields }) + "\n"),
+  info: (message, fields) =>
+    process.stdout.write(`${JSON.stringify({ level: "info", message, ...fields })}\n`),
+  error: (message, fields) =>
+    process.stdout.write(`${JSON.stringify({ level: "error", message, ...fields })}\n`),
 };
 
 /** Injectable seams for one tick (production defaults in `main`). */
@@ -180,7 +182,11 @@ export async function runIncidents(deps: NotifierDeps): Promise<number> {
     deps.store.optInAddresses("validator_set_incident"),
   ]);
   const optInsForKind = (kind: AlertKind): ReadonlySet<string> =>
-    kind === "vault_status" ? vaultOptIns : kind === "validator_set_incident" ? validatorOptIns : new Set();
+    kind === "vault_status"
+      ? vaultOptIns
+      : kind === "validator_set_incident"
+        ? validatorOptIns
+        : new Set();
   const candidates = evaluateIncidents(facts, optInsForKind);
   const newCursor = facts.reduce((m, f) => Math.max(m, f.id), cursor);
   if (candidates.length === 0 && newCursor === cursor) return 0; // idle: skip the commit
@@ -243,14 +249,19 @@ export async function runTick(deps: NotifierDeps): Promise<TickResult> {
       inserted[stream.name] = await stream.run(deps);
     } catch (err) {
       errors[stream.name] = err instanceof Error ? err.message : String(err);
-      deps.log.error("notifier stream failed", { stream: stream.name, reason: errors[stream.name] });
+      deps.log.error("notifier stream failed", {
+        stream: stream.name,
+        reason: errors[stream.name],
+      });
     }
   }
   let swept = 0;
   try {
     swept = await runSweep(deps);
   } catch (err) {
-    deps.log.error("notifier sweep failed", { reason: err instanceof Error ? err.message : String(err) });
+    deps.log.error("notifier sweep failed", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
   }
   let pushSwept = 0;
   try {
@@ -261,7 +272,9 @@ export async function runTick(deps: NotifierDeps): Promise<TickResult> {
     // deletion hygiene must not depend on VAPID being set here.
     pushSwept = await deps.pushStore.sweepOrphans(deps.now());
   } catch (err) {
-    deps.log.error("push orphan sweep failed", { reason: err instanceof Error ? err.message : String(err) });
+    deps.log.error("push orphan sweep failed", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
   }
   return { inserted, errors, swept, pushSwept };
 }
@@ -308,7 +321,8 @@ async function main(): Promise<void> {
 
   const deps: NotifierDeps = {
     store,
-    fetchJson: (url, headers) => fetchApiJson(url, (u, init) => fetch(u, init), NOTIFIER_READ_TIMEOUT_MS, headers),
+    fetchJson: (url, headers) =>
+      fetchApiJson(url, (u, init) => fetch(u, init), NOTIFIER_READ_TIMEOUT_MS, headers),
     assertionKey: config.apiServiceAssertionKey,
     apiBase,
     factLimit: config.factLimit,
@@ -322,7 +336,14 @@ async function main(): Promise<void> {
   const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => {
       const timer = setTimeout(resolve, ms);
-      controller.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      controller.signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
     });
   const stop = (signal: NodeJS.Signals): void => {
     consoleLogger.info("notifier stopping", { signal });

@@ -2,7 +2,7 @@ import { StepChart, type StepMarker } from "~/components/charts/step-chart";
 import { t, type Locale } from "~/i18n";
 import type { AccrualVM } from "~/portfolio/types";
 
-// §8.2 accrual tracker (plan §2.3): the holder's HASH value at each event and
+// §8.2 accrual tracker: the holder's HASH value at each event and
 // monthly settlement, step-after (nothing interpolated, §13). Deposit/redeem
 // markers ride the line (filled "in", hollow "out") and also appear in the
 // table's Event column so the marker data is not color- or shape-only. Cold
@@ -80,7 +80,9 @@ export function AccrualChart({ locale, accrual }: { locale: Locale; accrual: Acc
         ])}
       />
       {accrual.historyTruncated ? (
-        <p className="text-xs text-muted-foreground">{t(locale, "portfolio.accrual-history-truncated")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t(locale, "portfolio.accrual-history-truncated")}
+        </p>
       ) : null}
       {accrual.truncated ? (
         <p className="text-xs text-muted-foreground">{t(locale, "portfolio.accrual-truncated")}</p>

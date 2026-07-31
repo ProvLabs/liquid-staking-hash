@@ -46,7 +46,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       async signAndBroadcast(_msg, _funds) {
         if (config.mock) {
           // Simulated inclusion for the mock drill; returns a fake txhash.
-          return "MOCK" + Math.abs(hashString(JSON.stringify(_msg))).toString(16).toUpperCase();
+          return (
+            "MOCK" +
+            Math.abs(hashString(JSON.stringify(_msg)))
+              .toString(16)
+              .toUpperCase()
+          );
         }
         throw new Error("signing requires a connected wallet");
       },

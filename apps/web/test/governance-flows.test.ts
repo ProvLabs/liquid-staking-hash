@@ -1,14 +1,12 @@
-// The §4b C4 state × affordance matrix, and §4b C5's affordance-plane rule
-// (M7.3–7.4). One case per ROW of the plan's table, driven table-style rather
-// than written per-branch.
+// The state × affordance matrix, and the affordance-plane rule. One case per
+// ROW, driven table-style rather than written per-branch.
 //
-// WHY THIS SUITE EXISTS IN THIS SHAPE. 7.2 filled C4 with every row reading
-// "read only" and it changed nothing; the plan says to judge that format HERE,
-// where affordances first exist. The M6.4 P1 it inherits — an action panel
-// rendered against a state the action could not validly operate on — was a
-// decision made in JSX, where no table could reach it. So the decision lives in
-// `app/governance/actions.ts` as a pure function over a closed input, and the
-// table below is the matrix itself rather than a sample of it.
+// WHY THIS SUITE EXISTS IN THIS SHAPE. The failure it guards — an action panel
+// rendered against a state the action cannot validly operate on — is what a
+// decision made in JSX produces, because no table can reach it there. So the
+// decision lives in `app/governance/actions.ts` as a pure function over a
+// closed input, and the table below is the matrix itself rather than a sample
+// of it.
 //
 // THE C5 RULE, stated once and asserted many times: an action is decided from
 // the LIVE plane alone. `live: null` means the chain did not confirm the state
@@ -155,7 +153,7 @@ describe("C4 — the execute column, one case per row", () => {
     expect(executeAffordance(input({ live: liveAccepted }))).toEqual({ state: "offered" });
   });
 
-  it("accepted, executable, session is NOT a member → still OFFERED (§7 Q2)", () => {
+  it("accepted, executable, session is NOT a member → still OFFERED", () => {
     // Execution is PERMISSIONLESS in x/group. Hiding it from non-members would
     // imply a restriction the module does not enforce.
     expect(executeAffordance(input({ live: liveAccepted, isMember: false }))).toEqual({
@@ -216,9 +214,9 @@ describe("C4 — the execute column, one case per row", () => {
   });
 
   it("an UNDETERMINED window → disabled with an unknown time, NEVER offered", () => {
-    // THE DEFECT THIS REPLACES (PR #25 review, 2026-07-30). The null case used
-    // to fall through to `offered` on the reasoning that there was "no window to
-    // wait out". That was wrong: x/group serializes a Duration for both
+    // THE DEFECT THIS REFUSES. Falling through to `offered` on the reasoning
+    // that there is "no window to wait out" is wrong: x/group serializes a
+    // Duration for both
     // recognized decision-policy kinds, so a policy with NO waiting period
     // yields `"0s"` — null means only that we could not DETERMINE it (the policy
     // is outside the discovered set, or its rule is a kind this build does not
@@ -237,7 +235,7 @@ describe("C4 — the execute column, one case per row", () => {
     }
   });
 
-  it("a ZERO window is still offered — `\"0s\"` is a value, not an absence", () => {
+  it('a ZERO window is still offered — `"0s"` is a value, not an absence', () => {
     // The other half: the fix must not turn a legitimately-executable proposal
     // into a permanently disabled one. A policy with no waiting period says so
     // explicitly, and that is distinguishable from not knowing.
@@ -256,10 +254,10 @@ describe("C4 — the execute column, one case per row", () => {
   });
 });
 
-describe("the execution window comes from the LIVE policy (PR #25 review)", () => {
-  // THE DEFECT THIS PINS. The affordance previously took
-  // `min_execution_period` from the MIRROR'S SNAPSHOT of the decision policy
-  // while `runGovernancePreflight` read the LIVE policy, so after any policy
+describe("the execution window comes from the LIVE policy", () => {
+  // THE DEFECT THIS PINS. Taking `min_execution_period` from the MIRROR'S
+  // SNAPSHOT of the decision policy
+  // while `runGovernancePreflight` reads the LIVE policy means that after any policy
   // change the button and the check gating it disagreed: a proposal the chain
   // would execute showed as pending, or one it would refuse advanced to
   // simulation.
@@ -358,7 +356,9 @@ describe("no action is offered in any terminal state, under any other input", ()
             votedOption: hasVoted ? "yes" : null,
           });
           expect(voteAffordance(facts).state, `${status}/${isMember}/${hasVoted}`).toBe("hidden");
-          expect(executeAffordance(facts).state, `${status}/${isMember}/${hasVoted}`).toBe("hidden");
+          expect(executeAffordance(facts).state, `${status}/${isMember}/${hasVoted}`).toBe(
+            "hidden",
+          );
         }
       }
     }

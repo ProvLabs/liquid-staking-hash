@@ -1,4 +1,4 @@
-// M6.1 derived portfolio metrics: a pure BigInt fold over the indexed event
+// Derived portfolio metrics: a pure BigInt fold over the indexed event
 // history producing cost basis, realized gain, effective yield, and the
 // accrual series (app-spec §14.11 average cost, §14.12 effective yield).
 //
@@ -20,7 +20,7 @@ import type {
 } from "@nvhash/api-types";
 import { toSafeInt, toSafeSignedInt, type TransactionFacts } from "./derive.ts";
 
-// Re-exported from the shared bounds registry (PR 7.1 §4b C2): the PRODUCER half
+// Re-exported from the shared bounds registry (C2): the PRODUCER half
 // of a pair whose consumer half lives in apps/web, now one declaration rather
 // than two numbers that happen to agree.
 import { MARKER_CAP, MAX_ACCRUAL_POINTS, MAX_YIELD_POINTS } from "@nvhash/api-types";

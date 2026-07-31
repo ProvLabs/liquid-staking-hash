@@ -37,7 +37,9 @@ export async function vaultQuery(vaultAddress: string): Promise<VaultInfo> {
   const body = await getJson(`/vault/v1/vaults/${vaultAddress}`);
   const v = body.vault ?? {};
   const principal = body.principal ?? {};
-  const liquid = (principal.coins ?? []).find((c: { denom: string }) => c.denom === config.baseDenom)?.amount ?? "0";
+  const liquid =
+    (principal.coins ?? []).find((c: { denom: string }) => c.denom === config.baseDenom)?.amount ??
+    "0";
   return {
     total_vault_value: v.total_vault_value ?? "", // not on this build -> derived from snapshot
     total_shares: v.total_shares?.amount ?? "0",
@@ -72,8 +74,15 @@ export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwap
     for (const r of body.pending_swap_outs ?? []) {
       const p = r?.pending_swap_out;
       const maturesAtMs = Date.parse(r?.timeout ?? "");
-      if (r?.request_id == null || !p?.owner || typeof p?.shares?.amount !== "string" || Number.isNaN(maturesAtMs))
-        throw new Error(`pending_swap_outs: unexpected row shape: ${JSON.stringify(r).slice(0, 200)}`);
+      if (
+        r?.request_id == null ||
+        !p?.owner ||
+        typeof p?.shares?.amount !== "string" ||
+        Number.isNaN(maturesAtMs)
+      )
+        throw new Error(
+          `pending_swap_outs: unexpected row shape: ${JSON.stringify(r).slice(0, 200)}`,
+        );
       rows.push({
         id: Number(r.request_id),
         owner: p.owner,
@@ -84,19 +93,29 @@ export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwap
     key = body.pagination?.next_key ?? null;
   } while (key);
   return Promise.all(
-    rows.map(async (r) => ({ ...r, estimate_nhash: await estimateSwapOut(vaultAddress, r.shares) })),
+    rows.map(async (r) => ({
+      ...r,
+      estimate_nhash: await estimateSwapOut(vaultAddress, r.shares),
+    })),
   );
 }
 
 /** Contract staking totals for the deployment split (spec §5.2). delegated = Σ delegation
  *  balances; unbonding = Σ unbonding entry balances. One page suffices (MAX_VALIDATORS=50). */
-export async function stakingTotals(delegator: string): Promise<{ delegated: string; unbonding: string }> {
-  const del = await getJson(`/cosmos/staking/v1beta1/delegations/${delegator}?pagination.limit=200`);
+export async function stakingTotals(
+  delegator: string,
+): Promise<{ delegated: string; unbonding: string }> {
+  const del = await getJson(
+    `/cosmos/staking/v1beta1/delegations/${delegator}?pagination.limit=200`,
+  );
   let delegated = 0n;
   for (const r of del.delegation_responses ?? []) delegated += BigInt(r.balance?.amount ?? "0");
-  const unb = await getJson(`/cosmos/staking/v1beta1/delegators/${delegator}/unbonding_delegations?pagination.limit=200`);
+  const unb = await getJson(
+    `/cosmos/staking/v1beta1/delegators/${delegator}/unbonding_delegations?pagination.limit=200`,
+  );
   let unbonding = 0n;
-  for (const r of unb.unbonding_responses ?? []) for (const e of r.entries ?? []) unbonding += BigInt(e.balance ?? "0");
+  for (const r of unb.unbonding_responses ?? [])
+    for (const e of r.entries ?? []) unbonding += BigInt(e.balance ?? "0");
   return { delegated: delegated.toString(), unbonding: unbonding.toString() };
 }
 

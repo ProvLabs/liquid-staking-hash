@@ -16,13 +16,7 @@ import { t, type Locale } from "~/i18n";
 // Highlighting the session's own row is decoration. §8.7 is a PUBLIC read, so
 // the address never gates anything — an anonymous visitor sees the same table.
 
-export function MemberStatusTable({
-  locale,
-  status,
-}: {
-  locale: Locale;
-  status: MemberStatus;
-}) {
+export function MemberStatusTable({ locale, status }: { locale: Locale; status: MemberStatus }) {
   const title = t(locale, "governance.members-title");
 
   if (status.kind === "membership-changed") {

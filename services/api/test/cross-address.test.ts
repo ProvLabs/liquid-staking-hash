@@ -1,5 +1,5 @@
-// THE cross-address-rejection contract gate (ADR-001 Decision 2; master plan
-// §4) — a STANDING services/api CI gate from PR 3.3 on, never a one-time
+// THE cross-address-rejection contract gate (ADR-001 Decision 2
+// §4) — a STANDING services/api CI gate, never a one-time
 // audit. It proves the address-scoped authorization is an in-process
 // mechanism: an assertion for address A requesting address B → 403;
 // absent/expired/invalid → 401; `internal:notifier` on a personal endpoint →
@@ -21,13 +21,65 @@ const ADDR_B = "pb1walletzz2";
 const facts = {
   reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
   transactions: [
-    { txhash: "AA", msgIndex: 0, address: ADDR_A, kind: "swap_in" as const, shares: 1_000n, nhash: 1_017n, navAtHeight: 1_017_500_000n, height: 100n, blockTime: new Date("2026-06-01T00:00:00Z") },
-    { txhash: "BB", msgIndex: 0, address: ADDR_B, kind: "swap_in" as const, shares: 2_000n, nhash: 2_035n, navAtHeight: 1_017_500_000n, height: 200n, blockTime: new Date("2026-06-02T00:00:00Z") },
-    { txhash: "CC", msgIndex: 0, address: ADDR_A, kind: "swap_out_request" as const, shares: 500n, nhash: 0n, navAtHeight: 1_017_500_000n, height: 300n, blockTime: new Date("2026-06-03T00:00:00Z") },
+    {
+      txhash: "AA",
+      msgIndex: 0,
+      address: ADDR_A,
+      kind: "swap_in" as const,
+      shares: 1_000n,
+      nhash: 1_017n,
+      navAtHeight: 1_017_500_000n,
+      height: 100n,
+      blockTime: new Date("2026-06-01T00:00:00Z"),
+    },
+    {
+      txhash: "BB",
+      msgIndex: 0,
+      address: ADDR_B,
+      kind: "swap_in" as const,
+      shares: 2_000n,
+      nhash: 2_035n,
+      navAtHeight: 1_017_500_000n,
+      height: 200n,
+      blockTime: new Date("2026-06-02T00:00:00Z"),
+    },
+    {
+      txhash: "CC",
+      msgIndex: 0,
+      address: ADDR_A,
+      kind: "swap_out_request" as const,
+      shares: 500n,
+      nhash: 0n,
+      navAtHeight: 1_017_500_000n,
+      height: 300n,
+      blockTime: new Date("2026-06-03T00:00:00Z"),
+    },
   ],
   redemptions: [
-    { requestId: "req-1", owner: ADDR_A, shares: 500n, status: "enqueued" as const, enqueuedAt: new Date("2026-06-03T00:00:00Z"), expeditedAt: null, maturedAt: null, refundedAt: null, lastHeight: 300n, lastTxhash: "CC" },
-    { requestId: "req-0", owner: ADDR_A, shares: 100n, status: "matured" as const, enqueuedAt: new Date("2026-05-01T00:00:00Z"), expeditedAt: null, maturedAt: new Date("2026-05-20T00:00:00Z"), refundedAt: null, lastHeight: 50n, lastTxhash: "OLD" },
+    {
+      requestId: "req-1",
+      owner: ADDR_A,
+      shares: 500n,
+      status: "enqueued" as const,
+      enqueuedAt: new Date("2026-06-03T00:00:00Z"),
+      expeditedAt: null,
+      maturedAt: null,
+      refundedAt: null,
+      lastHeight: 300n,
+      lastTxhash: "CC",
+    },
+    {
+      requestId: "req-0",
+      owner: ADDR_A,
+      shares: 100n,
+      status: "matured" as const,
+      enqueuedAt: new Date("2026-05-01T00:00:00Z"),
+      expeditedAt: null,
+      maturedAt: new Date("2026-05-20T00:00:00Z"),
+      refundedAt: null,
+      lastHeight: 50n,
+      lastTxhash: "OLD",
+    },
   ],
 };
 
@@ -37,7 +89,7 @@ function startAuthServer(): Promise<RunningServer> {
 
 // Registry-derived, like INTERNAL_PATHS below: every current AND future
 // `auth: "address"` route joins the cross-address matrix automatically. It was
-// a hand-kept list through M6.2; M6.4 added three routes at once, and a
+// a hand-kept list; three routes can land at once, and a
 // hand-kept list is exactly the thing that silently misses the fourth.
 const PERSONAL_PATHS = routes.filter((r) => r.auth === "address").map((r) => r.path);
 
@@ -58,17 +110,13 @@ const VALOPER_A = "pbvaloper1walletaqq";
 
 /** The query string a personal route needs to reach its scope check. */
 function personalQuery(path: string, address: string): string {
-  return VALOPER_PATHS.has(path)
-    ? `address=${address}&valoper=${VALOPER_A}`
-    : `address=${address}`;
+  return VALOPER_PATHS.has(path) ? `address=${address}&valoper=${VALOPER_A}` : `address=${address}`;
 }
 
 // Registry-derived, like the public-route loop below: every current AND future
 // `internal:notifier` route joins this matrix automatically — a new internal
-// route cannot slip past the gate (plan §2.3).
-const INTERNAL_PATHS = routes
-  .filter((r) => r.auth === "internal:notifier")
-  .map((r) => r.path);
+// route cannot slip past the gate.
+const INTERNAL_PATHS = routes.filter((r) => r.auth === "internal:notifier").map((r) => r.path);
 
 describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
   it("rejects an assertion for A requesting B with 403 on every personal route", async () => {
@@ -101,11 +149,17 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
         {}, // absent
         { authorization: "Bearer not-a-token" },
         { authorization: "Basic abc" },
-        { authorization: mintAssertion(`address:${ADDR_A}`, { key: "wrong-key-wrong-key-wrong-key-wrong" }) },
+        {
+          authorization: mintAssertion(`address:${ADDR_A}`, {
+            key: "wrong-key-wrong-key-wrong-key-wrong",
+          }),
+        },
       ];
       for (const headers of cases) {
         for (const path of PERSONAL_PATHS) {
-          const res = await fetch(`${server.baseUrl}${path}?${personalQuery(path, ADDR_A)}`, { headers });
+          const res = await fetch(`${server.baseUrl}${path}?${personalQuery(path, ADDR_A)}`, {
+            headers,
+          });
           expect(res.status, `${path} ${JSON.stringify(headers)}`).toBe(401);
         }
       }
@@ -243,7 +297,11 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
         headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
       });
       const pBody = (await portfolio.json()) as {
-        data: { transaction_count: number; escrowed_shares: string; active_redemptions: Array<{ request_id: string }> };
+        data: {
+          transaction_count: number;
+          escrowed_shares: string;
+          active_redemptions: Array<{ request_id: string }>;
+        };
       };
       expect(pBody.data.transaction_count).toBe(2);
       expect(pBody.data.escrowed_shares).toBe("500"); // enqueued only; the matured req-0 does not escrow
@@ -289,7 +347,9 @@ describe("CSV export contract (§14.11; [R3] freshness headers)", () => {
         { headers: { authorization: mintAssertion(`address:${ADDR_A}`) } },
       );
       expect(cross.status).toBe(403);
-      const bare = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`);
+      const bare = await fetch(
+        `${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`,
+      );
       expect(bare.status).toBe(401);
     } finally {
       await server.close();
@@ -314,13 +374,19 @@ describe("CSV export contract (§14.11; [R3] freshness headers)", () => {
     const server = await startServer(
       { assertionKey: TEST_ASSERTION_KEY },
       undefined,
-      fakeReader({ reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n }, transactions: many }),
+      fakeReader({
+        reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
+        transactions: many,
+      }),
     );
     try {
       const auth = { authorization: mintAssertion(`address:${ADDR_A}`) };
-      const csv = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`, {
-        headers: auth,
-      });
+      const csv = await fetch(
+        `${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&format=csv`,
+        {
+          headers: auth,
+        },
+      );
       expect(csv.status).toBe(200);
       const lines = (await csv.text()).trimEnd().split("\n");
       expect(lines).toHaveLength(ROWS + 1); // header + every row, none truncated
@@ -329,9 +395,12 @@ describe("CSV export contract (§14.11; [R3] freshness headers)", () => {
       expect(lines[ROWS]!.split(",")[2]).toBe(`TX${ROWS - 1}`);
 
       // The JSON view still paginates at the schema ceiling (200).
-      const json = await fetch(`${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&limit=200`, {
-        headers: auth,
-      });
+      const json = await fetch(
+        `${server.baseUrl}${API_BASE}/transactions?address=${ADDR_A}&limit=200`,
+        {
+          headers: auth,
+        },
+      );
       const body = (await json.json()) as { data: unknown[] };
       expect(body.data).toHaveLength(200);
     } finally {

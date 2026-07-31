@@ -1,4 +1,4 @@
-// Wallet provider (plan 5.1 §3): client-side connection state plus the
+// Wallet provider: client-side connection state plus the
 // session login orchestration — connect via the vendor adapter, mint a
 // nonce, ADR-36-sign the challenge, establish the HttpOnly cookie session,
 // then revalidate so server loaders see it. The signed challenge text is
@@ -47,7 +47,7 @@ interface WalletContextValue {
   connect(vendor: VendorId): Promise<void>;
   disconnect(): Promise<void>;
   /**
-   * SIGN_MODE_DIRECT sign of a transaction sign doc (PR 5.2 machinery, wired
+   * SIGN_MODE_DIRECT sign of a transaction sign doc (wired
    * to pages in 5.3). Throws ReconnectToSignError when no live adapter backs
    * the current session (the reload case) — signing never silently no-ops.
    */
@@ -113,8 +113,7 @@ export function WalletProvider({
         const created = await WALLET_VENDORS[vendor].create({
           chainId,
           walletConnectProjectId,
-          onPairingUri: (uri) =>
-            setClientState({ phase: "connecting", vendor, pairingUri: uri }),
+          onPairingUri: (uri) => setClientState({ phase: "connecting", vendor, pairingUri: uri }),
         });
         const account = await created.connect();
         setAdapter(created);

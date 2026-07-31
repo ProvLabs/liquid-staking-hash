@@ -25,19 +25,67 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: app · changed?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the diff below needs both ends of the range
+      - id: filter
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # No usable base (first push to a branch, force push, unexpected
+          # event): run everything rather than guess.
+          if [ -z "${BASE_SHA:-}" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "no usable base sha — running the full suite"
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          echo "changed files:"
+          echo "$changed"
+          # Everything outside contracts/ is app work by default — except the
+          # two contract-only files that happen to live outside it. Neither the
+          # contract CI workflow nor the Rust toolchain pin can affect a JS
+          # test, and treating them as app work made a one-line contracts-ci
+          # edit run Playwright, db-grants and the console typecheck.
+          outside="$(echo "$changed" | grep -vE '^(contracts/|rust-toolchain\.toml$|\.github/workflows/contracts-ci\.yaml$)' || true)"
+          # TWO PARTS OF contracts/ ARE APP WORK, and both are easy to forget:
+          #   * schema/ is the committed IDL that apps/web/test/governance-templates.test.ts
+          #     asserts template totality against — a schema change can fail a WEB test;
+          #   * any shell script, because the shellcheck job gates every tracked *.sh
+          #     in the repository, contracts/scripts and contracts/drills included.
+          coupled="$(echo "$changed" | grep -E '^contracts/(schema/|.*\.sh$)' || true)"
+          if [ -n "$outside" ] || [ -n "$coupled" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+          fi
+
   workspace:
     name: workspace · typecheck · test · fixtures gate
     runs-on: ubuntu-latest
+    needs: changes
     timeout-minutes: 15
     container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       COREPACK_HOME: ${{ github.workspace }}/.corepack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
 
       - name: Restore pnpm store + corepack cache
-        uses: actions/cache@v4
+        if: needs.changes.outputs.app == 'true'
+        uses: actions/cache@v5
         with:
           path: |
             .pnpm-store
@@ -48,18 +96,31 @@ jobs:
       # --frozen-lockfile doubles as the lockfile-discipline gate
       # (SECURITY.md: lockfiles are committed for every workspace).
       - name: Install (frozen lockfile)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm install --frozen-lockfile
 
+      # Biome (biome.jsonc) is formatter AND linter for every JS/TS/CSS source
+      # in the repo — including apps/console, which is outside the pnpm
+      # workspace and therefore reached by no other job here. Runs before
+      # typecheck so a formatting-only failure is reported as one.
+      # Warnings do not fail the build; errors do.
+      - name: Lint + format check (biome)
+        if: needs.changes.outputs.app == 'true'
+        run: corepack pnpm run lint
+
       - name: Typecheck (all workspace packages)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm -r run typecheck
 
       - name: Test (all workspace packages)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm -r run test
 
       # The corpus must always carry every terminal state (swap in, enqueue,
       # expedite, payout, refund, both settlement legs) — a PR that drops or
       # truncates a fixture fails here, not in M2 decode tests.
       - name: Fixture corpus completeness gate
+        if: needs.changes.outputs.app == 'true'
         run: packages/fixtures/scripts/capture-fixtures.sh --check
 
   # apps/web gates that live outside `pnpm -r test` (app plan PR 1.3):
@@ -69,15 +130,18 @@ jobs:
   web-gates:
     name: web · palette validator · bundle-secret check
     runs-on: ubuntu-latest
+    needs: changes
     timeout-minutes: 15
     container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       COREPACK_HOME: ${{ github.workspace }}/.corepack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
       - name: Restore pnpm store + corepack cache
-        uses: actions/cache@v4
+        if: needs.changes.outputs.app == 'true'
+        uses: actions/cache@v5
         with:
           path: |
             .pnpm-store
@@ -85,10 +149,13 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
       - name: Install (frozen lockfile)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm install --frozen-lockfile
       - name: Dataviz palette validator (light + dark token sets)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/web run check:palette
       - name: Bundle-secret check (§7 client-safe subset only)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/web run check:bundle
 
   # Offline e2e (Playwright + axe + MSW over @nvhash/fixtures). Runs in the
@@ -98,15 +165,18 @@ jobs:
   web-e2e:
     name: web · Playwright e2e + axe (offline, MSW)
     runs-on: ubuntu-latest
+    needs: changes
     timeout-minutes: 20
     container: mcr.microsoft.com/playwright:v1.61.1-noble
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       COREPACK_HOME: ${{ github.workspace }}/.corepack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
       - name: Restore pnpm store + corepack cache
-        uses: actions/cache@v4
+        if: needs.changes.outputs.app == 'true'
+        uses: actions/cache@v5
         with:
           path: |
             .pnpm-store
@@ -114,8 +184,10 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
       - name: Install (frozen lockfile)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm install --frozen-lockfile
       - name: Playwright e2e (build + serve with NVHASH_MOCK=1)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/web run test:e2e
 
   # Grant-boundary gate (ADR-001 Decision 1, action item 4; app plan PR 1.5) —
@@ -130,6 +202,7 @@ jobs:
   db-grants:
     name: services · grant-boundary + api reader (roles.sql + migrate + test:grants + test:db)
     runs-on: ubuntu-latest
+    needs: changes
     timeout-minutes: 15
     container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
     services:
@@ -151,9 +224,11 @@ jobs:
       # service hostname inside the job container.
       ADMIN_DATABASE_URL: postgresql://nvhash:nvhash-dev@postgres:5432/nvhash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
       - name: Restore pnpm store + corepack cache
-        uses: actions/cache@v4
+        if: needs.changes.outputs.app == 'true'
+        uses: actions/cache@v5
         with:
           path: |
             .pnpm-store
@@ -161,34 +236,89 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
       - name: Install (frozen lockfile)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm install --frozen-lockfile
       - name: Install psql client (to apply roles.sql)
+        if: needs.changes.outputs.app == 'true'
         run: apt-get update -qq && apt-get install -y --no-install-recommends postgresql-client >/dev/null
       - name: Apply role/schema boundary (roles.sql)
+        if: needs.changes.outputs.app == 'true'
         run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f infra/dev/postgres/roles.sql
       - name: Migrate indexed schema (as indexer_writer)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/indexer run migrate:deploy
         env:
           DATABASE_URL: postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed
       - name: Grant SELECT on pre-existing tables (new tables inherit via default privs)
+        if: needs.changes.outputs.app == 'true'
         run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT ON ALL TABLES IN SCHEMA indexed TO api_reader;"
       - name: Grant-boundary test (test:grants)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/indexer run test:grants
+
+      # Migration ↔ model drift. Each schema is ONE regenerated baseline rather
+      # than an append-only chain (services/indexer/CLAUDE.md), which only holds
+      # if the committed SQL still produces exactly what the models declare.
+      # `--from-migrations` applies the baseline to a scratch database and
+      # compares the result, so a hand-edited migration, a model edit that was
+      # never regenerated, or a migration that cannot replay on an empty
+      # database all fail here rather than on someone's next `pg reset`.
+      - name: Create scratch databases for the drift check
+        if: needs.changes.outputs.app == 'true'
+        run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE shadow_indexed;" -c "CREATE DATABASE shadow_app;"
+      - name: Migrations match the models (indexed + app)
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          corepack pnpm --filter @nvhash/indexer exec prisma migrate diff \
+            --from-migrations prisma/migrations --to-schema-datamodel prisma \
+            --shadow-database-url "postgresql://nvhash:nvhash-dev@postgres:5432/shadow_indexed" --exit-code
+          corepack pnpm --filter @nvhash/web exec prisma migrate diff \
+            --from-migrations prisma/migrations --to-schema-datamodel prisma \
+            --shadow-database-url "postgresql://nvhash:nvhash-dev@postgres:5432/shadow_app" --exit-code
       - name: Generate @nvhash/db-indexed client (from the indexer's canonical schema)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/db-indexed run generate
       - name: API reader gate (test:db — real queries as api_reader)
+        if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/api run test:db
         env:
           API_READER_DATABASE_URL: postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed
           INDEXER_WRITER_DATABASE_URL: postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed
 
+  # apps/console is deliberately OUTSIDE the pnpm workspace (ADR-001 Decision 4,
+  # pnpm-workspace.yaml), so `pnpm -r` reaches none of it. Biome lints it from
+  # the root, but nothing type-checked it until this job: an internal tool is
+  # still shipped code, and a console that does not compile is found by whoever
+  # next opens it rather than by CI.
+  console:
+    name: console · typecheck (standalone npm project)
+    runs-on: ubuntu-latest
+    needs: changes
+    timeout-minutes: 10
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    defaults:
+      run:
+        working-directory: apps/console
+    steps:
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
+      - name: Install (lockfile-exact)
+        if: needs.changes.outputs.app == 'true'
+        run: npm ci
+      - name: Typecheck (tsc -b)
+        if: needs.changes.outputs.app == 'true'
+        run: npm run typecheck
+
   shell-lint:
     name: shellcheck (devnet + tooling scripts)
     runs-on: ubuntu-latest
+    needs: changes
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
       - name: shellcheck at warning severity
+        if: needs.changes.outputs.app == 'true'
         run: |
           # gate every tracked shell script plus the ./dev wrapper
           git ls-files '*.sh' | xargs shellcheck --severity=warning dev

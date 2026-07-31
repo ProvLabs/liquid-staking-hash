@@ -1,26 +1,24 @@
-// The CLOSED proposal-template registry (M7.3–7.4 §2.3; app-spec §8.7, §14.6).
+// The CLOSED proposal-template registry (app-spec §8.7, §14.6).
 // PURE — no I/O, no clock, no config. Runs unchanged in the browser bundle
 // (the composer form imports it) AND on the server (the relay guard does).
 //
-// WHAT THIS FILE IS — AND IS NOT, since it briefly was something else. This is
-// the COMPOSER'S vocabulary: it is what makes proposal creation
+// WHAT THIS FILE IS — AND IS NOT. This is the COMPOSER'S vocabulary: it is what makes proposal creation
 // "template-scoped" per app-spec §8.7, which asks the App to offer decoded
 // templates of the program's admin actions rather than free-form message
 // building (free-form stays a Console strength).
 //
-// It is NOT a relay guard input. The 2026-07-30 revision of the §12.3
-// amendment removed the guard's per-inner-message template matching: a proposal
-// executes nothing until the group's decision policy is satisfied by members
-// voting, so restricting what may be PROPOSED reduced no authority while
-// costing a live chain read and a registry the relay had to keep in lockstep
-// with the contract. What protects members from a hostile proposal is being
+// It is NOT a relay guard input, and must not become one: the guard does no
+// per-inner-message template matching. A proposal executes nothing until the
+// group's decision policy is satisfied by members voting, so restricting what
+// may be PROPOSED reduces no authority, while costing a live chain read and a
+// registry the relay would have to keep in lockstep with the contract. What
+// protects members from a hostile proposal is being
 // able to READ it before voting — `app/governance/decode.ts`, which summarizes
 // a closed union and tags everything else `unknown` with the exact JSON.
 //
-// ONE VOCABULARY, THREE CONSUMERS (§2.3, invariant 6) — still true, and still
-// the reason this is one file:
+// ONE VOCABULARY, THREE CONSUMERS — the reason this is one file:
 //
-//   * `app/governance/decode.ts` (7.2) READS proposals containing these
+//   * `app/governance/decode.ts` READS proposals containing these
 //     messages — through `ADMIN_VARIANTS`, which this file keys off, so a
 //     proposal composed here and read back there cannot be described
 //     differently;
@@ -31,12 +29,12 @@
 // no other variant. `test/governance-templates.test.ts` asserts that mapping is
 // total in BOTH directions against the committed `cargo schema` output
 // (`contracts/schema/nvhash-staking.json`, the tracked IDL — `schema/raw/` is
-// gitignored). That gate is now a PRODUCT
-// completeness property rather than a security one: a contract that gains an
+// gitignored). That gate is a PRODUCT completeness property, not a security
+// one: a contract that gains an
 // admin capability fails CI here rather than leaving it unreachable from the
 // App's composer.
 //
-// BRIDGE CONFIG IS ABSENT, NOT STUBBED (§7 Q1, confirmed 2026-07-30). App-spec
+// BRIDGE CONFIG IS ABSENT, NOT STUBBED. App-spec
 // §8.7 names it, but it depends on §14.3 (external, NUVA) and no contract
 // variant backs it. An absent template is honest; a disabled one invites "when".
 
@@ -77,7 +75,7 @@ const U32_MAX = 4_294_967_295n;
  * and "paused, no reason given" is the kind of state SECURITY.md's never-lie
  * rule exists to prevent. So this App will neither compose nor relay a
  * pause proposal without one. Declared HERE and imported by the template, the
- * composer form and the guard — one limit, never three literals (§4b C2).
+ * composer form and the guard — one limit, never three literals.
  */
 export const MIN_PAUSE_REASON_LEN = 1;
 export const MAX_PAUSE_REASON_LEN = 256;
@@ -140,7 +138,7 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
   {
     id: "update_config",
     optionalParams: true,
-    // Ten optional fields → 2¹⁰ possible shapes (§4b C1). The canonical builder
+    // Ten optional fields → 2¹⁰ possible shapes. The canonical builder
     // OMITS absent fields, and condition 5's byte comparison makes the shape
     // space irrelevant to the guard: it never enumerates the 1024 forms, it
     // demands the bytes equal the one form this builder would have produced.
@@ -175,7 +173,8 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
         key: "min_capture_interval_secs",
         min: 0n,
         max: MAX_JSON_SAFE_UINT,
-        contractRule: "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
+        contractRule:
+          "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
         labelKey: "governance.param-min-capture-interval-secs",
       },
       {
@@ -216,8 +215,7 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
         // Strictly below 10000: the contract rejects 10000 explicitly, because
         // a 100% offset would silently zero every deploy target.
         max: BPS_MAX - 1n,
-        contractRule:
-          "state.rs Config::validate: concentration_safety_offset_bps must be < 10000",
+        contractRule: "state.rs Config::validate: concentration_safety_offset_bps must be < 10000",
         labelKey: "governance.param-concentration-safety-offset-bps",
       },
       {
@@ -233,15 +231,13 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
         key: "jail_unbond_delay_secs",
         min: 0n,
         max: MAX_JSON_SAFE_UINT,
-        contractRule: "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
+        contractRule:
+          "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
         labelKey: "governance.param-jail-unbond-delay-secs",
       },
     ],
     labelKey: "governance.template-update-config",
-    summaryKeys: [
-      "governance.confirm-update-config-1",
-      "governance.confirm-update-config-2",
-    ],
+    summaryKeys: ["governance.confirm-update-config-1", "governance.confirm-update-config-2"],
   },
   {
     id: "set_halted",
@@ -286,10 +282,7 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
     optionalParams: false,
     params: [],
     labelKey: "governance.template-clear-pending-delegations",
-    summaryKeys: [
-      "governance.confirm-clear-pending-1",
-      "governance.confirm-clear-pending-2",
-    ],
+    summaryKeys: ["governance.confirm-clear-pending-1", "governance.confirm-clear-pending-2"],
   },
 ] as const;
 
@@ -326,10 +319,7 @@ export type TemplateParamError =
  * error the user must fix, not one this module quietly moves inside the range —
  * a clamped bps would submit a governance proposal for a number nobody chose.
  */
-export function validateTemplateValues(
-  id: string,
-  values: TemplateValues,
-): TemplateParamError[] {
+export function validateTemplateValues(id: string, values: TemplateValues): TemplateParamError[] {
   const template = templateById(id);
   if (template === null) return [{ code: "unknown-template", id }];
 
@@ -340,7 +330,7 @@ export function validateTemplateValues(
   }
 
   for (const param of template.params) {
-    const supplied = Object.prototype.hasOwnProperty.call(values, param.key);
+    const supplied = Object.hasOwn(values, param.key);
     if (!supplied) {
       if (!template.optionalParams) errors.push({ code: "missing-param", key: param.key });
       continue;
@@ -395,7 +385,7 @@ export function validateTemplateValues(
 
 /**
  * The CANONICAL inner execute payload for a template instance — the ONE place
- * this JSON is produced, exactly as `operatorInnerJson` is for M6.4.
+ * this JSON is produced, exactly as `operatorInnerJson` is for operator actions.
  *
  * Both the composer and the relay guard call it: the guard re-encodes what it
  * parsed and requires byte equality, so the only inner payload the relay will
@@ -419,10 +409,9 @@ export function templateInnerJson(id: string, values: TemplateValues): string {
   // `update_config` field is optional (none appears in its `required` list), so
   // omission is the shape the contract reads as "do not change this".
   for (const param of template.params) {
-    if (!Object.prototype.hasOwnProperty.call(values, param.key)) continue;
+    if (!Object.hasOwn(values, param.key)) continue;
     const value = values[param.key]!;
-    body[param.key] =
-      param.kind === "uint" ? Number(value as bigint) : (value as boolean | string);
+    body[param.key] = param.kind === "uint" ? Number(value as bigint) : (value as boolean | string);
   }
   return JSON.stringify({ [template.id]: body });
 }
@@ -561,7 +550,7 @@ export function templateFieldLines(
   const template = templateById(id);
   if (template === null) return [];
   return template.params
-    .filter((param) => Object.prototype.hasOwnProperty.call(values, param.key))
+    .filter((param) => Object.hasOwn(values, param.key))
     .map((param) => ({
       key: param.key,
       labelKey: param.labelKey,
@@ -570,7 +559,7 @@ export function templateFieldLines(
 }
 
 /**
- * The `update_config` DIFF (§8.7's named requirement, D19): current → proposed
+ * The `update_config` DIFF (§8.7's named requirement): current → proposed
  * for exactly the fields being changed, with untouched fields visibly untouched.
  *
  * `current` is the live `Config {}` read, keyed by the same parameter names.
@@ -596,7 +585,7 @@ export function configDiffRows(
 ): ConfigDiffRow[] {
   const template = templateById("update_config")!;
   return template.params.map((param) => {
-    const supplied = Object.prototype.hasOwnProperty.call(values, param.key);
+    const supplied = Object.hasOwn(values, param.key);
     const currentValue = current[param.key] ?? null;
     const proposed = supplied ? String(values[param.key]) : null;
     const state: ConfigDiffRow["state"] = !supplied
@@ -631,7 +620,8 @@ export function templateSummaryKey(
   if (template === null) return { key: "governance.msg-unknown-variant", params: {} };
   if (id === "set_halted") {
     const halted = values["halted"];
-    if (typeof halted !== "boolean") return { key: "governance.msg-set-halted-unknown", params: {} };
+    if (typeof halted !== "boolean")
+      return { key: "governance.msg-set-halted-unknown", params: {} };
     return {
       key: halted ? "governance.msg-set-halted-on" : "governance.msg-set-halted-off",
       params: {},

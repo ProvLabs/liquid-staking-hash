@@ -1,4 +1,4 @@
-// The Portfolio `?page=` boundary (M6.1 §2.6; SECURITY.md: reject, never
+// The Portfolio `?page=` boundary (SECURITY.md: reject, never
 // clamp). Absent -> 0; malformed or out-of-range -> a 400 Response.
 
 import { describe, expect, it } from "vitest";

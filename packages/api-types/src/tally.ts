@@ -1,5 +1,5 @@
 // The tally-vs-threshold comparison, shared by services/api and apps/web
-// (M7.1 decision D17).
+// (decision D17).
 //
 // WHY IT IS SHARED RATHER THAN WRITTEN TWICE. This is the `navHashPerShare`
 // precedent, and that helper exists because a duplicated amount formula drifted

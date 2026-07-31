@@ -1,0 +1,277 @@
+# Contract-side PR quality gates.
+#
+# The contract custodies staked funds, so its suite is the one gate that must
+# never be developer discipline alone: `SECURITY.md` requires the invariants to
+# be machine-checked, the simulation to stay seed-reproducible, and the
+# committed schema to be the shipped interface. Each of those is a job here.
+#
+# The toolchain is pinned by the REPOSITORY-ROOT `rust-toolchain.toml` — rustup
+# reads it by parent-directory search, which is why no toolchain action appears
+# below. Bump the pin there, not here. It must stay out of `contracts/`: that
+# directory is bind-mounted into the cosmwasm/optimizer image, which builds the
+# wasm from its own toolchain and breaks if rustup switches away from it.
+#
+# Deliberately NOT here: the live devnet drills under `contracts/drills/`. They
+# need the ghcr.io/provlabs/vault-dev-node image with the pre-release vault
+# module, so they stay local/scheduled until PR 8.0 pins a released vault — the
+# same boundary app-ci draws.
+#
+# SKIPPING THE WORK WITHOUT SKIPPING THE CHECK. The `changes` job decides whether
+# a PR touches the contract, and the expensive STEPS are guarded on its answer
+# while the jobs themselves always run to completion. Guarding steps rather than
+# jobs is deliberate: a job skipped by a job-level `if:` reports as "skipped"
+# rather than "success", which blocks merges wherever the check is required. An
+# app-only PR therefore pays ~20s of runner startup and every check still reports
+# green. `changes` fails OPEN — anything it cannot determine runs the full suite,
+# because the wrong direction to err here is the one that lets a contract change
+# through ungated.
+name: contracts-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: contracts-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # provwasm-test-tube bundles Go dependencies that do not build on Go >= 1.26
+  # (contracts/CLAUDE.md). Pinning the Go toolchain makes the runner's
+  # preinstalled Go version irrelevant to whether the suite compiles.
+  GOTOOLCHAIN: go1.24.5
+
+defaults:
+  run:
+    working-directory: contracts
+
+jobs:
+  changes:
+    name: contracts · changed?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      contracts: ${{ steps.filter.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the diff below needs both ends of the range
+      - id: filter
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # No usable base (first push to a branch, force push, unexpected
+          # event): run everything rather than guess.
+          if [ -z "${BASE_SHA:-}" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "no usable base sha — running the full suite"
+            echo "contracts=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          echo "changed files:"
+          echo "$changed"
+          # The workflow and the toolchain pin count as contract changes: both
+          # decide how the contract is built and tested.
+          if echo "$changed" | grep -qE '^(contracts/|rust-toolchain\.toml$|\.github/workflows/contracts-ci\.yaml$)'; then
+            echo "contracts=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "contracts=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Fast gates: no Docker, no chain, no artifact. These are the ones that catch
+  # a stale committed interface or unformatted source before the slow jobs run.
+  static:
+    name: contracts · fmt · clippy · schema freshness
+    runs-on: ubuntu-latest
+    needs: changes
+    # Not as fast as it sounds on a cold cache: `clippy --all-targets` builds the
+    # test targets too, which pulls in provwasm-test-tube's bundled Go.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.contracts == 'true'
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        if: needs.changes.outputs.contracts == 'true'
+        run: rustup show
+      - name: Cargo cache (Swatinem/rust-cache)
+        if: needs.changes.outputs.contracts == 'true'
+        # Pinned by commit SHA, not tag: a third-party action is a supply-chain
+        # dependency (SECURITY.md), and a tag can be moved. This is v2.9.1.
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          workspaces: contracts # the cargo workspace root is not the repo root
+          # A job that fails still leaves a useful cache. Without this the
+          # 918b7f9 failure discarded its whole wasm/optimizer build, so the
+          # next run paid for it again.
+          cache-on-failure: true
+
+      - name: Formatting (cargo fmt --check)
+        if: needs.changes.outputs.contracts == 'true'
+        run: cargo fmt --check
+
+      # Warnings are denied: the crate is warning-clean as of this workflow
+      # landing, so a new warning is a new defect rather than accumulated noise.
+      - name: Lints (cargo clippy, warnings denied)
+        if: needs.changes.outputs.contracts == 'true'
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # SECURITY.md audit readiness: "cargo schema output is regenerated and
+      # committed with interface changes, so the reviewed interface is the
+      # shipped one". This is the enforcement of that sentence. It matters
+      # beyond staleness: apps/web/test/governance-templates.test.ts asserts
+      # template totality AGAINST the committed JSON, so a stale schema does not
+      # fail that test — it makes it assert against the wrong interface.
+      - name: Committed schema is current (cargo schema → no diff)
+        if: needs.changes.outputs.contracts == 'true'
+        run: |
+          cargo run --bin schema --locked
+          git diff --exit-code -- schema \
+            || { echo "::error::contracts/schema is stale — run 'cargo run --bin schema' and commit the result"; exit 1; }
+
+  # The full suite, including the provwasm-test-tube tests that execute against
+  # a real embedded chain. Those load artifacts/nvhash_staking.wasm and refuse
+  # to run against a binary older than the source, so the artifact is built
+  # first — it is never committed (repo policy: no binary artifacts in git).
+  test:
+    name: contracts · cargo test (artifact-backed)
+    runs-on: ubuntu-latest
+    needs: changes
+    timeout-minutes: 45
+    env:
+      OPTIMIZER_CACHE_DIR: ${{ github.workspace }}/.optimizer-cache
+    steps:
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.contracts == 'true'
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        if: needs.changes.outputs.contracts == 'true'
+        run: rustup show
+      # CARGO CACHING HERE HAS A HISTORY — read before changing it.
+      #
+      # A naive whole-`target` cache broke this job: provwasm-test-tube's build
+      # script emits a Go shared library into a per-build-hash OUT_DIR, and a
+      # restored tree relinked against a different hash than the runtime lookup
+      # resolved, so every test binary died with "cannot open shared object
+      # file" (exit 127). rust-cache prunes stale build output instead of
+      # restoring a whole tree, and the Test step below makes the library lookup
+      # independent of which hash won — belt and braces, because the failure
+      # only reproduces on Linux with a warm cache.
+      - name: Cargo cache (Swatinem/rust-cache)
+        if: needs.changes.outputs.contracts == 'true'
+        # Pinned by commit SHA, not tag: a third-party action is a supply-chain
+        # dependency (SECURITY.md), and a tag can be moved. This is v2.9.1.
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          workspaces: contracts # the cargo workspace root is not the repo root
+          # A job that fails still leaves a useful cache. Without this the
+          # 918b7f9 failure discarded its whole wasm/optimizer build, so the
+          # next run paid for it again.
+          cache-on-failure: true
+
+      # The artifact itself, keyed on everything that decides its bytes. On a hit
+      # the Docker build below skips its own work entirely (~5 min).
+      #
+      # NO `restore-keys` HERE, deliberately: a prefix match would restore a wasm
+      # built from DIFFERENT sources, and the re-stamp below would then convince
+      # build-artifact.sh that a stale binary is current — precisely the "tested
+      # a stale binary" failure its freshness check exists to prevent. Exact key
+      # or rebuild.
+      - name: Restore the built artifact (exact source match only)
+        id: wasm
+        if: needs.changes.outputs.contracts == 'true'
+        uses: actions/cache@v5
+        with:
+          path: contracts/artifacts
+          key: wasm-${{ runner.os }}-${{ hashFiles('contracts/src/**', 'contracts/Cargo.toml', 'contracts/Cargo.lock', 'contracts/scripts/build-artifact.sh') }}
+
+      # Cache restore preserves mtimes, so a restored artifact looks OLDER than
+      # the just-checked-out sources and build-artifact.sh would rebuild it. A
+      # key hit means those sources are byte-identical, so re-stamping is sound.
+      - name: Re-stamp the restored artifact
+        if: needs.changes.outputs.contracts == 'true' && steps.wasm.outputs.cache-hit == 'true'
+        run: touch artifacts/nvhash_staking.wasm
+
+      # The optimizer recompiles the whole dependency tree in-container, and the
+      # docker named volumes it caches into do not exist on an ephemeral runner.
+      # `OPTIMIZER_CACHE_DIR` redirects them to a directory this cache persists:
+      # measured 2m29s cold against 2.08s warm, same output checksum.
+      - name: Restore the optimizer's cargo cache
+        if: needs.changes.outputs.contracts == 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/.optimizer-cache
+          key: optimizer-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/scripts/build-artifact.sh') }}
+          restore-keys: optimizer-${{ runner.os }}-
+
+      # Runs the pinned cosmwasm/optimizer image (amd64 on the runner) and gates
+      # the per-function locals limit, so a wasm the chain would statically
+      # reject fails here rather than at deploy.
+      - name: Build the optimized wasm artifact
+        if: needs.changes.outputs.contracts == 'true'
+        run: ./scripts/build-artifact.sh
+
+      # The optimizer container writes as root; the cache's post step runs as the
+      # runner user and cannot archive root-owned files.
+      - name: Take ownership of the optimizer cache
+        if: needs.changes.outputs.contracts == 'true'
+        run: sudo chown -R "$(id -u):$(id -g)" "$OPTIMIZER_CACHE_DIR"
+
+      - name: Test (unit, property, and embedded-chain integration)
+        if: needs.changes.outputs.contracts == 'true'
+        run: |
+          # Link first, so every build-script shared library exists, then put
+          # their directories on the loader path before any binary runs.
+          cargo test --locked --no-run
+          libdirs="$(find target "$HOME/.cargo/registry" -name 'lib*.so' -type f -printf '%h\n' 2>/dev/null | sort -u | tr '\n' ':' || true)"
+          export LD_LIBRARY_PATH="${libdirs}${LD_LIBRARY_PATH:-}"
+          cargo test --locked
+
+  # The chain-free simulation soak. Bounded and fixed-seed so it terminates and
+  # reproduces: SECURITY.md requires simulation failures to stay
+  # seed-reproducible, and the binary exits non-zero when any scenario fails.
+  # Reproduce a CI failure locally with the scenario seed it prints:
+  #   cargo run --release --bin simulate -- --seed <scenario_seed> --scenarios 1
+  soak:
+    name: contracts · simulation soak (bounded, fixed seed)
+    runs-on: ubuntu-latest
+    needs: changes
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.contracts == 'true'
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        if: needs.changes.outputs.contracts == 'true'
+        run: rustup show
+      - name: Cargo cache (Swatinem/rust-cache)
+        if: needs.changes.outputs.contracts == 'true'
+        # Pinned by commit SHA, not tag: a third-party action is a supply-chain
+        # dependency (SECURITY.md), and a tag can be moved. This is v2.9.1.
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+        with:
+          workspaces: contracts # the cargo workspace root is not the repo root
+          # A job that fails still leaves a useful cache. Without this the
+          # 918b7f9 failure discarded its whole wasm/optimizer build, so the
+          # next run paid for it again.
+          cache-on-failure: true
+
+      - name: Soak (500 scenarios × 240 epochs, halt on first failure)
+        if: needs.changes.outputs.contracts == 'true'
+        run: |
+          cargo run --release --bin simulate --locked -- \
+            --seed 20260730 --scenarios 500 --epochs 240 --halt-on-failure
+
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-failures
+          path: contracts/sim-failures.log
+          if-no-files-found: ignore

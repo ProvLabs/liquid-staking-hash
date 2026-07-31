@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { PositionSummaryVM } from "~/portfolio/types";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
-// §8.2 position summary (plan §2.6/§2.7): headline figures composed from the
+// §8.2 position summary (/§2.7): headline figures composed from the
 // live and indexed planes. Every figure is n/a when null, never 0 (§12.1);
 // the accrued gain carries an icon + sign word so state never rides color
 // alone; the §2.7 divergence / history-state note and the §14.11 basis aid
@@ -22,7 +22,9 @@ function StatCard({
     <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-2xl font-semibold tabular-nums">{value}</span>
-      {caption !== undefined ? <span className="text-xs text-muted-foreground">{caption}</span> : null}
+      {caption !== undefined ? (
+        <span className="text-xs text-muted-foreground">{caption}</span>
+      ) : null}
     </div>
   );
 }
@@ -45,12 +47,22 @@ function GainValue({ locale, display }: { locale: Locale; display: string }) {
         : "var(--status-good)";
   const word = t(
     locale,
-    dir === "flat" ? "portfolio.gain-flat" : dir === "down" ? "portfolio.gain-down" : "portfolio.gain-up",
+    dir === "flat"
+      ? "portfolio.gain-flat"
+      : dir === "down"
+        ? "portfolio.gain-down"
+        : "portfolio.gain-up",
   );
   return (
     <span className="inline-flex items-center gap-1.5" style={{ color: token }}>
       {dir === "flat" ? null : (
-        <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" className="h-4 w-4 shrink-0" style={{ fill: token }}>
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 16 16"
+          className="h-4 w-4 shrink-0"
+          style={{ fill: token }}
+        >
           <path d={dir === "down" ? "M8 14 1 3h14L8 14Z" : "M8 2 15 13H1L8 2Z"} />
         </svg>
       )}
@@ -60,10 +72,18 @@ function GainValue({ locale, display }: { locale: Locale; display: string }) {
   );
 }
 
-export function PositionSummary({ locale, summary }: { locale: Locale; summary: PositionSummaryVM }) {
+export function PositionSummary({
+  locale,
+  summary,
+}: {
+  locale: Locale;
+  summary: PositionSummaryVM;
+}) {
   const na = t(locale, "portfolio.na");
   const valueCaptionKey: MessageKey =
-    summary.valuePlane === "indexed" ? "portfolio.value-caption-indexed" : "portfolio.value-caption-live";
+    summary.valuePlane === "indexed"
+      ? "portfolio.value-caption-indexed"
+      : "portfolio.value-caption-live";
 
   const inconsistent = summary.historyState === "inconsistent";
   const incomplete =
@@ -102,7 +122,13 @@ export function PositionSummary({ locale, summary }: { locale: Locale; summary: 
         />
         <StatCard
           label={t(locale, "portfolio.gain-label")}
-          value={summary.accruedGainHash === null ? na : <GainValue locale={locale} display={summary.accruedGainHash} />}
+          value={
+            summary.accruedGainHash === null ? (
+              na
+            ) : (
+              <GainValue locale={locale} display={summary.accruedGainHash} />
+            )
+          }
           caption={t(locale, "portfolio.gain-caption")}
         />
         <StatCard

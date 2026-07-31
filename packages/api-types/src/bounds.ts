@@ -1,12 +1,11 @@
-// Wire bounds — declared ONCE, imported by both sides (M7.1 §4b C2).
+// Wire bounds — declared ONCE, imported by both sides.
 //
-// WHY THIS FILE EXISTS. PR #19 shipped this exact defect: `yield_by_epoch` was
-// uncapped server-side against a `.max(2_000)` Zod cap in the web tier, and the
-// whole derived read nulled out because the producer could legitimately emit more
-// rows than the consumer would accept. The fix added a constant. It did not add a
-// mechanism — `rows.ts` went on coupling the two sides in a COMMENT ("most recent
-// MAX_YIELD_POINTS kept"), with nothing importing or testing the pairing, so the
-// next new payload was free to reproduce the bug.
+// WHY THIS FILE EXISTS. A collection bound that is written twice — a cap in the
+// producer and a `.max()` in the consumer's Zod schema — fails silently and
+// totally: the producer legitimately emits more rows than the consumer accepts,
+// and the whole derived read nulls out. Coupling the two sides in a COMMENT is
+// not a mechanism; nothing imports or tests a comment, so every new payload is
+// free to reproduce the defect.
 //
 // A bound that exists on both sides of a component boundary is therefore ONE
 // declaration here, and `test/bounds.test.ts` asserts for every registered pair
@@ -29,7 +28,7 @@ export interface WireBound {
   readonly consumer: number;
 }
 
-// --- governance (PR 7.1) ---------------------------------------------------
+// --- governance ---------------------------------------------------
 
 /** `GET /governance/proposals` → `proposals[]`. Proposals per policy are in the
  * tens on any real program, so this is generous rather than tight. */
@@ -74,7 +73,7 @@ export const MAX_GOV_TITLE_LENGTH = 512;
 export const MAX_GOV_SUMMARY_LENGTH = 4_096;
 export const MAX_GOV_METADATA_LENGTH = 4_096;
 
-// --- governance WRITE path (PR 7.3–7.4) ------------------------------------
+// --- governance WRITE path ------------------------------------------------
 //
 // The bounds above bound what `services/api` SERIALIZES and what `apps/web`
 // ACCEPTS. These bound what the App will COMPOSE and what its relay guard will
@@ -84,27 +83,27 @@ export const MAX_GOV_METADATA_LENGTH = 4_096;
 // The rule is `write <= read`, asserted by `WRITE_READ_BOUNDS` in
 // `test/bounds.test.ts`. A composed proposal that exceeded a read bound would
 // be mirrored TRUNCATED-and-flagged, so the App would have submitted something
-// it can only render incompletely — the same class of defect as PR #19's, one
-// boundary further along.
+// it can only render incompletely — the same class of defect the read pairs
+// exist to prevent, one boundary further along.
 //
-// §4b C2 is explicit that a guard bound written as a literal in `build.ts` is a
-// review failure: the composer, the guard and the reader must not be able to
-// disagree about the same limit, so each of these has exactly one declaration.
+// A guard bound written as a literal in `build.ts` is a defect: the composer,
+// the guard and the reader must not be able to disagree about the same limit,
+// so each of these has exactly one declaration.
 
 /**
  * `MsgSubmitProposal.messages[]` — the relay guard's PER-PROPOSAL element cap.
  *
- * x/group itself puts NO ceiling here (§4b C1), so this is the App's, and an
+ * x/group itself puts NO ceiling here, so this is the App's, and an
  * over-cap proposal is REJECTED, never truncated: a governance payload quietly
  * shortened on its way to the chain would be a lie about what is being voted
- * on. v1 composes exactly one template per proposal (§7 Q4, confirmed
- * 2026-07-30); the cap is above one so a multi-message proposal built elsewhere
- * is still relayable and still validated element-wise.
+ * on. v1 composes exactly one template per proposal; the cap is above one so a
+ * multi-message proposal built elsewhere is still relayable and still validated
+ * element-wise.
  */
 export const MAX_PROPOSAL_MESSAGES = 8;
 
 /** `MsgSubmitProposal.metadata` — the composer's optional public rationale
- * (§7 Q3, confirmed 2026-07-30: offered on proposals, ABSENT on votes). */
+ * (offered on proposals, ABSENT on votes). */
 export const MAX_PROPOSAL_METADATA_LEN = 1_024;
 
 /** `MsgSubmitProposal.title` / `.summary` — the SDK ≥ 0.50 proposal fields
@@ -123,13 +122,25 @@ export interface WriteReadBound {
 }
 
 export const WRITE_READ_BOUNDS: readonly WriteReadBound[] = [
-  { field: "MsgSubmitProposal.messages", write: MAX_PROPOSAL_MESSAGES, read: MAX_GOV_PROPOSAL_MESSAGES },
-  { field: "MsgSubmitProposal.metadata", write: MAX_PROPOSAL_METADATA_LEN, read: MAX_GOV_METADATA_LENGTH },
+  {
+    field: "MsgSubmitProposal.messages",
+    write: MAX_PROPOSAL_MESSAGES,
+    read: MAX_GOV_PROPOSAL_MESSAGES,
+  },
+  {
+    field: "MsgSubmitProposal.metadata",
+    write: MAX_PROPOSAL_METADATA_LEN,
+    read: MAX_GOV_METADATA_LENGTH,
+  },
   { field: "MsgSubmitProposal.title", write: MAX_PROPOSAL_TITLE_LEN, read: MAX_GOV_TITLE_LENGTH },
-  { field: "MsgSubmitProposal.summary", write: MAX_PROPOSAL_SUMMARY_LEN, read: MAX_GOV_SUMMARY_LENGTH },
+  {
+    field: "MsgSubmitProposal.summary",
+    write: MAX_PROPOSAL_SUMMARY_LEN,
+    read: MAX_GOV_SUMMARY_LENGTH,
+  },
 ];
 
-// --- adopted from M6.1 (the pairs PR #19's fix left coupled by comment) ----
+// --- adopted (pairs previously coupled by comment alone) ----
 //
 // These were already correct, but only by inspection. Registering them here is
 // what makes them mechanically correct, and it is why `MAX_ACCRUAL_POINTS` and
@@ -152,21 +163,49 @@ export const MARKER_CAP_WIRE = 2_000;
  * so the test also asserts that every governance payload field it knows about is
  * represented.
  *
- * NOT YET COVERED, and recorded rather than implied: the pre-7.1 collection
- * bounds on `/validators` (500), `/portfolio.active_redemptions` (500),
+ * NOT YET COVERED, and recorded rather than implied: the collection bounds on
+ * `/validators` (500), `/portfolio.active_redemptions` (500),
  * `/market.depth_bands` (32) and `.bridged_supply` (64), plus
  * `ValidatorRow.failing_reasons` (32), still live only in the web Zod schema with
  * no declared producer cap. Adopting them means giving each a producer-side
  * constant, which is a change to those endpoints rather than to this one.
  */
 export const WIRE_BOUNDS: readonly WireBound[] = [
-  { field: "governance/proposals.proposals", producer: MAX_GOV_PROPOSALS_PAGE, consumer: MAX_GOV_PROPOSALS_PAGE_WIRE },
-  { field: "governance/proposal.votes", producer: MAX_GOV_VOTES_PER_PROPOSAL, consumer: MAX_GOV_VOTES_PER_PROPOSAL_WIRE },
-  { field: "GovProposalRow.messages", producer: MAX_GOV_PROPOSAL_MESSAGES, consumer: MAX_GOV_PROPOSAL_MESSAGES_WIRE },
-  { field: "GovProposalRow.proposers", producer: MAX_GOV_PROPOSERS, consumer: MAX_GOV_PROPOSERS_WIRE },
-  { field: "governance/policies.policies", producer: MAX_GOV_POLICIES, consumer: MAX_GOV_POLICIES_WIRE },
-  { field: "PortfolioMetrics.accrual", producer: MAX_ACCRUAL_POINTS, consumer: MAX_ACCRUAL_POINTS_WIRE },
-  { field: "PortfolioMetrics.yield_by_epoch", producer: MAX_YIELD_POINTS, consumer: MAX_YIELD_POINTS_WIRE },
+  {
+    field: "governance/proposals.proposals",
+    producer: MAX_GOV_PROPOSALS_PAGE,
+    consumer: MAX_GOV_PROPOSALS_PAGE_WIRE,
+  },
+  {
+    field: "governance/proposal.votes",
+    producer: MAX_GOV_VOTES_PER_PROPOSAL,
+    consumer: MAX_GOV_VOTES_PER_PROPOSAL_WIRE,
+  },
+  {
+    field: "GovProposalRow.messages",
+    producer: MAX_GOV_PROPOSAL_MESSAGES,
+    consumer: MAX_GOV_PROPOSAL_MESSAGES_WIRE,
+  },
+  {
+    field: "GovProposalRow.proposers",
+    producer: MAX_GOV_PROPOSERS,
+    consumer: MAX_GOV_PROPOSERS_WIRE,
+  },
+  {
+    field: "governance/policies.policies",
+    producer: MAX_GOV_POLICIES,
+    consumer: MAX_GOV_POLICIES_WIRE,
+  },
+  {
+    field: "PortfolioMetrics.accrual",
+    producer: MAX_ACCRUAL_POINTS,
+    consumer: MAX_ACCRUAL_POINTS_WIRE,
+  },
+  {
+    field: "PortfolioMetrics.yield_by_epoch",
+    producer: MAX_YIELD_POINTS,
+    consumer: MAX_YIELD_POINTS_WIRE,
+  },
   { field: "PortfolioMetrics.accrual_markers", producer: MARKER_CAP, consumer: MARKER_CAP_WIRE },
 ];
 

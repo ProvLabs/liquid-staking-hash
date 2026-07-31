@@ -1,4 +1,4 @@
-// Operator-view loader degradation + honesty matrix (M6.4 §2.3; SECURITY.md
+// Operator-view loader degradation + honesty matrix (SECURITY.md
 // "never lie about state", app-spec §12.1). Chain reads come from the fixture
 // corpus via MSW; API envelopes from the @nvhash/api-types producers.
 //
@@ -94,7 +94,9 @@ function epochRow(index: number, overrides: Record<string, unknown> = {}) {
 }
 
 const epochs = (rows: Record<string, unknown>[]) =>
-  http.get("*/api/v1/operator/epochs", () => HttpResponse.json(envelope(rows, { source: "indexed" })));
+  http.get("*/api/v1/operator/epochs", () =>
+    HttpResponse.json(envelope(rows, { source: "indexed" })),
+  );
 
 const payments = (rows: Record<string, unknown>[]) =>
   http.get("*/api/v1/operator/payments", () =>
@@ -479,7 +481,7 @@ describe("history composition", () => {
   });
 });
 
-// ── Which plane decides MEMBERSHIP (PR #22 review, greptile P1) ────────────
+// ── Which plane decides MEMBERSHIP (greptile P1) ────────────
 // `validator_registry` is written only at epoch cranks, and epochs are
 // calendar-monthly, so the indexed set can lag reality by up to a month. It
 // must never override the live contract set on the two things this page lets
@@ -490,7 +492,10 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
 
   it("shows a validator enrolled live but not yet sampled into the registry", async () => {
     // The just-enrolled case: live knows it, the indexed summary does not.
-    server.use(summary([summaryRow()]), liveValidators([liveValidator(), liveValidator({ valoper: NEW_VALOPER })]));
+    server.use(
+      summary([summaryRow()]),
+      liveValidators([liveValidator(), liveValidator({ valoper: NEW_VALOPER })]),
+    );
     const data = await loadOperatorViewData(withKey(), SESSION);
 
     expect(data.owned.map((v) => v.valoper).sort()).toEqual([NEW_VALOPER, VALOPER].sort());
@@ -521,7 +526,7 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
   const OTHER_VALOPER = NEW_VALOPER;
 
   it("does not offer program actions on an unregistered validator", async () => {
-    // PR #22 review. Keeping an unregistered validator in the list (so its
+    // Review. Keeping an unregistered validator in the list (so its
     // history stays reachable) is only safe if the ACTION panel is scoped to
     // enrolled ones: commission, TIP, unregister, report and purge would all be
     // rejected by the contract for a validator no longer in the set, so
@@ -541,7 +546,10 @@ describe("live ownership is canonical; the indexed registry only enriches", () =
     // "gone" sorts before "testing", so without the active-first preference the
     // page would open on the one validator the operator cannot act on.
     server.use(
-      summary([summaryRow(), summaryRow({ valoper: OTHER_VALOPER, moniker: "gone", active: true })]),
+      summary([
+        summaryRow(),
+        summaryRow({ valoper: OTHER_VALOPER, moniker: "gone", active: true }),
+      ]),
       liveValidators([liveValidator()]),
     );
     const data = await loadOperatorViewData(withKey(), SESSION);
@@ -614,7 +622,10 @@ describe("boundary validation", () => {
       liveValidators([liveValidator()]),
       http.get("*/api/v1/operator/summary", () =>
         HttpResponse.json(
-          envelope({ address: OPERATOR, validators: [{ valoper: VALOPER }] }, { source: "indexed" }),
+          envelope(
+            { address: OPERATOR, validators: [{ valoper: VALOPER }] },
+            { source: "indexed" },
+          ),
         ),
       ),
     );

@@ -11,7 +11,11 @@ import { applyTheme, nextTheme, type Theme } from "~/theme/theme";
 export function ThemeToggle({ locale, initialTheme }: { locale: Locale; initialTheme: Theme }) {
   const [theme, setTheme] = useState<Theme>(initialTheme);
 
-  const label = { auto: t(locale, "theme.auto"), light: t(locale, "theme.light"), dark: t(locale, "theme.dark") }[theme];
+  const label = {
+    auto: t(locale, "theme.auto"),
+    light: t(locale, "theme.light"),
+    dark: t(locale, "theme.dark"),
+  }[theme];
 
   return (
     <Button

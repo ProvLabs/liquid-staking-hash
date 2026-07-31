@@ -1,4 +1,4 @@
-// The reconciler (app-spec §9.6/§12.1, master plan PR 2.5) — the honesty alarm.
+// The reconciler (app-spec §9.6/§12.1) — the honesty alarm.
 // It runs as its OWN loop at a slower cadence, INDEPENDENT of the ingestion
 // workers, reading the live plane (fresh chain queries) vs the indexed plane
 // (the DB) and comparing. Independence is the point: if the workers stall, the
@@ -49,7 +49,9 @@ async function readLive(deps: ReconcilerDeps): Promise<LivePlane> {
           return { epochIndex: f.epochIndex, totalShares: f.totalShares, tvvAfter: f.tvvAfter };
         })();
 
-  const halted = parseHalted(await deps.pinned.smartAtHeight(deps.contractAddress, { epoch_status: {} }, head));
+  const halted = parseHalted(
+    await deps.pinned.smartAtHeight(deps.contractAddress, { epoch_status: {} }, head),
+  );
 
   return { head, snapshot, halted };
 }

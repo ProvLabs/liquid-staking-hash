@@ -1,4 +1,4 @@
-// Lifecycle-reducer gates (plan 5.2 §4): transitions are total, `signing`
+// Lifecycle-reducer gates: transitions are total, `signing`
 // is unreachable except through `confirm`, `confirmed` is unreachable
 // before chain inclusion, on-chain failure renders as failure, and RESET
 // cannot discard an in-flight sign/broadcast.

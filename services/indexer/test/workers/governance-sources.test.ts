@@ -9,7 +9,12 @@
 
 import { describe, expect, it } from "vitest";
 import type { RawEvent } from "../../src/decode/attributes.ts";
-import { discoverGovernance, paginate, MAX_PAGES, type PolicySource } from "../../src/workers/governance/policies.ts";
+import {
+  discoverGovernance,
+  paginate,
+  MAX_PAGES,
+  type PolicySource,
+} from "../../src/workers/governance/policies.ts";
 import { collectWindow, type GovEventSource } from "../../src/workers/governance/sources.ts";
 import { sweepPolicies } from "../../src/workers/governance/state.ts";
 import { GROUP_EVENT } from "../../src/workers/governance/events.ts";
@@ -63,12 +68,27 @@ const fullRoutes = {
     group_policies: [policyInfo(POLICY_A), policyInfo(POLICY_B)],
     pagination: noPage,
   },
-  "cosmos/group/v1/group_info/": { info: { id: "1", admin: ADMIN, metadata: "", version: "1", total_weight: "3", created_at: "2026-07-29T00:00:00Z" } },
+  "cosmos/group/v1/group_info/": {
+    info: {
+      id: "1",
+      admin: ADMIN,
+      metadata: "",
+      version: "1",
+      total_weight: "3",
+      created_at: "2026-07-29T00:00:00Z",
+    },
+  },
   "cosmos/group/v1/group_policies_by_admin/": { group_policies: [], pagination: noPage },
   "cosmos/group/v1/group_members/": {
     members: [
-      { group_id: "1", member: { address: "tp1a", weight: "1", metadata: "", added_at: "2026-07-29T00:00:00Z" } },
-      { group_id: "1", member: { address: "tp1b", weight: "2", metadata: "", added_at: "2026-07-29T00:00:00Z" } },
+      {
+        group_id: "1",
+        member: { address: "tp1a", weight: "1", metadata: "", added_at: "2026-07-29T00:00:00Z" },
+      },
+      {
+        group_id: "1",
+        member: { address: "tp1b", weight: "2", metadata: "", added_at: "2026-07-29T00:00:00Z" },
+      },
     ],
     pagination: noPage,
   },
@@ -105,7 +125,9 @@ describe("policy-set discovery (D1: the set, never 'the' policy)", () => {
     // empty set; "we could not read" must fail the window. Collapsing the two
     // would make an LCD blip look like a program without governance, and the read
     // surfaces would say so.
-    await expect(discoverGovernance(policySource({ admin: null }), CONTRACT, 100n)).rejects.toThrow();
+    await expect(
+      discoverGovernance(policySource({ admin: null }), CONTRACT, 100n),
+    ).rejects.toThrow();
   });
 
   it("unions configured override policies with what discovery finds", async () => {
@@ -179,7 +201,12 @@ describe("the sweep's success flag gates prune detection", () => {
     group_policy_version: "1",
     status,
     executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
-    final_tally_result: { yes_count: "0", no_count: "0", abstain_count: "0", no_with_veto_count: "0" },
+    final_tally_result: {
+      yes_count: "0",
+      no_count: "0",
+      abstain_count: "0",
+      no_with_veto_count: "0",
+    },
     messages: [],
   });
 
@@ -259,7 +286,10 @@ describe("collectWindow", () => {
     attributes: Object.entries(attrs).map(([key, value]) => ({ key, value })),
   });
 
-  function eventSource(txs: { hash: string; height: bigint; events: RawEvent[] }[], messages: unknown[] = []): GovEventSource {
+  function eventSource(
+    txs: { hash: string; height: bigint; events: RawEvent[] }[],
+    messages: unknown[] = [],
+  ): GovEventSource {
     return {
       txSearch: async () => ({ totalCount: txs.length, txs }),
       blockResults: async () => ({ finalizeBlockEvents: [] }),
@@ -287,9 +317,9 @@ describe("collectWindow", () => {
     expect(batch.observedHeight).toBe(10n);
   });
 
-  // PR #23 P1: the collector must RECOVER a proposal whose whole lifecycle fell
-  // inside one window, or the writer has no row to apply its events to. The M7.1
-  // plan §2.2 specified this read; it was dropped in implementation when the
+  // P1: the collector must RECOVER a proposal whose whole lifecycle fell
+  // inside one window, or the writer has no row to apply its events to. The
+  // Specified this read; it was dropped in implementation when the
   // 404-means-pruned semantics were corrected.
   it("recovers a proposal absent from the sweep by a pinned read at a live height", async () => {
     const pinned: { path: string; height: bigint }[] = [];
@@ -309,12 +339,18 @@ describe("collectWindow", () => {
               group_policy_version: "1",
               status: "PROPOSAL_STATUS_SUBMITTED",
               executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
-              final_tally_result: { yes_count: "0", no_count: "0", abstain_count: "0", no_with_veto_count: "0" },
+              final_tally_result: {
+                yes_count: "0",
+                no_count: "0",
+                abstain_count: "0",
+                no_with_veto_count: "0",
+              },
               messages: [],
             },
           };
         }
-        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        if (path.includes("proposals_by_group_policy"))
+          return { proposals: [], pagination: noPage };
         for (const [prefix, body] of Object.entries(fullRoutes)) {
           if (path.startsWith(prefix)) return body;
         }
@@ -335,8 +371,16 @@ describe("collectWindow", () => {
           hash: "CCDD",
           height: 120n,
           events: [
-            ev(GROUP_EVENT.exec, { proposal_id: '"9"', result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"', msg_index: "0" }),
-            ev(GROUP_EVENT.proposalPruned, { proposal_id: '"9"', status: '"PROPOSAL_STATUS_ACCEPTED"', msg_index: "0" }),
+            ev(GROUP_EVENT.exec, {
+              proposal_id: '"9"',
+              result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"',
+              msg_index: "0",
+            }),
+            ev(GROUP_EVENT.proposalPruned, {
+              proposal_id: '"9"',
+              status: '"PROPOSAL_STATUS_ACCEPTED"',
+              msg_index: "0",
+            }),
           ],
         },
       ]),
@@ -367,7 +411,8 @@ describe("collectWindow", () => {
           heights.push(height);
           throw new Error("500 not found: load proposal");
         }
-        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        if (path.includes("proposals_by_group_policy"))
+          return { proposals: [], pagination: noPage };
         for (const [prefix, body] of Object.entries(fullRoutes)) {
           if (path.startsWith(prefix)) return body;
         }
@@ -379,7 +424,13 @@ describe("collectWindow", () => {
         {
           hash: "CCDD",
           height: 300n,
-          events: [ev(GROUP_EVENT.proposalPruned, { proposal_id: '"4"', status: '"PROPOSAL_STATUS_REJECTED"', msg_index: "0" })],
+          events: [
+            ev(GROUP_EVENT.proposalPruned, {
+              proposal_id: '"4"',
+              status: '"PROPOSAL_STATUS_REJECTED"',
+              msg_index: "0",
+            }),
+          ],
         },
       ]),
       source,
@@ -402,7 +453,8 @@ describe("collectWindow", () => {
           attempted.push(height);
           throw new Error("500 not found: load proposal");
         }
-        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        if (path.includes("proposals_by_group_policy"))
+          return { proposals: [], pagination: noPage };
         for (const [prefix, body] of Object.entries(fullRoutes)) {
           if (path.startsWith(prefix)) return body;
         }
@@ -416,8 +468,16 @@ describe("collectWindow", () => {
           height: 200n,
           events: [
             ev(GROUP_EVENT.submitProposal, { proposal_id: '"12"', msg_index: "0" }),
-            ev(GROUP_EVENT.exec, { proposal_id: '"12"', result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"', msg_index: "0" }),
-            ev(GROUP_EVENT.proposalPruned, { proposal_id: '"12"', status: '"PROPOSAL_STATUS_ACCEPTED"', msg_index: "0" }),
+            ev(GROUP_EVENT.exec, {
+              proposal_id: '"12"',
+              result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"',
+              msg_index: "0",
+            }),
+            ev(GROUP_EVENT.proposalPruned, {
+              proposal_id: '"12"',
+              status: '"PROPOSAL_STATUS_ACCEPTED"',
+              msg_index: "0",
+            }),
           ],
         },
       ]),
@@ -437,7 +497,8 @@ describe("collectWindow", () => {
       smartAtHeight: async () => ({ admin: POLICY_A }),
       getAtHeight: async (path) => {
         if (path.startsWith("cosmos/group/v1/proposal/")) throw new Error("LCD down");
-        if (path.includes("proposals_by_group_policy")) return { proposals: [], pagination: noPage };
+        if (path.includes("proposals_by_group_policy"))
+          return { proposals: [], pagination: noPage };
         for (const [prefix, body] of Object.entries(fullRoutes)) {
           if (path.startsWith(prefix)) return body;
         }
@@ -485,7 +546,12 @@ describe("collectWindow", () => {
                 group_policy_version: "1",
                 status: "PROPOSAL_STATUS_SUBMITTED",
                 executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
-                final_tally_result: { yes_count: "0", no_count: "0", abstain_count: "0", no_with_veto_count: "0" },
+                final_tally_result: {
+                  yes_count: "0",
+                  no_count: "0",
+                  abstain_count: "0",
+                  no_with_veto_count: "0",
+                },
                 messages: [],
               },
             ],
@@ -518,7 +584,12 @@ describe("collectWindow", () => {
   });
 
   it("collects submit, exec and prune facts from the tx plane", async () => {
-    const source = policySource({ routes: { ...fullRoutes, "cosmos/group/v1/proposals_by_group_policy/": { proposals: [], pagination: noPage } } });
+    const source = policySource({
+      routes: {
+        ...fullRoutes,
+        "cosmos/group/v1/proposals_by_group_policy/": { proposals: [], pagination: noPage },
+      },
+    });
     const batch = await collectWindow(
       eventSource([
         {
@@ -526,11 +597,16 @@ describe("collectWindow", () => {
           height: 5n,
           events: [
             ev(GROUP_EVENT.submitProposal, { proposal_id: '"9"', msg_index: "0" }),
-            ev(GROUP_EVENT.exec, { proposal_id: '"9"', result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"', msg_index: "0" }),
+            ev(GROUP_EVENT.exec, {
+              proposal_id: '"9"',
+              result: '"PROPOSAL_EXECUTOR_RESULT_SUCCESS"',
+              msg_index: "0",
+            }),
             ev(GROUP_EVENT.proposalPruned, {
               proposal_id: '"9"',
               status: '"PROPOSAL_STATUS_ACCEPTED"',
-              tally_result: '{"yes_count":"2","abstain_count":"0","no_count":"0","no_with_veto_count":"0"}',
+              tally_result:
+                '{"yes_count":"2","abstain_count":"0","no_count":"0","no_with_veto_count":"0"}',
               msg_index: "0",
             }),
           ],

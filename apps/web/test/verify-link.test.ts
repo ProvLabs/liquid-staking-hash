@@ -1,4 +1,4 @@
-// Verify-link gate (plan 4.1 §3, app-spec §12.2): every target in the CLOSED
+// Verify-link gate (app-spec §12.2): every target in the CLOSED
 // VerifyTarget union resolves to an href strictly prefixed by the booted
 // consoleUrl (whose chain id the boot check proved matches ours), and the
 // figure→view map is total; a target without a path is a compile error via
@@ -35,7 +35,7 @@ describe("verify links (§12.2 environment lock)", () => {
   });
 
   it("maps each figure family to its confirmed console view", () => {
-    // Paths confirmed against apps/console/src/App.tsx (PR 4.1). `governance`
+    // Paths confirmed against apps/console/src/App.tsx. `governance`
     // is deliberately absent until the console grows that panel.
     expect(CONSOLE_VIEW_PATHS).toEqual({
       overview: "",

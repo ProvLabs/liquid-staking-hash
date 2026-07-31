@@ -1,12 +1,9 @@
-// Public program-endpoint row shapes (app plan PR 4.2 tranche 1, freezing the
-// Learn-facing subset of the PR 3.1 contracts; master plan M3 header:
-// contracts are defined and mocked first so the web lane builds without
-// waiting). Producer: services/api. Consumers: services/api and apps/web.
-// PR 3.1 implements the real derivations against exactly these shapes; a
-// field change is a spec-level amendment (app-spec §9.4 revision note), never
-// a silent edit. PR 3.1 also freezes the `/validators` shapes below (master
-// plan §2 places the endpoint in 3.1; PR 4.3's public page consumes them —
-// confirmed 2026-07-22, docs/plans/2026-07-22-app-m3-query-api.md §7).
+// Public program-endpoint row shapes. Producer: services/api. Consumers:
+// services/api and apps/web.
+//
+// These shapes are FROZEN: a field change is a spec-level amendment
+// (app-spec §9.4 revision note), never a silent edit, because both tiers
+// compile against this one declaration.
 //
 // Scale conventions follow the repo amount rules: token amounts and NAV are
 // DECIMAL STRINGS (BigInt/Decimal domain, never JS floats); block heights and
@@ -206,11 +203,11 @@ export interface RedemptionRow {
 /**
  * `GET /api/v1/portfolio` (address-scoped, app-spec §8.2): the indexed facts
  * for one address. Deliberately NO current-balance field ([R2],
- * docs/plans/2026-07-22-app-m3-query-api.md): the nvHASH balance is an
+ * app-spec §9.4): the nvHASH balance is an
  * on-chain LIVE read owned by the web tier (§8.2, §5.1) — indexed
  * transactions cannot see bank transfers, so a transactions-sum "balance"
  * here would silently misstate holdings. Derived metrics (cost basis,
- * effective yield) are the M6.1 service, not this endpoint.
+ * effective yield) are the service, not this endpoint.
  */
 export interface PortfolioSummary {
   /** The authorized address the facts belong to (echo of the query). */
@@ -226,7 +223,7 @@ export interface PortfolioSummary {
 }
 
 /**
- * One epoch step of the personal effective-yield series (M6.1 §2.2). The
+ * One epoch step of the personal effective-yield series. The
  * program figure `net_apr_bps` rides alongside the personal APR so the UI can
  * chart the depositor against the program for the same epoch. Both are signed
  * bps and nullable: null is the honest "not attributable to this position"
@@ -243,7 +240,7 @@ export interface EffectiveYieldPoint {
 }
 
 /**
- * One step-after sample of the position's value (M6.1 §2.3): value in nhash of
+ * One step-after sample of the position's value: value in nhash of
  * the held+escrow shares priced at the NAV current at `time`. Points exist only
  * once the position is priceable (a deposit exists and a NAV-bearing epoch has
  * settled); before that, a value cannot be honestly stated.
@@ -257,7 +254,7 @@ export interface AccrualPoint {
 }
 
 /**
- * One event annotation on the accrual series (M6.1 §2.3): the deposit,
+ * One event annotation on the accrual series: the deposit,
  * request, payout, refund, or transfer that moved the position, echoing the
  * event's own amounts (refund `nhash` is "0" upstream).
  */
@@ -273,7 +270,7 @@ export interface AccrualMarker {
 }
 
 /**
- * Fidelity of the reconstructed cost-basis history (M6.1 §2.1):
+ * Fidelity of the reconstructed cost-basis history:
  * `complete`: a clean deposit/redemption record;
  * `has_transfers`: transfers were observed (they carry no basis, so the
  *   reconstructed basis is a lower-fidelity estimate);
@@ -283,7 +280,7 @@ export interface AccrualMarker {
 export type PortfolioHistoryState = "complete" | "has_transfers" | "inconsistent";
 
 /**
- * `GET /api/v1/portfolio/metrics` (address-scoped, M6.1 §2.4): the derived
+ * `GET /api/v1/portfolio/metrics` (address-scoped): the derived
  * cost-basis, realized-gain, effective-yield, and accrual figures for one
  * address, reconstructed from the indexed event history. All amounts are
  * base-unit decimal strings; basis/gain/APR fields serve null on an
@@ -323,8 +320,8 @@ export interface PortfolioMetrics {
 
 /**
  * One depth-at-slippage band of a sampled DEX pool (app-spec §5.3/§8.5).
- * PROVISIONAL SHAPE: the market sampler (plan PR 2.4) is parked pending the
- * §14.3 pool facts, so no producer pins these fields yet — when PR 2.4 lands
+ * PROVISIONAL SHAPE: the market sampler is parked pending the
+ * §14.3 pool facts, so no producer pins these fields yet — when a sampler lands
  * it writes `market_samples.depthBands` in exactly this shape, and any
  * adjustment it needs is an app-spec §9.4 revision, never a silent edit.
  */
@@ -390,24 +387,24 @@ export interface MarketSummary {
   bridged_supply: BridgedSupplyRow[];
 }
 
-// --- internal alert-facts surface (M6.2, `internal:notifier` scope) ---------
+// --- internal alert-facts surface (`internal:notifier` scope) ---------
 //
 // The notifier (an apps/web worker, ADR-001 Decision 3) evaluates alert rules
 // against indexed facts it cannot read directly — its `app_writer` credential
 // has no `indexed` grants. These three shapes are the cross-address evaluation
 // reads served under the `internal:notifier` scope (app-spec §9.4): identity
 // and ordinals only, no amounts on the redemption/incident facts (the notifier
-// stores no amounts — plan §2.1), so the surface stays minimal. Producer:
+// stores no amounts), so the surface stays minimal. Producer:
 // services/api. Consumer: the apps/web notifier. A field change here is an
 // app-spec §9.4 revision, never a silent edit.
 
 /**
- * One row of `GET /api/v1/internal/alert-facts/redemptions` (M6.2): a
+ * One row of `GET /api/v1/internal/alert-facts/redemptions`: a
  * redemption whose lifecycle advanced past the notifier's height cursor. The
  * notifier keys `redemption_update` alerts off the terminal timestamps
  * (matured/expedited/refunded) and the `owner` account (both public chain
  * data). Deliberately NO `shares`/amount field — the notification payload
- * carries identifiers only (plan §2.1), and the linked surface shows the live
+ * carries identifiers only, and the linked surface shows the live
  * amount with a freshness label (§12.1).
  */
 export interface AlertRedemptionFact {
@@ -424,11 +421,11 @@ export interface AlertRedemptionFact {
 }
 
 /**
- * One row of `GET /api/v1/internal/alert-facts/incidents` (M6.2): a computed
+ * One row of `GET /api/v1/internal/alert-facts/incidents`: a computed
  * incident, projected to the identity the notifier needs — `id` (its id
  * cursor) and `(kind, dedupe_key)` (the replay-stable notification identity,
- * NOT the autoincrement id; plan §2.4). NO payload passthrough: the notifier
- * needs identity, not detail (plan §2.3). `opened_at`/`opened_height` locate
+ * NOT the autoincrement id). NO payload passthrough: the notifier
+ * needs identity, not detail. `opened_at`/`opened_height` locate
  * the event; there is no `closed_at` (v1 sends no close notifications, §7 Q3).
  */
 export interface AlertIncidentFact {
@@ -443,7 +440,7 @@ export interface AlertIncidentFact {
 }
 
 /**
- * One row of `GET /api/v1/internal/alert-facts/arrears` (M6.2): a program
+ * One row of `GET /api/v1/internal/alert-facts/arrears`: a program
  * validator with commission still due in the latest sampled epoch, joined to
  * its operator account. Only active registry rows (unregistered validators
  * excluded). The `operator` account is the `operator_arrears` alert's target
@@ -459,7 +456,7 @@ export interface AlertArrearsFact {
   commission_due: string;
 }
 
-// --- operator surface (M6.4, address-scoped) --------------------------------
+// --- operator surface (address-scoped) --------------------------------
 //
 // The `/validators/mine` view's three reads (app-spec §8.6, §9.4). They are the
 // PERSONAL counterpart of the public `/validators` projection, which
@@ -604,7 +601,7 @@ export interface EpochRow {
   /**
    * NAV in HASH per nvHASH at settlement, decimal string — or null for an
    * epoch settled with zero shares (an empty vault has no NAV; null is the
-   * honest state, never a fabricated "0"). Widened from `string` by PR 3.1,
+   * honest state, never a fabricated "0"). Widened from `string`,
    * recorded in the app-spec §9.4 revision note.
    */
   nav: string | null;
@@ -614,8 +611,7 @@ export interface EpochRow {
   net_apr_bps: number | null;
 }
 
-
-// --- governance (app plan PR 7.1 commit C, app-spec §8.7/§9.1/§9.4) --------
+// --- governance (app-spec §8.7/§9.1/§9.4) --------
 //
 // The durable MIRROR's shapes, not the live chain's. `services/api` has no chain
 // client by design (ADR-001 Decision 1), so these carry what the indexer stored
@@ -722,8 +718,7 @@ export interface GovProposalRow {
   /** True when `proposers` was trimmed to its wire bound. Same rule, and it needs
    * stating separately because WHO proposed something is identity data: a trimmed
    * list that carried no flag would be indistinguishable from the complete one, so
-   * a consumer could not tell a 32-proposer proposal from a 40-proposer one
-   * (PR #23 review, P2). */
+   * a consumer could not tell a 32-proposer proposal from a 40-proposer one. */
   proposers_truncated: boolean;
   /** The proposal's messages, VERBATIM and undecoded. 7.2 decodes them against a
    * closed typed union with a tagged `unknown`; no summary is invented here. */

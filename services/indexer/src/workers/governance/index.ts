@@ -1,4 +1,4 @@
-// The governance worker (app-spec §9.1/§9.2, master plan PR 7.1) →
+// The governance worker (app-spec §9.1/§9.2) →
 // `gov_proposals` + `gov_votes`.
 //
 // Structurally a sibling of chain-events (tx + block planes) crossed with
@@ -15,7 +15,7 @@
 //
 // The relay is untouched by this PR. Nothing here signs anything and no signing
 // path exists; `apps/web`'s `ALLOWED_MSG_TYPE_URLS` is unchanged and a governance
-// message is still provably rejected (M7.1 §2.5).
+// message is still provably rejected.
 
 import { STREAMS } from "../../runtime/streams.ts";
 import type { Worker } from "../../runtime/worker.ts";

@@ -1,4 +1,4 @@
-// Payload minimalism gate (plan 6.2 §4.4, standing): stored notification
+// Payload minimalism gate (standing): stored notification
 // payloads are CLOSED shapes of identifiers/ordinals only — NEVER amounts. A
 // stored amount goes stale and violates §12.1, and this keeps the 6.3 push
 // payload a strict subset of an already-minimal shape. Each kind's schema
@@ -71,7 +71,9 @@ describe("notification payload shapes (closed, identifier-only)", () => {
 
   it("rejects malformed leaf values (bounds at the boundary)", () => {
     expect(navStepPayloadSchema.safeParse({ epoch_index: -1 }).success).toBe(false);
-    expect(redemptionPayloadSchema.safeParse({ request_id: "r", event: "queued" }).success).toBe(false);
+    expect(redemptionPayloadSchema.safeParse({ request_id: "r", event: "queued" }).success).toBe(
+      false,
+    );
     expect(incidentPayloadSchema.safeParse({ incident_kind: "not_a_kind" }).success).toBe(false);
     expect(arrearsPayloadSchema.safeParse({ valoper: "v", epoch_index: 1.5 }).success).toBe(false);
   });

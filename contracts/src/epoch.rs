@@ -89,10 +89,7 @@ pub fn unbonding_state(deps: Deps, env: &Env) -> StdResult<(Uint128, Vec<String>
                 })?;
             }
         }
-        key = resp
-            .pagination
-            .and_then(|p| p.next_key)
-            .unwrap_or_default();
+        key = resp.pagination.and_then(|p| p.next_key).unwrap_or_default();
         if key.is_empty() {
             break;
         }
@@ -100,15 +97,17 @@ pub fn unbonding_state(deps: Deps, env: &Env) -> StdResult<(Uint128, Vec<String>
     Ok((total, at_capacity))
 }
 
+/// Rebalance constraints derived from in-flight redelegations: the validators
+/// that may not be redelegated FROM, and the `(src, dst)` routes that may not
+/// carry another entry.
+pub type RedelegationConstraints = (BTreeSet<String>, BTreeSet<(String, String)>);
+
 /// The contract's active redelegations, reduced to the rebalance constraints
 /// (RC1 §9.3): validators that are DESTINATIONS of in-flight entries cannot be
 /// redelegated FROM (the no-transitive-redelegation rule), and (src, dst)
 /// routes already at MAX_UNBOND_ENTRIES cannot carry another entry. Paginated:
 /// a truncated read could emit a move the chain rejects, reverting the crank.
-pub fn redelegation_state(
-    deps: Deps,
-    env: &Env,
-) -> StdResult<(BTreeSet<String>, BTreeSet<(String, String)>)> {
+pub fn redelegation_state(deps: Deps, env: &Env) -> StdResult<RedelegationConstraints> {
     let sq = StakingQuerier::new(&deps.querier);
     let mut blocked_sources = BTreeSet::new();
     let mut blocked_pairs = BTreeSet::new();
@@ -130,10 +129,7 @@ pub fn redelegation_state(
                 blocked_pairs.insert((red.validator_src_address, red.validator_dst_address));
             }
         }
-        key = resp
-            .pagination
-            .and_then(|p| p.next_key)
-            .unwrap_or_default();
+        key = resp.pagination.and_then(|p| p.next_key).unwrap_or_default();
         if key.is_empty() {
             break;
         }
@@ -157,10 +153,7 @@ pub fn vault_snapshot(deps: Deps, cfg: &Config) -> StdResult<(Uint128, Uint128, 
                 .map(|c| c.amount)
         })
         .unwrap_or_default();
-    let tvv = resp
-        .total_vault_value
-        .map(|c| c.amount)
-        .unwrap_or_default();
+    let tvv = resp.total_vault_value.map(|c| c.amount).unwrap_or_default();
     let shares = resp
         .vault
         .and_then(|v| v.total_shares)
@@ -230,10 +223,7 @@ pub fn pending_redemptions(deps: Deps, cfg: &Config) -> StdResult<Vec<(u64, Uint
                 }
             }
         }
-        key = resp
-            .pagination
-            .and_then(|p| p.next_key)
-            .unwrap_or_default();
+        key = resp.pagination.and_then(|p| p.next_key).unwrap_or_default();
         if key.is_empty() {
             break;
         }
@@ -261,7 +251,11 @@ pub fn delegations(deps: Deps, env: &Env, denom: &str) -> StdResult<Vec<Delegati
 /// WithdrawDelegatorReward will pay in the same block, so it doubles as the
 /// program-commission accrual base (RC1 §10.1: the contract IS the delegator,
 /// so its claims are precisely the rewards earned on program delegations).
-pub fn rewards_by_validator(deps: Deps, env: &Env, denom: &str) -> StdResult<Vec<(String, Uint128)>> {
+pub fn rewards_by_validator(
+    deps: Deps,
+    env: &Env,
+    denom: &str,
+) -> StdResult<Vec<(String, Uint128)>> {
     let total = deps
         .querier
         .query_delegation_total_rewards(env.contract.address.to_string())?;
@@ -288,7 +282,10 @@ pub fn claim_order(rewards: &[(String, Uint128)], enrolled_valopers: &[String]) 
 }
 
 fn enrolled_valopers(deps: Deps) -> StdResult<Vec<String>> {
-    Ok(enrolled(deps.storage)?.into_iter().map(|(v, _)| v).collect())
+    Ok(enrolled(deps.storage)?
+        .into_iter()
+        .map(|(v, _)| v)
+        .collect())
 }
 
 /// Phase A alone: withdraw accrued staking rewards for every delegated validator
@@ -442,8 +439,12 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     // Continuation crank: a prior crank left unexecuted rebalance moves or
     // undelegated deploy targets (gas chunking); drain the next chunk.
     // Bypasses the min-interval guard (epoch in progress).
-    let pending_redel = PENDING_REDELEGATIONS.may_load(deps.storage)?.unwrap_or_default();
-    let pending_targets = PENDING_DELEGATIONS.may_load(deps.storage)?.unwrap_or_default();
+    let pending_redel = PENDING_REDELEGATIONS
+        .may_load(deps.storage)?
+        .unwrap_or_default();
+    let pending_targets = PENDING_DELEGATIONS
+        .may_load(deps.storage)?
+        .unwrap_or_default();
     if !pending_redel.is_empty() || !pending_targets.is_empty() {
         return continue_epoch(deps, env, &cfg, pending_redel, pending_targets);
     }
@@ -604,18 +605,15 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         let others: Vec<DelegationView> = post_unbond
             .iter()
             .filter(|(v, s)| !eligible_set.contains(*v) && !s.is_zero())
-            .map(|(v, s)| DelegationView { valoper: v.clone(), staked: *s })
+            .map(|(v, s)| DelegationView {
+                valoper: v.clone(),
+                staked: *s,
+            })
             .collect();
-        let rebalance = crate::plan::plan_rebalance(
-            &seats,
-            &others,
-            budget,
-            &blocked_sources,
-            &blocked_pairs,
-        );
+        let rebalance =
+            crate::plan::plan_rebalance(&seats, &others, budget, &blocked_sources, &blocked_pairs);
         deployable = budget.saturating_sub(rebalance.undeployable);
-        let rebalanced_total: Uint128 =
-            rebalance.redelegations.iter().map(|(_, _, a)| *a).sum();
+        let rebalanced_total: Uint128 = rebalance.redelegations.iter().map(|(_, _, a)| *a).sum();
 
         // Return plan: settle the backed portion, write down the slashed portion.
         let ret = plan_return(receipt_minted, staked, unbonding, liquid);
@@ -842,7 +840,11 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let epoch_index = EPOCH_INDEX.may_load(deps.storage)?.unwrap_or(0) + 1;
     let started_at = prev.as_ref().map(|p| p.ended_at_seconds).unwrap_or(0);
     let now = env.block.time.seconds();
-    let window = if started_at == 0 { 0 } else { now.saturating_sub(started_at) };
+    let window = if started_at == 0 {
+        0
+    } else {
+        now.saturating_sub(started_at)
+    };
     let net_deposits = prev
         .as_ref()
         .map(|p| {
@@ -1000,6 +1002,7 @@ mod sequence_tests {
     use provwasm_common::MockableQuerier;
     use provwasm_mocks::{mock_provenance_dependencies, MockProvenanceQuerier};
     use provwasm_std::types::cosmos::auth::v1beta1::BaseAccount;
+    use provwasm_std::types::cosmos::base::v1beta1::Coin as PbCoin;
     use provwasm_std::types::cosmos::slashing::v1beta1::{
         Params as SlashingParams, QueryParamsResponse as SlashingParamsResponse,
     };
@@ -1011,7 +1014,6 @@ mod sequence_tests {
     use provwasm_std::types::provlabs::vault::v1::{
         AccountBalance, QueryVaultPendingSwapOutsResponse, QueryVaultResponse, VaultAccount,
     };
-    use provwasm_std::types::cosmos::base::v1beta1::Coin as PbCoin;
 
     use crate::msg::InstantiateMsg;
     use crate::state::{ValidatorRecord, VALIDATORS};
@@ -1246,7 +1248,6 @@ mod sequence_tests {
                     denom: "nhash".to_string(),
                     amount: (vault_liquid + 1_500).to_string(),
                 }),
-                ..Default::default()
             },
         );
         grpc(
@@ -1272,7 +1273,9 @@ mod sequence_tests {
 
     fn decode_any<M: prost::Message + Default>(msg: &CosmosMsg, expect_kind: &str) -> M {
         assert_eq!(kind(msg), expect_kind);
-        let CosmosMsg::Any(any) = msg else { unreachable!() };
+        let CosmosMsg::Any(any) = msg else {
+            unreachable!()
+        };
         M::decode(any.value.as_slice()).unwrap()
     }
 
@@ -1289,24 +1292,25 @@ mod sequence_tests {
         assert_eq!(
             kinds,
             vec![
-                "claim",             // Phase A: withdraw rewards
-                "create_payment",    // return settlement (unpaused)
+                "claim",          // Phase A: withdraw rewards
+                "create_payment", // return settlement (unpaused)
                 "accept_asset",
                 "pause",             // Phase C: pause window opens
                 "deposit_principal", // the NAV step, inside the window
                 "unpause",           // window closes
                 "transfer_receipt",  // burn leg: receipt into the marker account
                 "burn_receipt",
-                "mint_receipt",      // deploy settlement
+                "mint_receipt", // deploy settlement
                 "create_payment",
                 "accept_asset",
-                "delegate",          // fresh stake last
+                "delegate", // fresh stake last
             ],
             "run_epoch message order changed — the pause-window and settlement \
              safety story depends on this exact sequence"
         );
         // The deposit inside the window is exactly liquid - settle = 300.
-        let dep: MsgDepositPrincipalFundsRequest = decode_any(&res.messages[4].msg, "deposit_principal");
+        let dep: MsgDepositPrincipalFundsRequest =
+            decode_any(&res.messages[4].msg, "deposit_principal");
         assert_eq!(dep.amount.unwrap().amount, "300");
         // Burn is exactly the matured receipt.
         let burn: MsgBurnRequest = decode_any(&res.messages[7].msg, "burn_receipt");
@@ -1333,30 +1337,35 @@ mod sequence_tests {
         assert_eq!(
             kinds,
             vec![
-                "create_payment",   // return settlement for the backed 300
+                "create_payment", // return settlement for the backed 300
                 "accept_asset",
-                "update_nav",       // sandwich: mark receipt to 0 for 200 units
-                "create_payment",   // zero-priced settlement extracts the receipt
+                "update_nav",     // sandwich: mark receipt to 0 for 200 units
+                "create_payment", // zero-priced settlement extracts the receipt
                 "accept_asset",
-                "update_nav",       // restore the exact 1:1 entry
+                "update_nav", // restore the exact 1:1 entry
                 "transfer_receipt",
-                "burn_receipt",     // settle + write_down burned together
+                "burn_receipt", // settle + write_down burned together
             ],
             "write-down sandwich order changed — a fractional markdown or a \
              reordered restore poisons future 1:1 settlement legs"
         );
         // Sandwich prices: first update_nav marks 200 units at price 0, the
         // second restores 1 nhash per 1 unit.
-        let mark: crate::vault_ext::MsgUpdateVaultNavRequest = decode_any(&res.messages[2].msg, "update_nav");
+        let mark: crate::vault_ext::MsgUpdateVaultNavRequest =
+            decode_any(&res.messages[2].msg, "update_nav");
         assert_eq!(mark.price.unwrap().amount, "0");
         assert_eq!(mark.volume, "200");
-        let restore: crate::vault_ext::MsgUpdateVaultNavRequest = decode_any(&res.messages[5].msg, "update_nav");
+        let restore: crate::vault_ext::MsgUpdateVaultNavRequest =
+            decode_any(&res.messages[5].msg, "update_nav");
         assert_eq!(restore.price.unwrap().amount, "1");
         assert_eq!(restore.volume, "1");
         // No pause window anywhere: the write-down path deposits nothing.
         assert!(!kinds.iter().any(|k| *k == "pause" || *k == "unpause"));
         let burn: MsgBurnRequest = decode_any(&res.messages[7].msg, "burn_receipt");
         assert_eq!(burn.amount.unwrap().amount, "500");
-        assert_eq!(RECEIPT_MINTED.load(&deps.storage).unwrap(), Uint128::new(1_000));
+        assert_eq!(
+            RECEIPT_MINTED.load(&deps.storage).unwrap(),
+            Uint128::new(1_000)
+        );
     }
 }

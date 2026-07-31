@@ -1,4 +1,4 @@
-// Typical time-to-payout display (plan 5.4; app-spec §8.4, §9.5.3, §14.12).
+// Typical time-to-payout display (app-spec §8.4, §9.5.3, §14.12).
 // Pure mapping of the API's PayoutStats into what the exit surface may show.
 // The NORMATIVE rule (§8.4): the 60-day ceiling is always the promise; the
 // typical statistic is shown only when present and always LABELED typical —
@@ -22,9 +22,7 @@ export interface TypicalDisplay {
 }
 
 export function typicalDisplay(stats: PayoutStats | null): TypicalDisplay {
-  const guaranteeDays = stats
-    ? Math.round(stats.band_ceiling_seconds / SECONDS_PER_DAY)
-    : 60; // the fixed ceiling stands even if the stats read failed
+  const guaranteeDays = stats ? Math.round(stats.band_ceiling_seconds / SECONDS_PER_DAY) : 60; // the fixed ceiling stands even if the stats read failed
   if (stats === null || stats.median_seconds === null || stats.p90_seconds === null) {
     return {
       hasTypical: false,

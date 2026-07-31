@@ -1,4 +1,4 @@
-// The §10.2 step-4 confirm dialog (app plan PR 5.2 §3): consumer-worded
+// The §10.2 step-4 confirm dialog: consumer-worded
 // consequence summary, fee, tier (warning for redemptions, danger for
 // program-ops when M7 arrives), and the EXACT message JSON behind a
 // disclosure. The disclosure renders `plan.disclosureJson` — produced by

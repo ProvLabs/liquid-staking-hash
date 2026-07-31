@@ -1,4 +1,4 @@
-// Alert persistence — the models layer (plan 6.2 §2.5: the ONLY new Prisma
+// Alert persistence — the models layer (the ONLY new Prisma
 // import site; the session.server.ts port split, so routes/tests run
 // storeless). The `AlertStore` port has two implementations behind one
 // contract (test/alerts-models.test.ts runs BOTH):
@@ -11,7 +11,7 @@
 // (`skipDuplicates` = ON CONFLICT DO NOTHING over `@@unique([address, kind,
 // dedupeKey])`) AND the per-stream cursor advance happen in ONE transaction —
 // crash before commit → cursor unmoved → re-fetch → duplicates skipped; crash
-// after → nothing lost (plan §2.4). Schema content is gated by
+// after → nothing lost. Schema content is gated by
 // test/app-schema-allowlist.test.ts.
 
 import type { AlertKind, Candidate } from "~/lib/services/alerts.server";
@@ -69,10 +69,14 @@ export interface AlertStore {
   /**
    * Insert the candidates (skipDuplicates) AND advance the cursor in ONE
    * transaction. Returns the NEWLY-INSERTED candidates (duplicates skipped) —
-   * the "newly inserted set" the 6.3 push fan-out delivers (plan §2.3); its
+   * the "newly inserted set" the 6.3 push fan-out delivers; its
    * length is the count callers previously used.
    */
-  commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]>;
+  commitTick(
+    stream: string,
+    cursor: string,
+    candidates: readonly Candidate[],
+  ): Promise<Candidate[]>;
 
   // ── Retention (rides the tick, Commit B) ──
   /**
@@ -176,7 +180,11 @@ export class InMemoryAlertStore implements AlertStore {
     return this.checkpoints.get(stream) ?? null;
   }
 
-  async commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]> {
+  async commitTick(
+    stream: string,
+    cursor: string,
+    candidates: readonly Candidate[],
+  ): Promise<Candidate[]> {
     const inserted: Candidate[] = [];
     for (const c of candidates) {
       const id = dedupeId(c.address, c.kind, c.dedupeKey);
@@ -226,11 +234,21 @@ interface AlertPrismaLike {
   };
   notification: {
     findMany(args: unknown): Promise<
-      Array<{ id: bigint; address: string; kind: string; dedupeKey: string; payload: unknown; deliveredAt: Date; readAt: Date | null }>
+      Array<{
+        id: bigint;
+        address: string;
+        kind: string;
+        dedupeKey: string;
+        payload: unknown;
+        deliveredAt: Date;
+        readAt: Date | null;
+      }>
     >;
     count(args: unknown): Promise<number>;
     updateMany(args: unknown): Promise<{ count: number }>;
-    createManyAndReturn(args: unknown): Promise<Array<{ address: string; kind: string; dedupeKey: string; payload: unknown }>>;
+    createManyAndReturn(
+      args: unknown,
+    ): Promise<Array<{ address: string; kind: string; dedupeKey: string; payload: unknown }>>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
   addressActivity: {
@@ -253,7 +271,10 @@ export class PrismaAlertStore implements AlertStore {
   }
 
   async listOverrides(address: string): Promise<Map<AlertKind, boolean>> {
-    const rows = await this.prisma.alertRule.findMany({ where: { address }, select: { kind: true, enabled: true } });
+    const rows = await this.prisma.alertRule.findMany({
+      where: { address },
+      select: { kind: true, enabled: true },
+    });
     return new Map(rows.map((r) => [r.kind as AlertKind, r.enabled]));
   }
 
@@ -325,18 +346,25 @@ export class PrismaAlertStore implements AlertStore {
   }
 
   async getCheckpoint(stream: string): Promise<string | null> {
-    const row = await this.prisma.notifierCheckpoint.findUnique({ where: { stream }, select: { cursor: true } });
+    const row = await this.prisma.notifierCheckpoint.findUnique({
+      where: { stream },
+      select: { cursor: true },
+    });
     return row?.cursor ?? null;
   }
 
-  async commitTick(stream: string, cursor: string, candidates: readonly Candidate[]): Promise<Candidate[]> {
+  async commitTick(
+    stream: string,
+    cursor: string,
+    candidates: readonly Candidate[],
+  ): Promise<Candidate[]> {
     return this.prisma.$transaction(async (tx) => {
       let inserted: Candidate[] = [];
       if (candidates.length > 0) {
         // `createManyAndReturn` with `skipDuplicates` is INSERT … ON CONFLICT
         // DO NOTHING RETURNING (the exactly-once gate unchanged): it returns
         // ONLY the rows actually inserted — the "newly inserted set" the push
-        // fan-out delivers (plan §2.3), never the duplicates that were skipped.
+        // fan-out delivers, never the duplicates that were skipped.
         const created = await tx.notification.createManyAndReturn({
           data: candidates.map((c) => ({
             address: c.address,
@@ -354,7 +382,7 @@ export class PrismaAlertStore implements AlertStore {
           payload: r.payload,
         }));
       }
-      // Same transaction as the insert (plan §2.4): cursor advances iff the
+      // Same transaction as the insert: cursor advances iff the
       // batch committed.
       await tx.notifierCheckpoint.upsert({
         where: { stream },
@@ -396,7 +424,9 @@ async function createAlertStore(config: {
   if (config.databaseUrl !== undefined) {
     const { PrismaClient } = await import("@prisma/client");
     return new PrismaAlertStore(
-      new PrismaClient({ datasources: { db: { url: config.databaseUrl } } }) as unknown as AlertPrismaLike,
+      new PrismaClient({
+        datasources: { db: { url: config.databaseUrl } },
+      }) as unknown as AlertPrismaLike,
     );
   }
   if (config.appEnv !== "development") {

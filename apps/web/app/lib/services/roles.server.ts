@@ -1,4 +1,4 @@
-// Role detection as live on-chain facts (app-spec §4; plan 5.1 §3): operator
+// Role detection as live on-chain facts (app-spec §4): operator
 // = session address ∈ the contract's `Validators {}` operator set; admin =
 // session address ∈ the members of the x/group policy behind the contract's
 // `Config.admin`. Re-checked per session refresh through a short-TTL cache —
@@ -10,12 +10,7 @@
 // false — the App never guesses a privilege and never renders a role surface
 // from stale knowledge (SECURITY.md: never lie about state).
 
-import {
-  GroupClient,
-  LcdClient,
-  NvhashContractClient,
-  type FetchLike,
-} from "@nvhash/chain-client";
+import { GroupClient, LcdClient, NvhashContractClient, type FetchLike } from "@nvhash/chain-client";
 
 import type { WebConfig } from "~/config/config.server";
 

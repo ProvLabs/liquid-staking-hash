@@ -1,11 +1,11 @@
-// Tx endpoints over LCD (app plan PR 5.2, §10.2 steps 3/5): simulate for
+// Tx endpoints over LCD (§10.2 steps 3/5): simulate for
 // gas, broadcast of a USER-SIGNED transaction, and inclusion polling. This
 // client never constructs or signs anything — it carries bytes the wallet
 // produced (SECURITY.md: signing happens client-side in the wallet; the
 // web tier's relay guards are in apps/web, not here).
 
 import { expectObject, expectString, parseU64String } from "./amounts.ts";
-import { LcdClient, LcdError } from "./lcd.ts";
+import { type LcdClient, LcdError } from "./lcd.ts";
 
 export interface GasInfo {
   gasWanted: bigint;

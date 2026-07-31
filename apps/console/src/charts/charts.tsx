@@ -28,7 +28,12 @@ function ChartPanel({
       actions={
         <>
           {actions}
-          <button className="btn btn--ghost btn--sm" aria-pressed={showTable} onClick={() => setShowTable((v) => !v)}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            aria-pressed={showTable}
+            onClick={() => setShowTable((v) => !v)}
+          >
             {showTable ? "chart" : "table"}
           </button>
         </>
@@ -95,7 +100,14 @@ export function StepLine({
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={title}>
         {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={PADL} x2={W - PADR} y1={y(t)} y2={y(t)} stroke="var(--grid)" strokeWidth={1} />
+            <line
+              x1={PADL}
+              x2={W - PADR}
+              y1={y(t)}
+              y2={y(t)}
+              stroke="var(--grid)"
+              strokeWidth={1}
+            />
             <text x={PADL - 6} y={y(t) + 3} textAnchor="end" fontSize={11} fill="var(--ink-3)">
               {fmt(t)}
             </text>
@@ -151,7 +163,13 @@ export function SignedBars({
   const height = rows.length * rowH + 12;
   return (
     <ChartPanel title={title} table={table}>
-      <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={height} role="img" aria-label={title}>
+      <svg
+        viewBox={`0 0 ${W} ${height}`}
+        width="100%"
+        height={height}
+        role="img"
+        aria-label={title}
+      >
         <line x1={mid} x2={mid} y1={6} y2={height - 6} stroke="var(--baseline)" strokeWidth={1} />
         {rows.map((r, i) => {
           const cy = 6 + i * rowH + rowH / 2;
@@ -165,7 +183,14 @@ export function SignedBars({
                 {r.label}
               </text>
               {Math.abs(r.value) < 1e-9 ? (
-                <line x1={mid - 3} x2={mid + 3} y1={cy} y2={cy} stroke="var(--baseline)" strokeWidth={2} />
+                <line
+                  x1={mid - 3}
+                  x2={mid + 3}
+                  y1={cy}
+                  y2={cy}
+                  stroke="var(--baseline)"
+                  strokeWidth={2}
+                />
               ) : (
                 <rect x={bx} y={cy - 7} width={Math.max(1, w)} height={14} rx={3} fill={color}>
                   <title>
@@ -173,7 +198,13 @@ export function SignedBars({
                   </title>
                 </rect>
               )}
-              <text x={isDrag ? bx - 4 : bx + w + 4} y={cy + 3} textAnchor={isDrag ? "end" : "start"} fontSize={11} fill="var(--ink-2)">
+              <text
+                x={isDrag ? bx - 4 : bx + w + 4}
+                y={cy + 3}
+                textAnchor={isDrag ? "end" : "start"}
+                fontSize={11}
+                fill="var(--ink-2)"
+              >
                 {fmt(r.value)}
               </text>
             </g>
@@ -225,14 +256,27 @@ export function StackedBar({
           <div
             key={s.label}
             title={`${s.label}: ${fmt(s.value)}`}
-            style={{ width: `${(s.value / total) * 100}%`, background: SPLIT_COLORS[i % SPLIT_COLORS.length] }}
+            style={{
+              width: `${(s.value / total) * 100}%`,
+              background: SPLIT_COLORS[i % SPLIT_COLORS.length],
+            }}
           />
         ))}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12 }}>
         {segments.map((s, i) => (
-          <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: SPLIT_COLORS[i % SPLIT_COLORS.length] }} />
+          <span
+            key={s.label}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}
+          >
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 2,
+                background: SPLIT_COLORS[i % SPLIT_COLORS.length],
+              }}
+            />
             <span className="muted">{s.label}</span>
             <span className="tnum">{fmt(s.value)}</span>
           </span>
@@ -293,7 +337,14 @@ export function HistoryBars({
   return (
     <ChartPanel title={title} table={table} actions={actions}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={title}>
-        <line x1={PADL} x2={W - PADR} y1={zeroY} y2={zeroY} stroke="var(--baseline)" strokeWidth={1} />
+        <line
+          x1={PADL}
+          x2={W - PADR}
+          y1={zeroY}
+          y2={zeroY}
+          stroke="var(--baseline)"
+          strokeWidth={1}
+        />
         {bars.map((b, i) => {
           const h = Math.abs(b.value) * scale;
           const up = b.value >= 0;
@@ -301,7 +352,15 @@ export function HistoryBars({
           const by = up ? zeroY - h : zeroY;
           const color = diverging ? (up ? "var(--cat-1)" : "var(--drag)") : "var(--cat-1)";
           return (
-            <rect key={i} x={bx} y={by} width={Math.max(2, bw - 4)} height={Math.max(1, h)} rx={3} fill={color}>
+            <rect
+              key={i}
+              x={bx}
+              y={by}
+              width={Math.max(2, bw - 4)}
+              height={Math.max(1, h)}
+              rx={3}
+              fill={color}
+            >
               <title>
                 {b.label}: {fmt(b.value)}
               </title>
@@ -324,13 +383,28 @@ export function DotStrip({
   const W = 640;
   const lo = 9000; // 90%
   const hi = 10000; // 100%
-  const x = (bps: number) => PADL + ((Math.max(lo, Math.min(hi, bps)) - lo) / (hi - lo)) * (W - PADL - PADR);
+  const x = (bps: number) =>
+    PADL + ((Math.max(lo, Math.min(hi, bps)) - lo) / (hi - lo)) * (W - PADL - PADR);
   const rowH = 22;
   const height = rows.length * rowH + 20;
   const tx = x(thresholdBps);
   return (
-    <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={height} role="img" aria-label="uptime by validator">
-      <line x1={tx} x2={tx} y1={4} y2={height - 16} stroke="var(--ink-3)" strokeWidth={2} strokeDasharray="3 3" />
+    <svg
+      viewBox={`0 0 ${W} ${height}`}
+      width="100%"
+      height={height}
+      role="img"
+      aria-label="uptime by validator"
+    >
+      <line
+        x1={tx}
+        x2={tx}
+        y1={4}
+        y2={height - 16}
+        stroke="var(--ink-3)"
+        strokeWidth={2}
+        strokeDasharray="3 3"
+      />
       <text x={tx} y={height - 4} textAnchor="middle" fontSize={10} fill="var(--ink-3)">
         {(thresholdBps / 100).toFixed(0)}%
       </text>

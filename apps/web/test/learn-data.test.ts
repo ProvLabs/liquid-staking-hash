@@ -1,4 +1,4 @@
-// Learn-data gates (plan 4.2 §3, SECURITY.md "never lie about state",
+// Learn-data gates (SECURITY.md "never lie about state",
 // app-spec §12.1): every figure degrades independently to null on a failed
 // or off-shape read, never a crash, a guess, or a stale substitute. Chain
 // reads come from the fixture corpus via MSW; API envelopes are built with
@@ -85,7 +85,9 @@ describe("live figures (fixture corpus)", () => {
 
   it("a failed vault read nulls NAV/TVL and ONLY them (figures degrade independently)", async () => {
     server.use(
-      http.get("*/vault/v1/vaults/:id", () => HttpResponse.json({ message: "down" }, { status: 503 })),
+      http.get("*/vault/v1/vaults/:id", () =>
+        HttpResponse.json({ message: "down" }, { status: 503 }),
+      ),
     );
     const data = await loadLearnData(config());
     expect(data.live.nav).toBeNull();
@@ -169,7 +171,9 @@ describe("indexed figures (envelopes, §9.4/§12.1)", () => {
         HttpResponse.json(envelope({ participant_count: "many" }, { source: "indexed" })),
       ),
       http.get("*/api/v1/epochs", () =>
-        HttpResponse.json(envelope([{ epoch_index: 8, nav: "not-a-decimal" }], { source: "indexed" })),
+        HttpResponse.json(
+          envelope([{ epoch_index: 8, nav: "not-a-decimal" }], { source: "indexed" }),
+        ),
       ),
     );
     const data = await loadLearnData(config());

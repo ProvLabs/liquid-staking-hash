@@ -1,4 +1,4 @@
-// Regression (PR #7 review P2): the client-controlled `Host` header must not
+// Regression: the client-controlled `Host` header must not
 // influence routing. Before the fix the adapter built the request URL as
 // `http://${host}${req.url}`, so a `Host` value carrying a path component
 // injected a prefix into `url.pathname` — misrouting a legitimate path to a 404
@@ -11,7 +11,11 @@ import { API_BASE } from "../src/index.ts";
 import { startServer } from "./helpers.ts";
 
 /** Send one raw HTTP/1.1 GET with an arbitrary Host header; resolve the status. */
-function rawGet(baseUrl: string, target: string, hostHeader: string): Promise<{ status: number; body: string }> {
+function rawGet(
+  baseUrl: string,
+  target: string,
+  hostHeader: string,
+): Promise<{ status: number; body: string }> {
   const { hostname, port } = new URL(baseUrl);
   return new Promise((resolve, reject) => {
     const socket = net.connect(Number(port), hostname, () => {

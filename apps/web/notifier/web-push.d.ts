@@ -1,4 +1,4 @@
-// Minimal ambient types for the `web-push` package (plan 6.3 §2.3). Declared
+// Minimal ambient types for the `web-push` package. Declared
 // locally rather than adding `@types/web-push`, so the milestone keeps its
 // single named dependency (`web-push`). Covers exactly the surface the notifier
 // fan-out uses (`notifier/push.ts`).

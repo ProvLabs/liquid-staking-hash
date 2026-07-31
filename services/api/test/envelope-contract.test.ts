@@ -1,5 +1,5 @@
-// Envelope contract harness (app plan §4 "API contract" layer; standing CI gate
-// for services/api from PR 1.2 on). Registry-driven: it iterates the ACTUAL
+// Envelope contract harness — a standing CI gate for services/api.
+// Registry-driven: it iterates the ACTUAL
 // route table, so every route now and in the future is held to the same three
 // contracts — envelope shape, read-only method gate, and zod query bounds — and
 // the harness cannot silently skip a new route.
@@ -38,7 +38,7 @@ const ADDRESS_ROUTE_QUERY = new URLSearchParams({
  */
 /**
  * Public routes that REQUIRE a query param, with a valid value. Declared rather
- * than inferred, for the reason M6.4 learned on the operator routes: a route with
+ * than inferred, for the reason the operator routes demonstrate: a route with
  * a required param 400s under the bare harness, and a 400 satisfies "not a 200"
  * assertions by accident — so a missing declaration would let a route slip past
  * the very gate that is supposed to cover it. The coverage assertion below is what
@@ -70,7 +70,7 @@ function validRequest(route: Route, baseUrl: string): { url: string; init: Reque
     };
   }
   if (route.auth === "internal:notifier") {
-    // Internal alert-facts routes (M6.2): the notifier scope, no address. They
+    // Internal alert-facts routes: the notifier scope, no address. They
     // serve honest-empty arrays on the default reader, still a valid envelope.
     return {
       url: `${baseUrl}${route.path}`,
@@ -86,10 +86,12 @@ function isValidEnvelope(body: unknown): string | null {
   if (!("data" in record)) return "missing data";
   if (typeof record.meta !== "object" || record.meta === null) return "missing meta";
   const meta = record.meta as Record<string, unknown>;
-  if (meta.source !== "live" && meta.source !== "indexed") return `bad source: ${String(meta.source)}`;
+  if (meta.source !== "live" && meta.source !== "indexed")
+    return `bad source: ${String(meta.source)}`;
   for (const key of ["chain_height", "indexed_height"] as const) {
     const v = meta[key];
-    if (v !== null && (typeof v !== "number" || !Number.isInteger(v))) return `bad ${key}: ${String(v)}`;
+    if (v !== null && (typeof v !== "number" || !Number.isInteger(v)))
+      return `bad ${key}: ${String(v)}`;
   }
   if (typeof meta.generated_at !== "string" || Number.isNaN(Date.parse(meta.generated_at))) {
     return `bad generated_at: ${String(meta.generated_at)}`;
@@ -203,7 +205,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
   });
 
   it("/epochs and /incidents return empty arrays with null heights (no fabrication)", async () => {
-    // /validators is covered by its own case below: since PR 3.1 it returns a
+    // /validators is covered by its own case below: it returns a
     // ValidatorsPayload object, not a bare array.
     const server = await startServer();
     try {
@@ -223,7 +225,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
   });
 
   it("/epochs is pagination-bounded like every collection route", async () => {
-    // /validators takes no pagination since PR 3.1 (whole current set).
+    // /validators takes no pagination (whole current set).
     const server = await startServer();
     try {
       const ok = await fetch(`${server.baseUrl}${API_BASE}/epochs?limit=48`);
@@ -280,7 +282,10 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
     try {
       const res = await fetch(`${server.baseUrl}${API_BASE}/redemptions/stats`);
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { data: Record<string, unknown>; meta: { indexed_height: unknown } };
+      const body = (await res.json()) as {
+        data: Record<string, unknown>;
+        meta: { indexed_height: unknown };
+      };
       // Exact PayoutStats field set (frozen shape).
       expect(Object.keys(body.data).sort()).toEqual([
         "band_ceiling_seconds",
@@ -374,16 +379,44 @@ describe("populated portfolio metrics (M6.1 derived fold behind the route)", () 
     // NAV rises 1.0 → 2.2 between the two settled epochs; the deposit lands
     // between them, so it is held into epoch 2's repricing.
     epochs: [
-      { epochIndex: 1n, endedAtSeconds: 1_000n, tvvAfter: 1_000n, totalShares: 1_000n, netAprBps: 400, endHeight: 10n },
-      { epochIndex: 2n, endedAtSeconds: 2_000n, tvvAfter: 2_200n, totalShares: 1_000n, netAprBps: 500, endHeight: 20n },
+      {
+        epochIndex: 1n,
+        endedAtSeconds: 1_000n,
+        tvvAfter: 1_000n,
+        totalShares: 1_000n,
+        netAprBps: 400,
+        endHeight: 10n,
+      },
+      {
+        epochIndex: 2n,
+        endedAtSeconds: 2_000n,
+        tvvAfter: 2_200n,
+        totalShares: 1_000n,
+        netAprBps: 500,
+        endHeight: 20n,
+      },
     ],
     transactions: [
-      { txhash: "DEP", msgIndex: 0, address: ADDR, kind: "swap_in", shares: 1_000n, nhash: 1_000n, navAtHeight: 1_000_000_000n, height: 15n, blockTime: new Date(1_500 * 1000) },
+      {
+        txhash: "DEP",
+        msgIndex: 0,
+        address: ADDR,
+        kind: "swap_in",
+        shares: 1_000n,
+        nhash: 1_000n,
+        navAtHeight: 1_000_000_000n,
+        height: 15n,
+        blockTime: new Date(1_500 * 1000),
+      },
     ],
   };
 
   it("derives basis, balances, accrual heights, and yield behind the route", async () => {
-    const server = await startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(metricsFacts));
+    const server = await startServer(
+      { assertionKey: TEST_ASSERTION_KEY },
+      undefined,
+      fakeReader(metricsFacts),
+    );
     try {
       const res = await fetch(`${server.baseUrl}${API_BASE}/portfolio/metrics?address=${ADDR}`, {
         headers: { authorization: mintAssertion(`address:${ADDR}`) },
@@ -420,7 +453,12 @@ describe("populated portfolio metrics (M6.1 derived fold behind the route)", () 
       // Only epoch 2 spans time after the deposit; its program net APR rides
       // alongside the (unattributable-here) personal figure.
       expect(body.data.yield_by_epoch).toEqual([
-        { epoch_index: 2, ended_at: new Date(2_000 * 1000).toISOString(), personal_apr_bps: null, net_apr_bps: 500 },
+        {
+          epoch_index: 2,
+          ended_at: new Date(2_000 * 1000).toISOString(),
+          personal_apr_bps: null,
+          net_apr_bps: 500,
+        },
       ]);
       expect(typeof body.data.effective_apr_bps).toBe("number");
       expect(body.data.accrual_markers.map((m) => m.kind)).toEqual(["swap_in"]);
@@ -434,7 +472,7 @@ describe("populated portfolio metrics (M6.1 derived fold behind the route)", () 
   });
 });
 
-describe("populated reader (PR 3.1: real derivations behind the frozen shapes)", () => {
+describe("populated reader (real derivations behind the frozen shapes)", () => {
   // Corpus NAV goldens (@nvhash/fixtures queries/vault/get.json) — the same
   // values pinning the shared helper, now proven through the HTTP surface.
   const FIXTURE_TVV = 315397882283n;
@@ -451,8 +489,20 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
     epochs: [
       // Epoch 11's clean ratio (3e11 nhash over 3e17 shares) gives an exact
       // 1 HASH/nvHASH NAV — the premium denominator the [R6] test pins.
-      { epochIndex: 11n, endedAtSeconds: 1_764_547_200n, tvvAfter: 300_000_000_000n, totalShares: 300_000_000_000_000_000n, netAprBps: 410 },
-      { epochIndex: 12n, endedAtSeconds: 1_767_225_600n, tvvAfter: FIXTURE_TVV, totalShares: FIXTURE_SHARES, netAprBps: 431 },
+      {
+        epochIndex: 11n,
+        endedAtSeconds: 1_764_547_200n,
+        tvvAfter: 300_000_000_000n,
+        totalShares: 300_000_000_000_000_000n,
+        netAprBps: 410,
+      },
+      {
+        epochIndex: 12n,
+        endedAtSeconds: 1_767_225_600n,
+        tvvAfter: FIXTURE_TVV,
+        totalShares: FIXTURE_SHARES,
+        netAprBps: 431,
+      },
     ],
     marketSamples: [
       {
@@ -471,15 +521,37 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
       { chain: "ethereum", remoteSupply: 500n, sampledAt: new Date("2026-07-05T00:00:00Z") },
     ],
     incidents: [
-      { kind: "indexer_lag", severity: "warning", openedAt: new Date("2026-07-01T00:00:00Z"), closedAt: null, openedHeight: 900n },
+      {
+        kind: "indexer_lag",
+        severity: "warning",
+        openedAt: new Date("2026-07-01T00:00:00Z"),
+        closedAt: null,
+        openedHeight: 900n,
+      },
     ],
     registry: [
       { valoper: "pbvaloper1aaa", moniker: "alpha", unregisteredAt: null },
       { valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null },
     ],
     validatorEpochs: [
-      { valoper: "pbvaloper1aaa", epochIndex: 11n, uptimeBps: 9000, eligible: false, failingReasons: ["uptime"], programDelegation: 1n, commissionDue: 9n },
-      { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1_000_000_000n, commissionDue: 5n },
+      {
+        valoper: "pbvaloper1aaa",
+        epochIndex: 11n,
+        uptimeBps: 9000,
+        eligible: false,
+        failingReasons: ["uptime"],
+        programDelegation: 1n,
+        commissionDue: 9n,
+      },
+      {
+        valoper: "pbvaloper1aaa",
+        epochIndex: 12n,
+        uptimeBps: 9990,
+        eligible: true,
+        failingReasons: [],
+        programDelegation: 1_000_000_000n,
+        commissionDue: 5n,
+      },
       // pbvaloper1bbb: enrolled, never sampled — per-epoch fields must be null.
     ],
   };
@@ -487,9 +559,19 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
   it("serves real envelope heights from the reconciler run on every data route", async () => {
     const server = await startServer({}, undefined, fakeReader(facts));
     try {
-      for (const path of ["/status", "/metrics", "/epochs", "/incidents", "/validators", "/market", "/redemptions/stats"]) {
+      for (const path of [
+        "/status",
+        "/metrics",
+        "/epochs",
+        "/incidents",
+        "/validators",
+        "/market",
+        "/redemptions/stats",
+      ]) {
         const res = await fetch(`${server.baseUrl}${API_BASE}${path}`);
-        const body = (await res.json()) as { meta: { chain_height: number; indexed_height: number } };
+        const body = (await res.json()) as {
+          meta: { chain_height: number; indexed_height: number };
+        };
         expect(body.meta.chain_height, path).toBe(4242);
         expect(body.meta.indexed_height, path).toBe(4200);
       }
@@ -552,7 +634,13 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
       const res = await fetch(`${server.baseUrl}${API_BASE}/incidents`);
       const body = (await res.json()) as { data: Array<Record<string, unknown>> };
       expect(body.data).toEqual([
-        { kind: "indexer_lag", severity: "warning", opened_at: "2026-07-01T00:00:00.000Z", closed_at: null, height: 900 },
+        {
+          kind: "indexer_lag",
+          severity: "warning",
+          opened_at: "2026-07-01T00:00:00.000Z",
+          closed_at: null,
+          height: 900,
+        },
       ]);
     } finally {
       await server.close();
@@ -638,7 +726,11 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
         lastTxhash: `tx${i}`,
       };
     });
-    const server = await startServer({}, undefined, fakeReader({ ...facts, redemptions, payoutNow: now }));
+    const server = await startServer(
+      {},
+      undefined,
+      fakeReader({ ...facts, redemptions, payoutNow: now }),
+    );
     try {
       const res = await fetch(`${server.baseUrl}${API_BASE}/redemptions/stats`);
       const body = (await res.json()) as { data: Record<string, number | boolean | null> };
@@ -671,7 +763,11 @@ describe("populated reader (PR 3.1: real derivations behind the frozen shapes)",
       lastHeight: 1n,
       lastTxhash: `tx${i}`,
     }));
-    const server = await startServer({}, undefined, fakeReader({ ...facts, redemptions, payoutNow: now }));
+    const server = await startServer(
+      {},
+      undefined,
+      fakeReader({ ...facts, redemptions, payoutNow: now }),
+    );
     try {
       const res = await fetch(`${server.baseUrl}${API_BASE}/redemptions/stats`);
       const body = (await res.json()) as { data: Record<string, number | boolean | null> };
@@ -703,7 +799,15 @@ describe("zod query bounds on the paginated route (/incidents)", () => {
   it("rejects out-of-bounds / malformed pagination with 400", async () => {
     const server = await startServer();
     try {
-      for (const qs of ["?limit=0", "?limit=201", "?limit=-1", "?limit=abc", "?limit=1.5", "?offset=-1", "?offset=99999999"]) {
+      for (const qs of [
+        "?limit=0",
+        "?limit=201",
+        "?limit=-1",
+        "?limit=abc",
+        "?limit=1.5",
+        "?offset=-1",
+        "?offset=99999999",
+      ]) {
         const res = await fetch(`${server.baseUrl}${path}${qs}`);
         expect(res.status, `"${qs}" should be rejected`).toBe(400);
         const body = (await res.json()) as { error?: { code?: string } };

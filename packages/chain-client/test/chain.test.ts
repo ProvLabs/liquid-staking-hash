@@ -23,19 +23,25 @@ function lcdServing(body: unknown): LcdClient {
 
 describe("staking decoders against the devnet corpus", () => {
   it("decodes the validator set (tokens as bigint)", async () => {
-    const r = await new StakingClient(lcdServing(fixture("queries/staking/validators.json"))).validators();
+    const r = await new StakingClient(
+      lcdServing(fixture("queries/staking/validators.json")),
+    ).validators();
     expect(r.validators.length).toBeGreaterThan(0);
     for (const v of r.validators) {
       expect(typeof v.tokens).toBe("bigint");
       expect(v.operatorAddress).toMatch(/^tpvaloper1/);
     }
     // pagination total decodes to the exact value the corpus carries
-    const rawTotal = expectObject(expectObject(fixture("queries/staking/validators.json"))["pagination"])["total"];
+    const rawTotal = expectObject(
+      expectObject(fixture("queries/staking/validators.json"))["pagination"],
+    )["total"];
     expect(r.pagination.total).toBe(BigInt(rawTotal as string));
   });
 
   it("decodes the contract's program delegations", async () => {
-    const r = await new StakingClient(lcdServing(fixture("queries/staking/delegations.json"))).delegations("tp1contract");
+    const r = await new StakingClient(
+      lcdServing(fixture("queries/staking/delegations.json")),
+    ).delegations("tp1contract");
     expect(r.delegations.length).toBeGreaterThan(0);
     const d = r.delegations[0]!;
     expect(d.balance.denom).toBe("nhash");
@@ -45,8 +51,8 @@ describe("staking decoders against the devnet corpus", () => {
 
 describe("group decoders against the devnet corpus", () => {
   // The 2026-07-14 corpus captured an EMPTY groups list, because the devnet had
-  // no x/group substrate at all — which is what M7 finding F1 recorded. The
-  // 2026-07-29 capture (PR 7.1 commit A) bootstrapped one, so this file now
+  // no x/group substrate at all. The
+  // 2026-07-29 capture bootstrapped one, so this file now
   // pins real groups. The module was always served; only the devnet was bare.
   it("decodes the groups list and its pagination envelope", async () => {
     const r = await new GroupClient(lcdServing(fixture("queries/group/groups.json"))).groups();
@@ -75,7 +81,9 @@ describe("group decoders against the devnet corpus", () => {
   });
 
   it("decodes group members through the nested `member` envelope", async () => {
-    const r = await new GroupClient(lcdServing(fixture("queries/group/group-members.json"))).groupMembers(1n);
+    const r = await new GroupClient(
+      lcdServing(fixture("queries/group/group-members.json")),
+    ).groupMembers(1n);
     expect(r.members.length).toBeGreaterThan(0);
     for (const m of r.members) {
       expect(m.address).toMatch(/^tp1/);
@@ -94,7 +102,7 @@ describe("group decoders against the devnet corpus", () => {
     expect(typeof info.groupId).toBe("bigint");
   });
 
-  // Set-valued discovery (plan §2.1 / decision D1): the corpus deliberately
+  // Set-valued discovery (/ decision D1): the corpus deliberately
   // carries MORE THAN ONE policy on the group, so a decoder that silently took
   // the first element could not pass this.
   it("decodes the policy SET on a group, not a single policy", async () => {
@@ -175,7 +183,9 @@ describe("group decoders against the devnet corpus", () => {
     do {
       const r = await client.proposalsByGroupPolicy(
         "tp1policy",
-        key === null ? { "pagination.limit": "2" } : { "pagination.limit": "2", "pagination.key": key },
+        key === null
+          ? { "pagination.limit": "2" }
+          : { "pagination.limit": "2", "pagination.key": key },
       );
       seen.push(...r.proposals.map((p) => p.id));
       key = r.pagination.nextKey;
@@ -211,7 +221,7 @@ describe("group decoders against the devnet corpus", () => {
     expect(Object.keys(v)).not.toContain("weight");
   });
 
-  // The live tally read (app plan PR 7.2). It exists because a proposal's
+  // The live tally read. It exists because a proposal's
   // `final_tally_result` is zeros for the whole voting period — the module writes
   // it only when it tallies — so the state plane cannot say where an OPEN
   // proposal stands, and rendering those zeros would assert "nobody has voted".
@@ -257,7 +267,7 @@ describe("group decoders against the devnet corpus", () => {
 
   it("tags an unrecognized decision policy instead of throwing", () => {
     // An enum or policy type a later chain upgrade adds must not stall an
-    // indexer window mid-sweep (plan §4 invariant 8). The raw payload is kept so
+    // indexer window mid-sweep (invariant 8). The raw payload is kept so
     // the surface can say what it does not understand.
     const dp = parseDecisionPolicy({ "@type": "/cosmos.group.v1.FutureDecisionPolicy", magic: 7 });
     expect(dp.kind).toBe("unknown");
@@ -275,7 +285,12 @@ describe("group decoders against the devnet corpus", () => {
       group_version: "1",
       group_policy_version: "1",
       status: "PROPOSAL_STATUS_SOMETHING_NEW",
-      final_tally_result: { yes_count: "0", abstain_count: "0", no_count: "0", no_with_veto_count: "0" },
+      final_tally_result: {
+        yes_count: "0",
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      },
       voting_period_end: "2026-07-29T00:01:00Z",
       executor_result: "PROPOSAL_EXECUTOR_RESULT_WAT",
       messages: [],
@@ -286,10 +301,20 @@ describe("group decoders against the devnet corpus", () => {
 
   it("rejects a non-canonical tally count rather than coercing it", () => {
     expect(() =>
-      parseTallyResult({ yes_count: "1.5", abstain_count: "0", no_count: "0", no_with_veto_count: "0" }),
+      parseTallyResult({
+        yes_count: "1.5",
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      }),
     ).toThrow(/canonical unsigned integer/);
     expect(() =>
-      parseTallyResult({ yes_count: 2, abstain_count: "0", no_count: "0", no_with_veto_count: "0" }),
+      parseTallyResult({
+        yes_count: 2,
+        abstain_count: "0",
+        no_count: "0",
+        no_with_veto_count: "0",
+      }),
     ).toThrow();
   });
 
@@ -335,7 +360,7 @@ describe("LcdClient error surface", () => {
   });
 });
 
-describe("corpus manifest stays provisional until PR 8.0", () => {
+describe("corpus manifest stays provisional until the formal vault release", () => {
   it("manifest carries the provisional marker and the feature-probe result", () => {
     const m = expectObject(fixture("manifest.json"));
     expect(String(m["status"])).toContain("PROVISIONAL");

@@ -1,4 +1,4 @@
-// Market-page gates (plan 4.4 §3, SECURITY.md "never lie about state",
+// Market-page gates (SECURITY.md "never lie about state",
 // app-spec §8.5/§12.1/§13 decision 4): the v1 shell is the honest contract
 // state, never a fabricated market; a null premium stays null; every read
 // degrades only its own figure. Chain reads come from the fixture corpus via
@@ -141,7 +141,9 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
 
   it("a failed vault read nulls only localSupply", async () => {
     server.use(
-      http.get("*/vault/v1/vaults/:id", () => HttpResponse.json({ message: "down" }, { status: 503 })),
+      http.get("*/vault/v1/vaults/:id", () =>
+        HttpResponse.json({ message: "down" }, { status: 503 }),
+      ),
     );
     const data = await loadMarketData(config());
     expect(data.localSupply).toBeNull();
@@ -150,12 +152,20 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
 
   it("a fractional TVV is a shape error at the boundary, never a render crash", async () => {
     // history.tsx BigInts tvv for the table; the schema must reject fractions
-    // (PR #14 review) so a bad row degrades the whole surface instead.
+    // so a bad row degrades the whole surface instead.
     server.use(
       http.get("*/api/v1/epochs", () =>
         HttpResponse.json(
           envelope(
-            [{ epoch_index: 8, ended_at: "2026-07-14T00:00:01Z", nav: "1.0175", tvv: "1.5", net_apr_bps: null }],
+            [
+              {
+                epoch_index: 8,
+                ended_at: "2026-07-14T00:00:01Z",
+                nav: "1.0175",
+                tvv: "1.5",
+                net_apr_bps: null,
+              },
+            ],
             { source: "indexed" },
           ),
         ),

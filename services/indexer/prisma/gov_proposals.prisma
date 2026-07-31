@@ -35,7 +35,7 @@ model GovProposal {
   /// the devnet payload 2026-07-29). Public chain data, and the only
   /// human-readable label a proposal has — a pruned proposal's title exists
   /// nowhere else, so omitting them would make closed history unreadable.
-  /// Added by direction (Ira, 2026-07-29) beyond the M7.1 §3.2 enumeration.
+  /// Added by direction (Ira, 2026-07-29).
   title              String
   summary            String
   /// The proposal's messages, stored VERBATIM. 7.2 decodes them and 7.4

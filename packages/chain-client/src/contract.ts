@@ -14,7 +14,7 @@ import {
   parseU64Number,
   parseUint128,
 } from "./amounts.ts";
-import { LcdClient } from "./lcd.ts";
+import type { LcdClient } from "./lcd.ts";
 
 export interface ContractConfig {
   admin: string;
@@ -123,16 +123,34 @@ export function parseContractConfig(value: unknown, path = "$"): ContractConfig 
     vaultAddress: expectString(o["vault_address"], `${path}.vault_address`),
     underlyingDenom: expectString(o["underlying_denom"], `${path}.underlying_denom`),
     receiptDenom: expectString(o["receipt_denom"], `${path}.receipt_denom`),
-    maxDelegationsPerRun: parseU64Number(o["max_delegations_per_run"], `${path}.max_delegations_per_run`),
+    maxDelegationsPerRun: parseU64Number(
+      o["max_delegations_per_run"],
+      `${path}.max_delegations_per_run`,
+    ),
     aumFeeBps: parseU64Number(o["aum_fee_bps"], `${path}.aum_fee_bps`),
-    performanceThresholdBps: parseU64Number(o["performance_threshold_bps"], `${path}.performance_threshold_bps`),
-    minCaptureIntervalSecs: parseU64Number(o["min_capture_interval_secs"], `${path}.min_capture_interval_secs`),
-    maxConcentrationMultipleBps: parseU64Number(o["max_concentration_multiple_bps"], `${path}.max_concentration_multiple_bps`),
+    performanceThresholdBps: parseU64Number(
+      o["performance_threshold_bps"],
+      `${path}.performance_threshold_bps`,
+    ),
+    minCaptureIntervalSecs: parseU64Number(
+      o["min_capture_interval_secs"],
+      `${path}.min_capture_interval_secs`,
+    ),
+    maxConcentrationMultipleBps: parseU64Number(
+      o["max_concentration_multiple_bps"],
+      `${path}.max_concentration_multiple_bps`,
+    ),
     minBondedCapBps: parseU64Number(o["min_bonded_cap_bps"], `${path}.min_bonded_cap_bps`),
     maxBondedCapBps: parseU64Number(o["max_bonded_cap_bps"], `${path}.max_bonded_cap_bps`),
-    concentrationSafetyOffsetBps: parseU64Number(o["concentration_safety_offset_bps"], `${path}.concentration_safety_offset_bps`),
+    concentrationSafetyOffsetBps: parseU64Number(
+      o["concentration_safety_offset_bps"],
+      `${path}.concentration_safety_offset_bps`,
+    ),
     commissionBps: parseU64Number(o["commission_bps"], `${path}.commission_bps`),
-    jailUnbondDelaySecs: parseU64Number(o["jail_unbond_delay_secs"], `${path}.jail_unbond_delay_secs`),
+    jailUnbondDelaySecs: parseU64Number(
+      o["jail_unbond_delay_secs"],
+      `${path}.jail_unbond_delay_secs`,
+    ),
   };
 }
 
@@ -143,14 +161,19 @@ export function parseEpochStatus(value: unknown, path = "$"): EpochStatus {
     halted: expectBoolean(o["halted"], `${path}.halted`),
     lastRunSeconds: parseU64Number(o["last_run_seconds"], `${path}.last_run_seconds`),
     receiptMinted: parseUint128(o["receipt_minted"], `${path}.receipt_minted`),
-    pendingDelegations: expectArray(o["pending_delegations"], `${path}.pending_delegations`).map((p, i) => {
-      const d = expectObject(p, `${path}.pending_delegations[${i}]`);
-      return {
-        valoper: expectString(d["valoper"], `${path}.pending_delegations[${i}].valoper`),
-        amount: parseUint128(d["amount"], `${path}.pending_delegations[${i}].amount`),
-      };
-    }),
-    pendingRedelegations: expectArray(o["pending_redelegations"] ?? [], `${path}.pending_redelegations`).map((p, i) => {
+    pendingDelegations: expectArray(o["pending_delegations"], `${path}.pending_delegations`).map(
+      (p, i) => {
+        const d = expectObject(p, `${path}.pending_delegations[${i}]`);
+        return {
+          valoper: expectString(d["valoper"], `${path}.pending_delegations[${i}].valoper`),
+          amount: parseUint128(d["amount"], `${path}.pending_delegations[${i}].amount`),
+        };
+      },
+    ),
+    pendingRedelegations: expectArray(
+      o["pending_redelegations"] ?? [],
+      `${path}.pending_redelegations`,
+    ).map((p, i) => {
       const d = expectObject(p, `${path}.pending_redelegations[${i}]`);
       return {
         src: expectString(d["src"], `${path}.pending_redelegations[${i}].src`),
@@ -179,8 +202,14 @@ export function parseEpochSnapshot(value: unknown, path = "$"): EpochSnapshot {
     writeDown: parseUint128(o["write_down"], `${path}.write_down`),
     deployed: parseUint128(o["deployed"], `${path}.deployed`),
     rebalanced: parseUint128(o["rebalanced"], `${path}.rebalanced`),
-    unbondedForRedemptions: parseUint128(o["unbonded_for_redemptions"], `${path}.unbonded_for_redemptions`),
-    redemptionsExpedited: parseU64Number(o["redemptions_expedited"], `${path}.redemptions_expedited`),
+    unbondedForRedemptions: parseUint128(
+      o["unbonded_for_redemptions"],
+      `${path}.unbonded_for_redemptions`,
+    ),
+    redemptionsExpedited: parseU64Number(
+      o["redemptions_expedited"],
+      `${path}.redemptions_expedited`,
+    ),
     validatorsPurged: parseU64Number(o["validators_purged"], `${path}.validators_purged`),
     eligibleCount: parseU64Number(o["eligible_count"], `${path}.eligible_count`),
     aumFeeEstimate: parseUint128(o["aum_fee_estimate"], `${path}.aum_fee_estimate`),
@@ -212,7 +241,8 @@ export function parseValidatorStatus(value: unknown, path = "$"): ValidatorStatu
     operator: expectString(o["operator"], `${path}.operator`),
     enrolledAtSeconds: parseU64Number(o["enrolled_at_seconds"], `${path}.enrolled_at_seconds`),
     uptimeCaptureCount: parseU64Number(o["uptime_capture_count"], `${path}.uptime_capture_count`),
-    uptimeBps: uptime === null || uptime === undefined ? null : parseU64Number(uptime, `${path}.uptime_bps`),
+    uptimeBps:
+      uptime === null || uptime === undefined ? null : parseU64Number(uptime, `${path}.uptime_bps`),
     jailed: expectBoolean(o["jailed"], `${path}.jailed`),
     tombstoned: expectBoolean(o["tombstoned"], `${path}.tombstoned`),
     tipEpoch: parseUint128(o["tip_epoch"], `${path}.tip_epoch`),
@@ -230,7 +260,10 @@ export function parseJailReport(value: unknown, path = "$"): JailReport {
   return {
     valoper: expectString(o["valoper"], `${path}.valoper`),
     reportedAtSeconds: parseU64Number(o["reported_at_seconds"], `${path}.reported_at_seconds`),
-    purgeReadyAtSeconds: parseU64Number(o["purge_ready_at_seconds"], `${path}.purge_ready_at_seconds`),
+    purgeReadyAtSeconds: parseU64Number(
+      o["purge_ready_at_seconds"],
+      `${path}.purge_ready_at_seconds`,
+    ),
   };
 }
 
@@ -250,7 +283,9 @@ export class NvhashContractClient {
   async smart(query: Record<string, unknown>): Promise<unknown> {
     const b64 = toBase64(JSON.stringify(query));
     const res = expectObject(
-      await this.lcd.get(`cosmwasm/wasm/v1/contract/${this.contract}/smart/${encodeURIComponent(b64)}`),
+      await this.lcd.get(
+        `cosmwasm/wasm/v1/contract/${this.contract}/smart/${encodeURIComponent(b64)}`,
+      ),
     );
     return res["data"];
   }

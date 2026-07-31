@@ -1,4 +1,4 @@
-// POST /tx/simulate (PR 5.2, §10.2 step 3): price the intent's gas for the
+// POST /tx/simulate (§10.2 step 3): price the intent's gas for the
 // SESSION address. The intent is constructed server-side from the session
 // address and the configured vault — the client chooses only kind, amount,
 // and its pubkey; it cannot name another owner or vault.
@@ -21,7 +21,10 @@ import { simulateIntent } from "~/tx/simulate.server";
 import type { Route } from "./+types/tx-simulate";
 
 /** base64 33-byte compressed secp256k1 from the connected wallet. */
-const pubkeySchema = z.string().length(44).regex(/^[A-Za-z0-9+/]+={0,2}$/);
+const pubkeySchema = z
+  .string()
+  .length(44)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/);
 const valoperSchema = z.string().max(90).regex(VALOPER_RE);
 
 const bodySchema = z.object({
@@ -32,7 +35,7 @@ const bodySchema = z.object({
   redeemDenom: z.string().max(64).default(""),
 });
 
-/** M6.4 operator actions: a separate bounded schema, never a widened one. The
+/** Operator actions: a separate bounded schema, never a widened one. The
  * client chooses the variant, its validator and the amount; the SENDER and the
  * CONTRACT are filled server-side, so it cannot name another signer or a
  * different contract. */
@@ -42,7 +45,10 @@ const operatorBodySchema = z
     variant: z.enum(OPERATOR_VARIANTS),
     valoper: valoperSchema,
     claimantValoper: valoperSchema.nullable().default(null),
-    amount: z.string().regex(/^[0-9]{1,39}$/).default("0"),
+    amount: z
+      .string()
+      .regex(/^[0-9]{1,39}$/)
+      .default("0"),
     denom: z.string().min(1).max(64).default(PROGRAM_UNDERLYING_DENOM),
     pubkey: pubkeySchema,
   })
@@ -52,12 +58,12 @@ const operatorBodySchema = z
   // rather than a 500: a zero-amount payment, or funds on a fundless action,
   // never reaches the builder (2026-07-28 review).
   .refine(
-    (b) => FUNDED_VARIANTS.has(b.variant) === (BigInt(b.amount) > 0n),
+    (b) => FUNDED_VARIANTS.has(b.variant) === BigInt(b.amount) > 0n,
     "a payment requires a positive amount; every other action must carry none",
   );
 
 /**
- * M7.3–7.4 governance actions. A third bounded schema, on the same terms as the
+ * Governance actions. A third bounded schema, on the same terms as the
  * operator one: the client names the proposal, the option and the template; the
  * SIGNER and the CONTRACT are filled server-side, so it cannot name another
  * voter, another proposer, or a different contract for a proposal's messages.
@@ -159,10 +165,10 @@ export async function action({ request }: Route.ActionArgs) {
  * Simulate a governance intent (§2.5 would-fail simulation before sign).
  *
  * A full `MsgExec` simulation EXECUTES the proposal's inner messages in the
- * node's simulation context (§7 Q5, confirmed as the intended depth): it is
+ * node's simulation context, which is the intended depth: it is
  * side-effect-free — the node discards the simulated state — and it is the only
  * way to surface "passed, but will fail to execute", which is exactly what
- * 7.1's `executorResult` column exists to make visible. Surfacing that reason
+ * the indexer's `executorResult` column exists to make visible. Surfacing that reason
  * BEFORE the wallet is asked to sign is the whole point of §10.2 step 3.
  */
 async function simulateGovernance(

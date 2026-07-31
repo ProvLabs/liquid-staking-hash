@@ -1,4 +1,4 @@
-// Session service (app-spec §3 decision 5, §12.3; plan 5.1 §3): nonce mint →
+// Session service (app-spec §3 decision 5, §12.3): nonce mint →
 // ADR-36 verify → opaque-id cookie over a server-side row. Business logic
 // only — persistence is the SessionStore port (models layer), crypto is
 // adr36-verify.server.ts, and every input crosses a zod bound HERE before
@@ -9,11 +9,11 @@
 //   * value = the opaque 256-bit session id, nothing else (never a claims
 //     token; the row is the session)
 //   * HttpOnly always; SameSite=Lax; Path=/; Secure outside development
-//   * absolute ceiling 7 days + 24 h sliding inactivity bound (plan §7 Q6
+// * absolute ceiling 7 days + 24 h sliding inactivity bound (§7 Q6
 //     proposal values — the mechanism is spec-pinned, the numbers are not)
 //
 // requireSession / getSessionContext are the ONLY paths into personal
-// loaders (the standing session-scope gate, plan §4.6): the acting address
+// loaders (standing session-scope gate): the acting address
 // is always the session row's address, never a query param.
 
 import { randomBytes } from "node:crypto";
@@ -59,7 +59,7 @@ export interface SessionDeps {
   store: SessionStore;
   now?: () => Date;
   /**
-   * M6.3 push-token deletion chain (plan §2.4): removing a session removes its
+   * Push-token deletion chain: removing a session removes its
    * push subscriptions. Injected so the deletion gate can assert it
    * (test/push-token-deletion.test.ts).
    */
@@ -97,9 +97,7 @@ export async function mintNonce(
   };
 }
 
-export type LoginResult =
-  | { ok: true; address: string; setCookie: string }
-  | { ok: false }; // one undifferentiated failure → 401 (auth.ts precedent)
+export type LoginResult = { ok: true; address: string; setCookie: string } | { ok: false }; // one undifferentiated failure → 401 (auth.ts precedent)
 
 /** Verify a signed challenge and establish a session (POST /session/login). */
 export async function login(
@@ -133,7 +131,11 @@ export async function login(
   };
   await store.createSession(row);
   await store.touchAddressActivity(body.address, at);
-  return { ok: true, address: body.address, setCookie: sessionCookie(config, id, row.expiresAt, at) };
+  return {
+    ok: true,
+    address: body.address,
+    setCookie: sessionCookie(config, id, row.expiresAt, at),
+  };
 }
 
 /** Destroy the session row and clear the cookie (POST /session/logout). */
@@ -149,7 +151,7 @@ export async function logout(
 }
 
 /**
- * Remove a session AND its push subscriptions (plan 6.3 §2.4 — the deletion
+ * Remove a session AND its push subscriptions (the deletion
  * chain, a standing SECURITY.md-exception gate). Fired from logout and from the
  * expiry-sweep path below; idempotent (a no-op for an already-gone id).
  *
@@ -166,7 +168,11 @@ export async function logout(
  *     covering crash remnants AND browsers that never present their stale
  *     cookie. Push is latency-sugar (§10.4), never load-bearing.
  */
-async function destroySession(store: SessionStore, pushStore: PushStore, id: string): Promise<void> {
+async function destroySession(
+  store: SessionStore,
+  pushStore: PushStore,
+  id: string,
+): Promise<void> {
   await pushStore.deleteForSession(id);
   await store.deleteSession(id);
 }
@@ -189,7 +195,7 @@ export async function getSessionContext(
   if (row === null) {
     // A well-formed cookie that resolves to no live session is an expired or
     // already-removed session presented by a stale cookie: sweep its remnant
-    // and, via the deletion chain, its push subscriptions (plan §2.4). A no-op
+    // and, via the deletion chain, its push subscriptions. A no-op
     // for a never-existed id, so a forged cookie costs only two empty deletes.
     await destroySession(store, pushStore, id);
     return null;

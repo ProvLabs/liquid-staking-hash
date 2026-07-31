@@ -7,7 +7,7 @@
 //
 // Data minimization (SECURITY.md; app-spec §12.3): the `app` schema holds
 // sessions, single-use login nonces, and the accepted per-address first/last
-// seen timestamps — nothing else in PR 5.1. No role column anywhere (roles
+// seen timestamps — nothing else. No role column anywhere (roles
 // are live on-chain facts re-checked per refresh, never persisted — spec §4),
 // no IP or device identifiers, no off-chain identity. Enforced, not trusted,
 // by the schema-field allowlist gate (test/app-schema-allowlist.test.ts).

@@ -1,4 +1,4 @@
-// Notifier worker gate (plan 6.2 §3 commit B, §4.5 exactly-once). Drives the
+// Notifier worker gate (§4.5 exactly-once). Drives the
 // pure tick over the InMemoryAlertStore + a fake fetch returning fixture
 // envelopes + a fixed clock — no Postgres, no network. Covers: presence
 // filter, opt-out suppression, default-off opt-in fan-out, incident→kind
@@ -32,7 +32,12 @@ const silentLog: Logger = { info: () => {}, error: () => {} };
 function envelope(data: unknown): unknown {
   return {
     data,
-    meta: { chain_height: 1000, indexed_height: 1000, generated_at: NOW.toISOString(), source: "indexed" },
+    meta: {
+      chain_height: 1000,
+      indexed_height: 1000,
+      generated_at: NOW.toISOString(),
+      source: "indexed",
+    },
   };
 }
 
@@ -68,7 +73,11 @@ function makeFetch(fx: Fixtures): NotifierDeps["fetchJson"] {
   };
 }
 
-function makeDeps(store: InMemoryAlertStore, fx: Fixtures, extra?: Partial<NotifierDeps>): NotifierDeps {
+function makeDeps(
+  store: InMemoryAlertStore,
+  fx: Fixtures,
+  extra?: Partial<NotifierDeps>,
+): NotifierDeps {
   return {
     store,
     fetchJson: makeFetch(fx),
@@ -84,7 +93,9 @@ function makeDeps(store: InMemoryAlertStore, fx: Fixtures, extra?: Partial<Notif
   };
 }
 
-function redemption(overrides: Partial<Record<string, unknown>> & { request_id: string; owner: string }): unknown {
+function redemption(
+  overrides: Partial<Record<string, unknown>> & { request_id: string; owner: string },
+): unknown {
   return {
     status: "matured",
     enqueued_at: "2026-05-01T00:00:00Z",
@@ -104,7 +115,9 @@ describe("notifier: redemption_update (default-on)", () => {
   it("notifies a present owner who has not opted out", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     store.setPresent(OWNER);
-    await runTick(makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }));
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }),
+    );
     const rows = await allFor(store, OWNER);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.kind).toBe("redemption_update");
@@ -113,7 +126,9 @@ describe("notifier: redemption_update (default-on)", () => {
 
   it("does NOT notify an owner with no app presence (data minimization)", async () => {
     const store = new InMemoryAlertStore(() => NOW); // OWNER not present
-    await runTick(makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }));
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }),
+    );
     expect(await allFor(store, OWNER)).toHaveLength(0);
   });
 
@@ -121,7 +136,9 @@ describe("notifier: redemption_update (default-on)", () => {
     const store = new InMemoryAlertStore(() => NOW);
     store.setPresent(OWNER);
     await store.upsertRule(OWNER, "redemption_update", false);
-    await runTick(makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }));
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }),
+    );
     expect(await allFor(store, OWNER)).toHaveLength(0);
   });
 
@@ -131,11 +148,18 @@ describe("notifier: redemption_update (default-on)", () => {
     await runTick(
       makeDeps(store, {
         redemptions: [
-          redemption({ request_id: "r1", owner: OWNER, matured_at: "2026-05-20T00:00:00Z", refunded_at: "2026-06-01T00:00:00Z" }),
+          redemption({
+            request_id: "r1",
+            owner: OWNER,
+            matured_at: "2026-05-20T00:00:00Z",
+            refunded_at: "2026-06-01T00:00:00Z",
+          }),
         ],
       }),
     );
-    const events = (await allFor(store, OWNER)).map((n) => (n.payload as { event: string }).event).sort();
+    const events = (await allFor(store, OWNER))
+      .map((n) => (n.payload as { event: string }).event)
+      .sort();
     expect(events).toEqual(["matured", "refunded"]);
   });
 });
@@ -185,7 +209,11 @@ describe("notifier: exactly-once (the unique constraint, not the cursor)", () =>
       const afterId = params.get("after_id") ?? "";
       const limit = Number(params.get("limit") ?? "200");
       const page = burst
-        .filter((f) => f.last_height > sinceHeight || (f.last_height === sinceHeight && f.request_id > afterId))
+        .filter(
+          (f) =>
+            f.last_height > sinceHeight ||
+            (f.last_height === sinceHeight && f.request_id > afterId),
+        )
         .slice(0, limit);
       return envelope(page);
     };
@@ -201,7 +229,10 @@ describe("notifier: exactly-once (the unique constraint, not the cursor)", () =>
 
   it("degrades a legacy or garbage redemptions cursor to a re-scan", () => {
     expect(parseRedemptionsCursor("250")).toEqual({ height: 250, afterId: "" }); // legacy height-only
-    expect(parseRedemptionsCursor("500:req:with:colons")).toEqual({ height: 500, afterId: "req:with:colons" });
+    expect(parseRedemptionsCursor("500:req:with:colons")).toEqual({
+      height: 500,
+      afterId: "req:with:colons",
+    });
     expect(parseRedemptionsCursor(null)).toEqual({ height: 0, afterId: "" });
     expect(parseRedemptionsCursor("garbage")).toEqual({ height: 0, afterId: "" });
   });
@@ -211,10 +242,15 @@ describe("notifier: operator_arrears (default-on)", () => {
   it("notifies a present operator; suppresses an opted-out one", async () => {
     const store = new InMemoryAlertStore(() => NOW);
     store.setPresent(OPERATOR);
-    const arrears = [{ valoper: "pbvaloper1aaa", operator: OPERATOR, epoch_index: 12, commission_due: "7" }];
+    const arrears = [
+      { valoper: "pbvaloper1aaa", operator: OPERATOR, epoch_index: 12, commission_due: "7" },
+    ];
     await runTick(makeDeps(store, { arrears }));
     expect(await allFor(store, OPERATOR)).toHaveLength(1);
-    expect((await allFor(store, OPERATOR))[0]!.payload).toEqual({ valoper: "pbvaloper1aaa", epoch_index: 12 });
+    expect((await allFor(store, OPERATOR))[0]!.payload).toEqual({
+      valoper: "pbvaloper1aaa",
+      epoch_index: 12,
+    });
 
     await store.upsertRule(OPERATOR, "operator_arrears", false);
     // Same epoch again → dedupe already covers it, but also opted out now.
@@ -228,8 +264,22 @@ describe("notifier: incidents (default-off, opt-in fan-out + mapping)", () => {
     const store = new InMemoryAlertStore(() => NOW);
     await store.upsertRule(SUBSCRIBER, "vault_status", true); // opted in
     const incidents = [
-      { id: 1, kind: "vault_paused", severity: "critical", dedupe_key: "vault:1", opened_at: NOW.toISOString(), opened_height: 10 },
-      { id: 2, kind: "indexer_lag", severity: "warning", dedupe_key: "lag:1", opened_at: NOW.toISOString(), opened_height: 20 }, // unmapped → nothing
+      {
+        id: 1,
+        kind: "vault_paused",
+        severity: "critical",
+        dedupe_key: "vault:1",
+        opened_at: NOW.toISOString(),
+        opened_height: 10,
+      },
+      {
+        id: 2,
+        kind: "indexer_lag",
+        severity: "warning",
+        dedupe_key: "lag:1",
+        opened_at: NOW.toISOString(),
+        opened_height: 20,
+      }, // unmapped → nothing
     ];
     await runTick(makeDeps(store, { incidents }));
     const rows = await allFor(store, SUBSCRIBER);
@@ -243,7 +293,14 @@ describe("notifier: incidents (default-off, opt-in fan-out + mapping)", () => {
     const store = new InMemoryAlertStore(() => NOW);
     await store.upsertRule(SUBSCRIBER, "validator_set_incident", true);
     const incidents = [
-      { id: 3, kind: "jail_report", severity: "warning", dedupe_key: "jail:v", opened_at: NOW.toISOString(), opened_height: 30 },
+      {
+        id: 3,
+        kind: "jail_report",
+        severity: "warning",
+        dedupe_key: "jail:v",
+        opened_at: NOW.toISOString(),
+        opened_height: 30,
+      },
     ];
     await runTick(makeDeps(store, { incidents }));
     expect(await allFor(store, SUBSCRIBER)).toHaveLength(1);
@@ -303,7 +360,9 @@ describe("notifier: idle ticks are free", () => {
     // Not idle: an un-notifiable fact page must STILL move the cursor, or the
     // stream would refetch the same page every tick.
     const store = new InMemoryAlertStore(() => NOW); // OWNER not present
-    await runTick(makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }));
+    await runTick(
+      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }),
+    );
     expect(await store.getCheckpoint("redemptions")).toBe("100:r1");
   });
 });
@@ -315,7 +374,9 @@ describe("notifier: failure isolation + retention", () => {
     const result = await runTick(
       makeDeps(store, {
         down: new Set(["redemptions"]),
-        arrears: [{ valoper: "pbvaloper1aaa", operator: OPERATOR, epoch_index: 12, commission_due: "7" }],
+        arrears: [
+          { valoper: "pbvaloper1aaa", operator: OPERATOR, epoch_index: 12, commission_due: "7" },
+        ],
       }),
     );
     expect(result.errors.redemptions).toBeDefined();
@@ -337,7 +398,11 @@ describe("notifier: failure isolation + retention", () => {
       send: () => Promise.reject(new Error("push transport exploded")),
     };
     const result = await runTick(
-      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender }),
+      makeDeps(
+        store,
+        { redemptions: [redemption({ request_id: "r1", owner: OWNER })] },
+        { pushStore, pushSender: sender },
+      ),
     );
     // The tick reports the stream as succeeded (push failure is not a stream
     // failure) and the notification is recorded in-app regardless.
@@ -364,7 +429,11 @@ describe("notifier: failure isolation + retention", () => {
       },
     };
     await runTick(
-      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender }),
+      makeDeps(
+        store,
+        { redemptions: [redemption({ request_id: "r1", owner: OWNER })] },
+        { pushStore, pushSender: sender },
+      ),
     );
     expect(await pushStore.countForAddress(OWNER)).toBe(0); // pruned
   });
@@ -420,7 +489,11 @@ describe("notifier: failure isolation + retention", () => {
       },
     };
     await runTick(
-      makeDeps(store, { redemptions: [redemption({ request_id: "r1", owner: OWNER })] }, { pushStore, pushSender: sender, log }),
+      makeDeps(
+        store,
+        { redemptions: [redemption({ request_id: "r1", owner: OWNER })] },
+        { pushStore, pushSender: sender, log },
+      ),
     );
     const serialized = JSON.stringify(lines);
     expect(serialized).toContain("push send failed"); // the drop IS logged…

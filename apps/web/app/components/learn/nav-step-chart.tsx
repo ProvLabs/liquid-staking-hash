@@ -3,9 +3,9 @@ import { StepChart } from "~/components/charts/step-chart";
 import { t, type Locale } from "~/i18n";
 
 // §8.1.1 step chart: NAV per settled epoch, rendered by the shared
-// step-after chart (PR 4.4 extraction). This adapter owns the Learn cold
+// step-after chart (extraction). This adapter owns the Learn cold
 // states and the null-NAV filter (an epoch settled with zero shares has no
-// NAV, PR 3.1); below two plottable rows the cold-start explainer renders
+// NAV); below two plottable rows the cold-start explainer renders
 // instead of an empty chart (§8.1 cold-start rule).
 type PlottableEpoch = EpochRow & { nav: string };
 
@@ -29,9 +29,7 @@ export function NavStepChart({
       <section className="flex flex-col gap-2">
         <h3 className="text-base font-medium">{t(locale, "learn.chart-title")}</h3>
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          {epochs === null
-            ? t(locale, "learn.chart-unavailable")
-            : t(locale, "learn.chart-empty")}
+          {epochs === null ? t(locale, "learn.chart-unavailable") : t(locale, "learn.chart-empty")}
         </p>
       </section>
     );

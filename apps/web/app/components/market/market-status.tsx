@@ -35,9 +35,7 @@ export function MarketStatus({
               <span className="text-xs text-muted-foreground">
                 {t(locale, "market.price-label")}
               </span>
-              <span className="text-2xl font-semibold tabular-nums">
-                {market.sample.priceHash}
-              </span>
+              <span className="text-2xl font-semibold tabular-nums">{market.sample.priceHash}</span>
               <span className="text-xs text-muted-foreground">
                 {t(locale, "market.price-caption")}
               </span>

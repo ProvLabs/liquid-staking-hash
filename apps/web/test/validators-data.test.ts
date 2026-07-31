@@ -1,4 +1,4 @@
-// Validators-page gates (plan 4.3 §3, SECURITY.md "never lie about state",
+// Validators-page gates (SECURITY.md "never lie about state",
 // app-spec §8.6/§12.1): the set read degrades honestly, per-field joins
 // degrade only their field, and the client-crossing row is the CLOSED public
 // projection (no operator economics, ever). Chain reads come from the fixture
@@ -154,9 +154,7 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
   });
 
   it("an unreachable API nulls only setHealth (distinct from empty)", async () => {
-    server.use(
-      http.get("*/api/v1/validators", () => HttpResponse.json({}, { status: 502 })),
-    );
+    server.use(http.get("*/api/v1/validators", () => HttpResponse.json({}, { status: 502 })));
     const data = await loadValidatorsData(config());
     expect(data.setHealth).toBeNull();
     expect(data.rows).toHaveLength(1);

@@ -1,7 +1,7 @@
 // Fixture-decode: the epoch snapshot / APR smart-query shapes and the run_epoch
 // crank detection match the captured corpus (packages/fixtures). A contract
 // interface change breaks THIS test, not production (app-spec §9.2). Corpus is
-// provisional against the pre-release vault, re-vetted at PR 8.0.
+// provisional against the pre-release vault, re-vetted.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -20,7 +20,11 @@ function load(rel: string): Record<string, unknown> {
 }
 
 /** A tx-search-shaped tx from a run-epoch fixture (hash/height/events). */
-function txOf(fixture: Record<string, unknown>): { hash: string; height: bigint; events: RawEvent[] } {
+function txOf(fixture: Record<string, unknown>): {
+  hash: string;
+  height: bigint;
+  events: RawEvent[];
+} {
   const resp = fixture["tx_response"] as Record<string, unknown>;
   return {
     hash: String(resp["txhash"]),

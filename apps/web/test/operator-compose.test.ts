@@ -1,4 +1,4 @@
-// Operator-view pure composition (M6.4 §2.3). Everything here is a fold over
+// Operator-view pure composition. Everything here is a fold over
 // explicit inputs — no fetch, no clock — so the arithmetic an operator would
 // act on is pinned by goldens rather than by whatever the loader happened to
 // produce. Two things this suite exists to prevent:
@@ -171,13 +171,10 @@ describe("earnings steps (pairing delegation with the program's epochs)", () => 
   });
 
   it("skips an epoch with no program APR rather than assuming zero", () => {
-    const steps = buildEarningsSteps(
-      new Map([[2, 100n]]),
-      [
-        { epochIndex: 1, endedAtSeconds: 1_000_000, netAprBps: 500 },
-        { epochIndex: 2, endedAtSeconds: 2_000_000, netAprBps: null },
-      ],
-    );
+    const steps = buildEarningsSteps(new Map([[2, 100n]]), [
+      { epochIndex: 1, endedAtSeconds: 1_000_000, netAprBps: 500 },
+      { epochIndex: 2, endedAtSeconds: 2_000_000, netAprBps: null },
+    ]);
     expect(steps).toEqual([]);
   });
 });

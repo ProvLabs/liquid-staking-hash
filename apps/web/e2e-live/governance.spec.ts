@@ -1,12 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-// e2e-live: the governance center against the REAL devnet stack (M7.2; master
-// plan §4 "e2e (live)" layer). Needs no signer — §8.7 is a public read — so it
+// e2e-live: the governance center against the REAL devnet stack. Needs no signer — §8.7 is a public read — so it
 // runs whenever the stack is up, and skips cleanly otherwise.
 //
 // WHY THIS LAYER EXISTS FOR THIS PAGE, when the offline suite already covers the
-// rendering: the offline corpus is UNGOVERNED (M7.2 §3.4 R1 — its contract was
-// deployed before the group existed, and there is no admin-rotation message).
+// rendering: the offline corpus is UNGOVERNED — its contract was deployed
+// before the group existed, and there is no admin-rotation message.
 // So the GOVERNED live plane — set-valued policy discovery, the member set, and
 // the module's own tally for an open proposal — is exercised offline only
 // through MSW overrides. This spec is where it meets a real chain.
@@ -25,12 +24,14 @@ test("the governance page renders against the real chain, with no session", asyn
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Governance");
   await expect(page.getByRole("heading", { name: "Open" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Outcome history" })).toBeVisible();
-  // M7.3–7.4: the page is no longer read-only, and the note says what the
-  // write path is rather than promising it for a later release.
+  // The page is not read-only, and the note says what the write path is
+  // rather than promising it for a later release.
   await expect(page.getByText("Members vote and execute", { exact: false })).toBeVisible();
 });
 
-test("the live plane resolves to exactly one of its three states, and says which", async ({ page }) => {
+test("the live plane resolves to exactly one of its three states, and says which", async ({
+  page,
+}) => {
   await page.goto("/governance");
   const notGoverned = await page
     .getByText("is a plain account rather than a group policy", { exact: false })
@@ -63,5 +64,7 @@ test("a governed stack renders the member set rather than a not-checked note", a
   // Either the members table or the membership-changed note — both are real
   // answers. "The current member set could not be read" is not, on a chain the
   // page just read a group from.
-  await expect(page.getByText("The current member set could not be read", { exact: false })).toHaveCount(0);
+  await expect(
+    page.getByText("The current member set could not be read", { exact: false }),
+  ).toHaveCount(0);
 });

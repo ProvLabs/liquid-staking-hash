@@ -8,7 +8,7 @@
 //
 // Amount discipline (app-spec §5.8): base-unit amounts arrive as bigint and
 // leave as decimal strings; NAV uses the shared scale-then-floor helper
-// ([R1], docs/plans/2026-07-22-app-m3-query-api.md). Heights and counts are
+// ([R1]). Heights and counts are
 // JS safe integers, guarded loudly ([R7a]): a height that cannot be a safe
 // integer is corrupt, and serializing it would ship a lie — throw instead.
 
@@ -113,7 +113,7 @@ export interface ValidatorRegistryFacts {
   /**
    * Operator account (public chain data). Optional because the public
    * `/validators` derivation never surfaces it (it is excluded from public
-   * economics, app-spec §9.4); only the M6.2 arrears join reads it.
+   * economics, app-spec §9.4); only the arrears join reads it.
    */
   readonly operator?: string;
 }
@@ -239,7 +239,7 @@ export function deriveValidatorsPayload(
   return { validators, set_health: deriveSetHealth(validators) };
 }
 
-// --- market (PR 3.2) --------------------------------------------------------
+// --- market --------------------------------------------------------
 
 export interface MarketSampleFacts {
   readonly venue: string;
@@ -302,7 +302,10 @@ export function premiumDiscountBps(priceNhash: bigint, navNhash: bigint | null):
   return toSafeSignedInt(((priceNhash - navNhash) * 10_000n) / navNhash, "premium_discount_bps");
 }
 
-export function toMarketSample(facts: MarketSampleFacts, navAtSampleTime: bigint | null): MarketSample {
+export function toMarketSample(
+  facts: MarketSampleFacts,
+  navAtSampleTime: bigint | null,
+): MarketSample {
   return {
     venue: facts.venue,
     pool: facts.pool,
@@ -321,7 +324,7 @@ export function toBridgedSupplyRow(facts: BridgedSupplyFacts): BridgedSupplyRow 
   };
 }
 
-// --- address-scoped (PR 3.3) ------------------------------------------------
+// --- address-scoped ------------------------------------------------
 
 export interface TransactionFacts {
   readonly txhash: string;
@@ -380,12 +383,12 @@ export function isActiveRedemption(status: RedemptionStatus): boolean {
   return status === "enqueued" || status === "expedited";
 }
 
-// --- internal alert-facts (M6.2, `internal:notifier` scope) -----------------
+// --- internal alert-facts (`internal:notifier` scope) -----------------
 //
 // The notifier's cross-address evaluation reads (ADR-001 Decision 3). Each is
 // a pure projection to the identity/ordinal fields the notifier keys off —
 // NEVER amounts on the redemption/incident facts (the stored notification
-// carries no amount, plan §2.1). The heights/ids cross into JS number domain
+// carries no amount). The heights/ids cross into JS number domain
 // through the same loud safe-integer guard as every other fact.
 
 /** Structural facts for one alert-incident projection (id + dedupe identity). */
@@ -409,7 +412,7 @@ export interface AlertArrearsFacts {
 /**
  * A redemption fact for the notifier: owner + terminal timestamps + the height
  * cursor. Reuses `RedemptionFacts` (only a subset is read); deliberately drops
- * `shares` — the alert surface carries no amount (plan §2.1).
+ * `shares` — the alert surface carries no amount.
  */
 export function toAlertRedemptionFact(f: RedemptionFacts): AlertRedemptionFact {
   return {
@@ -444,7 +447,7 @@ export function toAlertArrearsFact(f: AlertArrearsFacts): AlertArrearsFact {
   };
 }
 
-// --- operator surface (M6.4, address-scoped) --------------------------------
+// --- operator surface (address-scoped) --------------------------------
 //
 // The personal counterpart of the public `/validators` projection. Two rules
 // shape everything here:
@@ -452,7 +455,7 @@ export function toAlertArrearsFact(f: AlertArrearsFacts): AlertArrearsFact {
 //      enforced server-side; a valoper the address does not operate resolves to
 //      nothing, and the route answers honest-empty rather than 403 — a 403
 //      would be an oracle telling the caller that valoper exists and belongs to
-//      someone else (plan §3 commit B: "never 403-leaks about who operates
+// someone else ("never 403-leaks about who operates
 //      what").
 //   2. `epoch_index` on a payment is DERIVED here, not stored: the indexer
 //      cannot know a payment's crediting epoch at ingest (app-spec §9.1).
@@ -726,7 +729,7 @@ export function payoutDurationSeconds(f: RedemptionFacts): number | null {
 /**
  * `/portfolio` ([R2]): indexed facts only — first activity, event count,
  * escrow, active redemptions. Deliberately no balance (a live read) and no
- * derived metrics (M6.1). `activeRedemptions` must already be filtered to
+ * derived metrics. `activeRedemptions` must already be filtered to
  * active states (the readers own the filter; asserted here defensively).
  */
 export function derivePortfolio(
@@ -738,7 +741,9 @@ export function derivePortfolio(
   let escrowed = 0n;
   for (const redemption of activeRedemptions) {
     if (!isActiveRedemption(redemption.status)) {
-      throw new RangeError(`redemption ${redemption.requestId} is ${redemption.status}, not active`);
+      throw new RangeError(
+        `redemption ${redemption.requestId} is ${redemption.status}, not active`,
+      );
     }
     escrowed += redemption.shares;
   }
@@ -751,7 +756,7 @@ export function derivePortfolio(
   };
 }
 
-// --- governance (PR 7.1 commit C) -------------------------------------------
+// --- governance -------------------------------------------
 //
 // Pure mappers from the indexer's row facts to the frozen wire shapes. The
 // division of labour is the same as everywhere else in this file: derivation
@@ -852,7 +857,10 @@ export function toGovDecisionPolicy(stored: unknown): GovDecisionPolicy | null {
   const minExecution =
     typeof windows["min_execution_period"] === "string" ? windows["min_execution_period"] : "";
 
-  if (typeUrl === "/cosmos.group.v1.ThresholdDecisionPolicy" && typeof o["threshold"] === "string") {
+  if (
+    typeUrl === "/cosmos.group.v1.ThresholdDecisionPolicy" &&
+    typeof o["threshold"] === "string"
+  ) {
     return {
       kind: "threshold",
       threshold: o["threshold"],
@@ -860,7 +868,10 @@ export function toGovDecisionPolicy(stored: unknown): GovDecisionPolicy | null {
       min_execution_period: minExecution,
     };
   }
-  if (typeUrl === "/cosmos.group.v1.PercentageDecisionPolicy" && typeof o["percentage"] === "string") {
+  if (
+    typeUrl === "/cosmos.group.v1.PercentageDecisionPolicy" &&
+    typeof o["percentage"] === "string"
+  ) {
     return {
       kind: "percentage",
       percentage: o["percentage"],
@@ -888,7 +899,7 @@ export function toGovProposalRow(f: GovProposalFacts): GovProposalRow {
   const truncated = messages.length > MAX_GOV_PROPOSAL_MESSAGES;
   // Flagged for the same reason `messages` is, and it is NOT covered by that flag:
   // `proposers` is identity data, so a silent trim leaves a consumer unable to tell
-  // a full list from a shortened one (PR #23 review, P2).
+  // a full list from a shortened one.
   const proposersTruncated = f.proposers.length > MAX_GOV_PROPOSERS;
   return {
     // u64 ids stay STRINGS on the wire: the JSON number domain stops at 2^53.
@@ -918,7 +929,9 @@ export function toGovProposalRow(f: GovProposalFacts): GovProposalRow {
     height: f.height === null ? null : toSafeInt(f.height, "gov_proposals.height"),
     txhash: f.txhash,
     pruned_at_height:
-      f.prunedAtHeight === null ? null : toSafeInt(f.prunedAtHeight, "gov_proposals.prunedAtHeight"),
+      f.prunedAtHeight === null
+        ? null
+        : toSafeInt(f.prunedAtHeight, "gov_proposals.prunedAtHeight"),
     messages_truncated: truncated,
     proposers_truncated: proposersTruncated,
     messages: truncated ? messages.slice(0, MAX_GOV_PROPOSAL_MESSAGES) : messages,

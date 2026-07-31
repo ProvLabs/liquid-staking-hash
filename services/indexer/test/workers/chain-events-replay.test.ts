@@ -92,7 +92,13 @@ function snapshot(store: MemStore): unknown {
 interface Plan {
   navs: bigint[];
   swapIns: { owner: string; nhash: bigint; shares: bigint }[];
-  requests: { id: string; owner: string; shares: bigint; expedite: boolean; terminal: "none" | "matured" | "refunded" }[];
+  requests: {
+    id: string;
+    owner: string;
+    shares: bigint;
+    expedite: boolean;
+    terminal: "none" | "matured" | "refunded";
+  }[];
   payments: { valoper: string; payer: string; paymentType: "commission" | "tip"; amount: bigint }[];
   splitFraction: number;
 }
@@ -109,17 +115,55 @@ function build(plan: Plan): DomainEvent[] {
   for (const price of plan.navs) evs.push({ kind: "nav", priceNhash: price, ...at() });
   for (const s of plan.swapIns) {
     const ctx = at();
-    evs.push({ kind: "swap_in", owner: s.owner, nhashIn: s.nhash, sharesReceived: s.shares, txhash: `tx${ctx.height}`, msgIndex: 0, ...ctx });
+    evs.push({
+      kind: "swap_in",
+      owner: s.owner,
+      nhashIn: s.nhash,
+      sharesReceived: s.shares,
+      txhash: `tx${ctx.height}`,
+      msgIndex: 0,
+      ...ctx,
+    });
   }
   for (const r of plan.requests) {
     const reqCtx = at();
-    evs.push({ kind: "swap_out_requested", owner: r.owner, requestId: r.id, shares: r.shares, redeemDenom: "nhash", txhash: `tx${reqCtx.height}`, msgIndex: 0, ...reqCtx });
+    evs.push({
+      kind: "swap_out_requested",
+      owner: r.owner,
+      requestId: r.id,
+      shares: r.shares,
+      redeemDenom: "nhash",
+      txhash: `tx${reqCtx.height}`,
+      msgIndex: 0,
+      ...reqCtx,
+    });
     if (r.expedite && r.terminal !== "refunded") {
       const exCtx = at();
-      evs.push({ kind: "expedited", requestId: r.id, txhash: `tx${exCtx.height}`, msgIndex: 0, ...exCtx });
+      evs.push({
+        kind: "expedited",
+        requestId: r.id,
+        txhash: `tx${exCtx.height}`,
+        msgIndex: 0,
+        ...exCtx,
+      });
     }
-    if (r.terminal === "matured") evs.push({ kind: "swap_out_completed", owner: r.owner, requestId: r.id, assetsNhash: r.shares, ...at() });
-    if (r.terminal === "refunded") evs.push({ kind: "swap_out_refunded", owner: r.owner, requestId: r.id, shares: r.shares, reason: "insufficient_funds", ...at() });
+    if (r.terminal === "matured")
+      evs.push({
+        kind: "swap_out_completed",
+        owner: r.owner,
+        requestId: r.id,
+        assetsNhash: r.shares,
+        ...at(),
+      });
+    if (r.terminal === "refunded")
+      evs.push({
+        kind: "swap_out_refunded",
+        owner: r.owner,
+        requestId: r.id,
+        shares: r.shares,
+        reason: "insufficient_funds",
+        ...at(),
+      });
   }
   for (const p of plan.payments) {
     const ctx = at();
@@ -142,7 +186,11 @@ const bigintArb = fc.bigInt({ min: 0n, max: 10n ** 18n });
 const planArb: fc.Arbitrary<Plan> = fc.record({
   navs: fc.array(fc.bigInt({ min: 1n, max: 10n ** 18n }), { maxLength: 5 }),
   swapIns: fc.array(
-    fc.record({ owner: fc.constantFrom("tp1a", "tp1b", "tp1c"), nhash: bigintArb, shares: bigintArb }),
+    fc.record({
+      owner: fc.constantFrom("tp1a", "tp1b", "tp1c"),
+      nhash: bigintArb,
+      shares: bigintArb,
+    }),
     { maxLength: 5 },
   ),
   requests: fc.uniqueArray(
@@ -151,7 +199,9 @@ const planArb: fc.Arbitrary<Plan> = fc.record({
       owner: fc.constantFrom("tp1a", "tp1b", "tp1c"),
       shares: fc.bigInt({ min: 1n, max: 10n ** 12n }),
       expedite: fc.boolean(),
-      terminal: fc.constantFrom("none", "matured", "refunded") as fc.Arbitrary<"none" | "matured" | "refunded">,
+      terminal: fc.constantFrom("none", "matured", "refunded") as fc.Arbitrary<
+        "none" | "matured" | "refunded"
+      >,
     }),
     { selector: (r) => r.id, maxLength: 10 },
   ),

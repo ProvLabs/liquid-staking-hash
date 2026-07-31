@@ -1,4 +1,4 @@
-// Internal alert-facts surface (M6.2, `internal:notifier` scope; app-spec
+// Internal alert-facts surface (`internal:notifier` scope; app-spec
 // §9.4). Proves the three notifier reads over the in-memory fake — through the
 // SAME derive.ts mappers the Prisma reader uses — for shape, cursor windowing,
 // honest-empty, and the arrears active-registry join. The auth matrix
@@ -20,27 +20,118 @@ const facts: FakeFacts = {
   reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n },
   redemptions: [
     // lastHeight spread across the cursor boundary so windowing is observable.
-    { requestId: "req-1", owner: OWNER_A, shares: 500n, status: "matured", enqueuedAt: new Date("2026-05-01T00:00:00Z"), expeditedAt: null, maturedAt: new Date("2026-05-20T00:00:00Z"), refundedAt: null, lastHeight: 100n, lastTxhash: "AA" },
-    { requestId: "req-2", owner: OWNER_B, shares: 200n, status: "expedited", enqueuedAt: new Date("2026-05-02T00:00:00Z"), expeditedAt: new Date("2026-05-10T00:00:00Z"), maturedAt: null, refundedAt: null, lastHeight: 200n, lastTxhash: "BB" },
-    { requestId: "req-3", owner: OWNER_A, shares: 300n, status: "refunded", enqueuedAt: new Date("2026-05-03T00:00:00Z"), expeditedAt: null, maturedAt: null, refundedAt: new Date("2026-06-01T00:00:00Z"), lastHeight: 300n, lastTxhash: "CC" },
+    {
+      requestId: "req-1",
+      owner: OWNER_A,
+      shares: 500n,
+      status: "matured",
+      enqueuedAt: new Date("2026-05-01T00:00:00Z"),
+      expeditedAt: null,
+      maturedAt: new Date("2026-05-20T00:00:00Z"),
+      refundedAt: null,
+      lastHeight: 100n,
+      lastTxhash: "AA",
+    },
+    {
+      requestId: "req-2",
+      owner: OWNER_B,
+      shares: 200n,
+      status: "expedited",
+      enqueuedAt: new Date("2026-05-02T00:00:00Z"),
+      expeditedAt: new Date("2026-05-10T00:00:00Z"),
+      maturedAt: null,
+      refundedAt: null,
+      lastHeight: 200n,
+      lastTxhash: "BB",
+    },
+    {
+      requestId: "req-3",
+      owner: OWNER_A,
+      shares: 300n,
+      status: "refunded",
+      enqueuedAt: new Date("2026-05-03T00:00:00Z"),
+      expeditedAt: null,
+      maturedAt: null,
+      refundedAt: new Date("2026-06-01T00:00:00Z"),
+      lastHeight: 300n,
+      lastTxhash: "CC",
+    },
   ],
   alertIncidents: [
-    { id: 1n, kind: "vault_paused", severity: "critical", dedupeKey: "vault:1", openedAt: new Date("2026-06-01T00:00:00Z"), openedHeight: 150n },
-    { id: 2n, kind: "jail_report", severity: "warning", dedupeKey: "jail:pbvaloper1aaa", openedAt: new Date("2026-06-02T00:00:00Z"), openedHeight: 260n },
-    { id: 3n, kind: "reconciler_divergence", severity: "critical", dedupeKey: "recon:nav", openedAt: new Date("2026-06-03T00:00:00Z"), openedHeight: null },
+    {
+      id: 1n,
+      kind: "vault_paused",
+      severity: "critical",
+      dedupeKey: "vault:1",
+      openedAt: new Date("2026-06-01T00:00:00Z"),
+      openedHeight: 150n,
+    },
+    {
+      id: 2n,
+      kind: "jail_report",
+      severity: "warning",
+      dedupeKey: "jail:pbvaloper1aaa",
+      openedAt: new Date("2026-06-02T00:00:00Z"),
+      openedHeight: 260n,
+    },
+    {
+      id: 3n,
+      kind: "reconciler_divergence",
+      severity: "critical",
+      dedupeKey: "recon:nav",
+      openedAt: new Date("2026-06-03T00:00:00Z"),
+      openedHeight: null,
+    },
   ],
   registry: [
     { valoper: "pbvaloper1aaa", moniker: "alpha", unregisteredAt: null, operator: "pb1opalpha" },
     { valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null, operator: "pb1opbravo" },
-    // charlie is UNREGISTERED — its arrears must never surface (plan §2.3).
-    { valoper: "pbvaloper1ccc", moniker: "charlie", unregisteredAt: new Date("2026-05-01T00:00:00Z"), operator: "pb1opcharlie" },
+    // charlie is UNREGISTERED — its arrears must never surface.
+    {
+      valoper: "pbvaloper1ccc",
+      moniker: "charlie",
+      unregisteredAt: new Date("2026-05-01T00:00:00Z"),
+      operator: "pb1opcharlie",
+    },
   ],
   validatorEpochs: [
     // Latest epoch is 12. alpha owes; bravo is square; charlie owes but is unregistered.
-    { valoper: "pbvaloper1aaa", epochIndex: 11n, uptimeBps: 9000, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 999n },
-    { valoper: "pbvaloper1aaa", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 7n },
-    { valoper: "pbvaloper1bbb", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 0n },
-    { valoper: "pbvaloper1ccc", epochIndex: 12n, uptimeBps: 9990, eligible: true, failingReasons: [], programDelegation: 1n, commissionDue: 42n },
+    {
+      valoper: "pbvaloper1aaa",
+      epochIndex: 11n,
+      uptimeBps: 9000,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 999n,
+    },
+    {
+      valoper: "pbvaloper1aaa",
+      epochIndex: 12n,
+      uptimeBps: 9990,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 7n,
+    },
+    {
+      valoper: "pbvaloper1bbb",
+      epochIndex: 12n,
+      uptimeBps: 9990,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 0n,
+    },
+    {
+      valoper: "pbvaloper1ccc",
+      epochIndex: 12n,
+      uptimeBps: 9990,
+      eligible: true,
+      failingReasons: [],
+      programDelegation: 1n,
+      commissionDue: 42n,
+    },
   ],
 };
 
@@ -48,7 +139,11 @@ function server(): Promise<RunningServer> {
   return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(facts));
 }
 
-async function getData<T>(s: RunningServer, path: string, headers = NOTIFIER): Promise<{ status: number; data: T }> {
+async function getData<T>(
+  s: RunningServer,
+  path: string,
+  headers = NOTIFIER,
+): Promise<{ status: number; data: T }> {
   const res = await fetch(`${s.baseUrl}${path}`, { headers });
   const body = (await res.json()) as { data: T };
   return { status: res.status, data: body.data };
@@ -75,7 +170,7 @@ describe("internal alert-facts: redemptions", () => {
         refunded_at: null,
         last_height: 100,
       });
-      // Payload minimalism: no amount-bearing key leaks (plan §2.1).
+      // Payload minimalism: no amount-bearing key leaks.
       for (const row of data) {
         for (const key of Object.keys(row)) {
           expect(key).not.toMatch(/shares|amount|nhash/i);
@@ -91,7 +186,7 @@ describe("internal alert-facts: redemptions", () => {
     try {
       // Empty after_id: the boundary height is INCLUDED (tuple (100, id) >
       // (100, "")) — a height-only cursor re-scans its boundary and the
-      // notifier's unique constraint absorbs it (plan §2.4).
+      // notifier's unique constraint absorbs it.
       const { data } = await getData<Array<{ request_id: string }>>(
         s,
         `${API_BASE}/internal/alert-facts/redemptions?since_height=100`,
@@ -154,7 +249,13 @@ describe("internal alert-facts: redemptions", () => {
   it("rejects out-of-bounds query params with 400 (bounded at entry)", async () => {
     const s = await server();
     try {
-      for (const qs of ["?limit=0", "?limit=501", "?since_height=-1", "?limit=abc", `?after_id=${"x".repeat(129)}`]) {
+      for (const qs of [
+        "?limit=0",
+        "?limit=501",
+        "?since_height=-1",
+        "?limit=abc",
+        `?after_id=${"x".repeat(129)}`,
+      ]) {
         const res = await fetch(`${s.baseUrl}${API_BASE}/internal/alert-facts/redemptions${qs}`, {
           headers: NOTIFIER,
         });
@@ -185,7 +286,7 @@ describe("internal alert-facts: incidents", () => {
       });
       // Height-less incident serves null, never a fabricated 0.
       expect(data[2]!.opened_height).toBeNull();
-      // No `payload` field crosses the boundary (plan §2.3).
+      // No `payload` field crosses the boundary.
       for (const row of data) expect("payload" in row).toBe(false);
     } finally {
       await s.close();
@@ -215,7 +316,7 @@ describe("internal alert-facts: arrears", () => {
         `${API_BASE}/internal/alert-facts/arrears`,
       );
       // Only alpha (epoch 12, due 7, active). bravo is square (due 0); charlie
-      // owes but is UNREGISTERED → excluded (plan §2.3).
+      // owes but is UNREGISTERED → excluded.
       expect(data).toEqual([
         { valoper: "pbvaloper1aaa", operator: "pb1opalpha", epoch_index: 12, commission_due: "7" },
       ]);

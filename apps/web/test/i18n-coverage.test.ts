@@ -1,4 +1,4 @@
-// i18n coverage (plan PR 1.3; placeholder gate added after the
+// i18n coverage (placeholder gate added after the
 // "exit.native-typical-withheld" {days} regression): every locale catalog
 // carries exactly the reference (`en`) key set, every `t(locale, "key")` call
 // site in app code references a defined key, and every message's
@@ -161,7 +161,10 @@ function resolveKeys(expr: string, allKeys: readonly string[]): string[] | null 
     const body = template[1]!;
     if (!body.includes("${")) return [body];
     const pattern = new RegExp(
-      `^${body.split(/\$\{[^}]*\}/).map(escapeRegExp).join("[a-z0-9-]+")}$`,
+      `^${body
+        .split(/\$\{[^}]*\}/)
+        .map(escapeRegExp)
+        .join("[a-z0-9-]+")}$`,
     );
     return allKeys.filter((k) => pattern.test(k));
   }
@@ -256,7 +259,7 @@ function scanApp(): Scan {
 // hand-verified to supply its params.
 //
 // The six below are the valoper-bearing program-action summaries in
-// `app/governance/decode.ts` (M7.2). They reach t() through
+// `app/governance/decode.ts`. They reach t() through
 // `VARIANT_SUMMARY_KEYS`, which exists so the summary set is TOTAL over the
 // variant vocabulary `app/tx/build.ts` exports — that totality is itself a
 // gating property (invariant 3), so the table is not replaceable by literal
@@ -268,7 +271,7 @@ function scanApp(): Scan {
 // output of all six against golden strings, so an unfilled placeholder here
 // fails that suite rather than reaching a user.
 //
-// `governance.msg-update-config` (M7.4) joins for a stronger reason than the
+// `governance.msg-update-config` joins for a stronger reason than the
 // six above: `templateSummaryKey` in `app/governance/templates.ts` returns the
 // key AND its params as ONE value, so a caller cannot take the key without the
 // params — the pairing is enforced by the return type rather than by review.

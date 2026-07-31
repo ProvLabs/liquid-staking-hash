@@ -1,4 +1,4 @@
-// e2e-live: one full §10.2 lifecycle pass on devnet (plan 5.2 §2.4) —
+// e2e-live: one full §10.2 lifecycle pass on devnet —
 // preflight → simulate → build → sign (test process) → guarded relay →
 // track to inclusion → indexer fast-poll. A REAL fund-moving swap-in of a
 // tiny amount from the throwaway devnet account; flow-level drill specs

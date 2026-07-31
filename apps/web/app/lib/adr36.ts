@@ -1,5 +1,5 @@
 // ADR-36 (Cosmos arbitrary-data signing) — the sign-doc construction shared
-// by BOTH sides of the session login (app-spec §3 decision 5, plan 5.1 §3):
+// by BOTH sides of the session login (app-spec §3 decision 5):
 // the wallet layer builds this exact document and hands it to the vendor
 // adapter's `signArbitrary`; the server rebuilds the same document to verify
 // the signature. One construction site, two callers — drift is impossible.
@@ -63,7 +63,7 @@ export function canonicalJson(value: unknown): string {
 export function utf8ToBase64(text: string): string {
   if (typeof Buffer !== "undefined") return Buffer.from(text, "utf8").toString("base64");
   // Loop, not spread: spreading a typed array into String.fromCharCode hits
-  // engine argument-count limits on large inputs (PR #17 review) — this
+  // engine argument-count limits on large inputs — this
   // utility must be safe regardless of payload size.
   const bytes = new TextEncoder().encode(text);
   let binary = "";

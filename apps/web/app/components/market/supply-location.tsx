@@ -2,7 +2,7 @@ import { t, type Locale } from "~/i18n";
 import { formatAgeSince } from "~/learn/duration";
 import type { BridgedRowView } from "~/market/types";
 
-// §8.5 supply location (PR 3.2's amendment): LOCAL supply is a live chain
+// §8.5 supply location: LOCAL supply is a live chain
 // read composed here by the web tier; the API serves only the bridged side.
 // Bridged rows carry chain + sample time; the empty state is the honest v1
 // truth, not a placeholder.

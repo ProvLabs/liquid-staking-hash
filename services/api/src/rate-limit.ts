@@ -4,7 +4,7 @@
 //
 // Scaffold scope: process-local counting is correct for a single instance and
 // for CI. A shared store (e.g. Redis) for multi-instance deployments is a
-// deployment-time concern (PR 8.2 load-test + tuning), not a scaffold decision;
+// deployment-time concern (load-test + tuning), not a scaffold decision;
 // the interface here does not change when that lands.
 
 /** Injectable clock so tests advance time deterministically (no wall-clock). */
@@ -50,7 +50,9 @@ export class RateLimiter {
       throw new RangeError(`rate limit max must be a positive integer, got ${options.max}`);
     }
     if (!Number.isInteger(options.windowMs) || options.windowMs < 1) {
-      throw new RangeError(`rate limit windowMs must be a positive integer, got ${options.windowMs}`);
+      throw new RangeError(
+        `rate limit windowMs must be a positive integer, got ${options.windowMs}`,
+      );
     }
     this.#max = options.max;
     this.#windowMs = options.windowMs;

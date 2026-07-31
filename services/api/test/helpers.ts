@@ -27,7 +27,11 @@ const DEFAULT_CONFIG: ApiConfig = {
  * `reader` injects a populated in-memory fake (test/reader-fake.ts); absent,
  * the server runs on the honest empty reader — the dataless scaffold state.
  */
-export async function startServer(overrides: Partial<ApiConfig> = {}, now?: () => Date, reader?: IndexedReader): Promise<RunningServer> {
+export async function startServer(
+  overrides: Partial<ApiConfig> = {},
+  now?: () => Date,
+  reader?: IndexedReader,
+): Promise<RunningServer> {
   const config: ApiConfig = { ...DEFAULT_CONFIG, ...overrides };
   const { server } = createApiServer(config, now, reader);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -35,6 +39,8 @@ export async function startServer(overrides: Partial<ApiConfig> = {}, now?: () =
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     close: () =>
-      new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
+      new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      ),
   };
 }

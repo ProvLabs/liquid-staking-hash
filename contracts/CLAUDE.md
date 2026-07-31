@@ -24,6 +24,36 @@ Provenance.
   bootstrap load it from `artifacts/`. `cargo schema` regenerates `schema/`.
 - `cargo test --lib` needs `GOTOOLCHAIN=go1.24.5` on Go >= 1.26 hosts
   (provwasm-test-tube's bundled Go deps do not build on 1.26).
+- The toolchain is pinned by the **repository-root** `rust-toolchain.toml`, and
+  it must stay there. `scripts/build-artifact.sh` bind-mounts this directory
+  into the cosmwasm/optimizer image, which builds the wasm from its own
+  toolchain; a `rust-toolchain.toml` inside `contracts/` is visible to rustup in
+  that container, which then switches away from the image's toolchain to one
+  carrying no `wasm32-unknown-unknown` target and the build fails with "can't
+  find crate for `std`".
+
+## CI gates
+
+`.github/workflows/contracts-ci.yaml`. All fail the build on violation; each is
+runnable locally with the same command.
+
+- **`cargo fmt --check`** and **`cargo clippy --all-targets --locked -D
+  warnings`**. The crate is warning-clean, so a new warning is a new defect.
+- **Committed schema is current** — `cargo run --bin schema` then
+  `git diff --exit-code -- schema`. Enforces the `SECURITY.md` audit-readiness
+  rule that the reviewed interface is the shipped one. It also protects a
+  consumer: `apps/web/test/governance-templates.test.ts` asserts template
+  totality *against the committed JSON*, so a stale schema would not fail that
+  test — it would make it assert against the wrong interface.
+- **`cargo test --locked`** over a freshly built artifact, so the test-tube
+  suite runs against the wasm the current source produces.
+- **Bounded simulation soak** — fixed seed, 500 scenarios, halts on first
+  failure, and uploads `sim-failures.log`. Reproduce a CI failure with the
+  scenario seed it prints: `cargo run --release --bin simulate -- --seed <seed>
+  --scenarios 1`.
+
+Not gated here: the live devnet drills under `drills/`, which need the
+pre-release vault node image.
 
 ## Bootstrap requirements (contract deployment)
 

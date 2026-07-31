@@ -9,10 +9,7 @@ export type FreshnessDisplay =
   | { kind: "indexed"; height: number; ageSeconds: number };
 
 /** Classify freshness meta for the footer. `nowMs` is injectable for tests. */
-export function describeFreshness(
-  meta: FreshnessMeta | null,
-  nowMs: number,
-): FreshnessDisplay {
+export function describeFreshness(meta: FreshnessMeta | null, nowMs: number): FreshnessDisplay {
   if (meta === null || meta.indexed_height === null) return { kind: "na" };
   const generated = Date.parse(meta.generated_at);
   const ageSeconds = Number.isFinite(generated)

@@ -1,7 +1,7 @@
 import type { OperatorStandingVM } from "~/validators/mine-types";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
-// §8.6 commission standing (plan §2.3): THREE states, not two — in arrears,
+// §8.6 commission standing: THREE states, not two — in arrears,
 // current, and PREPAID. The third exists because program commission is
 // cumulative and an overpayment carries forward indefinitely
 // (`contracts/src/validators.rs::epoch_rollover` never resets `commission_paid`),
@@ -86,9 +86,7 @@ export function CommissionBanner({
       <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-3">
         <div className="flex justify-between gap-2 sm:flex-col sm:justify-start">
           <dt className="text-muted-foreground">{t(locale, "operator.commission-due-label")}</dt>
-          <dd className="tabular-nums">
-            {standing.commissionDueHash ?? t(locale, "operator.na")}
-          </dd>
+          <dd className="tabular-nums">{standing.commissionDueHash ?? t(locale, "operator.na")}</dd>
         </div>
         <div className="flex justify-between gap-2 sm:flex-col sm:justify-start">
           <dt className="text-muted-foreground">{t(locale, "operator.commission-paid-label")}</dt>

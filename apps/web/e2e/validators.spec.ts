@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { LIVE_DOWN_ORIGIN } from "../playwright.config";
 
-// Validators public page (plan 4.3, app-spec §8.6) against the fixture-backed
+// Validators public page (app-spec §8.6) against the fixture-backed
 // server: the consumer table with the corpus values, honest cold-start set
 // history, environment-locked verify links, and per-surface degradation.
 
@@ -16,9 +16,7 @@ test("renders the set table with the corpus validator", async ({ page }) => {
   await expect(table).toContainText("315.35"); // program delegation, HASH
 });
 
-test("set health shows the live eligible count and the indexed aggregates", async ({
-  page,
-}) => {
+test("set health shows the live eligible count and the indexed aggregates", async ({ page }) => {
   await page.goto("/validators");
   const health = page.getByLabel("Set health");
   await expect(health).toContainText("Eligible now");

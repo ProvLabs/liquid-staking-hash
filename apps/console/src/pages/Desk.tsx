@@ -22,7 +22,9 @@ export function Desk() {
     return (
       <div className="stack">
         <h1 className="page-title">Validator Desk</h1>
-        <div className="callout callout--info">Connect a wallet to manage your validator. This surface is operator-scoped.</div>
+        <div className="callout callout--info">
+          Connect a wallet to manage your validator. This surface is operator-scoped.
+        </div>
       </div>
     );
   }
@@ -45,23 +47,42 @@ export function Desk() {
                 <div className="row" style={{ alignItems: "flex-end", gap: 12 }}>
                   <label className="field" style={{ flex: 1 }}>
                     valoper address
-                    <input className="input" placeholder="pbvaloper1…" value={valoper} onChange={(e) => setValoper(e.target.value)} />
+                    <input
+                      className="input"
+                      placeholder="pbvaloper1…"
+                      value={valoper}
+                      onChange={(e) => setValoper(e.target.value)}
+                    />
                   </label>
                   <button
+                    type="button"
                     className="btn btn--primary"
                     disabled={!valoper.startsWith("pbvaloper1")}
-                    onClick={() => tx.submit({ title: "Register participation", message: msg.register(valoper), onDone: () => refresh(["validators"]) })}
+                    onClick={() =>
+                      tx.submit({
+                        title: "Register participation",
+                        message: msg.register(valoper),
+                        onDone: () => refresh(["validators"]),
+                      })
+                    }
                   >
                     Register participation
                   </button>
                 </div>
                 <p className="muted-3" style={{ fontSize: 12, marginTop: 8 }}>
-                  The caller must be the valoper's operator (same key payload); the validator must exist on chain.
+                  The caller must be the valoper's operator (same key payload); the validator must
+                  exist on chain.
                 </p>
               </Panel>
             );
           }
-          return <>{mine.map((v) => <OwnValidator key={v.valoper} v={v} threshold={threshold} />)}</>;
+          return (
+            <>
+              {mine.map((v) => (
+                <OwnValidator key={v.valoper} v={v} threshold={threshold} />
+              ))}
+            </>
+          );
         }}
       </Cell>
     </div>
@@ -71,13 +92,23 @@ export function Desk() {
     const due = toBig(v.commission_due) - toBig(v.commission_paid);
     const reasons: { label: string; ok: boolean }[] = [
       { label: "bonded, not jailed", ok: !v.jailed && !v.tombstoned },
-      { label: `uptime ≥ ${(threshold / 100).toFixed(0)}%`, ok: v.uptime_bps !== null && v.uptime_bps >= threshold },
+      {
+        label: `uptime ≥ ${(threshold / 100).toFixed(0)}%`,
+        ok: v.uptime_bps !== null && v.uptime_bps >= threshold,
+      },
       { label: "commission current", ok: !v.in_arrears },
     ];
     return (
       <div className="stack" style={{ gap: 16 }}>
         {/* Rank 1: itemized eligibility */}
-        <Panel title="Eligibility" actions={<Pill tone={v.eligible ? "good" : "serious"}>{v.eligible ? "eligible" : "ineligible"}</Pill>}>
+        <Panel
+          title="Eligibility"
+          actions={
+            <Pill tone={v.eligible ? "good" : "serious"}>
+              {v.eligible ? "eligible" : "ineligible"}
+            </Pill>
+          }
+        >
           <div className="row" style={{ gap: 12 }}>
             {reasons.map((r) => (
               <Pill key={r.label} tone={r.ok ? "good" : "serious"}>
@@ -86,7 +117,10 @@ export function Desk() {
             ))}
           </div>
           <div className="row" style={{ gap: 24, marginTop: 12 }}>
-            <span className="muted">uptime {v.uptime_bps === null ? "no data" : pct(v.uptime_bps)} (threshold {pct(threshold)})</span>
+            <span className="muted">
+              uptime {v.uptime_bps === null ? "no data" : pct(v.uptime_bps)} (threshold{" "}
+              {pct(threshold)})
+            </span>
             <span className="muted">headroom {hash(v.headroom)} HASH</span>
             <span className="muted">tip this epoch {hash(v.tip_epoch)} HASH</span>
           </div>
@@ -101,10 +135,12 @@ export function Desk() {
           </div>
           {v.in_arrears && (
             <div className="callout callout--serious" style={{ marginTop: 12 }}>
-              In arrears: pay {hash(due.toString())} HASH to clear. Ineligible until paid (one-epoch grace exceeded).
+              In arrears: pay {hash(due.toString())} HASH to clear. Ineligible until paid (one-epoch
+              grace exceeded).
             </div>
           )}
           <button
+            type="button"
             className="btn btn--secondary"
             style={{ marginTop: 12 }}
             onClick={() =>
@@ -113,7 +149,8 @@ export function Desk() {
                 message: msg.payCommission(v.valoper),
                 funds: [{ denom: "nhash", amount: (due > 0n ? due : 0n).toString() }],
                 tier: "warning",
-                consequence: "Non-refundable. Overpayment prepays future accrual. Sweeps into vault principal at the next epoch.",
+                consequence:
+                  "Non-refundable. Overpayment prepays future accrual. Sweeps into vault principal at the next epoch.",
                 onDone: () => refresh(["validators"]),
               })
             }
@@ -124,8 +161,12 @@ export function Desk() {
 
         {/* Rank 3: TIP */}
         <Panel title="TIP &amp; priority">
-          <p className="muted">Current-epoch TIP {hash(v.tip_epoch)} HASH. TIP is the primary priority key and resets every epoch.</p>
+          <p className="muted">
+            Current-epoch TIP {hash(v.tip_epoch)} HASH. TIP is the primary priority key and resets
+            every epoch.
+          </p>
           <button
+            type="button"
             className="btn btn--secondary"
             style={{ marginTop: 12 }}
             onClick={() =>
@@ -146,13 +187,15 @@ export function Desk() {
         {/* Rank 4: unregister */}
         <Panel title="Participation">
           <button
+            type="button"
             className="btn btn--warning"
             onClick={() =>
               tx.submit({
                 title: "Unregister participation",
                 message: msg.unregister(v.valoper),
                 tier: "warning",
-                consequence: "Program stake is redelegated away at the next epoch; the enrollment record is removed.",
+                consequence:
+                  "Program stake is redelegated away at the next epoch; the enrollment record is removed.",
                 onDone: () => refresh(["validators"]),
               })
             }

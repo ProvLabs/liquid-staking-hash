@@ -38,12 +38,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
   const [chrome, session] = await Promise.all([
     loadChromeState(config),
-    // PR 5.1: the session context is the server truth the wallet slot renders
+    // The session context is the server truth the wallet slot renders
     // from. Only the public address crosses (never the session id — the
     // cookie is HttpOnly and the id never appears in loader data).
     getSessionContext(config, request),
   ]);
-  // M6.2: the bell's unread badge — only the integer crosses to the client
+  // The bell's unread badge — only the integer crosses to the client
   // (never the notifications themselves; the popover fetches those on open).
   // A store failure degrades to no badge (null), never a 500 on every page:
   // the badge is a convenience read, not part of the shell's contract.

@@ -79,25 +79,25 @@ export function ProofStrip({
         />
         <Tile
           label={t(locale, "learn.stat-participants")}
-          value={metrics?.participant_count !== null && metrics?.participant_count !== undefined ? String(metrics.participant_count) : na}
-          caption={t(locale, "learn.stat-indexed-caption")}
-          verify={verify}
-        />
-        <Tile
-          label={t(locale, "learn.stat-age")}
           value={
-            metrics?.program_started_at
-              ? formatAgeSince(metrics.program_started_at, nowMs)
+            metrics?.participant_count !== null && metrics?.participant_count !== undefined
+              ? String(metrics.participant_count)
               : na
           }
           caption={t(locale, "learn.stat-indexed-caption")}
           verify={verify}
         />
         <Tile
-          label={t(locale, "learn.stat-validators")}
+          label={t(locale, "learn.stat-age")}
           value={
-            data.live.eligibleValidators !== null ? String(data.live.eligibleValidators) : na
+            metrics?.program_started_at ? formatAgeSince(metrics.program_started_at, nowMs) : na
           }
+          caption={t(locale, "learn.stat-indexed-caption")}
+          verify={verify}
+        />
+        <Tile
+          label={t(locale, "learn.stat-validators")}
+          value={data.live.eligibleValidators !== null ? String(data.live.eligibleValidators) : na}
           verify={<VerifyLink locale={locale} target="validators" />}
         />
       </div>

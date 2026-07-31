@@ -43,7 +43,11 @@ export interface CrankSample {
 
 /** The reads a sample needs: pinned smart query, pinned LCD GET, block time. */
 export interface SamplerSource {
-  smartAtHeight(contract: string, query: Record<string, unknown>, height: bigint | number): Promise<unknown>;
+  smartAtHeight(
+    contract: string,
+    query: Record<string, unknown>,
+    height: bigint | number,
+  ): Promise<unknown>;
   getAtHeight(
     path: string,
     params: Record<string, string | number | bigint | undefined>,
@@ -80,13 +84,21 @@ export async function sampleCrank(
 ): Promise<CrankSample | null> {
   const H = crank.height;
 
-  const epochIndex = epochIndexOf(await src.smartAtHeight(contractAddress, { epoch_snapshot: {} }, H));
+  const epochIndex = epochIndexOf(
+    await src.smartAtHeight(contractAddress, { epoch_snapshot: {} }, H),
+  );
   if (epochIndex === null) return null;
 
   const statuses = parseValidators(await src.smartAtHeight(contractAddress, { validators: {} }, H));
-  const reports = parseJailReports(await src.smartAtHeight(contractAddress, { jail_reports: {} }, H));
+  const reports = parseJailReports(
+    await src.smartAtHeight(contractAddress, { jail_reports: {} }, H),
+  );
   const monikers = parseMonikers(
-    await src.getAtHeight("cosmos/staking/v1beta1/validators", { "pagination.limit": STAKING_PAGE_LIMIT }, H),
+    await src.getAtHeight(
+      "cosmos/staking/v1beta1/validators",
+      { "pagination.limit": STAKING_PAGE_LIMIT },
+      H,
+    ),
   );
   const delegations = parseProgramDelegations(
     await src.getAtHeight(

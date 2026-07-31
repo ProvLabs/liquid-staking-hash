@@ -5,10 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const FIXTURES_DIR = join(
-  fileURLToPath(new URL(".", import.meta.url)),
-  "../../fixtures/fixtures",
-);
+const FIXTURES_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "../../fixtures/fixtures");
 
 export function fixture(relPath: string): unknown {
   return JSON.parse(readFileSync(join(FIXTURES_DIR, relPath), "utf8"));

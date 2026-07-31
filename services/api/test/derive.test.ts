@@ -1,5 +1,5 @@
 // Unit: the pure derivation layer (indexed facts → frozen API shapes).
-// Covers the review resolutions of docs/plans/2026-07-22-app-m3-query-api.md:
+// Covers the recorded derivation resolutions:
 // [R1] NAV via the shared scale-then-floor helper (corpus golden value),
 // [R7a] loud safe-integer guards on every height/index crossing into JSON,
 // and the honest-null rules (empty-vault NAV, unsampled validators,
@@ -74,13 +74,19 @@ describe("deriveHeads", () => {
 describe("deriveMetrics", () => {
   it("is all-null until a worker stream has committed", () => {
     expect(
-      deriveMetrics({ indexed: false, participantCount: 7, firstActivityAt: new Date(), epochCount: 3 }),
+      deriveMetrics({
+        indexed: false,
+        participantCount: 7,
+        firstActivityAt: new Date(),
+        epochCount: 3,
+      }),
     ).toEqual({ participant_count: null, program_started_at: null, epoch_count: null });
   });
 
   it("reports honest zeros once indexed (empty ≠ unknown)", () => {
-    expect(deriveMetrics({ indexed: true, participantCount: 0, firstActivityAt: null, epochCount: 0 }))
-      .toEqual({ participant_count: 0, program_started_at: null, epoch_count: 0 });
+    expect(
+      deriveMetrics({ indexed: true, participantCount: 0, firstActivityAt: null, epochCount: 0 }),
+    ).toEqual({ participant_count: 0, program_started_at: null, epoch_count: 0 });
   });
 });
 
@@ -113,10 +119,28 @@ describe("toIncidentRow", () => {
   it("maps heights and closure honestly", () => {
     const opened = new Date("2026-07-01T00:00:00Z");
     expect(
-      toIncidentRow({ kind: "indexer_lag", severity: "warning", openedAt: opened, closedAt: null, openedHeight: 900n }),
-    ).toEqual({ kind: "indexer_lag", severity: "warning", opened_at: opened.toISOString(), closed_at: null, height: 900 });
+      toIncidentRow({
+        kind: "indexer_lag",
+        severity: "warning",
+        openedAt: opened,
+        closedAt: null,
+        openedHeight: 900n,
+      }),
+    ).toEqual({
+      kind: "indexer_lag",
+      severity: "warning",
+      opened_at: opened.toISOString(),
+      closed_at: null,
+      height: 900,
+    });
     expect(
-      toIncidentRow({ kind: "contract_halted", severity: "critical", openedAt: opened, closedAt: opened, openedHeight: null }).height,
+      toIncidentRow({
+        kind: "contract_halted",
+        severity: "critical",
+        openedAt: opened,
+        closedAt: opened,
+        openedHeight: null,
+      }).height,
     ).toBeNull();
   });
 });
@@ -159,8 +183,14 @@ describe("validators derivation", () => {
   it("aggregates set health over active validators only", () => {
     const rows = [
       toValidatorRow(reg, epoch), // active, eligible, in arrears (due 5)
-      toValidatorRow({ valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null }, { ...epoch, valoper: "pbvaloper1bbb", eligible: false, commissionDue: 0n }),
-      toValidatorRow({ valoper: "pbvaloper1ccc", moniker: "chuck", unregisteredAt: new Date() }, { ...epoch, valoper: "pbvaloper1ccc", commissionDue: 7n }), // unregistered: excluded from active counts
+      toValidatorRow(
+        { valoper: "pbvaloper1bbb", moniker: "bravo", unregisteredAt: null },
+        { ...epoch, valoper: "pbvaloper1bbb", eligible: false, commissionDue: 0n },
+      ),
+      toValidatorRow(
+        { valoper: "pbvaloper1ccc", moniker: "chuck", unregisteredAt: new Date() },
+        { ...epoch, valoper: "pbvaloper1ccc", commissionDue: 7n },
+      ), // unregistered: excluded from active counts
     ];
     expect(deriveSetHealth(rows)).toEqual({ total: 3, active: 2, eligible: 1, in_arrears: 1 });
   });
@@ -172,7 +202,7 @@ describe("validators derivation", () => {
   });
 });
 
-describe("portfolio derivation (PR 3.3, [R2] indexed facts only)", () => {
+describe("portfolio derivation ([R2] indexed facts only)", () => {
   const active = {
     requestId: "req-1",
     owner: "pb1walletaqq",
@@ -212,10 +242,12 @@ describe("portfolio derivation (PR 3.3, [R2] indexed facts only)", () => {
   });
 });
 
-describe("market derivation (PR 3.2)", () => {
+describe("market derivation", () => {
   it("toSafeSignedInt admits negatives but rejects beyond-safe magnitudes", () => {
     expect(toSafeSignedInt(-300n, "bps")).toBe(-300);
-    expect(() => toSafeSignedInt(-(BigInt(Number.MAX_SAFE_INTEGER) + 1n), "bps")).toThrow(RangeError);
+    expect(() => toSafeSignedInt(-(BigInt(Number.MAX_SAFE_INTEGER) + 1n), "bps")).toThrow(
+      RangeError,
+    );
   });
 
   it("navPriceNhash floors tvv·10^15/shares and nulls a zero-share epoch", () => {
@@ -272,7 +304,11 @@ describe("market derivation (PR 3.2)", () => {
 describe("payout statistics (§9.5.3, §14.12)", () => {
   const DAY = 24 * 60 * 60;
 
-  function terminal(enqueuedIso: string, expedited: string | null, matured: string | null): RedemptionFacts {
+  function terminal(
+    enqueuedIso: string,
+    expedited: string | null,
+    matured: string | null,
+  ): RedemptionFacts {
     return {
       requestId: "r",
       owner: "pb1owner",
@@ -299,7 +335,9 @@ describe("payout statistics (§9.5.3, §14.12)", () => {
     ).toBe(21 * DAY);
     // expedited wins even when both are set.
     expect(
-      payoutDurationSeconds(terminal("2026-06-01T00:00:00Z", "2026-06-25T00:00:00Z", "2026-07-30T00:00:00Z")),
+      payoutDurationSeconds(
+        terminal("2026-06-01T00:00:00Z", "2026-06-25T00:00:00Z", "2026-07-30T00:00:00Z"),
+      ),
     ).toBe(24 * DAY);
     // refund-only (no payout) → null, excluded from the cohort.
     const refundOnly: RedemptionFacts = {
@@ -323,12 +361,25 @@ describe("payout statistics (§9.5.3, §14.12)", () => {
     const durations = Array.from({ length: 12 }, (_, i) => (20 + i) * DAY); // 20..31d
     const ok = derivePayoutStats(durations, 2);
     expect(ok.sample_count).toBe(12);
-    expect(ok.median_seconds).toBe(percentileSeconds([...durations].sort((a, b) => a - b), 50));
-    expect(ok.p90_seconds).toBe(percentileSeconds([...durations].sort((a, b) => a - b), 90));
+    expect(ok.median_seconds).toBe(
+      percentileSeconds(
+        [...durations].sort((a, b) => a - b),
+        50,
+      ),
+    );
+    expect(ok.p90_seconds).toBe(
+      percentileSeconds(
+        [...durations].sort((a, b) => a - b),
+        90,
+      ),
+    );
   });
 
   it("cold-start (no completed epoch) gates the stat regardless of sample size", () => {
-    const stats = derivePayoutStats(Array.from({ length: 50 }, () => 30 * DAY), 0);
+    const stats = derivePayoutStats(
+      Array.from({ length: 50 }, () => 30 * DAY),
+      0,
+    );
     expect(stats.cold_start).toBe(true);
     expect(stats.median_seconds).toBeNull();
     expect(stats.p90_seconds).toBeNull();
@@ -344,7 +395,7 @@ describe("payout statistics (§9.5.3, §14.12)", () => {
   });
 });
 
-// --- governance mappers (PR 7.1 commit C) -----------------------------------
+// --- governance mappers -----------------------------------
 
 describe("governance derive", () => {
   const facts: GovProposalFacts = {
@@ -386,7 +437,11 @@ describe("governance derive", () => {
 
   it("maps an unrecognized enum to `unspecified` instead of throwing", () => {
     // A status a later chain upgrade adds must render honestly, not 500 a page.
-    const row = toGovProposalRow({ ...facts, status: "PROPOSAL_STATUS_FUTURE", executorResult: "WAT" });
+    const row = toGovProposalRow({
+      ...facts,
+      status: "PROPOSAL_STATUS_FUTURE",
+      executorResult: "WAT",
+    });
     expect(row.status).toBe("unspecified");
     expect(row.executor_result).toBe("unspecified");
   });
@@ -404,7 +459,7 @@ describe("governance derive", () => {
     expect(row.proposers).toEqual(["tp1a", "tp1b"]);
     expect(row.proposers_truncated).toBe(false);
     // And an over-limit list is trimmed WITH a flag — silently shortening identity
-    // data leaves a consumer unable to tell it happened (PR #23 review, P2).
+    // data leaves a consumer unable to tell it happened.
     const trimmed = toGovProposalRow({
       ...facts,
       proposers: Array.from({ length: 40 }, (_, i) => `tp1p${i}`),
@@ -447,7 +502,12 @@ describe("governance derive", () => {
         percentage: "0.5",
         windows: { voting_period: "1h", min_execution_period: "0s" },
       }),
-    ).toEqual({ kind: "percentage", percentage: "0.5", voting_period: "1h", min_execution_period: "0s" });
+    ).toEqual({
+      kind: "percentage",
+      percentage: "0.5",
+      voting_period: "1h",
+      min_execution_period: "0s",
+    });
     // Tagged, with the type URL kept, so a surface can name what it cannot read.
     expect(toGovDecisionPolicy({ "@type": "/x.Future" })).toEqual({
       kind: "unknown",
@@ -472,16 +532,19 @@ describe("governance derive", () => {
   });
 
   it("flags a truncated vote list rather than shortening it silently", () => {
-    const votes: GovVoteFacts[] = Array.from({ length: MAX_GOV_VOTES_PER_PROPOSAL + 2 }, (_, i) => ({
-      proposalId: 7n,
-      voter: `tp1v${i}`,
-      option: "YES",
-      metadata: null,
-      weight: 1n,
-      submitTime: new Date("2026-07-29T00:01:00Z"),
-      height: null,
-      txhash: null,
-    }));
+    const votes: GovVoteFacts[] = Array.from(
+      { length: MAX_GOV_VOTES_PER_PROPOSAL + 2 },
+      (_, i) => ({
+        proposalId: 7n,
+        voter: `tp1v${i}`,
+        option: "YES",
+        metadata: null,
+        weight: 1n,
+        submitTime: new Date("2026-07-29T00:01:00Z"),
+        height: null,
+        txhash: null,
+      }),
+    );
     const detail = toGovProposalDetail(facts, votes);
     expect(detail.votes).toHaveLength(MAX_GOV_VOTES_PER_PROPOSAL);
     expect(detail.votes_truncated).toBe(true);

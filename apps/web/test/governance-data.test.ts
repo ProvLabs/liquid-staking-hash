@@ -1,5 +1,5 @@
-// Governance-center degradation + honesty matrix — M7.2 §4 invariants 5, 6, 7,
-// 9 and 10, and the §4b C5 plane-precedence table walked cell by cell.
+// Governance-center degradation + honesty matrix — invariants 5, 6, 7,
+// 9 and 10, and the plane-precedence table walked cell by cell.
 //
 // This is the `operator-data.test.ts` idiom applied to governance, and the same
 // reason applies twice over: this page is where a member decides how to vote. A
@@ -10,7 +10,7 @@
 // Chain reads come from the fixture corpus via MSW; API envelopes are built with
 // the same `@nvhash/api-types` producer the real service uses.
 //
-// NOTE on the corpus (M7.2 §3.4 R1): its contract admin is a PLAIN ACCOUNT, so
+// NOTE on the corpus (R1): its contract admin is a PLAIN ACCOUNT, so
 // the default MSW world has no group behind the program and the live plane
 // resolves to `not-governed`. The governed world is built explicitly by
 // `governedWorld()` below — which is also what makes the two states testably
@@ -185,7 +185,7 @@ describe("live plane: `not-governed` and `unavailable` are different answers (§
   });
 });
 
-describe("plane precedence, cell by cell (§4b C5)", () => {
+describe("plane precedence, cell by cell", () => {
   it("open + live ok → LIVE status and tally, no stale badge", async () => {
     server.use(...governedWorld(), mirrorList([proposalRow()]));
     const data = await loadGovernanceListData(config, { now: () => NOW });
@@ -195,9 +195,13 @@ describe("plane precedence, cell by cell (§4b C5)", () => {
   });
 
   it("open + live DOWN → the mirror, badged with the height it was observed at", async () => {
-    // M6.4's stale-registry P1 in this page's shape: the danger is not an empty
+    // The stale-registry hazard in this page's shape: the danger is not an empty
     // value, it is a successful-looking one.
-    server.use(...governedWorld(), liveDown(), mirrorList([proposalRow({ tally: { yes: "1", no: "0", abstain: "0", no_with_veto: "0" } })]));
+    server.use(
+      ...governedWorld(),
+      liveDown(),
+      mirrorList([proposalRow({ tally: { yes: "1", no: "0", abstain: "0", no_with_veto: "0" } })]),
+    );
     const data = await loadGovernanceListData(config, { now: () => NOW });
     const proposal = data.proposals[0]!;
     expect(proposal.plane).toBe("indexed-fallback");
@@ -209,7 +213,16 @@ describe("plane precedence, cell by cell (§4b C5)", () => {
   it("closed → the mirror is CANONICAL even when the chain is readable", async () => {
     // A successful exec prunes in its own transaction, so the happy path leaves
     // nothing on chain — the mirror is the record, not a fallback.
-    server.use(...governedWorld(), mirrorList([proposalRow({ proposal_id: "4", status: "accepted", tally: { yes: "2", no: "0", abstain: "0", no_with_veto: "0" } })]));
+    server.use(
+      ...governedWorld(),
+      mirrorList([
+        proposalRow({
+          proposal_id: "4",
+          status: "accepted",
+          tally: { yes: "2", no: "0", abstain: "0", no_with_veto: "0" },
+        }),
+      ]),
+    );
     const data = await loadGovernanceListData(config, { now: () => NOW });
     expect(data.proposals[0]!.plane).toBe("indexed");
     expect(data.proposals[0]!.tally.yes).toBe("2");
@@ -358,15 +371,19 @@ describe("votes: the live read only ever ADDS (§3.4 R6)", () => {
   });
 
   it("a live vote the mirror has not caught up to is added and LABELED", () => {
-    const merged = mergeVotes(recorded, [
-      {
-        proposalId: 8n,
-        voter: MEMBER_B,
-        option: "NO",
-        metadata: "",
-        submitTime: "2026-07-29T23:31:55.000Z",
-      },
-    ], [{ address: MEMBER_B, weight: "2", metadata: "" }]);
+    const merged = mergeVotes(
+      recorded,
+      [
+        {
+          proposalId: 8n,
+          voter: MEMBER_B,
+          option: "NO",
+          metadata: "",
+          submitTime: "2026-07-29T23:31:55.000Z",
+        },
+      ],
+      [{ address: MEMBER_B, weight: "2", metadata: "" }],
+    );
     expect(merged).toHaveLength(2);
     const live = merged.find((v) => v.voter === MEMBER_B)!;
     expect(live.liveOnly).toBe(true);
@@ -383,7 +400,7 @@ describe("votes: the live read only ever ADDS (§3.4 R6)", () => {
   });
 });
 
-describe("cardinality the chain permits, not the shapes the drill happened to walk (§4b C1)", () => {
+describe("cardinality the chain permits, not the shapes the drill happened to walk", () => {
   it("several proposers, several messages, and both truncation flags render", async () => {
     server.use(
       mirrorList([
@@ -408,7 +425,9 @@ describe("cardinality the chain permits, not the shapes the drill happened to wa
     // different lie than showing an empty one.
     server.use(
       mirrorList([], null),
-      http.get("*/api/v1/governance/policies", () => HttpResponse.json(envelope([], { source: "indexed" }))),
+      http.get("*/api/v1/governance/policies", () =>
+        HttpResponse.json(envelope([], { source: "indexed" })),
+      ),
     );
     const data = await loadGovernanceListData(config, { now: () => NOW });
     expect(data.policies).toEqual([]);
@@ -419,7 +438,9 @@ describe("cardinality the chain permits, not the shapes the drill happened to wa
 
   it("a failed mirror read is distinguishable from an empty one", async () => {
     server.use(
-      http.get("*/api/v1/governance/proposals", () => HttpResponse.json({ error: "boom" }, { status: 500 })),
+      http.get("*/api/v1/governance/proposals", () =>
+        HttpResponse.json({ error: "boom" }, { status: 500 }),
+      ),
     );
     const data = await loadGovernanceListData(config, { now: () => NOW });
     expect(data.indexedAvailable).toBe(false);
@@ -446,7 +467,9 @@ describe("cardinality the chain permits, not the shapes the drill happened to wa
 describe("the detail route (invariants 5, 7, 9)", () => {
   it("an id neither plane holds is null → the route's 404", async () => {
     server.use(
-      http.get("*/api/v1/governance/proposal", () => HttpResponse.json({ error: "not_found" }, { status: 404 })),
+      http.get("*/api/v1/governance/proposal", () =>
+        HttpResponse.json({ error: "not_found" }, { status: 404 }),
+      ),
     );
     expect(await loadGovernanceProposalData(config, "999", { now: () => NOW })).toBeNull();
   });

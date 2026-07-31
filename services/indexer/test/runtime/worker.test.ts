@@ -62,9 +62,13 @@ describe("runWorker (one guarded pass)", () => {
     const processed: Window[] = [];
     const upserted: bigint[] = [];
 
-    const tx = { indexerCheckpoint: { upsert: async (a: { create: { cursorHeight: bigint } }) => {
-      upserted.push(a.create.cursorHeight);
-    } } };
+    const tx = {
+      indexerCheckpoint: {
+        upsert: async (a: { create: { cursorHeight: bigint } }) => {
+          upserted.push(a.create.cursorHeight);
+        },
+      },
+    };
     const prisma = {
       $transaction: async (cb: (t: typeof tx) => Promise<void>) => cb(tx),
       indexerCheckpoint: { findUnique: async () => null }, // no checkpoint → startHeight

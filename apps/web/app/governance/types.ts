@@ -16,7 +16,12 @@
 //   3. "n/a" is a value. `meetsThreshold` is `boolean | null` end to end and
 //      the null never collapses to false on the way to the page.
 
-import type { FreshnessMeta, GovExecutorResult, GovProposalStatus, GovVoteOption } from "@nvhash/api-types";
+import type {
+  FreshnessMeta,
+  GovExecutorResult,
+  GovProposalStatus,
+  GovVoteOption,
+} from "@nvhash/api-types";
 
 import type { LiveProposalState } from "./actions";
 import type { DecodedMessage } from "./decode";
@@ -147,7 +152,7 @@ export interface ProposalDetailVM extends ProposalSummaryVM {
   /**
    * The LIVE plane's own view of this proposal, when a live read succeeded.
    *
-   * SEPARATE FROM `plane` on purpose (M7.3–7.4 §4b C5). `plane` answers "where
+   * SEPARATE FROM `plane` on purpose. `plane` answers "where
    * did the figures on this page come from", and for a CLOSED proposal the
    * honest answer is the mirror — x/group prunes, so the mirror is the record.
    * This answers a different question: "did the chain, just now, confirm this

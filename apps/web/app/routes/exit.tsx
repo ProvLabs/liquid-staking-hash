@@ -38,7 +38,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /** Redemption value at current NAV: shares × TVV ÷ totalShares (floor). */
-function redeemValueNhash(shares: bigint, totalShares: bigint, totalValueNhash: bigint): bigint | null {
+function redeemValueNhash(
+  shares: bigint,
+  totalShares: bigint,
+  totalValueNhash: bigint,
+): bigint | null {
   if (totalShares <= 0n) return null;
   return (shares * totalValueNhash) / totalShares;
 }
@@ -94,13 +98,22 @@ export default function Exit({ loaderData }: Route.ComponentProps) {
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">{t(locale, "exit.native-title")}</h2>
         {vault === null ? (
-          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">{t(locale, "exit.unavailable")}</p>
+          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+            {t(locale, "exit.unavailable")}
+          </p>
         ) : vault.paused ? (
-          <p className="rounded-lg border border-[var(--status-serious)] bg-card p-4 text-sm" role="alert">
-            {t(locale, "exit.paused", { reason: vault.pausedReason || t(locale, "exit.paused-generic") })}
+          <p
+            className="rounded-lg border border-[var(--status-serious)] bg-card p-4 text-sm"
+            role="alert"
+          >
+            {t(locale, "exit.paused", {
+              reason: vault.pausedReason || t(locale, "exit.paused-generic"),
+            })}
           </p>
         ) : !connected ? (
-          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">{t(locale, "exit.connect-prompt")}</p>
+          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+            {t(locale, "exit.connect-prompt")}
+          </p>
         ) : (
           <div className="flex flex-col gap-4">
             <label className="flex flex-col gap-1 text-sm">
@@ -117,24 +130,37 @@ export default function Exit({ loaderData }: Route.ComponentProps) {
             </label>
             {context.shareBalance !== null ? (
               <p className="text-xs text-muted-foreground">
-                {t(locale, "exit.balance", { balance: formatBaseAmount(BigInt(context.shareBalance), SHARE_EXPONENT, 4) })}
+                {t(locale, "exit.balance", {
+                  balance: formatBaseAmount(BigInt(context.shareBalance), SHARE_EXPONENT, 4),
+                })}
               </p>
             ) : null}
             {preview !== null ? (
               <div className="rounded-md border bg-background p-3 text-sm">
-                <p>{t(locale, "exit.preview", { value: formatBaseAmount(preview, HASH_EXPONENT, 4) })}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{t(locale, "exit.preview-reprice-note")}</p>
+                <p>
+                  {t(locale, "exit.preview", {
+                    value: formatBaseAmount(preview, HASH_EXPONENT, 4),
+                  })}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t(locale, "exit.preview-reprice-note")}
+                </p>
               </div>
             ) : null}
             {input !== "" && !parsed.ok && parsed.error !== "zero" ? (
-              <p className="text-xs text-[var(--status-serious)]">{t(locale, "exit.amount-invalid")}</p>
+              <p className="text-xs text-[var(--status-serious)]">
+                {t(locale, "exit.amount-invalid")}
+              </p>
             ) : null}
             {!wallet.canSign ? (
               <p className="text-xs text-muted-foreground">{t(locale, "tx.reconnect-to-sign")}</p>
             ) : null}
             {!vault.swapOutEnabled ? (
               // §10.2: a disabled control always carries its reason.
-              <p className="rounded-lg border border-[var(--status-warning)] bg-card p-3 text-sm" role="alert">
+              <p
+                className="rounded-lg border border-[var(--status-warning)] bg-card p-3 text-sm"
+                role="alert"
+              >
                 {t(locale, "tx.reason-swaps-disabled")}
               </p>
             ) : null}
@@ -166,7 +192,12 @@ export default function Exit({ loaderData }: Route.ComponentProps) {
           />
         ) : null}
 
-        <FlowStatus locale={locale} state={flow.state} amountExponent={SHARE_EXPONENT} onReset={flow.reset} />
+        <FlowStatus
+          locale={locale}
+          state={flow.state}
+          amountExponent={SHARE_EXPONENT}
+          onReset={flow.reset}
+        />
       </div>
 
       {context.tracker !== null ? (

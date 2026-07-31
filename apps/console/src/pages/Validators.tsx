@@ -22,7 +22,8 @@ function eligibilityReasons(v: ValidatorStatus, thresholdBps: number): string[] 
   if (v.jailed) out.push("jailed");
   if (v.tombstoned) out.push("tombstoned");
   if (v.in_arrears) out.push("in arrears");
-  if (v.uptime_bps !== null && v.uptime_bps < thresholdBps) out.push(`uptime ${(v.uptime_bps / 100).toFixed(1)}% < ${(thresholdBps / 100).toFixed(0)}%`);
+  if (v.uptime_bps !== null && v.uptime_bps < thresholdBps)
+    out.push(`uptime ${(v.uptime_bps / 100).toFixed(1)}% < ${(thresholdBps / 100).toFixed(0)}%`);
   if (v.uptime_bps === null) out.push("no uptime data");
   return out;
 }
@@ -44,7 +45,9 @@ export function Validators() {
     <div className="stack">
       <div>
         <h1 className="page-title">Validators</h1>
-        <p className="page-sub">Enrolled validators in program-priority order (rank 1 = highest priority = last drained).</p>
+        <p className="page-sub">
+          Enrolled validators in program-priority order (rank 1 = highest priority = last drained).
+        </p>
       </div>
 
       <Cell cell={vals}>
@@ -53,7 +56,11 @@ export function Validators() {
           const view = all.filter((v) => {
             if (filter === "eligible" && !v.eligible) return false;
             if (filter === "ineligible" && v.eligible) return false;
-            if (q && !v.valoper.toLowerCase().includes(q.toLowerCase()) && !monikerOf(v.valoper).includes(q.toLowerCase()))
+            if (
+              q &&
+              !v.valoper.toLowerCase().includes(q.toLowerCase()) &&
+              !monikerOf(v.valoper).includes(q.toLowerCase())
+            )
               return false;
             return true;
           });
@@ -74,9 +81,15 @@ export function Validators() {
                 title="Participation"
                 actions={
                   <>
-                    <div role="group" aria-label="eligibility filter" style={{ display: "flex", gap: 2 }}>
+                    {/* biome-ignore lint/a11y/useSemanticElements: a button toolbar, not form controls — role="group" is correct here. */}
+                    <div
+                      role="group"
+                      aria-label="eligibility filter"
+                      style={{ display: "flex", gap: 2 }}
+                    >
                       {(["all", "eligible", "ineligible"] as Filter[]).map((f) => (
                         <button
+                          type="button"
                           key={f}
                           className={`btn btn--sm ${filter === f ? "btn--secondary" : "btn--ghost"}`}
                           aria-pressed={filter === f}
@@ -86,7 +99,14 @@ export function Validators() {
                         </button>
                       ))}
                     </div>
-                    <input className="input" style={{ minHeight: 28 }} placeholder="search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search validators" />
+                    <input
+                      className="input"
+                      style={{ minHeight: 28 }}
+                      placeholder="search"
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      aria-label="search validators"
+                    />
                   </>
                 }
               >
@@ -110,7 +130,10 @@ export function Validators() {
                         const isOpen = expanded === v.valoper;
                         return (
                           <Fragment key={v.valoper}>
-                            <tr onClick={() => setExpanded(isOpen ? null : v.valoper)} style={{ cursor: "pointer" }}>
+                            <tr
+                              onClick={() => setExpanded(isOpen ? null : v.valoper)}
+                              style={{ cursor: "pointer" }}
+                            >
                               <td className="num tnum">{rank}</td>
                               <td>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -131,9 +154,16 @@ export function Validators() {
                                   )}
                                 </div>
                               </td>
-                              <td className="num tnum">{v.uptime_bps === null ? "—" : pct(v.uptime_bps)}</td>
+                              <td className="num tnum">
+                                {v.uptime_bps === null ? "—" : pct(v.uptime_bps)}
+                              </td>
                               <td className="num tnum">{hash(v.tip_epoch)} HASH</td>
-                              <td className="num tnum" style={v.in_arrears ? { color: "var(--status-serious)" } : undefined}>
+                              <td
+                                className="num tnum"
+                                style={
+                                  v.in_arrears ? { color: "var(--status-serious)" } : undefined
+                                }
+                              >
                                 {hash(v.commission_paid)} / {hash(v.commission_due)}
                               </td>
                               <td className="num tnum">{hash(v.headroom)} HASH</td>
@@ -141,24 +171,58 @@ export function Validators() {
                             {isOpen && (
                               <tr>
                                 <td colSpan={7} style={{ background: "var(--page)" }}>
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 24, padding: "8px 4px", fontSize: 13 }}>
-                                    <span className="muted">operator <AddressChip addr={v.operator} /></span>
-                                    <span className="muted">enrolled {absTime(v.enrolled_at_seconds)}</span>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: 24,
+                                      padding: "8px 4px",
+                                      fontSize: 13,
+                                    }}
+                                  >
+                                    <span className="muted">
+                                      operator <AddressChip addr={v.operator} />
+                                    </span>
+                                    <span className="muted">
+                                      enrolled {absTime(v.enrolled_at_seconds)}
+                                    </span>
                                     <span className="muted">captures {v.uptime_capture_count}</span>
                                     {v.in_arrears && (
                                       <span style={{ color: "var(--status-serious)" }}>
-                                        arrears: pay {hash(toDue(v))} HASH to clear (ineligible until paid)
+                                        arrears: pay {hash(toDue(v))} HASH to clear (ineligible
+                                        until paid)
                                       </span>
                                     )}
                                     <span style={{ display: "flex", gap: 8 }}>
-                                      <button className="btn btn--secondary btn--sm" onClick={(e) => { e.stopPropagation(); payCommission(v); }}>
+                                      <button
+                                        type="button"
+                                        className="btn btn--secondary btn--sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          payCommission(v);
+                                        }}
+                                      >
                                         Pay commission…
                                       </button>
-                                      <button className="btn btn--secondary btn--sm" onClick={(e) => { e.stopPropagation(); payTip(v); }}>
+                                      <button
+                                        type="button"
+                                        className="btn btn--secondary btn--sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          payTip(v);
+                                        }}
+                                      >
                                         Pay tip…
                                       </button>
                                       {v.jailed && (
-                                        <button className="btn btn--warning btn--sm" onClick={(e) => { e.stopPropagation(); reportJailed(v); }}>
+                                        <button
+                                          type="button"
+                                          className="btn btn--warning btn--sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            reportJailed(v);
+                                          }}
+                                        >
                                           Report jailed
                                         </button>
                                       )}
@@ -180,7 +244,11 @@ export function Validators() {
 
               <Panel title="Uptime vs threshold">
                 <DotStrip
-                  rows={all.map((v) => ({ label: monikerOf(v.valoper), uptimeBps: v.uptime_bps, eligible: v.eligible }))}
+                  rows={all.map((v) => ({
+                    label: monikerOf(v.valoper),
+                    uptimeBps: v.uptime_bps,
+                    eligible: v.eligible,
+                  }))}
                   thresholdBps={threshold}
                 />
               </Panel>
@@ -200,7 +268,8 @@ export function Validators() {
       message: msg.payCommission(v.valoper),
       funds: [{ denom: "nhash", amount: toDue(v) }],
       tier: "warning",
-      consequence: "Non-refundable. Funds sweep into vault principal at the next epoch's deposit leg (raising NAV).",
+      consequence:
+        "Non-refundable. Funds sweep into vault principal at the next epoch's deposit leg (raising NAV).",
     });
   }
   function payTip(v: ValidatorStatus) {
@@ -214,7 +283,11 @@ export function Validators() {
   }
   function reportJailed(v: ValidatorStatus) {
     if (role === "observer") return;
-    tx.submit({ title: "Report jailed validator", message: msg.reportJailed(v.valoper), tier: "standard" });
+    tx.submit({
+      title: "Report jailed validator",
+      message: msg.reportJailed(v.valoper),
+      tier: "standard",
+    });
   }
 }
 

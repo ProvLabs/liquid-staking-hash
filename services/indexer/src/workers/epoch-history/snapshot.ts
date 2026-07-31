@@ -23,7 +23,11 @@ export interface EpochRow extends EpochSnapshotFields {
 
 /** The reads a snapshot fetch needs (height-pinned smart query + block time). */
 export interface SnapshotSource {
-  smartAtHeight(contract: string, query: Record<string, unknown>, height: bigint | number): Promise<unknown>;
+  smartAtHeight(
+    contract: string,
+    query: Record<string, unknown>,
+    height: bigint | number,
+  ): Promise<unknown>;
   blockTime(height: bigint | number): Promise<Date>;
 }
 
@@ -37,7 +41,10 @@ export async function fetchEpochAt(
   contract: string,
   crank: Crank,
 ): Promise<EpochRow | null> {
-  const envelope = expectObject(await src.smartAtHeight(contract, { epoch_snapshot: {} }, crank.height), "$.data");
+  const envelope = expectObject(
+    await src.smartAtHeight(contract, { epoch_snapshot: {} }, crank.height),
+    "$.data",
+  );
   const snapshot = envelope["snapshot"];
   if (snapshot === null || snapshot === undefined) return null;
 

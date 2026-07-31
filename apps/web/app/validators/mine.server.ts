@@ -1,4 +1,4 @@
-// Operator-view data assembly (`/validators/mine`, plan M6.4 §2.3; app-spec
+// Operator-view data assembly (`/validators/mine`; app-spec
 // §8.6, §12.1). Two planes composed honestly, the market.server.ts pattern:
 // every read degrades to null independently and the loader NEVER throws.
 //
@@ -66,7 +66,7 @@ export const PAYMENT_PAGE_SIZE = 50;
 // ── Pure composition (BigInt only) ─────────────────────────────────────────
 
 /**
- * The THREE-state commission standing (plan §2.3). `in_arrears` is the
+ * The THREE-state commission standing. `in_arrears` is the
  * contract's own assessment (`paid < due` past the one-epoch grace); a prepaid
  * credit exists whenever cumulative paid exceeds cumulative accrued.
  */
@@ -158,7 +158,11 @@ export function estimateOperatorEarnings(
  */
 export function buildEarningsSteps(
   delegationByEpoch: ReadonlyMap<number, bigint>,
-  epochBoundaries: readonly { epochIndex: number; endedAtSeconds: number; netAprBps: number | null }[],
+  epochBoundaries: readonly {
+    epochIndex: number;
+    endedAtSeconds: number;
+    netAprBps: number | null;
+  }[],
 ): EarningsStep[] {
   const steps: EarningsStep[] = [];
   for (let i = 1; i < epochBoundaries.length; i++) {
@@ -168,7 +172,11 @@ export function buildEarningsSteps(
     if (delegation === undefined || current.netAprBps === null) continue;
     const duration = BigInt(current.endedAtSeconds - previous.endedAtSeconds);
     if (duration <= 0n) continue;
-    steps.push({ programDelegation: delegation, netAprBps: current.netAprBps, durationSeconds: duration });
+    steps.push({
+      programDelegation: delegation,
+      netAprBps: current.netAprBps,
+      durationSeconds: duration,
+    });
   }
   return steps;
 }
@@ -196,7 +204,10 @@ export async function loadOperatorViewData(
   options: OperatorViewOptions = {},
 ): Promise<OperatorViewData> {
   const doFetch: FetchLike = options.fetchImpl ?? ((url, init) => fetch(url, init));
-  const lcd = new LcdClient(config.lcdUrl, { fetchImpl: doFetch, timeoutMs: CHROME_READ_TIMEOUT_MS });
+  const lcd = new LcdClient(config.lcdUrl, {
+    fetchImpl: doFetch,
+    timeoutMs: CHROME_READ_TIMEOUT_MS,
+  });
   const contract = new NvhashContractClient(lcd, config.contractAddress);
   const staking = new StakingClient(lcd);
   const apiBase = config.apiUrl.replace(/\/+$/, "");
@@ -212,7 +223,11 @@ export async function loadOperatorViewData(
     staking.validators().catch(() => null),
     authFetch === null
       ? Promise.resolve(null)
-      : fetchApiJson(`${apiBase}/api/v1/operator/summary?address=${addr}`, authFetch, CHROME_READ_TIMEOUT_MS)
+      : fetchApiJson(
+          `${apiBase}/api/v1/operator/summary?address=${addr}`,
+          authFetch,
+          CHROME_READ_TIMEOUT_MS,
+        )
           .then((body) => operatorSummaryEnvelopeSchema.parse(body))
           .catch(() => null),
   ]);
@@ -225,7 +240,7 @@ export async function loadOperatorViewData(
   );
 
   // MEMBERSHIP comes from the LIVE contract set; the indexed registry only
-  // ENRICHES it (PR #22 review, greptile P1).
+  // ENRICHES it (greptile P1).
   //
   // The two planes are not interchangeable here. `validator_registry` is
   // written by the validator-sampler, which is anchored to EPOCH CRANKS — and
@@ -263,15 +278,16 @@ export async function loadOperatorViewData(
     // Null, not "0.0000": an unsampled validator has no known history, and
     // claiming zero paid would be a fabricated fact (§12.1).
     commissionPaidTotalHash:
-      indexed === null ? null : formatBaseAmount(BigInt(indexed.commission_paid_total), HASH_EXPONENT, 4),
+      indexed === null
+        ? null
+        : formatBaseAmount(BigInt(indexed.commission_paid_total), HASH_EXPONENT, 4),
     tipPaidTotalHash:
       indexed === null ? null : formatBaseAmount(BigInt(indexed.tip_paid_total), HASH_EXPONENT, 4),
     paymentCount: indexed?.payment_count ?? null,
   });
 
-  const liveOwned = liveValidators === null
-    ? null
-    : liveValidators.filter((v) => v.operator === session.address);
+  const liveOwned =
+    liveValidators === null ? null : liveValidators.filter((v) => v.operator === session.address);
   const owned: OperatorValidatorVM[] =
     liveOwned === null
       ? [...indexedByValoper.values()].map((v) => toVM(v.valoper, v, v.active))
@@ -299,7 +315,7 @@ export async function loadOperatorViewData(
   // An explicit `?valoper=` is honoured even for an unregistered validator —
   // that is how its history is reached. But the DEFAULT prefers an enrolled
   // one: landing on an unregistered validator would open the page on the one
-  // subject the operator cannot act on (PR #22 review).
+  // subject the operator cannot act on.
   const selectedValoper =
     requested !== null && owned.some((v) => v.valoper === requested)
       ? requested
@@ -361,8 +377,7 @@ export async function loadOperatorViewData(
           active: owned.find((v) => v.valoper === selectedValoper)?.active ?? true,
           enrolledAt: summaryRow?.enrolled_at ?? null,
           failingReasons: summaryRow?.failing_reasons ?? [],
-          jailReport:
-            (jailReports ?? []).find((r) => r.valoper === selectedValoper) ?? null,
+          jailReport: (jailReports ?? []).find((r) => r.valoper === selectedValoper) ?? null,
         });
 
   // Epoch history (newest first from the API; the chart needs oldest first).
@@ -493,13 +508,16 @@ function buildStanding(input: {
 function buildNetBenefit(input: {
   summaryRow: { commission_paid_total: string; tip_paid_total: string };
   epochsAsc: readonly { epoch_index: number; program_delegation: string }[];
-  programEpochs: readonly { epoch_index: number; ended_at: string; net_apr_bps: number | null }[] | null;
+  programEpochs:
+    | readonly { epoch_index: number; ended_at: string; net_apr_bps: number | null }[]
+    | null;
   commissionRate: string | null;
   truncated: boolean;
 }): NetBenefitVM {
   const commissionPaid = BigInt(input.summaryRow.commission_paid_total);
   const tipPaid = BigInt(input.summaryRow.tip_paid_total);
-  const rateScaled = input.commissionRate === null ? null : parseCommissionRate(input.commissionRate);
+  const rateScaled =
+    input.commissionRate === null ? null : parseCommissionRate(input.commissionRate);
 
   let earnings: bigint | null = null;
   let epochsCovered = 0;
@@ -526,8 +544,7 @@ function buildNetBenefit(input: {
     commissionPaidTotalHash: formatBaseAmount(commissionPaid, HASH_EXPONENT, 4),
     tipPaidTotalHash: formatBaseAmount(tipPaid, HASH_EXPONENT, 4),
     netBenefitHash: earnings === null ? null : hash(earnings - commissionPaid - tipPaid),
-    commissionRatePercent:
-      rateScaled === null ? null : formatBaseAmount(rateScaled * 100n, 18, 2),
+    commissionRatePercent: rateScaled === null ? null : formatBaseAmount(rateScaled * 100n, 18, 2),
     epochsCovered,
     truncated: input.truncated,
   };

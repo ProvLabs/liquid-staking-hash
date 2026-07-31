@@ -35,7 +35,9 @@ describe("RpcClient.blockResults", () => {
     const { impl } = fakeFetch({
       result: {
         height: "7810",
-        txs_results: [{ events: [{ type: "wasm", attributes: [{ key: "action", value: "run_epoch" }] }] }],
+        txs_results: [
+          { events: [{ type: "wasm", attributes: [{ key: "action", value: "run_epoch" }] }] },
+        ],
         finalize_block_events: [
           {
             type: "provlabs.vault.v1.EventSwapOutCompleted",
@@ -56,7 +58,10 @@ describe("RpcClient.blockResults", () => {
     expect(block.height).toBe(7810n);
     expect(block.txsResults[0]!.events[0]!.attributes[0]!.value).toBe("run_epoch");
 
-    const completed = findEvent(block.finalizeBlockEvents, "provlabs.vault.v1.EventSwapOutCompleted");
+    const completed = findEvent(
+      block.finalizeBlockEvents,
+      "provlabs.vault.v1.EventSwapOutCompleted",
+    );
     expect(completed).toBeDefined();
     expect(attr(completed!, "request_id")).toBe("3");
     expect(coinAttr(completed!, "assets")).toEqual({ amount: 36852482n, denom: "nhash" });
@@ -72,7 +77,9 @@ describe("RpcClient.txSearch / blockSearch", () => {
           {
             hash: "ABCD",
             height: "42",
-            tx_result: { events: [{ type: "wasm", attributes: [{ key: "action", value: "swap_in" }] }] },
+            tx_result: {
+              events: [{ type: "wasm", attributes: [{ key: "action", value: "swap_in" }] }],
+            },
           },
         ],
       },
@@ -92,10 +99,16 @@ describe("RpcClient.txSearch / blockSearch", () => {
 
   it("extracts block heights from block_search", async () => {
     const { impl } = fakeFetch({
-      result: { total_count: "2", blocks: [{ block: { header: { height: "10" } } }, { block: { header: { height: "20" } } }] },
+      result: {
+        total_count: "2",
+        blocks: [{ block: { header: { height: "10" } } }, { block: { header: { height: "20" } } }],
+      },
     });
     const client = new RpcClient("http://dev-node:26657", { fetchImpl: impl });
-    expect(await client.blockSearch("run_epoch.exists")).toEqual({ totalCount: 2, heights: [10n, 20n] });
+    expect(await client.blockSearch("run_epoch.exists")).toEqual({
+      totalCount: 2,
+      heights: [10n, 20n],
+    });
   });
 });
 

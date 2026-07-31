@@ -7,15 +7,7 @@ import { VerifyLink } from "~/components/verify-link";
 // jail report with the instant a purge becomes allowed. Every figure is "n/a"
 // when null, never 0 (§12.1) — an unmeasured uptime is not 0%.
 
-function Field({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: string;
-  caption?: string;
-}) {
+function Field({ label, value, caption }: { label: string; value: string; caption?: string }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border bg-card p-4">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -51,14 +43,22 @@ export function StandingHeader({
       <p className="break-all font-mono text-xs text-muted-foreground">{standing.valoper}</p>
 
       {standing.jailed ? (
-        <p role="status" className="rounded-lg border p-3 text-sm" style={{ borderLeft: "4px solid var(--status-critical)" }}>
+        <p
+          role="status"
+          className="rounded-lg border p-3 text-sm"
+          style={{ borderLeft: "4px solid var(--status-critical)" }}
+        >
           <strong className="font-semibold">{t(locale, "operator.jailed-label")}</strong>{" "}
           <span className="text-muted-foreground">{t(locale, "operator.jailed-consequence")}</span>
         </p>
       ) : null}
 
       {standing.tombstoned ? (
-        <p role="status" className="rounded-lg border p-3 text-sm" style={{ borderLeft: "4px solid var(--status-critical)" }}>
+        <p
+          role="status"
+          className="rounded-lg border p-3 text-sm"
+          style={{ borderLeft: "4px solid var(--status-critical)" }}
+        >
           <strong className="font-semibold">{t(locale, "operator.tombstoned-label")}</strong>{" "}
           <span className="text-muted-foreground">
             {t(locale, "operator.tombstoned-consequence")}
@@ -67,7 +67,11 @@ export function StandingHeader({
       ) : null}
 
       {standing.jailReport !== null ? (
-        <p role="status" className="rounded-lg border p-3 text-sm" style={{ borderLeft: "4px solid var(--status-serious)" }}>
+        <p
+          role="status"
+          className="rounded-lg border p-3 text-sm"
+          style={{ borderLeft: "4px solid var(--status-serious)" }}
+        >
           <strong className="font-semibold">{t(locale, "operator.jail-report-label")}</strong>{" "}
           <span className="text-muted-foreground">
             {t(locale, "operator.jail-report-consequence", {

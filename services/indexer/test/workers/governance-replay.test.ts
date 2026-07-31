@@ -1,4 +1,4 @@
-// The governance mirror's three load-bearing claims, made executable. Per M7.1
+// The governance mirror's three load-bearing claims, made executable. Per
 // §9 these are where the PR review should spend its effort, so they are asserted
 // here rather than left to inspection:
 //
@@ -58,9 +58,10 @@ class MemStore implements GovernanceStore {
       ...row,
       // `executorResult` is monotone, so a sweep's NOT_RUN default must not erase
       // an outcome the tx plane already established.
-      executorResult: !known(row.executorResult) && known(existing.executorResult)
-        ? existing.executorResult
-        : row.executorResult,
+      executorResult:
+        !known(row.executorResult) && known(existing.executorResult)
+          ? existing.executorResult
+          : row.executorResult,
       // Never un-prune, and never lose provenance, on a later observation.
       prunedAtHeight: existing.prunedAtHeight,
       height: existing.height,
@@ -112,9 +113,7 @@ class MemStore implements GovernanceStore {
   }
 
   async existingProposalIds(proposalIds: readonly bigint[]): Promise<Set<string>> {
-    return new Set(
-      proposalIds.map((id) => id.toString()).filter((id) => this.proposals.has(id)),
-    );
+    return new Set(proposalIds.map((id) => id.toString()).filter((id) => this.proposals.has(id)));
   }
 
   async upsertVote(row: VoteUpsert): Promise<void> {
@@ -208,7 +207,10 @@ describe("invariant 2 — replay converges and never regresses", () => {
     // A replay from 0 re-reads state pinned at an OLD height. That state is
     // correct FOR THAT HEIGHT but stale as a mirror, which is exactly the case the
     // guard exists for.
-    await applyBatch(store, batch({ observedHeight: 100n, proposals: [snapshot(1n, "SUBMITTED")] }));
+    await applyBatch(
+      store,
+      batch({ observedHeight: 100n, proposals: [snapshot(1n, "SUBMITTED")] }),
+    );
     expect(store.proposals.get("1")!.status).toBe("REJECTED");
     expect(store.proposals.get("1")!.observedHeight).toBe(200n);
   });
@@ -225,7 +227,10 @@ describe("invariant 2 — replay converges and never regresses", () => {
             batch({
               observedHeight: BigInt(h),
               proposals: [
-                snapshot(1n, statuses[Math.min(i, statuses.length - 1)]!, { ...ZERO, yes: String(i) }),
+                snapshot(1n, statuses[Math.min(i, statuses.length - 1)]!, {
+                  ...ZERO,
+                  yes: String(i),
+                }),
               ],
             }),
           );
@@ -301,7 +306,10 @@ describe("invariant 2 — replay converges and never regresses", () => {
 describe("invariant 3 — the voting-period-end transition is OBSERVED, not inferred", () => {
   it("a window with NO transaction flips SUBMITTED -> REJECTED", async () => {
     const store = new MemStore();
-    await applyBatch(store, batch({ observedHeight: 100n, proposals: [snapshot(1n, "SUBMITTED")] }));
+    await applyBatch(
+      store,
+      batch({ observedHeight: 100n, proposals: [snapshot(1n, "SUBMITTED")] }),
+    );
     expect(store.proposals.get("1")!.status).toBe("SUBMITTED");
 
     // The transition is eventless on this build — no tally event exists in
@@ -342,9 +350,9 @@ describe("invariant 3 — the voting-period-end transition is OBSERVED, not infe
 });
 
 describe("invariant 4 — the mirror outlives chain state and never claims otherwise", () => {
-  // THE PR #23 P1 REGRESSION. The case below it ("from EVENTS ALONE") seeded the
+  // THE ONE-WINDOW-LIFECYCLE REGRESSION. The case below it ("from EVENTS ALONE") seeded the
   // row in a PRIOR window and only then applied the prune — so it verified the
-  // easy variant and never the real one, which is precisely the M6.4 failure the
+  // easy variant and never the real one, which is precisely the failure the
   // §4b apparatus was built to prevent: a named, gated invariant that passes while
   // the defect it names is live.
   //
@@ -521,7 +529,10 @@ describe("invariant 4 — the mirror outlives chain state and never claims other
     await applyBatch(store, batch({ observedHeight: 90n, proposals: [snapshot(5n, "SUBMITTED")] }));
     // No prune event this window — the EndBlocker's prune may have been missed —
     // but a SUCCESSFUL enumeration proves the chain no longer holds it.
-    await applyBatch(store, batch({ observedHeight: 150n, proposals: [], presentIds: [], sweepOk: true }));
+    await applyBatch(
+      store,
+      batch({ observedHeight: 150n, proposals: [], presentIds: [], sweepOk: true }),
+    );
     expect(store.proposals.get("5")!.prunedAtHeight).toBe(150n);
   });
 
@@ -548,7 +559,13 @@ describe("invariant 4 — the mirror outlives chain state and never claims other
     // stamp every stored proposal pruned the moment discovery hiccupped.
     await applyBatch(
       store,
-      batch({ observedHeight: 150n, proposals: [], presentIds: [], sweepOk: false, sweptPolicies: [] }),
+      batch({
+        observedHeight: 150n,
+        proposals: [],
+        presentIds: [],
+        sweepOk: false,
+        sweptPolicies: [],
+      }),
     );
     expect(store.proposals.get("8")!.prunedAtHeight).toBeNull();
   });
@@ -645,7 +662,7 @@ describe("votes — the durable per-voter record", () => {
       }),
     );
     // Same voter, same transaction, different proposals. A txhash-keyed store
-    // would have kept one — the M6.4 defect.
+    // would have kept one.
     expect(store.votes.size).toBe(2);
   });
 });

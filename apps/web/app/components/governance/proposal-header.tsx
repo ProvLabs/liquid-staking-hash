@@ -31,7 +31,8 @@ export function ProposalHeader({
       </h1>
 
       <p className="text-sm">
-        {t(locale, STATUS_KEYS[proposal.status])} · {t(locale, EXECUTOR_KEYS[proposal.executorResult])}
+        {t(locale, STATUS_KEYS[proposal.status])} ·{" "}
+        {t(locale, EXECUTOR_KEYS[proposal.executorResult])}
       </p>
       <p>
         <PlaneBadge
@@ -101,7 +102,9 @@ export function ProposalHeader({
       </dl>
 
       {proposal.proposersTruncated ? (
-        <p className="text-xs text-muted-foreground">{t(locale, "governance.proposers-truncated")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t(locale, "governance.proposers-truncated")}
+        </p>
       ) : null}
 
       {/* Submit provenance is nullable BY DESIGN: a proposal first seen by a

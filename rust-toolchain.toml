@@ -1,0 +1,23 @@
+# Pinned Rust toolchain for the contract crate.
+#
+# rustfmt and clippy output are version-dependent, so the formatting and lint
+# gates in .github/workflows/contracts-ci.yaml are only deterministic against a
+# fixed toolchain: without this pin the same source formats differently on two
+# machines and CI fails on style rather than on substance.
+#
+# IT LIVES AT THE REPOSITORY ROOT, NOT IN `contracts/`, AND THAT PLACEMENT IS
+# LOAD-BEARING. `contracts/scripts/build-artifact.sh` bind-mounts `contracts/`
+# as `/code` inside the pinned cosmwasm/optimizer image, whose whole purpose is
+# a reproducible wasm build from ITS OWN toolchain. A `rust-toolchain.toml`
+# inside that directory is visible to rustup in the container, which then
+# switches away from the image's toolchain to this one — and this one carries no
+# `wasm32-unknown-unknown` target, so the build dies with "can't find crate for
+# `std`". At the root the file is outside the mount, so the container keeps its
+# toolchain while host builds, tests and the CI gates still resolve this pin by
+# rustup's parent-directory search.
+#
+# Honored by rustup. A host whose `cargo` comes from Homebrew or a distro
+# package ignores this file, so match the version there or run through rustup.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

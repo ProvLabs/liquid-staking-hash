@@ -211,8 +211,24 @@ The rows keep their numbers for attribution and for §5's cross-references; see
 | 8.1 [P] | **Degradation drills as e2e:** corrupt an indexed row → reconciler incident → surfaces flip to live-read + "history temporarily degraded"; kill the indexer → canonical values survive, history dims; kill the LCD → indexed values carry stale labels. | 2.5, M4 |
 | 8.2 [P] | **Load test + rate-limit tuning** on the public API. | M3 |
 | 8.3 [P] | **Accessibility walk** on both themes, keyboard-only pass, reduced-motion audit; fixes. | M4–M7 |
-| 8.4 | **Deployment configs** (`infra/`: Docker images per component, ArgoCD, per-environment profiles) + **testnet pilot** alongside the Console — the verify-link contract is only testable with both deployed (needs console follow-on §14.13 for entity anchors). | all; **8.0 (release certification blocked until upstream vetting passes)** |
+| 8.4a | **Migration-mode entry point (decision).** The row after which the program is no longer in complete reset-and-rebuild mode. Three parts land together. **(i) Contract upgradability** — decide whether `nvhash-staking` gains a `migrate` entry point (`contracts/src/contract.rs` exposes `instantiate`/`execute`/`query` only; the cw2 marker it already writes at instantiate is the version prerequisite such a path checks) and who holds the **wasmd contract admin** that authorizes `MsgMigrateContract` — a different authority from `InstantiateMsg.admin`, set by `--admin` at instantiate (`infra/devnet/bootstrap/nvhash-deploy-p2p.sh`, today the deployer key). A contract instantiated with **no** admin can never be given one, so the choice is irreversible per deployment and must be settled before anything is deployed that we intend to keep. A migrate path is a new **admin capability**: `liquid-staking-spec.md` §12 trust surface and `contracts/IMPLEMENTATION-STATUS.md` are amended in the same change, and the authorization is established by a devnet drill under `contracts/drills/` (an unauthorized migrate is rejected; post-migrate state and cw2 version asserted) rather than by reading wasmd's semantics — the `chain-facts` rule. **(ii) Database schemas leave baseline mode** — `services/indexer` and `apps/web` stop regenerating their single baseline migration and begin appending incremental ones. The trigger is the first environment whose contents cannot be recreated: `app` (sessions, notification log, push subscriptions) crosses it before `indexed`, which is rebuildable from chain by definition. **(iii)** The reset-and-rebuild rule in `services/indexer/CLAUDE.md`, `apps/web/CLAUDE.md` and `indexer-design-notes.md` is replaced by the migration rule in the same change, so no environment is left following stale instructions. | a decision, not code-blocked; **blocks 8.4** — nothing non-devnet deploys until it is made |
+| 8.4 | **Deployment configs** (`infra/`: Docker images per component, ArgoCD, per-environment profiles) + **testnet pilot** alongside the Console — the verify-link contract is only testable with both deployed (needs console follow-on §14.13 for entity anchors). | all; **8.0 (release certification blocked until upstream vetting passes)**; **8.4a (the contract admin it deploys with is irreversible)** |
 | 8.5 | **Mainnet launch checklist:** remaining §14 closures (naming/domain §14.14, locale set §14.9 confirmation), security review against `SECURITY.md`, runbook in `docs/user/`. | 8.0–8.4 |
+
+> **Row 8.4a added 2026-07-30 (Ira's direction).** Every row before it assumes a
+> complete reset and rebuild: each Prisma schema is ONE baseline migration
+> regenerated from its models rather than an appended history (collapsed
+> 2026-07-30), devnet is wiped whenever a change lands that needs it (the 7.1
+> precedent), and the contract is redeployed rather than migrated. That is the
+> right posture while nothing runs outside dev and CI, and it stops being right
+> at the first environment whose contents cannot be recreated. 8.4 stands up the
+> **first non-devnet targets** (§6), so the crossing has to be *decided before it
+> deploys*, not discovered after — most sharply for the contract, where the
+> wasmd admin is fixed at instantiate.
+>
+> Row numbering is unchanged: 8.4a is **inserted, not renumbered**, so §5/§6
+> cross-references and PR-title attribution stay valid (the M7 precedent). Work
+> after 8.4a should assume migrations, not rebuilds.
 
 ## 3. Parallelization map
 
@@ -225,7 +241,7 @@ M0 ─ M1 ─┬─ services lane:  2.1 ∥ 2.2 ∥ 2.3 ∥ 2.4 → 2.5 → 3.1 
                                           (5.4 also needs 3.3)
 M6: 6.1 → 6.2 → 6.3 → 6.4          (planned 6.1 ∥ 6.2 ∥ 6.4 → 6.3; ran serialized)
 M7: 7.0 → 7.1 → 7.2 → [7.3+7.4]  ∥  [7.5+7.6]    — 4 PRs; 7.1 also needs a devnet x/group substrate
-M8: (8.0 external gate) ∥ 8.1 ∥ 8.2 ∥ 8.3 → 8.4 → 8.5   (8.4/8.5 also gated on 8.0)
+M8: (8.0 external gate) ∥ 8.1 ∥ 8.2 ∥ 8.3 → 8.4a → 8.4 → 8.5   (8.4/8.5 also gated on 8.0)
 ```
 
 Practical staffing note: the web lane never blocks on the services lane —
@@ -360,7 +376,8 @@ topology assumption:
 | Secrets via environment only; nothing non-public in the client bundle | Bundle-secret check in web CI from PR 1.3; `.env.example` placeholders only |
 | Never lie about state (freshness, labeled estimates) | Envelope contract tests (source/heights on every response), chart-honesty e2e assertions, M8 degradation drills |
 | Spec/code parity: spec amended in the same change | Certification recorded in `app-spec.md`'s 2026-07-13 revision note (this change); every PR carries its own spec/CLAUDE.md updates — no "docs later" PRs (§2 preamble) |
-| Devnet keys are throwaway; drills point only at disposable chains | PR 1.5 wires the full stack to `infra/devnet/` only; deployment profiles (PR 8.4) are the first non-devnet targets |
+| Devnet keys are throwaway; drills point only at disposable chains | PR 1.5 wires the full stack to `infra/devnet/` only; deployment profiles (PR 8.4) are the first non-devnet targets, gated on the 8.4a admin decision |
+| Enumerated trust surfaces: every admin capability is listed in the spec, and adding one is a spec-level event | The contract exposes `instantiate`/`execute`/`query` and no upgrade path today. If PR 8.4a adds one, it lands as a spec amendment (`liquid-staking-spec.md` §12 + `contracts/IMPLEMENTATION-STATUS.md`, same change) plus a `contracts/drills/` drill asserting that a migrate from a non-admin is rejected and that the post-migrate cw2 version and state are what was intended — never "only the admin key can reach it" as a deployment assumption |
 
 ---
 
@@ -838,3 +855,21 @@ and a case-per-row suite instead of conditions in JSX, and two of its rows
 for an unparseable waiting period) are cells that would not have been written
 otherwise. C3's "not idempotent" row is the reason the confirm step says signing
 twice creates two proposals rather than the flow trying to deduplicate one.*
+
+*2026-07-30 — **M8 row 8.4a added** (Ira's direction), the point at which the
+program leaves complete reset-and-rebuild mode. Occasioned by collapsing both
+Prisma histories into one regenerated baseline per schema the same day: with
+nothing running outside dev and CI, an incremental migration chain encodes a
+history no database has, and it rots silently — the indexer's chain could not
+replay on a fresh database, because its init migration was search_path-dependent
+while every later one was schema-qualified. Rebuild-not-migrate is therefore the
+standing rule up to 8.4a, recorded in `services/indexer/CLAUDE.md`,
+`apps/web/CLAUDE.md` and `indexer-design-notes.md`, and 8.4a is the change that
+replaces it. The contract half is the irreversible one and the reason the row
+sits before 8.4 rather than inside it: `nvhash-staking` has no `migrate` entry
+point, and the wasmd contract admin that would authorize one is fixed at
+instantiate — a contract instantiated without an admin can never be given one,
+so the first deployment we intend to keep is also the last moment the choice
+exists. §6 gains the matching trust-surface row: if an upgrade path is adopted,
+it is a spec amendment plus a drill that an unauthorized migrate is rejected,
+not a deployment assumption about who holds a key.*

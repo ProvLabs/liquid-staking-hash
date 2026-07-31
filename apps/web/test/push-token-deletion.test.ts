@@ -1,5 +1,5 @@
-// Push-token deletion — THE STANDING SECURITY-EXECUTABLE GATE from PR 6.3 on
-// (master plan §4; plan 6.3 §4.1). This is the SECURITY.md accepted exception's
+// Push-token deletion — THE STANDING SECURITY-EXECUTABLE GATE
+//. This is the SECURITY.md accepted exception's
 // condition made mechanical: a Web Push token is opt-in, opaque, and REVOCABLE,
 // "deleted on opt-out AND session delete." All four deletion paths are asserted
 // here — not just opt-out:
@@ -18,14 +18,14 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { loadConfig } from "~/config/config.server";
-import {
-  getPushStore,
-  InMemoryPushStore,
-  resetPushStoreForTests,
-} from "~/lib/models/push.server";
+import { getPushStore, InMemoryPushStore, resetPushStoreForTests } from "~/lib/models/push.server";
 import { InMemorySessionStore, type SessionRow } from "~/lib/models/session.server";
 import { deleteSubscriptionsForSession } from "~/push/push.server";
-import { getSessionContext, logout, SESSION_ABSOLUTE_TTL_SECONDS } from "~/lib/services/session.server";
+import {
+  getSessionContext,
+  logout,
+  SESSION_ABSOLUTE_TTL_SECONDS,
+} from "~/lib/services/session.server";
 import { fanOutPush, type PushSender } from "../notifier/push.ts";
 
 const config = loadConfig({
@@ -57,7 +57,9 @@ async function seededSession(sessionStore: InMemorySessionStore, pushStore: InMe
   };
   await sessionStore.createSession(row);
   await pushStore.upsertForSession(ADDRESS, id, SUB);
-  const request = new Request("http://app.local/portfolio", { headers: { Cookie: `nvhash_session=${id}` } });
+  const request = new Request("http://app.local/portfolio", {
+    headers: { Cookie: `nvhash_session=${id}` },
+  });
   return { id, request };
 }
 
@@ -90,7 +92,11 @@ describe("push-token deletion (the SECURITY.md accepted exception's condition)",
     const { request } = await seededSession(sessionStore, pushStore);
     // Advance past the absolute ceiling: the session is no longer live.
     const later = () => new Date(NOW.getTime() + (SESSION_ABSOLUTE_TTL_SECONDS + 1) * 1000);
-    const context = await getSessionContext(config, request, { store: sessionStore, pushStore, now: later });
+    const context = await getSessionContext(config, request, {
+      store: sessionStore,
+      pushStore,
+      now: later,
+    });
     expect(context).toBeNull(); // expired
     expect(await pushStore.countForAddress(ADDRESS)).toBe(0); // …and swept
   });
@@ -106,7 +112,14 @@ describe("push-token deletion (the SECURITY.md accepted exception's condition)",
       },
     };
     await fanOutPush({
-      inserted: [{ address: ADDRESS, kind: "redemption_update", dedupeKey: "r1", payload: { request_id: "r1", event: "matured" } }],
+      inserted: [
+        {
+          address: ADDRESS,
+          kind: "redemption_update",
+          dedupeKey: "r1",
+          payload: { request_id: "r1", event: "matured" },
+        },
+      ],
       pushStore,
       sender,
       log: silentLog,

@@ -25,7 +25,7 @@ export function meta(_: Route.MetaArgs) {
 // the asserted address regardless, so this is a shape bound, not the control.
 
 /**
- * Three honest states before any data loads (plan §2.3):
+ * Three honest states before any data loads:
  *   anonymous            → the connect prompt (never blank, never a guess)
  *   roles degraded       → an explicit "we could not check" note; the App never
  *                          renders a privileged surface from a failed read
@@ -112,7 +112,10 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
       ) : (
         <>
           {data.owned.length > 1 ? (
-            <nav aria-label={t(locale, "operator.switch-validator")} className="flex flex-wrap gap-2">
+            <nav
+              aria-label={t(locale, "operator.switch-validator")}
+              className="flex flex-wrap gap-2"
+            >
               {data.owned.map((v) => (
                 <a
                   key={v.valoper}
@@ -146,8 +149,8 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
 
           {/* Actions render independently of the INDEXED plane: an operator
               must be able to clear arrears even when history is unavailable.
-              But they are scoped to a validator that is STILL ENROLLED (PR #22
-              review): an unregistered validator is kept in the list so its
+              But they are scoped to a validator that is STILL ENROLLED:
+              an unregistered validator is kept in the list so its
               history stays reachable, and every program action except
               re-enrolling would be rejected by the contract for it. Offering
               them would be a UI that invites a transaction guaranteed to fail.
@@ -163,7 +166,10 @@ export default function ValidatorsMine({ loaderData }: Route.ComponentProps) {
               />
             ) : (
               <>
-                <p role="status" className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                <p
+                  role="status"
+                  className="rounded-lg border bg-card p-4 text-sm text-muted-foreground"
+                >
                   {t(locale, "operator.inactive-validator")}
                 </p>
                 <OperatorFlows

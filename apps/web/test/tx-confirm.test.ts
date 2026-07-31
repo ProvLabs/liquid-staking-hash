@@ -1,4 +1,4 @@
-// Exact-JSON disclosure gate (plan 5.2 §4.2; §10.2 step 4): the user signs
+// Exact-JSON disclosure gate (§10.2 step 4): the user signs
 // exactly what they saw. The confirm step renders `plan.disclosureJson`;
 // the wallet signs `plan.signDocBytes`. This suite DECODES the sign-doc
 // bytes and proves the disclosure is a faithful rendering of them — same
@@ -33,7 +33,11 @@ const signer = {
   sequence: 4n,
   pubkeyBase64: Buffer.alloc(33, 3).toString("base64"),
 };
-const plan = buildTxPlan(intent, { gasLimit: 260_000n, amount: 495_300_000n, denom: "nhash" }, signer);
+const plan = buildTxPlan(
+  intent,
+  { gasLimit: 260_000n, amount: 495_300_000n, denom: "nhash" },
+  signer,
+);
 
 describe("the disclosure equals the signed bytes (single serialization site)", () => {
   it("decoding signDocBytes recovers exactly what the disclosure shows", () => {
@@ -77,7 +81,7 @@ describe("the disclosure equals the signed bytes (single serialization site)", (
   });
 });
 
-// ── M6.4: the same rigor over the operator execute messages ──────────────
+// ── The same rigor over the operator execute messages ──────────────
 //
 // §17.1 says graduating privileged writes to the consumer surface must not
 // soften the confirmation contract. The risk here is specific: an execute
@@ -126,7 +130,9 @@ describe("operator execute: the disclosure equals the signed bytes", () => {
 
   it("every disclosed field is the decoded signed field", () => {
     const signed = signedMessage(operatorPlan);
-    const disclosed = (JSON.parse(operatorPlan.disclosureJson) as Array<Record<string, unknown>>)[0]!;
+    const disclosed = (
+      JSON.parse(operatorPlan.disclosureJson) as Array<Record<string, unknown>>
+    )[0]!;
 
     expect(disclosed["@type"]).toBe(signed.typeUrl);
     expect(disclosed["sender"]).toBe(signed.sender);
@@ -165,7 +171,9 @@ describe("operator execute: the disclosure equals the signed bytes", () => {
       { gasLimit: 300_000n, amount: 400_000n, denom: "nhash" },
       signer,
     );
-    const disclosed = (JSON.parse(withClaimant.disclosureJson) as Array<Record<string, unknown>>)[0]!;
+    const disclosed = (
+      JSON.parse(withClaimant.disclosureJson) as Array<Record<string, unknown>>
+    )[0]!;
     const body = (disclosed["msg"] as Record<string, Record<string, string>>)[
       "purge_jailed_validator"
     ]!;
@@ -178,15 +186,16 @@ describe("operator execute: the disclosure equals the signed bytes", () => {
       signer,
     );
     const withoutBody = (
-      (JSON.parse(without.disclosureJson) as Array<Record<string, unknown>>)[0]![
-        "msg"
-      ] as Record<string, Record<string, string>>
+      (JSON.parse(without.disclosureJson) as Array<Record<string, unknown>>)[0]!["msg"] as Record<
+        string,
+        Record<string, string>
+      >
     )["purge_jailed_validator"]!;
     expect("claimant_valoper" in withoutBody).toBe(false);
   });
 });
 
-// ── M7.3–7.4: the governance disclosures (§2.6, §4 invariant 12) ─────────
+// ── The governance disclosures (invariant 12) ────────────────────────────
 //
 // The same property, on the three messages where it matters most: the user
 // signs exactly what they saw. For a governance write that is not a nicety —
@@ -240,9 +249,7 @@ describe("governance disclosures equal the signed bytes", () => {
       const signed = signedAny(built);
       const disclosed = disclosureOf(built);
       expect(disclosed["@type"], option).toBe(signed.typeUrl);
-      expect(disclosed["proposal_id"], option).toBe(
-        uintField(signed.fields, 1)!.toString(),
-      );
+      expect(disclosed["proposal_id"], option).toBe(uintField(signed.fields, 1)!.toString());
       expect(disclosed["voter"], option).toBe(stringField(signed.fields, 2));
       expect(disclosed["option"], option).toBe(`VOTE_OPTION_${option.toUpperCase()}`);
       expect(uintField(signed.fields, 3), option).toBe(GOVERNANCE_VOTE_OPTIONS[option]);

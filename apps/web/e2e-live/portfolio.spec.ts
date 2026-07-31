@@ -1,5 +1,4 @@
-// e2e-live: Portfolio against the REAL devnet stack (plan M6.1 §2.6; master
-// plan §4 "e2e (live)" layer). Establishes a session the same way session.spec
+// e2e-live: Portfolio against the REAL devnet stack. Establishes a session the same way session.spec
 // does (nonce → ADR-36 → HttpOnly cookie), then asserts the authenticated
 // Portfolio page renders the position summary and that the CSV export carries
 // its freshness headers. Skips cleanly when the stack is absent (no
@@ -13,7 +12,10 @@ const KEY = process.env.E2E_LIVE_SIGNER_KEY;
 test.skip(KEY === undefined, "E2E_LIVE_SIGNER_KEY not set (needs the devnet stack)");
 
 /** nonce → ADR-36 login; returns the session cookie value for a browser context. */
-async function login(request: import("@playwright/test").APIRequestContext, signer: DevnetTestSigner) {
+async function login(
+  request: import("@playwright/test").APIRequestContext,
+  signer: DevnetTestSigner,
+) {
   const nonceRes = await request.post("/session/nonce", { data: { address: signer.address } });
   expect(nonceRes.ok()).toBe(true);
   const { nonce, challenge } = (await nonceRes.json()) as { nonce: string; challenge: string };

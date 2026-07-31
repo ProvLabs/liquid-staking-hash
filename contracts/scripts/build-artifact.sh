@@ -48,11 +48,27 @@ esac
 OCIMFS=65   # binaryen IR-size cap for single-caller inlining (~flexible limit)
 MAX_LOCALS=100
 
-MOUNTS=(
-  -v "$CRATE":/code
-  --mount "type=volume,source=$(basename "$CRATE")_cache,target=/target"
-  --mount "type=volume,source=registry_cache,target=/usr/local/cargo/registry"
-)
+# The optimizer recompiles the whole dependency tree, so its `/target` and cargo
+# registry are worth keeping between builds. Docker named volumes are the right
+# home locally; a CI runner is ephemeral and has none, so `OPTIMIZER_CACHE_DIR`
+# redirects both to directories the caller can persist itself. Files land
+# root-owned (the image runs as root) — a caller that archives them afterwards
+# has to take ownership first.
+if [ -n "${OPTIMIZER_CACHE_DIR:-}" ]; then
+  mkdir -p "$OPTIMIZER_CACHE_DIR/target" "$OPTIMIZER_CACHE_DIR/registry"
+  MOUNTS=(
+    -v "$CRATE":/code
+    -v "$OPTIMIZER_CACHE_DIR/target":/target
+    -v "$OPTIMIZER_CACHE_DIR/registry":/usr/local/cargo/registry
+  )
+  echo "optimizer caches: $OPTIMIZER_CACHE_DIR (bind mounts)"
+else
+  MOUNTS=(
+    -v "$CRATE":/code
+    --mount "type=volume,source=$(basename "$CRATE")_cache,target=/target"
+    --mount "type=volume,source=registry_cache,target=/usr/local/cargo/registry"
+  )
+fi
 
 echo "building $ARTIFACT with $IMAGE (wasm-opt -ocimfs=$OCIMFS)"
 docker run --rm "${MOUNTS[@]}" --entrypoint sh "$IMAGE" -c '

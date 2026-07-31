@@ -4,7 +4,7 @@ import { useFetcher } from "react-router";
 import { PushSettings } from "~/components/portfolio/push-settings";
 import { t, type Locale, type MessageKey } from "~/i18n";
 
-// Alert settings (app-spec §8.2; plan 6.2 §2.6) — joins the Portfolio page,
+// Alert settings (app-spec §8.2) — joins the Portfolio page,
 // fulfilling the recorded 6.1 deferral. One toggle per kind in the closed
 // list; default-on kinds annotated "on by default" (not a fake rule row —
 // absence means default). `operator_arrears` shows only for operator sessions
@@ -22,11 +22,23 @@ const OPERATOR_ONLY = new Set(["operator_arrears"]);
 
 /** i18n label + description key per kind (the closed §8.2 list). */
 const KIND_COPY: Record<string, { label: MessageKey; desc: MessageKey }> = {
-  nav_step_posted: { label: "alerts.kind.nav-step-posted", desc: "alerts.kind.nav-step-posted-desc" },
-  redemption_update: { label: "alerts.kind.redemption-update", desc: "alerts.kind.redemption-update-desc" },
+  nav_step_posted: {
+    label: "alerts.kind.nav-step-posted",
+    desc: "alerts.kind.nav-step-posted-desc",
+  },
+  redemption_update: {
+    label: "alerts.kind.redemption-update",
+    desc: "alerts.kind.redemption-update-desc",
+  },
   vault_status: { label: "alerts.kind.vault-status", desc: "alerts.kind.vault-status-desc" },
-  validator_set_incident: { label: "alerts.kind.validator-set-incident", desc: "alerts.kind.validator-set-incident-desc" },
-  operator_arrears: { label: "alerts.kind.operator-arrears", desc: "alerts.kind.operator-arrears-desc" },
+  validator_set_incident: {
+    label: "alerts.kind.validator-set-incident",
+    desc: "alerts.kind.validator-set-incident-desc",
+  },
+  operator_arrears: {
+    label: "alerts.kind.operator-arrears",
+    desc: "alerts.kind.operator-arrears-desc",
+  },
 };
 
 export function AlertSettings({ locale }: { locale: Locale }) {
@@ -43,14 +55,18 @@ export function AlertSettings({ locale }: { locale: Locale }) {
 
   // Sync local state from every response (GET carries is_operator; both carry settings).
   useEffect(() => {
-    const data = fetcher.data as { settings?: EffectiveSetting[]; is_operator?: boolean } | undefined;
+    const data = fetcher.data as
+      | { settings?: EffectiveSetting[]; is_operator?: boolean }
+      | undefined;
     if (data?.settings) setSettings(data.settings);
     if (typeof data?.is_operator === "boolean") setIsOperator(data.is_operator);
   }, [fetcher.data]);
 
   const toggle = (kind: string, enabled: boolean) => {
     // Optimistic: reflect the change immediately; the POST response reconciles.
-    setSettings((prev) => (prev === null ? prev : prev.map((s) => (s.kind === kind ? { ...s, enabled } : s))));
+    setSettings((prev) =>
+      prev === null ? prev : prev.map((s) => (s.kind === kind ? { ...s, enabled } : s)),
+    );
     fetcher.submit(JSON.stringify({ kind, enabled }), {
       method: "post",
       action: "/alerts/rules",
@@ -61,7 +77,11 @@ export function AlertSettings({ locale }: { locale: Locale }) {
   const visible = (settings ?? []).filter((s) => !OPERATOR_ONLY.has(s.kind) || isOperator);
 
   return (
-    <section id="alert-settings" className="flex flex-col gap-3" aria-label={t(locale, "alerts.settings-title")}>
+    <section
+      id="alert-settings"
+      className="flex flex-col gap-3"
+      aria-label={t(locale, "alerts.settings-title")}
+    >
       <h2 className="text-lg font-semibold">{t(locale, "alerts.settings-title")}</h2>
       <p className="text-sm text-muted-foreground">{t(locale, "alerts.settings-lede")}</p>
 

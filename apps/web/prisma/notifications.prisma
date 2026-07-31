@@ -1,4 +1,4 @@
-// notifications (app-spec §9.1, §10.4; plan 6.2 §2.1) — the in-app delivery
+// notifications (app-spec §9.1, §10.4) — the in-app delivery
 // log. `kind` is NOT a rule FK: default-on kinds have no rule row (absence
 // means default). Payload minimalism is enforced, not stylistic: each kind has
 // a closed zod shape (app/lib/services/alerts.server.ts) carrying only
@@ -8,7 +8,7 @@
 // subset of an already-minimal shape). In-app copy renders at read time from
 // the payload keys + i18n.
 //
-// Two mechanisms, correctness never resting on the cursor (plan §2.4):
+// Two mechanisms, correctness never resting on the cursor:
 //   * `@@unique([address, kind, dedupeKey])` — THE exactly-once gate: every
 //     tick inserts with `skipDuplicates` (ON CONFLICT DO NOTHING), so an
 //     indexer replay or worker restart can never double-deliver.

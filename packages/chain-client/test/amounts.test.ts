@@ -19,7 +19,21 @@ describe("parseUint128", () => {
   });
 
   it("rejects everything that is not a canonical unsigned integer string", () => {
-    for (const bad of ["", "-1", "1.5", "01", "0x10", " 1", "1n", 5, null, undefined, {}, "+1", "1e9"]) {
+    for (const bad of [
+      "",
+      "-1",
+      "1.5",
+      "01",
+      "0x10",
+      " 1",
+      "1n",
+      5,
+      null,
+      undefined,
+      {},
+      "+1",
+      "1e9",
+    ]) {
       expect(() => parseUint128(bad)).toThrow(DecodeError);
     }
   });

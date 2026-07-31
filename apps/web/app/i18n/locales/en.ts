@@ -33,7 +33,8 @@ export default {
   "learn.stat-na": "n/a",
 
   "learn.chart-title": "Redemption value by monthly settlement",
-  "learn.chart-caption": "HASH per nvHASH at each monthly settlement; flat between settlements by design.",
+  "learn.chart-caption":
+    "HASH per nvHASH at each monthly settlement; flat between settlements by design.",
   "learn.chart-empty":
     "No monthly settlements are indexed yet. The step chart appears as settlement history lands.",
   "learn.chart-unavailable": "Settlement history is unavailable right now.",
@@ -134,10 +135,13 @@ export default {
     "You deposit HASH into the vault and receive nvHASH at the current rate. Value accrues in monthly steps as each epoch settles, and you can redeem back to HASH at any time.",
   "stake.educate-fixed": "Your nvHASH amount stays fixed; its redemption value grows.",
   "stake.next-epoch": "Next expected epoch step: {date}.",
-  "stake.unavailable": "The vault could not be read right now. Staking is unavailable until it recovers.",
-  "stake.paused": "Deposits are paused: {reason}. They resume automatically when the vault is unpaused.",
+  "stake.unavailable":
+    "The vault could not be read right now. Staking is unavailable until it recovers.",
+  "stake.paused":
+    "Deposits are paused: {reason}. They resume automatically when the vault is unpaused.",
   "stake.paused-generic": "the vault is paused",
-  "stake.connect-prompt": "Connect a wallet to stake. You approve every transaction in your wallet.",
+  "stake.connect-prompt":
+    "Connect a wallet to stake. You approve every transaction in your wallet.",
   "stake.amount-label": "Amount to deposit (HASH)",
   "stake.balance": "Spendable balance: {balance} HASH",
   "stake.limits": "Vault limits — min {min} HASH, max {max} HASH.",
@@ -148,7 +152,8 @@ export default {
   "stake.amount-invalid": "Enter a plain HASH amount (up to 9 decimal places).",
   "stake.review": "Review deposit",
   "stake.confirm-deposit": "Deposit {amount} HASH into the vault.",
-  "stake.confirm-rate-note": "nvHASH mints at the execution-time rate; its redemption value grows with each epoch.",
+  "stake.confirm-rate-note":
+    "nvHASH mints at the execution-time rate; its redemption value grows with each epoch.",
   "exit.title": "Redeem & Exit",
   "exit.lede":
     "Two ways out. Compare them before you choose — the native redemption pays full value at a guaranteed date; the market path will arrive once nvHASH is bridged.",
@@ -164,14 +169,20 @@ export default {
   "exit.dex-risks": "Premium or discount to value, pool depth, and bridge transit.",
   "exit.native-you-get": "Full value at maturity, re-priced at payout.",
   "exit.native-guarantee": "Guaranteed within {days} days.",
-  "exit.native-typical": "Typically sooner — recently, a median of {median} days (90% within {p90} days). Typical, not guaranteed.",
-  "exit.native-typical-withheld": "Not enough recent redemptions to show a typical time yet; the {days}-day guarantee stands.",
-  "exit.native-risks": "None beyond the wait. An unfunded maturity refunds your shares — never a loss.",
+  "exit.native-typical":
+    "Typically sooner — recently, a median of {median} days (90% within {p90} days). Typical, not guaranteed.",
+  "exit.native-typical-withheld":
+    "Not enough recent redemptions to show a typical time yet; the {days}-day guarantee stands.",
+  "exit.native-risks":
+    "None beyond the wait. An unfunded maturity refunds your shares — never a loss.",
   "exit.native-title": "Redeem nvHASH for HASH",
-  "exit.unavailable": "The vault could not be read right now. Redemption is unavailable until it recovers.",
-  "exit.paused": "Redemptions are paused: {reason}. They resume automatically when the vault is unpaused.",
+  "exit.unavailable":
+    "The vault could not be read right now. Redemption is unavailable until it recovers.",
+  "exit.paused":
+    "Redemptions are paused: {reason}. They resume automatically when the vault is unpaused.",
   "exit.paused-generic": "the vault is paused",
-  "exit.connect-prompt": "Connect a wallet to redeem. You approve every transaction in your wallet.",
+  "exit.connect-prompt":
+    "Connect a wallet to redeem. You approve every transaction in your wallet.",
   "exit.amount-label": "Amount to redeem (nvHASH)",
   "exit.balance": "Your balance: {balance} nvHASH",
   "exit.preview": "Estimated value now: {value} HASH.",
@@ -181,7 +192,8 @@ export default {
   "exit.review": "Review redemption",
   "exit.confirm-escrow": "Your {shares} nvHASH escrow now.",
   "exit.confirm-guarantee": "Guaranteed release within {days} days.",
-  "exit.confirm-typical": "Typically sooner — recently a median of {median} days (typical, not guaranteed).",
+  "exit.confirm-typical":
+    "Typically sooner — recently a median of {median} days (typical, not guaranteed).",
   "exit.confirm-typical-withheld": "A typical time is not shown yet; the guarantee above stands.",
   "exit.confirm-refund": "If a maturity is unfunded, your shares are refunded — never a loss.",
   "exit.tracker-title": "Your redemptions",
@@ -191,12 +203,14 @@ export default {
   "exit.tracker-shares": "{shares} nvHASH escrowed",
   "exit.tracker-queue-position": "Queue position {position} of {total}",
   "exit.tracker-countdown": "Guaranteed within {days} days.",
-  "exit.tracker-expedite-note": "“Expedited” means the vault had funds to release you early, ahead of the guarantee.",
+  "exit.tracker-expedite-note":
+    "“Expedited” means the vault had funds to release you early, ahead of the guarantee.",
   "exit.tracker-paid": "Paid out",
   "exit.tracker-refunded": "Refunded (unfunded maturity — shares returned, no loss)",
   "exit.tracker-payout-amount": "Received {amount} HASH",
   "exit.tracker-refund-shares": "{shares} nvHASH returned",
-  "exit.tracker-alert-note": "You'll be alerted here and in the bell when this matures or is expedited.",
+  "exit.tracker-alert-note":
+    "You'll be alerted here and in the bell when this matures or is expedited.",
   "exit.tracker-alert-settings-link": "Manage in alert settings",
 
   "alerts.bell-label": "Alerts",
@@ -232,9 +246,10 @@ export default {
   "alerts.kind.validator-set-incident-desc":
     "When a program validator is jailed or takes a slashing write-down.",
   "alerts.kind.operator-arrears": "Commission arrears",
-  "alerts.kind.operator-arrears-desc": "When one of your validators still has commission owed at epoch close.",
+  "alerts.kind.operator-arrears-desc":
+    "When one of your validators still has commission owed at epoch close.",
 
-  // Web Push, per-browser opt-in (M6.3 §2.2). Every honest permission state has
+  // Web Push, per-browser opt-in. Every honest permission state has
   // its own copy — no silent no-ops.
   "alerts.push.title": "Push notifications on this device",
   "alerts.push.lede":
@@ -288,7 +303,8 @@ export default {
   "portfolio.yield-title": "Effective yield",
   "portfolio.yield-apr-label": "Your effective APR",
   "portfolio.yield-apr-caption": "Annualized since your first deposit",
-  "portfolio.yield-cold": "First epoch not yet settled. Your effective yield appears after the first monthly settlement.",
+  "portfolio.yield-cold":
+    "First epoch not yet settled. Your effective yield appears after the first monthly settlement.",
   "portfolio.yield-chart-title": "Your APR vs the program, by settlement",
   "portfolio.yield-chart-caption": "Percent per year at each monthly settlement.",
   "portfolio.yield-series-personal": "Your APR",
@@ -303,7 +319,8 @@ export default {
   "portfolio.accrual-title": "Position value over time",
   "portfolio.accrual-caption":
     "Your HASH value at each event and monthly settlement; flat between settlements by design.",
-  "portfolio.accrual-cold": "Your value chart appears once your position has at least two points of history.",
+  "portfolio.accrual-cold":
+    "Your value chart appears once your position has at least two points of history.",
   "portfolio.accrual-unavailable": "Your accrual history is unavailable right now.",
   "portfolio.yield-truncated":
     "Showing the most recent settlements; earlier yield history is trimmed.",
@@ -355,16 +372,20 @@ export default {
   "portfolio.alerts-deferred": "Per-address alert rules arrive with a later milestone.",
 
   "tx.reason-vault-paused": "The vault is paused, so this cannot proceed right now.",
-  "tx.reason-vault-paused-detail": "The vault is paused ({detail}), so this cannot proceed right now.",
+  "tx.reason-vault-paused-detail":
+    "The vault is paused ({detail}), so this cannot proceed right now.",
   "tx.reason-swaps-disabled": "This action is currently disabled on the vault.",
   "tx.reason-below-minimum": "Below the vault minimum of {minimum}.",
   "tx.reason-above-maximum": "Above the vault maximum of {maximum}.",
-  "tx.reason-insufficient-balance": "Not enough balance: you have {balance}, this needs {required} including the fee.",
-  "tx.reason-vesting-locked": "Some of your HASH is still vesting and cannot be deposited. Spendable now: {spendable} HASH.",
+  "tx.reason-insufficient-balance":
+    "Not enough balance: you have {balance}, this needs {required} including the fee.",
+  "tx.reason-vesting-locked":
+    "Some of your HASH is still vesting and cannot be deposited. Spendable now: {spendable} HASH.",
   "tx.reason-amount-invalid": "Enter a valid amount.",
-  "tx.reason-account-missing": "This account has no on-chain activity yet. Receive some HASH first.",
+  "tx.reason-account-missing":
+    "This account has no on-chain activity yet. Receive some HASH first.",
   "tx.reason-chain-unavailable": "The chain could not be reached to check this. Try again shortly.",
-  // M6.4 operator predicates. Each restates a rule the CONTRACT enforces —
+  // Operator predicates. Each restates a rule the CONTRACT enforces —
   // these explain in advance, they do not decide (§12.1).
   "tx.reason-not-validator-operator":
     "Only the validator's own operator account can do this, and this wallet is not it.",
@@ -375,12 +396,13 @@ export default {
     "This validator is not jailed. Reporting only applies to a validator that is jailed right now, and the contract clears a stale report on its next observation.",
   "tx.reason-no-jail-report":
     "No jail report is on file yet. Report the validator first — that starts the cooldown.",
-  "tx.reason-purge-cooldown": "The cooldown has not elapsed. A purge becomes possible at {readyAt}.",
+  "tx.reason-purge-cooldown":
+    "The cooldown has not elapsed. A purge becomes possible at {readyAt}.",
   "tx.reason-program-halted":
     "The program's fund-moving cranks are halted, so a purge cannot run right now.",
   "tx.reason-too-many-validators":
     "The program is at its limit of {max} enrolled validators, so no new one can enroll right now.",
-  // M7.3–7.4 governance would-fail reasons (§2.5).
+  // Governance would-fail reasons.
   "tx.reason-proposal-not-found": "This proposal could not be read from the chain.",
   "tx.reason-proposal-pruned":
     "The chain no longer holds this proposal, so no action can reference it.",
@@ -401,7 +423,8 @@ export default {
   "tx.reason-template-invalid": "This action cannot be composed as entered: {detail}",
   "tx.reason-governance-unavailable":
     "The program's governance could not be read right now, so this action cannot be prepared.",
-  "tx.reconnect-to-sign": "Reconnect your wallet to sign — the session is active but the signing connection was lost.",
+  "tx.reconnect-to-sign":
+    "Reconnect your wallet to sign — the session is active but the signing connection was lost.",
   "tx.status-signing": "Approve the transaction in your wallet…",
   "tx.view-explorer": "View on explorer",
   "tx.status-confirmed": "Confirmed on chain.",
@@ -416,7 +439,8 @@ export default {
   "wallet.disconnect": "Disconnect",
   "wallet.pick-vendor": "Choose a wallet",
   "wallet.connecting": "Waiting for the wallet…",
-  "wallet.approve-in-wallet": "Approve the login request in your wallet. It signs a one-time message; nothing moves.",
+  "wallet.approve-in-wallet":
+    "Approve the login request in your wallet. It signs a one-time message; nothing moves.",
   "wallet.scan-qr": "Scan with your wallet app",
   "wallet.error-wc-unconfigured":
     "Mobile wallet pairing is not configured on this deployment. The browser extension still works.",
@@ -505,7 +529,7 @@ export default {
   "validators.status-tombstoned": "Tombstoned",
   "validators.uptime-vs-threshold": "{uptime}% / {threshold}% required",
   "validators.uptime-na": "n/a (no capture yet)",
-  // Operator view (M6.4, app-spec §8.6). Copy restates the CONTRACT's own
+  // Operator view (app-spec §8.6). Copy restates the CONTRACT's own
   // mechanics (contracts/src/msg.rs + validators.rs doc comments), not an
   // invented product story — in particular the commission/TIP asymmetry, which
   // is the thing an operator most easily gets wrong.
@@ -662,7 +686,8 @@ export default {
     "This MOVES the program's stake off the validator: redelegated up to a claimant's headroom if you named one, otherwise unbonded in full.",
   "operator.confirm-purge-2":
     "It only succeeds if the validator is still jailed and the cooldown from the report has elapsed.",
-  "operator.confirm-purge-3": "Stake that is unbonded is unavailable until the unbonding period ends.",
+  "operator.confirm-purge-3":
+    "Stake that is unbonded is unavailable until the unbonding period ends.",
 
   "operator.epochs-title": "Per-epoch history",
   "operator.epochs-caption":
@@ -674,13 +699,13 @@ export default {
   "operator.accrued-header": "Accrued (HASH)",
   "operator.due-header": "Due (HASH)",
 
-  // Governance center (§8.7, PR 7.2). Read-only in this milestone: voting and
+  // Governance center (§8.7). Read-only in this milestone: voting and
   // execution arrive with 7.3–7.4, so nothing here offers an action.
   "governance.title": "Governance",
   "governance.lede":
     "Proposals for the program's group policies, with what each one would do, where its tally stands, and how it ended.",
-  // M7.3–7.4 shipped voting, execution and the template composer, so the
-  // read-only note this page carried since 7.2 would now be false.
+  // Voting, execution and the template composer all ship, so this page must
+  // not carry a read-only note.
   "governance.write-note":
     "Members vote and execute from each proposal's page. Proposals are composed from the program's own admin actions.",
 
@@ -694,7 +719,8 @@ export default {
   "governance.policy-voting-period": "Voting period {period}",
   "governance.policy-proposals": "{count} mirrored",
   "governance.policy-proposals-none": "None mirrored",
-  "governance.group-summary": "Group {groupId}, version {version} · {members} members, total weight {weight}",
+  "governance.group-summary":
+    "Group {groupId}, version {version} · {members} members, total weight {weight}",
   "governance.policies-truncated":
     "More policies exist than this page read. The list below is incomplete.",
 
@@ -707,7 +733,8 @@ export default {
   "governance.proposals-empty": "No proposals have been mirrored yet.",
   "governance.proposals-unavailable":
     "The mirrored proposal history could not be read. This is not an empty history.",
-  "governance.indexed-from": "Mirrored from height {height}. Anything pruned before then is unrecoverable.",
+  "governance.indexed-from":
+    "Mirrored from height {height}. Anything pruned before then is unrecoverable.",
   "governance.indexed-from-unknown":
     "No height certifies how far back this mirror reaches, so it may be incomplete.",
 
@@ -848,7 +875,7 @@ export default {
   "governance.msg-malformed":
     "This message could not be read as its declared type. The exact payload is below.",
 
-  // ── M7.3–7.4 write path: vote, execute, compose ────────────────────────
+  // ── The write path: vote, execute, compose ─────────────────────────────
   "governance.actions-title": "Your actions",
   "governance.actions-live-down":
     "Actions are hidden because the current on-chain state could not be read. What is shown above is the mirrored record, and acting on it could submit a transaction that is certain to fail.",
@@ -870,8 +897,7 @@ export default {
   "governance.vote-metadata-note":
     "Votes carry no note. Only the option above is recorded on chain.",
   "governance.confirm-vote-1": "You are voting {option} on proposal {id}.",
-  "governance.confirm-vote-2":
-    "This vote is recorded on chain permanently and cannot be changed.",
+  "governance.confirm-vote-2": "This vote is recorded on chain permanently and cannot be changed.",
   "governance.confirm-vote-3":
     "This signature votes only. If the proposal passes, executing it is a separate transaction you sign separately.",
 
@@ -953,8 +979,7 @@ export default {
     "Submitting is not idempotent: signing twice creates two separate proposals, not one.",
   "governance.confirm-submit-min-execution":
     "This policy requires {period} between passage and execution, so the earliest this can take effect is that long after the voting period ends.",
-  "governance.confirm-submit-voting-period":
-    "The voting period for this policy is {period}.",
+  "governance.confirm-submit-voting-period": "The voting period for this policy is {period}.",
 
   "governance.confirm-update-config-1":
     "This proposes a change to the program's configuration. Only the settings listed are changed.",

@@ -68,7 +68,10 @@ function toEpoch(v: SampledValidator, sample: CrankSample): EpochRow {
   };
 }
 
-export async function applySamples(store: ValidatorStore, samples: readonly CrankSample[]): Promise<void> {
+export async function applySamples(
+  store: ValidatorStore,
+  samples: readonly CrankSample[],
+): Promise<void> {
   for (const sample of samples) {
     const present = new Set<string>();
     for (const v of sample.validators) {

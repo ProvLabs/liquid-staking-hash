@@ -4,19 +4,18 @@
 //   1. Every route is `method: "GET"`. There is no way to register a write in
 //      this array; the read-only contract test asserts it, and the request
 //      handler rejects any non-GET/HEAD verb with 405 before dispatch. This is
-//      how "no write endpoint of any kind" (plan §1, SECURITY.md) is enforced.
+// how "no write endpoint of any kind" (SECURITY.md) is enforced.
 //   2. Every route declares whether it carries the freshness envelope and what
 //      zod schema (if any) bounds its query params. The envelope contract test
 //      iterates THIS array, so a new route is automatically held to both the
 //      envelope and query-bounds gates — the harness cannot silently miss one.
 //
-// PR 3.1: the public program endpoints read real indexed data through the
+// The public program endpoints read real indexed data through the
 // injected `IndexedReader` port (reader.ts) — `emptyReader` when no database
 // is configured, so a dataless process still reports the honest null/empty
 // state (app-spec §12.1), never a fabricated height or row. Envelope heights
 // come from `reader.heads()` (latest reconciler run; worker-checkpoint
-// fallback). `/market` lands with PR 3.2; the address-scoped endpoints with
-// PR 3.3.
+// fallback).
 
 import type {
   FreshnessSource,
@@ -46,7 +45,6 @@ import {
   toOperatorEpochRow,
   toOperatorPaymentRow,
   toTransactionRow,
-  type EpochBoundary,
   type OperatorPaymentFacts,
 } from "./derive.ts";
 import { derivePortfolioMetrics } from "./portfolio-metrics.ts";
@@ -83,7 +81,7 @@ export interface RouteContext<Q> {
   /** Injectable clock (deterministic in tests); drives `generated_at`. */
   readonly now: () => Date;
   readonly appEnv: ApiConfig["appEnv"];
-  /** The indexed-data port (PR 3.1) — every data read goes through it. */
+  /** The indexed-data port — every data read goes through it. */
   readonly reader: IndexedReader;
   /** What `/status` reports as the wired data source. */
   readonly dataSource: "unwired" | "api_reader";
@@ -108,7 +106,7 @@ export interface EnvelopedPayload {
  *   the route's zod-parsed `?address=` target exactly (mismatch → 403;
  *   absent/expired/invalid assertion → 401).
  * - "internal:notifier": the notifier's read-only surface (ADR-001
- *   Decision 3; no route uses it until M6.2) — never grants address routes.
+ * Decision 3) — never grants address routes.
  */
 export type RouteAuth = "public" | "address" | "internal:notifier";
 
@@ -153,7 +151,7 @@ function defineOperational<Q>(route: OperationalRoute<Q>): Route {
 /**
  * `GET /api/v1/status` — enveloped service descriptor. `data_source` reports
  * what is actually wired ("api_reader" | "unwired") and the heights come from
- * the reader — the M4.1 chrome consumes this envelope for the footer
+ * the reader — the chrome consumes this envelope for the footer
  * freshness line, so it must never claim a plane that is not connected.
  */
 const statusRoute = defineEnveloped<unknown>({
@@ -181,7 +179,7 @@ const statusRoute = defineEnveloped<unknown>({
 
 /**
  * `GET /api/v1/incidents` — enveloped, paginated collection over the
- * reconciler-derived `incidents` (app-spec §9.6; row shape frozen by PR 4.2).
+ * reconciler-derived `incidents` (app-spec §9.6; row shape frozen by).
  * A healthy program legitimately has zero incidents; null heights mean no
  * indexer height certifies the list yet (§12.1).
  */
@@ -234,8 +232,8 @@ const metricsRoute = defineEnveloped<unknown>({
 /**
  * `GET /api/v1/epochs` — enveloped, paginated per-epoch history (newest
  * first) from the indexer's `epoch_snapshots`, the series behind the Learn
- * NAV step chart and the §8.5 views (row shape frozen by PR 4.2; `nav`
- * widened to `string | null` by PR 3.1 — an empty-vault epoch has no NAV).
+ * NAV step chart and the §8.5 views (row shape frozen; `nav`
+ * widened to `string | null` — an empty-vault epoch has no NAV).
  * A fresh program legitimately has zero settled epochs.
  */
 const epochsRoute = defineEnveloped({
@@ -263,7 +261,7 @@ const epochsRoute = defineEnveloped({
  * `GET /api/v1/validators` — the public set view (app-spec §8.6): registry
  * enrollment joined with each validator's latest sampled epoch, plus the
  * set-health aggregates. Shapes frozen by this PR (`ValidatorRow` /
- * `ValidatorSetHealth`, @nvhash/api-types); PR 4.3's public page consumes
+ * `ValidatorSetHealth`, @nvhash/api-types); the public page consumes
  * them. Per-epoch fields are null before the first sample — honest, never a
  * fabricated zero.
  */
@@ -286,11 +284,11 @@ const validatorsRoute = defineEnveloped<unknown>({
 });
 
 /**
- * `GET /api/v1/market` — the §8.5 secondary-market summary (PR 3.2; shapes
+ * `GET /api/v1/market` — the §8.5 secondary-market summary (shapes
  * `MarketSummary`/`MarketSample` frozen in @nvhash/api-types). Market data
  * has no chain-canonical plane, so venue + sample time ride IN the payload,
  * and the premium/discount is computed against the NAV current at the
- * sample's time ([R6], §9.5(4)). With the sampler (PR 2.4) parked pending
+ * sample's time ([R6], §9.5(4)). With the sampler parked pending
  * §14.3, this serves the honest empty state — the v1 "coming soon" shell
  * (§13 decision 4) with a stable shape ahead of the data.
  */
@@ -314,7 +312,7 @@ const marketRoute = defineEnveloped<unknown>({
 
 /**
  * `GET /api/v1/redemptions/stats` — the program-wide typical time-to-payout
- * (PR 5.4; app-spec §8.4, §9.5.3, §14.12). PUBLIC and aggregate over the
+ * (app-spec §8.4, §9.5.3, §14.12). PUBLIC and aggregate over the
  * recent terminal-request cohort — no owner keying, so no PII. The ≥ 10-
  * terminal threshold and the epoch cold-start gate are applied in the
  * derivation (median/p90 null below them), and the physical 21–60-day band
@@ -341,11 +339,11 @@ const payoutStatsRoute = defineEnveloped<unknown>({
 });
 
 /**
- * `GET /api/v1/portfolio?address=` — address-scoped (PR 3.3, ADR-001
+ * `GET /api/v1/portfolio?address=` — address-scoped (ADR-001
  * Decision 2): the indexed facts for one address — first activity, event
  * count, escrowed shares, active redemptions. Deliberately NO balance and no
  * derived metrics ([R2]: balance is the web tier's live read; cost basis /
- * effective yield are M6.1). The registry `auth: "address"` declaration is
+ * effective yield). The registry `auth: "address"` declaration is
  * what the handler enforces — reaching this handler means the assertion's
  * scope already equals `?address=` exactly.
  */
@@ -371,7 +369,7 @@ const portfolioRoute = defineEnveloped<z.infer<typeof portfolioQuerySchema>>({
 });
 
 /**
- * `GET /api/v1/portfolio/metrics?address=` — address-scoped (M6.1 §2.4): the
+ * `GET /api/v1/portfolio/metrics?address=` — address-scoped: the
  * derived cost-basis, realized-gain, effective-yield, and accrual figures for
  * one address, produced by the pure `derivePortfolioMetrics` fold over the
  * address's FULL indexed history plus the epoch step series. A sibling of
@@ -418,7 +416,7 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
   summary: "Address-scoped transaction history (paginated; CSV export)",
   handle: async (ctx) => {
     if (ctx.query.format === "csv") {
-      // §14.11 amendment (M6.1): the export is the COMPLETE indexed history
+      // §14.11 amendment: the export is the COMPLETE indexed history
       // ascending by (height, msg_index) — a statement of fact, never a
       // paginated slice. `limit`/`offset` are deliberately ignored here (they
       // bound only the JSON view); the full stream comes from the chunked
@@ -430,11 +428,14 @@ const transactionsRoute = defineEnveloped<TransactionsQuery>({
       // [R3]: freshness rides in headers for the non-JSON representation —
       // same values the envelope would carry, never omitted.
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
-      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      if (heads.indexedHeight !== null)
+        headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
       return new Response(
-        csvStream(ctx.reader.transactionsAscStream(ctx.query.address), transactionsCsvHeader(), (facts) =>
-          transactionsCsvRows(facts.map(toTransactionRow)),
+        csvStream(
+          ctx.reader.transactionsAscStream(ctx.query.address),
+          transactionsCsvHeader(),
+          (facts) => transactionsCsvRows(facts.map(toTransactionRow)),
         ),
         { status: 200, headers },
       );
@@ -502,7 +503,7 @@ function csvStream<Fact>(
   });
 }
 
-// --- operator surface (M6.4, address-scoped) --------------------------------
+// --- operator surface (address-scoped) --------------------------------
 //
 // The three reads behind `/validators/mine` (app-spec §8.6). All `auth:
 // "address"`, so they join the standing cross-address gate automatically; on
@@ -510,7 +511,7 @@ function csvStream<Fact>(
 // need: the address→valoper mapping is resolved server-side from
 // `validator_registry.operator`, and a valoper the address does not operate is
 // answered honest-empty. Not 403 — a 403 would confirm the valoper exists and
-// belongs to someone else, an oracle on who operates what (plan §3 commit B).
+// belongs to someone else, an oracle on who operates what.
 
 /**
  * `GET /api/v1/operator/summary?address=` — every validator this address
@@ -520,8 +521,8 @@ function csvStream<Fact>(
  * from an address that operates none on a dataless process.
  *
  * Peer context (`rank_by_tip`, eligible/enrolled counts) is deliberately ABSENT
- * — plan §7 Q5 was not approved, so no other validator's ordinal position is
- * computed onto this personal surface (delivery note, commit B).
+ * — §7 Q5 was not approved, so no other validator's ordinal position is
+ * computed onto this personal surface.
  */
 const operatorSummaryRoute = defineEnveloped<z.infer<typeof operatorSummaryQuerySchema>>({
   method: "GET",
@@ -632,7 +633,8 @@ const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
       headers.set("content-type", "text/csv; charset=utf-8");
       headers.set("content-disposition", 'attachment; filename="operator-payments.csv"');
       if (heads.chainHeight !== null) headers.set("x-chain-height", String(heads.chainHeight));
-      if (heads.indexedHeight !== null) headers.set("x-indexed-height", String(heads.indexedHeight));
+      if (heads.indexedHeight !== null)
+        headers.set("x-indexed-height", String(heads.indexedHeight));
       headers.set("x-generated-at", ctx.now().toISOString());
       return new Response(
         csvStream(source, operatorPaymentsCsvHeader(), (facts) =>
@@ -661,7 +663,7 @@ const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
   },
 });
 
-// --- internal alert-facts surface (M6.2, `internal:notifier` scope) ---------
+// --- internal alert-facts surface (`internal:notifier` scope) ---------
 //
 // The notifier's cross-address evaluation reads (ADR-001 Decision 3; app-spec
 // §9.4). All `auth: "internal:notifier"`: the handler pipeline enforces that
@@ -669,13 +671,13 @@ const operatorPaymentsRoute = defineEnveloped<OperatorPaymentsQuery>({
 // these paths — the standing INTERNAL_PATHS matrix in cross-address.test.ts),
 // and `internal:notifier` never grants a personal endpoint. Enveloped, so
 // their freshness heights ride the same contract every route carries — a
-// stale indexer is observable, never fabricated (plan §2.5).
+// stale indexer is observable, never fabricated.
 
 /**
  * `GET /api/v1/internal/alert-facts/redemptions` — redemptions whose lifecycle
  * advanced past the notifier's height cursor (`since_height`), ascending by
  * height, bounded page. Owner-keyed transitions have no public surface; the
- * notifier keys `redemption_update` off these terminal timestamps (plan §2.3).
+ * notifier keys `redemption_update` off these terminal timestamps.
  */
 const alertRedemptionsRoute = defineEnveloped<AlertRedemptionsQuery>({
   method: "GET",
@@ -687,7 +689,11 @@ const alertRedemptionsRoute = defineEnveloped<AlertRedemptionsQuery>({
   handle: async (ctx) => {
     const [heads, data] = await Promise.all([
       ctx.reader.heads(),
-      ctx.reader.redemptionsChangedSince(ctx.query.since_height, ctx.query.after_id, ctx.query.limit),
+      ctx.reader.redemptionsChangedSince(
+        ctx.query.since_height,
+        ctx.query.after_id,
+        ctx.query.limit,
+      ),
     ]);
     return {
       data,
@@ -702,7 +708,7 @@ const alertRedemptionsRoute = defineEnveloped<AlertRedemptionsQuery>({
  * `GET /api/v1/internal/alert-facts/incidents` — incidents past the notifier's
  * id cursor (`since_id`), ascending by id, bounded page. No payload
  * passthrough: identity only (id + `(kind, dedupe_key)`), the replay-stable
- * pair the notifier's dedupe keys off (plan §2.3/§2.4). Public `/incidents`
+ * pair the notifier's dedupe keys off (/§2.4). Public `/incidents`
  * omits the dedupe identity, so this surface is not redundant with it.
  */
 const alertIncidentsRoute = defineEnveloped<AlertIncidentsQuery>({
@@ -731,7 +737,7 @@ const alertIncidentsRoute = defineEnveloped<AlertIncidentsQuery>({
  * in the latest sampled epoch, joined to their operator account (active
  * registry rows only). No cursor: arrears is a point-in-time "who owes now"
  * read. Operator economics are excluded from public `/validators`, so this
- * surface is not redundant with it (plan §2.3).
+ * surface is not redundant with it.
  */
 const alertArrearsRoute = defineEnveloped<unknown>({
   method: "GET",
@@ -750,7 +756,6 @@ const alertArrearsRoute = defineEnveloped<unknown>({
     };
   },
 });
-
 
 /**
  * `GET /api/v1/governance/proposals` — the §8.7 proposal list, newest first,
@@ -858,10 +863,7 @@ const governancePoliciesRoute = defineEnveloped<unknown>({
   querySchema: null,
   summary: "Historical x/group policy set observed in the mirror",
   handle: async (ctx) => {
-    const [heads, policies] = await Promise.all([
-      ctx.reader.heads(),
-      ctx.reader.listGovPolicies(),
-    ]);
+    const [heads, policies] = await Promise.all([ctx.reader.heads(), ctx.reader.listGovPolicies()]);
     return {
       data: policies.map(toGovPolicyRow) satisfies GovPolicyRow[],
       source: "indexed" as const,

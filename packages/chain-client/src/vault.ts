@@ -5,7 +5,7 @@
 // - estimate_swap_out serves over REST (string params); estimate_swap_in does
 //   NOT — grpc-gateway rejects Coin/math.Int query parameters — so it throws
 //   UnsupportedTransportError here until a gRPC path exists (or the formal
-//   vault release fixes the annotation; re-checked at PR 8.0).
+// vault release fixes the annotation; re-checked).
 // All shapes are decoded against @nvhash/fixtures in test/.
 
 import {
@@ -17,10 +17,9 @@ import {
   parseCoin,
   parseU64Number,
   parseU64String,
-  parseUint128,
   type Coin,
 } from "./amounts.ts";
-import { LcdClient, UnsupportedTransportError } from "./lcd.ts";
+import { type LcdClient, UnsupportedTransportError } from "./lcd.ts";
 import { parsePagination, type Pagination } from "./types.ts";
 
 export interface VaultAccount {
@@ -144,7 +143,10 @@ export function parsePendingSwapOuts(
   return {
     pendingSwapOuts: list.map((e, i) => {
       const entry = expectObject(e, `${path}.pending_swap_outs[${i}]`);
-      const p = expectObject(entry["pending_swap_out"], `${path}.pending_swap_outs[${i}].pending_swap_out`);
+      const p = expectObject(
+        entry["pending_swap_out"],
+        `${path}.pending_swap_outs[${i}].pending_swap_out`,
+      );
       return {
         owner: expectString(p["owner"], `${path}[${i}].owner`),
         vaultAddress: expectString(p["vault_address"], `${path}[${i}].vault_address`),
@@ -170,7 +172,10 @@ export function parseVaultParams(value: unknown, path = "$"): VaultParams {
   const o = expectObject(expectObject(value, path)["params"], `${path}.params`);
   return {
     techFeeAddress: expectString(o["tech_fee_address"], `${path}.params.tech_fee_address`),
-    defaultAumFeeBips: parseU64Number(o["default_aum_fee_bips"], `${path}.params.default_aum_fee_bips`),
+    defaultAumFeeBips: parseU64Number(
+      o["default_aum_fee_bips"],
+      `${path}.params.default_aum_fee_bips`,
+    ),
   };
 }
 
@@ -195,11 +200,17 @@ export class VaultClient {
     return parseVaultParams(await this.lcd.get("vault/v1/params"));
   }
 
-  async pendingSwapOuts(vault: string): Promise<{ pendingSwapOuts: PendingSwapOut[]; pagination: Pagination }> {
+  async pendingSwapOuts(
+    vault: string,
+  ): Promise<{ pendingSwapOuts: PendingSwapOut[]; pagination: Pagination }> {
     return parsePendingSwapOuts(await this.lcd.get(`vault/v1/vaults/${vault}/pending_swap_outs`));
   }
 
-  async estimateSwapOut(vault: string, shares: bigint, redeemDenom?: string): Promise<SwapEstimate> {
+  async estimateSwapOut(
+    vault: string,
+    shares: bigint,
+    redeemDenom?: string,
+  ): Promise<SwapEstimate> {
     if (shares < 0n) throw new DecodeError("$.shares", "shares must be non-negative");
     return parseSwapEstimate(
       await this.lcd.get(`vault/v1/vaults/${vault}/estimate_swap_out`, {
@@ -214,14 +225,14 @@ export class VaultClient {
    * `Coin`/`math.Int` query parameters ("field type *types.Coin is not
    * supported"). Callers needing swap-in estimates must use a gRPC path
    * (server-side) or wait for the formal vault release to fix the annotation.
-   * Kept as a method so the call site — the M5 stake flow preview — fails
+   * Kept as a method so the call site — the stake flow preview — fails
    * loudly at the boundary instead of silently estimating client-side.
    */
   estimateSwapIn(_vault: string, _assets: Coin): Promise<SwapEstimate> {
     return Promise.reject(
       new UnsupportedTransportError(
         "vault estimate_swap_in",
-        "grpc-gateway rejects Coin/math.Int query parameters on the feature-probed dev build (fixture corpus pinned fact; re-check at PR 8.0)",
+        "grpc-gateway rejects Coin/math.Int query parameters on the feature-probed dev build (fixture corpus pinned fact; re-check at the formal vault release)",
       ),
     );
   }

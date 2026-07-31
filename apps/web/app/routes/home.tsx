@@ -15,7 +15,7 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "nvHASH" }];
 }
 
-// The Learn page (plan 4.2, app-spec §8.1): the Evaluator's due-diligence
+// The Learn page (app-spec §8.1): the Evaluator's due-diligence
 // funnel. Every figure degrades independently and honestly (learn.server.ts);
 // the loader's clock rides along so SSR and hydration agree on ages.
 export async function loader() {

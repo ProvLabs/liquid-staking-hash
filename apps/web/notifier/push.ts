@@ -1,4 +1,4 @@
-// Web Push fan-out (plan 6.3 §2.3). A notifier-only module (OUTSIDE `app/`, so
+// Web Push fan-out. A notifier-only module (OUTSIDE `app/`, so
 // the React Router build never bundles it — and `web-push`, imported only
 // here, never reaches the client). After a stream's `commitTick` returns the
 // NEWLY-INSERTED notifications, the tick's delivery phase — OUTSIDE any DB

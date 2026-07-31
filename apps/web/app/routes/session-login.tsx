@@ -1,4 +1,4 @@
-// POST /session/login (plan 5.1 §3): verify the ADR-36-signed challenge and
+// POST /session/login: verify the ADR-36-signed challenge and
 // establish the session. Every failure — unknown nonce, replayed nonce,
 // expired nonce, address mismatch, bad signature, pubkey/address mismatch —
 // is ONE undifferentiated 401 (the services/api auth.ts precedent: an

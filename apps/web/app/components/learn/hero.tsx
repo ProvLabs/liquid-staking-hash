@@ -4,7 +4,7 @@ import { t, type Locale, type MessageKey } from "~/i18n";
 // explanation (register E4): the step note is part of the hero, not a
 // footnote. The pipeline diagram is a static inline SVG whose arrow pulse is
 // CSS-only and disabled by the global prefers-reduced-motion rule (§11).
-// The last step names the restaking loop explicitly (PR 4.2 review, Ira):
+// The last step names the restaking loop explicitly (Ira):
 // rewards are redeployed to validators, and that compounding is why the
 // nvHASH redemption value steps up.
 const FLOW_STEPS: ReadonlyArray<{ key: MessageKey }> = [

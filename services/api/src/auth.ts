@@ -1,8 +1,8 @@
-// In-process service-assertion verification (ADR-001 Decision 2; app plan PR
-// 3.3). The web tier's session layer mints a short-lived HMAC assertion per
+// In-process service-assertion verification (ADR-001 Decision 2). The web
+// tier's session layer mints a short-lived HMAC assertion per
 // request; this module verifies it INSIDE the API process — never a caller
 // or network-topology assumption. The cross-address-rejection contract tests
-// (test/cross-address.test.ts) gate this service's CI from this PR on.
+// (test/cross-address.test.ts) are a standing CI gate for this service.
 //
 // Wire format (recorded in ADR-001 Decision 2 and app-spec §9.4 in the same
 // change as this file — both sides implement ONE contract):

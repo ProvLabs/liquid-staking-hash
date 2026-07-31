@@ -1,4 +1,4 @@
-// Minimal protobuf wire primitives (app plan PR 5.2). Deliberately
+// Minimal protobuf wire primitives. Deliberately
 // dependency-free and tiny: the App encodes exactly four message shapes
 // (TxBody, AuthInfo, SignDoc, TxRaw over the two vault msgs) and decodes one
 // (TxRaw, for the broadcast-relay guards) — a proto toolchain would be a
@@ -69,7 +69,10 @@ export class ProtoWriter {
    */
   message(field: number, encoded: Uint8Array, alwaysEmit = false): this {
     if (encoded.length === 0 && !alwaysEmit) return this;
-    this.parts.push(...varintBytes(BigInt((field << 3) | 2)), ...varintBytes(BigInt(encoded.length)));
+    this.parts.push(
+      ...varintBytes(BigInt((field << 3) | 2)),
+      ...varintBytes(BigInt(encoded.length)),
+    );
     for (const b of encoded) this.parts.push(b);
     return this;
   }
@@ -136,12 +139,12 @@ export function stringField(fields: WireField[], field: number): string {
   return raw === null ? "" : new TextDecoder().decode(raw);
 }
 
-// ── Reader helpers the M7.3–7.4 governance guards need ───────────────────
+// ── Reader helpers the governance guards need ────────────────────────────
 //
 // The vault/execute guards read one string per field. The `cosmos.group.v1`
 // messages do not fit that shape: `MsgVote.proposal_id`/`option` are VARINTS,
 // and `MsgSubmitProposal.proposers` is a REPEATED string whose multiplicity is
-// unbounded by the module (7.3–7.4 §4b C1). Reading either through
+// unbounded by the module. Reading either through
 // `stringField` would silently answer "" for a field that is present — the
 // shape of bug where a guard's verdict is decided by a value it never saw.
 

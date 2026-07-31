@@ -1,4 +1,4 @@
-// The validator-sampler worker (app-spec §9.2, master plan PR 2.3) →
+// The validator-sampler worker (app-spec §9.2) →
 // `validator_registry` + `validator_epochs`. Anchored to epoch cranks and read
 // height-pinned AS OF each crank (finalized per-epoch validator economics),
 // structurally a sibling of epoch-history — so it backfills and replays

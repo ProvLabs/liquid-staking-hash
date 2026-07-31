@@ -1,4 +1,4 @@
-// Proposal-message decoding (app-spec §8.7, §12.1; M7.2 §2.2). PURE — no I/O,
+// Proposal-message decoding (app-spec §8.7, §12.1). PURE — no I/O,
 // no clock, no config beyond the program contract address passed in.
 //
 // THE RULE THIS FILE EXISTS TO ENFORCE: a decoded summary is produced from a
@@ -18,12 +18,12 @@
 //     contract — pinned by `contracts/src/msg.rs` for the bodies and by
 //     `app/tx/build.ts` for the variant vocabulary, which is IMPORTED rather
 //     than restated so this reader and 7.4's composer cannot describe the same
-//     action differently (M7.2 §2.2 "one vocabulary for one action").
+// action differently ("one vocabulary for one action").
 //
 // x/group's own messages (`MsgUpdateGroupMembers` and friends) are deliberately
 // ABSENT: no fixture pins their shape on this build, and adding an arm from
 // proto knowledge alone is exactly the confident-wrong summary invariant 2's
-// disproof line names (M7.2 §3.4 R3).
+// disproof line names (R3).
 
 import { ADMIN_VARIANTS, KEEPER_VARIANTS, OPERATOR_VARIANTS } from "~/tx/build";
 import { formatBaseAmount, HASH_EXPONENT } from "~/learn/amounts";
@@ -232,7 +232,7 @@ export function decodeMessage(message: unknown, programContract: string): Decode
     // marshals it as the raw JSON object over grpc-gateway, but the plain proto
     // JSON encoding of a bytes field is base64 — and no fixture pins which one
     // this build serves inside a proposal (the drill corpus carries only
-    // `MsgSend`, M7.2 §3.4 R3). BOTH are accepted rather than assuming one:
+    // `MsgSend`). BOTH are accepted rather than assuming one:
     // guessing wrong would render every program-action proposal as `unknown`,
     // which is a safe failure but a needless one.
     const msg = readExecutePayload(message["msg"]);
@@ -348,7 +348,10 @@ export function summarizeMessage(locale: Locale, decoded: DecodedMessage): strin
   const { variant } = decoded;
   if (variant === "set_halted") {
     if (decoded.halted === null) return t(locale, "governance.msg-set-halted-unknown");
-    return t(locale, decoded.halted ? "governance.msg-set-halted-on" : "governance.msg-set-halted-off");
+    return t(
+      locale,
+      decoded.halted ? "governance.msg-set-halted-on" : "governance.msg-set-halted-off",
+    );
   }
   if (variant === "update_config") {
     // The contract changes only the fields a proposal supplies, so NAMING the
