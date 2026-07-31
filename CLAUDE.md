@@ -76,6 +76,11 @@ and status ledger updated in the same change as the behavior they describe.
 
 ## Working conventions
 
+- **Formatting and linting are one tool, repo-wide.** Biome (`biome.jsonc`)
+  formats and lints every JS/TS/CSS source, `apps/console` included: `./dev pnpm
+  run lint` to check, `./dev pnpm run lint:fix` to apply. Rust is `cargo fmt` +
+  `cargo clippy` against the pinned toolchain in the root `rust-toolchain.toml`.
+  Both are CI gates, so a formatting-only diff fails the build.
 - **JS tooling runs in containers, never on the host** (ADR-002 in
   `docs/architecture/`): use the repo-root `./dev` wrapper — `./dev pnpm …`,
   `./dev node …`, `./dev pg up|reset`. Host node/pnpm versions are

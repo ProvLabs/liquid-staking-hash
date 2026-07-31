@@ -21,7 +21,12 @@ Internal testing/operations web console.
   renders every page from fixtures with no live node.
 - `npm run typecheck` — `tsc -b` (project references; `noEmit` comes from
   tsconfig, do not pass `--noEmit` on the command line — TS 5.5 rejects it
-  with `-b`).
+  with `-b`). Gated by the `console` job in `.github/workflows/app-ci.yaml`:
+  this app is outside the pnpm workspace, so `pnpm -r` reaches none of it and
+  that job is the only thing compiling it.
+- Formatting and linting come from the repo-root Biome config (`biome.jsonc`),
+  which covers this app despite the workspace boundary: `./dev pnpm run lint`
+  from the repository root, gated in the same workflow.
 - `npm run build` / `build:devnet` / `build:test` — typecheck + vite build
   per deployment profile (`.env.<profile>`, all client-public values).
 - Against a real chain: stand up the dev node via `infra/devnet/dev-node.sh
