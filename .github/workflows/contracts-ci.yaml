@@ -5,9 +5,11 @@
 # be machine-checked, the simulation to stay seed-reproducible, and the
 # committed schema to be the shipped interface. Each of those is a job here.
 #
-# The toolchain is pinned by `contracts/rust-toolchain.toml` — rustup reads it
-# automatically, which is why no toolchain action appears below. Bump the pin
-# there, not here.
+# The toolchain is pinned by the REPOSITORY-ROOT `rust-toolchain.toml` — rustup
+# reads it by parent-directory search, which is why no toolchain action appears
+# below. Bump the pin there, not here. It must stay out of `contracts/`: that
+# directory is bind-mounted into the cosmwasm/optimizer image, which builds the
+# wasm from its own toolchain and breaks if rustup switches away from it.
 #
 # Deliberately NOT here: the live devnet drills under `contracts/drills/`. They
 # need the ghcr.io/provlabs/vault-dev-node image with the pre-release vault
@@ -49,9 +51,11 @@ jobs:
   static:
     name: contracts · fmt · clippy · schema freshness
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Not as fast as it sounds on a cold cache: `clippy --all-targets` builds the
+    # test targets too, which pulls in provwasm-test-tube's bundled Go.
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         run: rustup show
       - name: Restore cargo registry + target cache
@@ -61,7 +65,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             contracts/target
-          key: cargo-static-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/rust-toolchain.toml') }}
+          key: cargo-static-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: cargo-static-${{ runner.os }}-
 
       - name: Formatting (cargo fmt --check)
@@ -93,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         run: rustup show
       - name: Restore cargo registry + target cache
@@ -103,7 +107,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             contracts/target
-          key: cargo-test-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/rust-toolchain.toml') }}
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: cargo-test-${{ runner.os }}-
 
       # Runs the pinned cosmwasm/optimizer image (amd64 on the runner) and
@@ -125,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
         run: rustup show
       - name: Restore cargo registry + target cache
@@ -135,7 +139,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             contracts/target
-          key: cargo-soak-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'contracts/rust-toolchain.toml') }}
+          key: cargo-soak-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: cargo-soak-${{ runner.os }}-
 
       - name: Soak (500 scenarios × 240 epochs, halt on first failure)

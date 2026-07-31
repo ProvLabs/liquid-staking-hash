@@ -34,7 +34,7 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       COREPACK_HOME: ${{ github.workspace }}/.corepack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Restore pnpm store + corepack cache
         uses: actions/cache@v4
@@ -83,7 +83,7 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       COREPACK_HOME: ${{ github.workspace }}/.corepack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Restore pnpm store + corepack cache
         uses: actions/cache@v4
         with:
@@ -112,7 +112,7 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       COREPACK_HOME: ${{ github.workspace }}/.corepack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Restore pnpm store + corepack cache
         uses: actions/cache@v4
         with:
@@ -159,7 +159,7 @@ jobs:
       # service hostname inside the job container.
       ADMIN_DATABASE_URL: postgresql://nvhash:nvhash-dev@postgres:5432/nvhash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Restore pnpm store + corepack cache
         uses: actions/cache@v4
         with:
@@ -182,6 +182,24 @@ jobs:
         run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT ON ALL TABLES IN SCHEMA indexed TO api_reader;"
       - name: Grant-boundary test (test:grants)
         run: corepack pnpm --filter @nvhash/indexer run test:grants
+
+      # Migration ↔ model drift. Each schema is ONE regenerated baseline rather
+      # than an append-only chain (services/indexer/CLAUDE.md), which only holds
+      # if the committed SQL still produces exactly what the models declare.
+      # `--from-migrations` applies the baseline to a scratch database and
+      # compares the result, so a hand-edited migration, a model edit that was
+      # never regenerated, or a migration that cannot replay on an empty
+      # database all fail here rather than on someone's next `pg reset`.
+      - name: Create scratch databases for the drift check
+        run: psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE shadow_indexed;" -c "CREATE DATABASE shadow_app;"
+      - name: Migrations match the models (indexed + app)
+        run: |
+          corepack pnpm --filter @nvhash/indexer exec prisma migrate diff \
+            --from-migrations prisma/migrations --to-schema-datamodel prisma \
+            --shadow-database-url "postgresql://nvhash:nvhash-dev@postgres:5432/shadow_indexed" --exit-code
+          corepack pnpm --filter @nvhash/web exec prisma migrate diff \
+            --from-migrations prisma/migrations --to-schema-datamodel prisma \
+            --shadow-database-url "postgresql://nvhash:nvhash-dev@postgres:5432/shadow_app" --exit-code
       - name: Generate @nvhash/db-indexed client (from the indexer's canonical schema)
         run: corepack pnpm --filter @nvhash/db-indexed run generate
       - name: API reader gate (test:db — real queries as api_reader)
@@ -190,12 +208,32 @@ jobs:
           API_READER_DATABASE_URL: postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed
           INDEXER_WRITER_DATABASE_URL: postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed
 
+  # apps/console is deliberately OUTSIDE the pnpm workspace (ADR-001 Decision 4,
+  # pnpm-workspace.yaml), so `pnpm -r` reaches none of it. Biome lints it from
+  # the root, but nothing type-checked it until this job: an internal tool is
+  # still shipped code, and a console that does not compile is found by whoever
+  # next opens it rather than by CI.
+  console:
+    name: console · typecheck (standalone npm project)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    defaults:
+      run:
+        working-directory: apps/console
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install (lockfile-exact)
+        run: npm ci
+      - name: Typecheck (tsc -b)
+        run: npm run typecheck
+
   shell-lint:
     name: shellcheck (devnet + tooling scripts)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: shellcheck at warning severity
         run: |
           # gate every tracked shell script plus the ./dev wrapper
