@@ -297,6 +297,12 @@ jobs:
         run: corepack pnpm --filter @nvhash/web run migrate:deploy
         env:
           DATABASE_URL: postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app
+      # NOTE: this script runs `prisma generate` itself, and must. `apps/web`
+      # and `services/indexer` both generate to the hoisted, shared
+      # `@prisma/client` (neither declares an `output`), so the db-indexed
+      # generate two steps above leaves it holding `indexed` models — the app
+      # models this suite needs would be missing. Generating inside the script
+      # keeps it correct regardless of where it sits in this job.
       - name: App-schema store gate (test:db — real Prisma stores as app_writer)
         if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/web run test:db
