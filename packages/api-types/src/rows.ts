@@ -844,8 +844,16 @@ export interface AdminProgramHealth {
    * depositor is not counted as new.
    */
   first_deposits_in_window: number | null;
-  /** The window the field above covers, riding in the payload as data so the
-   * web tier labels and queries against one number it did not choose. */
+  /**
+   * The window the field above covers. Rides in the payload as data and IS what
+   * the web tier queries counters with and captions the panel from — not merely
+   * a copy of the shared constant.
+   *
+   * That matters because the two tiers deploy separately: if their windows ever
+   * differ, the panel stays internally consistent with whichever produced the
+   * terminal figure instead of captioning this API's count with a web build's
+   * number. The shared constant is the consumer's fallback when this read failed.
+   */
   funnel_window_days: number;
   /** Ascending by epoch index. */
   epochs: AdminHealthPoint[];

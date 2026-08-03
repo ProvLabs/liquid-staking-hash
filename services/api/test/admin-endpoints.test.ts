@@ -426,10 +426,54 @@ describe("holder cohorts (§8.8) and the minimum-group-size gate", () => {
 
   it("bounds the upkeep sample and flags a capped distribution", async () => {
     const reader = fakeReader({ redemptionLatencies: [10, 20, 30, 40, 50] });
-    expect(await reader.redemptionLatencySeconds(3)).toHaveLength(3);
+    const capped = await reader.redemptionLatencySeconds(3);
+    expect(capped.seconds).toHaveLength(3);
+    expect(capped.truncated).toBe(true);
+    expect((await reader.redemptionLatencySeconds(50)).truncated).toBe(false);
     // The flag is what keeps a bounded answer from reading as all history.
     expect(toUpkeepDistribution([10, 20, 30], true).truncated).toBe(true);
     expect(toUpkeepDistribution([10, 20, 30]).truncated).toBe(false);
+  });
+
+  it("judges truncation on ROWS READ, not on the surviving durations", async () => {
+    // The defect this pins: rows are dropped when they yield no payout time, so
+    // a caller comparing `seconds.length` to the limit reports `truncated:
+    // false` on a read the cap DID bind — the panel then claims all history.
+    // Two requests fill a limit of 2; only one produces a duration.
+    const reader = fakeReader({
+      redemptions: [
+        {
+          requestId: "paid",
+          owner: "pb1a",
+          shares: 1n,
+          status: "matured",
+          enqueuedAt: new Date("2026-01-01T00:00:00Z"),
+          expeditedAt: null,
+          maturedAt: new Date("2026-01-02T00:00:00Z"),
+          refundedAt: null,
+          lastHeight: 2n,
+          lastTxhash: "B",
+        },
+        {
+          // Matured but with no payout timestamp: `payoutDurationSeconds`
+          // returns null and this row vanishes from `seconds`.
+          requestId: "no-duration",
+          owner: "pb1b",
+          shares: 1n,
+          status: "matured",
+          enqueuedAt: new Date("2026-01-01T00:00:00Z"),
+          expeditedAt: null,
+          maturedAt: null,
+          refundedAt: null,
+          lastHeight: 1n,
+          lastTxhash: "A",
+        },
+      ],
+    });
+    const result = await reader.redemptionLatencySeconds(2);
+    expect(result.seconds).toHaveLength(1);
+    // Shorter than the limit, and STILL truncated.
+    expect(result.truncated).toBe(true);
   });
 
   it("reports adoption zero for an epoch nobody joined — a fact, not a gap", async () => {

@@ -1078,7 +1078,9 @@ const adminUpkeepRoute = defineEnveloped<unknown>({
           epochLagSeconds(epochs),
           epochs.length >= MAX_ADMIN_EPOCH_POINTS,
         ),
-        redemption_latency: toUpkeepDistribution(latencies, latencies.length >= MAX_UPKEEP_SAMPLES),
+        // The flag comes FROM the read: rows that yield no payout time are
+        // dropped, so `seconds.length` cannot answer "did the cap bind".
+        redemption_latency: toUpkeepDistribution(latencies.seconds, latencies.truncated),
         capture_cadence: null,
       } satisfies AdminUpkeepTimeliness,
       source: "indexed" as const,

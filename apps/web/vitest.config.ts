@@ -12,6 +12,10 @@ export default defineConfig({
   },
   test: {
     include: ["test/**/*.test.ts"],
+    // EXCLUDED so `pnpm -r run test` stays database-free: the `app`-schema
+    // store gate needs a migrated Postgres and runs under
+    // vitest.integration.config.ts via `test:db`, the services/api precedent.
+    exclude: ["test/integration/**"],
     environment: "node",
   },
 });

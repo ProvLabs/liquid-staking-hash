@@ -53,6 +53,19 @@ import type { Pagination } from "./query.ts";
 
 export type { Heads } from "./derive.ts";
 
+/**
+ * A capped latency sample and whether the cap bound it.
+ *
+ * `truncated` is a property of the READ, not of `seconds`: rows that yield no
+ * payout time are dropped, so the array can be shorter than the limit on a read
+ * that was nonetheless truncated. Returning both together is what stops a
+ * caller inferring one from the other and under-reporting.
+ */
+export interface RedemptionLatencies {
+  readonly seconds: number[];
+  readonly truncated: boolean;
+}
+
 /** Reads the M3.1/3.2 public program endpoints need. 3.3 extends this. */
 export interface IndexedReader {
   /** Envelope heights (latest reconciler run; checkpoint fallback; nulls). */
@@ -232,16 +245,20 @@ export interface IndexedReader {
   /** Registry enrollment/churn totals as of the mirror. */
   validatorRegistryCounts(): Promise<{ enrolledNow: number; churnedTotal: number }>;
   /**
-   * Enqueue→terminal durations in seconds for settled requests, NEWEST first
-   * and capped at `limit`.
+   * Enqueue→payout durations in seconds for PAID-OUT requests, NEWEST first and
+   * capped at `limit`, with whether the cap bound the read.
    *
    * Bounded for the same reason as `holderLifecycles`: redemption history grows
    * permissionlessly. Newest-first is the meaningful direction — the panel
    * measures how timely upkeep is now — and the output is bucketed, so a
-   * bounded sample is a bounded answer rather than a partial one. The caller
-   * flags a capped read so the panel does not present a window as all history.
+   * bounded sample is a bounded answer rather than a partial one.
+   *
+   * `truncated` comes back FROM THE READ rather than being inferred from
+   * `seconds.length` by the caller: rows are dropped when they yield no
+   * duration, so the returned array is not authoritative for "did the cap
+   * bind" and a caller comparing its length to the limit under-reports.
    */
-  redemptionLatencySeconds(limit: number): Promise<number[]>;
+  redemptionLatencySeconds(limit: number): Promise<RedemptionLatencies>;
   /** The incident feed WITH ids, newest first, paginated (the public
    * `/incidents` row omits the id; acknowledgment needs it). */
   adminIncidents(page: Pagination): Promise<AdminIncidentFacts[]>;
@@ -323,6 +340,6 @@ export const emptyReader: IndexedReader = {
   redemptionMix: () => Promise.resolve({ enqueued: 0, expedited: 0, matured: 0, refunded: 0 }),
   validatorEpochAggregates: () => Promise.resolve([]),
   validatorRegistryCounts: () => Promise.resolve({ enrolledNow: 0, churnedTotal: 0 }),
-  redemptionLatencySeconds: () => Promise.resolve([]),
+  redemptionLatencySeconds: () => Promise.resolve({ seconds: [], truncated: false }),
   adminIncidents: () => Promise.resolve([]),
 };

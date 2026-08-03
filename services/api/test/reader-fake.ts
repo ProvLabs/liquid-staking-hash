@@ -503,19 +503,35 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
           churnedTotal: (facts.registry ?? []).filter((r) => r.unregisteredAt !== null).length,
         },
       ),
-    // Capped like the SQL, so `truncated` is reachable from a fixture.
-    redemptionLatencySeconds: (limit) =>
-      Promise.resolve(
-        (facts.redemptionLatencies !== undefined
-          ? [...facts.redemptionLatencies]
-          : // Derived through the SAME `payoutDurationSeconds` the Prisma
-            // reader uses, over terminal requests only.
-            (facts.redemptions ?? [])
-              .filter((r) => r.status !== "enqueued")
-              .map(payoutDurationSeconds)
-              .filter((s): s is number => s !== null)
-        ).slice(0, limit),
-      ),
+    // Capped like the SQL, and the flag is judged on the ROWS taken — before
+    // the null filter — exactly as the Prisma reader does. A fake that
+    // measured truncation on the filtered array would agree with a caller that
+    // made the same mistake, which is the bug this shape exists to prevent.
+    redemptionLatencySeconds: (limit) => {
+      if (facts.redemptionLatencies !== undefined) {
+        const taken = facts.redemptionLatencies.slice(0, limit);
+        return Promise.resolve({ seconds: [...taken], truncated: taken.length >= limit });
+      }
+      // Derived through the SAME `payoutDurationSeconds` the Prisma reader
+      // uses, over PAID-OUT requests only (a refund never paid out, so it
+      // yields no duration and is not selected), and NEWEST FIRST like the SQL
+      // — so a capped fake keeps the same rows the database would, and a test
+      // cannot pass here while failing against Postgres.
+      const rows = (facts.redemptions ?? [])
+        .filter((r) => r.status === "matured" || r.status === "expedited")
+        .sort((a, b) =>
+          a.lastHeight === b.lastHeight
+            ? b.requestId.localeCompare(a.requestId)
+            : a.lastHeight < b.lastHeight
+              ? 1
+              : -1,
+        )
+        .slice(0, limit);
+      return Promise.resolve({
+        seconds: rows.map(payoutDurationSeconds).filter((s): s is number => s !== null),
+        truncated: rows.length >= limit,
+      });
+    },
     adminIncidents: (p) =>
       Promise.resolve(
         page(

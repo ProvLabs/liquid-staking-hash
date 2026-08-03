@@ -148,10 +148,17 @@ export function IncidentFeed({
                     </div>
                     {row.ack === null ? null : (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {t(locale, "admin.ack-by", {
-                          address: row.ack.by,
-                          at: row.ack.at.slice(0, 10),
-                        })}
+                        {/* C4 makes "acked by THIS admin" and "acked by another"
+                            different states, and the affordance already differs.
+                            The label differs too — rendering a reader their own
+                            bech32 address as though it were a stranger's is a
+                            distinction the view model draws and the UI dropped. */}
+                        {row.ack.bySessionAdmin
+                          ? t(locale, "admin.ack-by-you", { at: row.ack.at.slice(0, 10) })
+                          : t(locale, "admin.ack-by", {
+                              address: row.ack.by,
+                              at: row.ack.at.slice(0, 10),
+                            })}
                         {row.ack.note === null ? null : ` — ${row.ack.note}`}
                       </p>
                     )}

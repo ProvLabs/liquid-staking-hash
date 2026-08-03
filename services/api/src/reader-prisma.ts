@@ -40,7 +40,7 @@ import type {
   ValidatorEpochAggregateFacts,
 } from "./admin-derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
-import type { Heads, IndexedReader } from "./reader.ts";
+import type { Heads, IndexedReader, RedemptionLatencies } from "./reader.ts";
 import { MAX_GOV_POLICIES, MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
 import type { Pagination } from "./query.ts";
 import type {
@@ -1192,16 +1192,22 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return { enrolledNow, churnedTotal };
     },
 
-    async redemptionLatencySeconds(limit: number): Promise<number[]> {
-      // Terminal requests only. A still-enqueued request has no latency yet,
-      // and counting one as "fast so far" would understate the distribution.
+    async redemptionLatencySeconds(limit: number): Promise<RedemptionLatencies> {
+      // PAID-OUT requests only, matching what `payoutDurationSeconds` can
+      // actually measure: it reads `expeditedAt ?? maturedAt`, so a `refunded`
+      // request yields null and contributes nothing. Selecting refunds anyway
+      // spent the cap on rows that were then discarded — a program with many
+      // refunds would get a far smaller effective sample than the limit — and
+      // it also made `seconds.length` a bad proxy for "did the cap bind".
+      // `payoutStats` draws the same line for the same reason: a refund-only
+      // request never paid out.
       //
       // Newest first under a cap: redemption history grows permissionlessly, so
       // an unbounded read would transfer the whole table and sort it in this
       // process to find two percentiles. `lastHeight` is the terminating update
       // for a settled request and carries its own index.
       const rows = await prisma.redemptionRequest.findMany({
-        where: { status: { in: ["matured", "expedited", "refunded"] } },
+        where: { status: { in: ["matured", "expedited"] } },
         orderBy: [{ lastHeight: "desc" }, { requestId: "desc" }],
         take: limit,
         select: { enqueuedAt: true, expeditedAt: true, maturedAt: true, refundedAt: true },
@@ -1222,7 +1228,8 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         });
         if (duration !== null) seconds.push(duration);
       }
-      return seconds;
+      // Truncation is judged on the ROWS READ, before the null filter above.
+      return { seconds, truncated: rows.length >= limit };
     },
 
     async adminIncidents(page: Pagination): Promise<AdminIncidentFacts[]> {

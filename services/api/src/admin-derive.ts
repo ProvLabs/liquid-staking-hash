@@ -17,6 +17,7 @@
 //    with a flag saying WHY — never a number, and never a zero.
 
 import {
+  CONCENTRATION_BANDS,
   MIN_COHORT_SIZE,
   type AdminAdoptionPoint,
   type AdminConcentration,
@@ -230,10 +231,13 @@ export function toConcentration(
     const top = facts.topDesc.slice(0, n).reduce((sum, value) => sum + value, 0n);
     return toSafeInt((top * 10_000n) / facts.totalPosition, "concentrationBps");
   };
+  // Band depths come from the shared list, so the field names and the read's
+  // cap cannot drift apart: `CONCENTRATION_BAND_DEPTH` is that list's maximum.
+  const [top1, top5, top10] = CONCENTRATION_BANDS;
   return {
-    top1_bps: shareBps(1),
-    top5_bps: shareBps(5),
-    top10_bps: shareBps(10),
+    top1_bps: shareBps(top1),
+    top5_bps: shareBps(top5),
+    top10_bps: shareBps(top10),
     holder_count: facts.holderCount,
   };
 }

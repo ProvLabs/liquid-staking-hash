@@ -473,6 +473,58 @@ describe("C4: incident state × affordance", () => {
     expect(data.incidents.kind === "data" && data.incidents.data.ackStateKnown).toBe(true);
   });
 
+  it("LOADER: takes the funnel window from the PAYLOAD, not its own constant", async () => {
+    // The API and this tier deploy separately. The window that produced the
+    // terminal figure must also caption the panel and bound the counter read,
+    // or a skewed deploy captions one tier's count with the other's number.
+    // A payload window of 30 must win over the imported 90.
+    resetIncidentAckStoreForTests();
+    const skewed = (url: string): Promise<Response> =>
+      url.includes("/admin/program-health")
+        ? Promise.resolve(
+            new Response(
+              JSON.stringify(
+                envelope({ ...HEALTH, funnel_window_days: 30 }, { source: "indexed" }),
+              ),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+          )
+        : adminFetchStub(url);
+
+    const data = await loadAdminViewData(
+      LOADER_CONFIG,
+      { address: ADMIN_A },
+      { Authorization: "Bearer test" },
+      { fetchImpl: skewed },
+    );
+    expect(data.funnel.kind).toBe("data");
+    if (data.funnel.kind === "data") {
+      expect(data.funnel.data.windowDays).toBe(30);
+      expect(data.funnel.data.windowDays).not.toBe(FUNNEL_WINDOW_DAYS);
+    }
+  });
+
+  it("LOADER: falls back to the shared window when the health read failed", async () => {
+    // No payload to follow, so the constant is the honest default — and the
+    // funnel still renders rather than losing its caption.
+    resetIncidentAckStoreForTests();
+    const noHealth = (url: string): Promise<Response> =>
+      url.includes("/admin/program-health")
+        ? Promise.resolve(new Response("nope", { status: 500 }))
+        : adminFetchStub(url);
+    const data = await loadAdminViewData(
+      LOADER_CONFIG,
+      { address: ADMIN_A },
+      { Authorization: "Bearer test" },
+      { fetchImpl: noHealth },
+    );
+    if (data.funnel.kind === "data") {
+      expect(data.funnel.data.windowDays).toBe(FUNNEL_WINDOW_DAYS);
+      // And the terminal figure is unknown, not zero.
+      expect(data.funnel.data.firstDeposits).toBeNull();
+    }
+  });
+
   it("LOADER: the funnel's terminal stage comes from the WINDOWED field", async () => {
     // The mapper case pins what `toFunnelVM` does with the windowed number;
     // this pins that the loader hands it that one. `HEALTH` carries 12 all-time

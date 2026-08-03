@@ -874,6 +874,38 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
   // Seeded above: alice swap_in 1000 @100 then swap_out_request 500 @300 (net
   // zero on the TOTAL position, so she still holds 1000), bob swap_in 2000 @200.
 
+  it("judges latency truncation on ROWS READ, against the real query", async () => {
+    // The unit case for this pins the FAKE. This pins the Prisma reader, which
+    // is a second implementation of the same rule — and the one that ships.
+    //
+    // A `matured` request with no payout timestamp yields no duration and
+    // disappears from `seconds`, so `seconds.length` is smaller than the rows
+    // the cap actually bound. A reader judging truncation on the filtered array
+    // reports `false` here and the panel then claims all history.
+    await writer.redemptionRequest.create({
+      data: {
+        requestId: "no-payout-time",
+        owner: "pb1alice",
+        shares: "1",
+        status: "matured",
+        enqueuedAt: new Date("2026-06-01T00:00:00Z"),
+        maturedAt: null,
+        // Highest lastHeight, so the newest-first read takes it FIRST.
+        lastHeight: 99_999n,
+        lastTxhash: "NOPAYOUT",
+      },
+    });
+    try {
+      const one = await reader.redemptionLatencySeconds(1);
+      // The single row read produced no duration...
+      expect(one.seconds).toHaveLength(0);
+      // ...and the read was still truncated.
+      expect(one.truncated).toBe(true);
+    } finally {
+      await writer.redemptionRequest.delete({ where: { requestId: "no-payout-time" } });
+    }
+  });
+
   it("folds holder lifecycles in SQL, ascending and capped, with no address", async () => {
     const lifecycles = await reader.holderLifecycles(100);
     expect(lifecycles).toHaveLength(2);
@@ -928,7 +960,10 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
       enrolledNow: expect.any(Number),
       churnedTotal: expect.any(Number),
     });
-    expect(Array.isArray(await reader.redemptionLatencySeconds(50_000))).toBe(true);
+    const latencies = await reader.redemptionLatencySeconds(50_000);
+    expect(Array.isArray(latencies.seconds)).toBe(true);
+    // Nothing seeded reaches the cap, so an honest read reports untruncated.
+    expect(latencies.truncated).toBe(false);
     expect(await reader.redemptionMix()).toEqual({
       enqueued: expect.any(Number),
       expedited: expect.any(Number),

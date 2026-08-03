@@ -74,7 +74,13 @@ redemption history — permissionlessly — so both take an explicit limit and b
 flag a capped read (`holders_truncated`, `AdminUpkeepDistribution.truncated`).
 Lifecycles read ASC so a trim drops the newest cohorts (the `adminEpochsAsc`
 convention); latencies read newest-first, because that panel measures upkeep
-*now*. **The cap bounds the transfer and this process's memory, not the scan:**
+*now*, and select only **paid-out** statuses — `payoutDurationSeconds` reads
+`expeditedAt ?? maturedAt`, so a refunded request yields nothing and selecting
+one would spend the cap on a row that is then discarded (the `payoutStats`
+line, for the same reason). `redemptionLatencySeconds` returns `truncated`
+**with** the sample rather than letting the caller infer it from
+`seconds.length`: rows are dropped after the read, so that length is not
+authoritative for "did the cap bind" and a caller comparing it under-reports. **The cap bounds the transfer and this process's memory, not the scan:**
 measured on the dev DB, the lifecycle window function ran 349 ms at 400 k
 transactions / 40 k holders and 1 407 ms at 1.2 M / 120 k — superlinear, on every
 `/admin` load, uncached. The remedy for the scan is materializing holder

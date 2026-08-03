@@ -452,10 +452,18 @@ export async function loadAdminViewData(
     }
   })();
 
+  // THE window, taken from the payload that computed the funnel's terminal
+  // stage — not from this tier's constant. The two tiers deploy separately, so
+  // if their windows ever differ the panel must be internally consistent with
+  // whichever produced the bottom figure, rather than captioning an API's count
+  // with a web build's number. The shared constant is the fallback for when the
+  // health read failed and there is no payload to follow.
+  const windowDays = health?.data.funnel_window_days ?? FUNNEL_WINDOW_DAYS;
+
   const funnelRows = await (async () => {
     try {
       const store = await getFunnelCounterStore(config);
-      const from = new Date(now.getTime() - FUNNEL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const from = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
       return await store.since(utcDay(from));
     } catch {
       return null;
@@ -470,14 +478,10 @@ export async function loadAdminViewData(
     upkeep: toUpkeepVM(upkeep?.data ?? null),
     incidents: toIncidentRowVMs(incidentRows, acks, session.address),
     // The chain-derived terminal stage: the health panel's WINDOWED first-
-    // deposit count, computed by the API over the same `FUNNEL_WINDOW_DAYS` the
-    // counter read above used. Not `depositor_count`, which is all-time and
-    // belongs to the header panel.
-    funnel: toFunnelVM(
-      funnelRows,
-      health?.data.first_deposits_in_window ?? null,
-      FUNNEL_WINDOW_DAYS,
-    ),
+    // deposit count, over the SAME `windowDays` the counter read above used —
+    // one number for the query, the figure and the caption. Not
+    // `depositor_count`, which is all-time and belongs to the header panel.
+    funnel: toFunnelVM(funnelRows, health?.data.first_deposits_in_window ?? null, windowDays),
     // Surfaced so a stale indexed read is visibly stale rather than presented
     // as current (C5). Any panel's envelope will do — they share a reader.
     freshness:

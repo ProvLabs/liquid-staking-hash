@@ -317,6 +317,17 @@ All fail CI on violation.
   params have no effect); anonymous requests prompt-and-explain (page) or 401
   (resource route); cookie flags, nonce single-use/replay, and expiry bounds are
   pinned. **Every new personal or public-by-design route joins this suite.**
+- **`app`-schema store gate** (`test:db`, `test/integration/app-stores.test.ts`)
+  — the REAL Prisma stores as `app_writer` against a migrated Postgres. It is
+  separate from the unit suites on purpose and it is **not** redundant with
+  them: the unit suites drive the in-memory stand-ins, which cannot exhibit the
+  behaviour the C3 remedies exist for. An in-memory `Map` write never loses an
+  update however the SQL is written, and a find-then-set is atomic in
+  single-threaded JS — so the `ON CONFLICT DO UPDATE SET count = count + 1`
+  increment, the conditional `updateMany` reversal, the partial unique index's
+  `AckConflict` (SQLSTATE 23505 / P2002) and the BIGINT `incidentId` are all
+  only real here. Excluded from the default config so `pnpm -r run test` stays
+  Postgres-free.
 - **App-schema allowlist** (`test/app-schema-allowlist.test.ts`) — the
   data-minimization gate; forbids any role/identity/device column. It carries
   TWO gates: the global per-model allowlist, and a **funnel-specific identifier

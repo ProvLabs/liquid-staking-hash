@@ -1128,6 +1128,8 @@ export default {
   "admin.incident-open": "open",
   "admin.incident-closed": "closed",
   "admin.ack-by": "Acknowledged by {address} on {at}",
+  // The C4 distinction the affordance already makes, said in the label too.
+  "admin.ack-by-you": "Acknowledged by you on {at}",
   "admin.ack-note-label": "Note (optional)",
   "admin.ack-action": "Acknowledge",
   "admin.unack-action": "Undo my acknowledgement",

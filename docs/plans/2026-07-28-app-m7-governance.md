@@ -436,6 +436,26 @@ evidence for the ceremony reading.
 > their quantity (`CONCENTRATION_BAND_DEPTH`, `MAX_HOLDER_LIFECYCLES`) so the
 > mismatch reads wrong at the call site.
 >
+> **AMENDED 2026-08-03, after four review rounds on 7.5–7.6.** The rounds found
+> one shape over and over: **a gate that tests the layer next to the defect.** A
+> mapper case where the loader was wrong; a fake-reader case where the SQL was
+> wrong; an in-memory-store case where the Prisma store was wrong — and, at the
+> limit, **two `app`-schema stores with no automated coverage at all**, one of
+> them implementing this milestone's headline C3 remedy. Every §4b cell for
+> those was filled, and filled correctly: C3 named the constraint, the code
+> implemented it, and the plan cited a test that exercised a stand-in which
+> could not fail.
+>
+> **The obligation §4b is missing is therefore not another space to enumerate —
+> it is a property of the gate itself:** for every C1–C6 cell whose remedy is a
+> *mechanism* (a DB constraint, an atomic statement, a conditional write), name
+> the test AND state what breaking the mechanism would make fail. If the answer
+> is "a suite running against an in-memory double", the cell is unfilled. That
+> is cheap, it is checkable at plan review, and all four rounds' worth of
+> escapes would have been caught by it before any code was written. **Proposed
+> as C7 for M8** — deliberately as a check on gates rather than a seventh space,
+> because the spaces were not the thing that failed.
+>
 > **Net on the pilot:** C1, C2 and C3 each changed implementations across the
 > milestone and stay. The drill rule (§7.4) remains the strongest single item —
 > it caught four wrong assumptions in 7.1 that no table did. C4 is worth keeping

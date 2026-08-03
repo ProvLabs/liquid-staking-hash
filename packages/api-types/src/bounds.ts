@@ -248,7 +248,13 @@ export const MAX_UPKEEP_SAMPLES = 50_000;
  * Borrowing an epoch cap for this (as the first cut did) silently truncated the
  * denominator past that many holders and OVERSTATED every band.
  */
-export const CONCENTRATION_BAND_DEPTH = 10;
+export const CONCENTRATION_BANDS = [1, 5, 10] as const;
+
+/** DERIVED from the deepest band, never restated. A literal here could fall
+ * below `top10_bps`'s depth, and the band would then quietly report a top-N
+ * share under a `top10` name — the same silent-wrong-number class as computing
+ * the denominator from the transferred rows. */
+export const CONCENTRATION_BAND_DEPTH = Math.max(...CONCENTRATION_BANDS);
 
 /**
  * Days of history the §8.8 evaluator-funnel panel covers — the ONE declaration,
