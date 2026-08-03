@@ -63,7 +63,9 @@ CREATE TABLE "app"."funnel_counters" (
 -- CreateTable
 CREATE TABLE "app"."incident_acks" (
     "id" BIGSERIAL NOT NULL,
-    "incidentId" INTEGER NOT NULL,
+    -- BIGINT, matching indexed.incidents.id (BIGSERIAL). A 32-bit column here
+    -- would be a narrower domain than the id it references.
+    "incidentId" BIGINT NOT NULL,
     "acknowledgedBy" TEXT NOT NULL,
     "acknowledgedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "unacknowledgedAt" TIMESTAMP(3),

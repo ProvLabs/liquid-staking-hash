@@ -929,3 +929,33 @@ beside the chain read. And the ADR amendment was tightened rather than merely
 confirmed: a fresh read at mint time reduces the stale-admin window from "60 s
 cache plus the assertion" to "the assertion", not to zero, and the ADR now says
 so instead of implying otherwise.*
+
+*2026-08-03 — **M7 closed**, and a second review pass over 7.5–7.6 landed nine
+fixes plus the milestone's closure records. Four were honesty defects of one
+shape — the gate for an invariant tested the layer next to the one that was
+wrong — and are tabled in that PR's plan §10.4: concentration bands divided by a
+truncated denominator; a 90-day funnel whose terminal stage counted all history;
+a failed acknowledgment read rendered as "nothing is acknowledged"; and a
+transient x/group failure reported as "not an administrator" rather than as
+unknown. Five were the hygiene items from the same pass: two admin reads that
+grew without bound (now capped and flagged, with the scan cost **measured** at
+two depths rather than asserted), literal NUL bytes that made a source file
+undiffable in git, a funnel bound declared twice in two packages, a read-then-write
+on the acknowledgment reversal, and an `incidentId` column narrower than the id
+it references.*
+
+*The load-bearing lesson is recorded in the milestone overview §7.5 rather than
+here: **§4b's C1–C3 each changed implementations and stay; C4 was filled
+completely and still leaked**, because its axis is record state while the defect
+lived on per-input availability — two schemas that fail independently. The fix
+that held was a type change (`Map | null`) rather than the new test beside it.
+M8 should generate C4's matrix from the loader's own inputs instead of tabulating
+it by hand, and C5 remains untested as a format.*
+
+*One process note worth keeping: every fix in this pass was verified by
+**disproof** — reintroduce the defect locally, confirm the new case goes red,
+revert. That is what surfaced two gates that were passing for the wrong reason
+(both tested a pure mapper while the defect was in the loader feeding it), and
+one fix that would have introduced a regression in the opposite direction
+(folding an x/group failure into the flag the operator view gates on). Neither
+was visible from reading the diff.*

@@ -199,11 +199,17 @@ export interface IndexedReader {
    */
   firstDepositorsSince(since: Date): Promise<number | null>;
   /**
-   * One row per depositor: first-deposit height and exit height (or null while
-   * still holding). NO ADDRESS — cohort arithmetic does not need identity, so
-   * the shape does not carry it.
+   * One row per depositor, ASCENDING by first-deposit height and capped at
+   * `limit`: first-deposit height and exit height (or null while still
+   * holding). NO ADDRESS — cohort arithmetic does not need identity, so the
+   * shape does not carry it.
+   *
+   * The cap is required, not defensive: the row set grows with depositor count
+   * and no operator action bounds it. ASC so a truncated read drops the NEWEST
+   * cohorts (the `adminEpochsAsc` convention) — the ones whose retention
+   * horizons have not elapsed anyway. A caller that hits the cap must flag it.
    */
-  holderLifecycles(): Promise<HolderLifecycleFacts[]>;
+  holderLifecycles(limit: number): Promise<HolderLifecycleFacts[]>;
   /**
    * The concentration panel's input: the top `bandDepth` positive positions
    * descending, PLUS the holder count and total position over the whole set.
@@ -225,8 +231,17 @@ export interface IndexedReader {
   validatorEpochAggregates(limit: number): Promise<ValidatorEpochAggregateFacts[]>;
   /** Registry enrollment/churn totals as of the mirror. */
   validatorRegistryCounts(): Promise<{ enrolledNow: number; churnedTotal: number }>;
-  /** Enqueue→terminal durations in seconds for settled requests (unordered). */
-  redemptionLatencySeconds(): Promise<number[]>;
+  /**
+   * Enqueue→terminal durations in seconds for settled requests, NEWEST first
+   * and capped at `limit`.
+   *
+   * Bounded for the same reason as `holderLifecycles`: redemption history grows
+   * permissionlessly. Newest-first is the meaningful direction — the panel
+   * measures how timely upkeep is now — and the output is bucketed, so a
+   * bounded sample is a bounded answer rather than a partial one. The caller
+   * flags a capped read so the panel does not present a window as all history.
+   */
+  redemptionLatencySeconds(limit: number): Promise<number[]>;
   /** The incident feed WITH ids, newest first, paginated (the public
    * `/incidents` row omits the id; acknowledgment needs it). */
   adminIncidents(page: Pagination): Promise<AdminIncidentFacts[]>;

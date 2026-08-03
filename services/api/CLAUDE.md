@@ -68,6 +68,18 @@ non-`meta:` worker checkpoint with a null chain head.
 | `/api/v1/internal/alert-facts/` | `internal:notifier` | Identity/ordinal fields only, **never amounts** |
 | `/api/v1/admin/` | `admin` | §8.8 program-wide aggregates. **No fact shape carries an address** — where one is needed to compute a figure it is a GROUP BY key inside SQL and is never selected out |
 
+**Every §8.8 read is capped, including the two that look like folds.**
+`holderLifecycles` and `redemptionLatencySeconds` grow with depositor count and
+redemption history — permissionlessly — so both take an explicit limit and both
+flag a capped read (`holders_truncated`, `AdminUpkeepDistribution.truncated`).
+Lifecycles read ASC so a trim drops the newest cohorts (the `adminEpochsAsc`
+convention); latencies read newest-first, because that panel measures upkeep
+*now*. **The cap bounds the transfer and this process's memory, not the scan:**
+measured on the dev DB, the lifecycle window function ran 349 ms at 400 k
+transactions / 40 k holders and 1 407 ms at 1.2 M / 120 k — superlinear, on every
+`/admin` load, uncached. The remedy for the scan is materializing holder
+lifecycle in the indexer; it is a follow-on, not something these caps did.
+
 **A transfer cap is not a denominator.** `holderPositions(bandDepth)` returns the
 top-`CONCENTRATION_BAND_DEPTH` positions **plus** the holder count and total
 position, aggregated over the whole set in the **same statement**. Deriving

@@ -862,6 +862,16 @@ The cohort-satisfaction dashboard the no-backend console cannot render (register
 > holder set: the read transfers only `CONCENTRATION_BAND_DEPTH` positions, and
 > the count and denominator are aggregated in the same SQL statement over the
 > full set, so the transfer cap can never move a reported share.
+> **[R4] Every §8.8 read is bounded, and a bounded read says so.** The two that
+> grow permissionlessly — depositor lifecycles and terminal redemption latencies
+> — carry explicit caps with `holders_truncated` and a per-distribution
+> `truncated`. A capped depositor set is a *different* caution from a short
+> series and renders as one: the newest cohorts are absent, so recent adoption
+> reads low. The caps bound transfer and server memory, **not** the underlying
+> scan: the lifecycle fold measured 349 ms at 400 k transactions and 1 407 ms at
+> 1.2 M on the dev database, superlinear and uncached. Materializing holder
+> lifecycle in the indexer is the remedy for that and is a recorded follow-on,
+> not something this release did.
 > **[R3] Capture-signal cadence gaps are NOT delivered.** §8.8 names them as a
 > third upkeep distribution, but no capture-signal series is indexed — the NAV
 > marker is consumed at ingest and not retained as its own row — so the panel

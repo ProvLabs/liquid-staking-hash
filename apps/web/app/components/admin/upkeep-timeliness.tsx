@@ -36,6 +36,14 @@ function Distribution({
               {" · "}
               {t(locale, "admin.upkeep-samples", { count: String(data.sampleCount) })}
             </p>
+            {/* A capped sample is a bounded answer, not a partial one — but it
+                describes recent upkeep rather than all history, so it says so
+                instead of letting the count imply totality. */}
+            {data.truncated ? (
+              <p role="note" className="text-xs text-muted-foreground">
+                {t(locale, "admin.upkeep-truncated", { count: String(data.sampleCount) })}
+              </p>
+            ) : null}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[20rem] text-left text-sm">
                 <caption className="sr-only">{title}</caption>

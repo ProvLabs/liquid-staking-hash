@@ -152,13 +152,30 @@ export class InMemoryIncidentAckStore implements IncidentAckStore {
  */
 const UNIQUE_VIOLATION_CODES = ["P2002", "23505"];
 
+/**
+ * What Prisma returns for this model. `incidentId` is a `bigint` on the way out
+ * because the column is BIGINT (it references `indexed.incidents.id`, a
+ * BIGSERIAL); {@link IncidentAckRecord} carries a `number` because the wire
+ * does, guarded into the safe-integer domain by the API's id mapper. The
+ * conversion happens HERE, at the one boundary where both domains are visible.
+ */
+interface IncidentAckRow extends Omit<IncidentAckRecord, "incidentId"> {
+  incidentId: bigint;
+}
+
 interface IncidentAckPrismaLike {
   incidentAck: {
-    create(args: unknown): Promise<IncidentAckRecord>;
-    findFirst(args: unknown): Promise<IncidentAckRecord | null>;
-    findMany(args: unknown): Promise<IncidentAckRecord[]>;
-    update(args: unknown): Promise<IncidentAckRecord>;
+    create(args: unknown): Promise<IncidentAckRow>;
+    findFirst(args: unknown): Promise<IncidentAckRow | null>;
+    findMany(args: unknown): Promise<IncidentAckRow[]>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
+}
+
+/** Row → record. The id came from a BIGINT column but originated as a wire
+ * number, so `Number` is lossless for every value this table can hold. */
+function toAckRecord(row: IncidentAckRow): IncidentAckRecord {
+  return { ...row, incidentId: Number(row.incidentId) };
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -185,9 +202,11 @@ export class PrismaIncidentAckStore implements IncidentAckStore {
       // live ack already exists. Checking first and then inserting would be
       // exactly the read-then-write C3 forbids — two admins can both pass the
       // check before either writes.
-      return await this.prisma.incidentAck.create({
-        data: { incidentId, acknowledgedBy, acknowledgedAt: now, note },
-      });
+      return toAckRecord(
+        await this.prisma.incidentAck.create({
+          data: { incidentId: BigInt(incidentId), acknowledgedBy, acknowledgedAt: now, note },
+        }),
+      );
     } catch (error) {
       if (isUniqueViolation(error)) throw new AckConflict();
       throw error;
@@ -199,24 +218,34 @@ export class PrismaIncidentAckStore implements IncidentAckStore {
     acknowledgedBy: string,
     now: Date,
   ): Promise<IncidentAckRecord | null> {
-    const row = await this.prisma.incidentAck.findFirst({
-      // `acknowledgedBy` is in the predicate, so this cannot reach another
-      // admin's acknowledgment however the id was supplied.
-      where: { incidentId, acknowledgedBy, unacknowledgedAt: null },
-    });
-    if (row === null) return null;
-    return this.prisma.incidentAck.update({
-      where: { id: row.id },
+    // A CONDITIONAL update, not find-then-update. `unacknowledgedAt: null` is
+    // part of the WHERE, so the row is claimed in one statement under its own
+    // lock: two concurrent reversals cannot both find a live ack and then both
+    // stamp it, which is the last-write-wins on a nullable column that C3
+    // forbids by name. The loser sees `count === 0` and gets the same "no live
+    // ack" answer as someone reversing nothing.
+    //
+    // `acknowledgedBy` is in the predicate too, so this cannot reach another
+    // admin's acknowledgment however the id was supplied.
+    const { count } = await this.prisma.incidentAck.updateMany({
+      where: { incidentId: BigInt(incidentId), acknowledgedBy, unacknowledgedAt: null },
       data: { unacknowledgedAt: now },
     });
+    if (count === 0) return null;
+    // Read back the row this call just stamped. Not a race: `unacknowledgedAt`
+    // is now set, so no other reversal can claim or re-stamp it.
+    const row = await this.prisma.incidentAck.findFirst({
+      where: { incidentId: BigInt(incidentId), acknowledgedBy, unacknowledgedAt: now },
+    });
+    return row === null ? null : toAckRecord(row);
   }
 
   async liveAcksFor(incidentIds: readonly number[]): Promise<Map<number, IncidentAckRecord>> {
     if (incidentIds.length === 0) return new Map();
     const rows = await this.prisma.incidentAck.findMany({
-      where: { incidentId: { in: [...incidentIds] }, unacknowledgedAt: null },
+      where: { incidentId: { in: incidentIds.map(BigInt) }, unacknowledgedAt: null },
     });
-    return new Map(rows.map((r) => [r.incidentId, r]));
+    return new Map(rows.map(toAckRecord).map((r) => [r.incidentId, r]));
   }
 }
 

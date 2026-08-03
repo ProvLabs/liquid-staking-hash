@@ -443,6 +443,7 @@ export const handlers = [
           retention_truncated: false,
           redemption_mix: { enqueued: 0, expedited: 0, matured: 0, refunded: 0 },
           concentration: null,
+          holders_truncated: false,
         },
         { source: "indexed" },
       ),
@@ -460,12 +461,19 @@ export const handlers = [
     HttpResponse.json(
       envelope(
         {
-          epoch_lag: { sample_count: 0, median_seconds: null, p90_seconds: null, buckets: [] },
+          epoch_lag: {
+            sample_count: 0,
+            median_seconds: null,
+            p90_seconds: null,
+            buckets: [],
+            truncated: false,
+          },
           redemption_latency: {
             sample_count: 0,
             median_seconds: null,
             p90_seconds: null,
             buckets: [],
+            truncated: false,
           },
           capture_cadence: null,
         },

@@ -14,7 +14,13 @@
 
 import { describe, expect, it } from "vitest";
 import { API_BASE } from "../src/index.ts";
-import { CONCENTRATION_BAND_DEPTH, FUNNEL_WINDOW_DAYS, MIN_COHORT_SIZE } from "@nvhash/api-types";
+import {
+  CONCENTRATION_BAND_DEPTH,
+  FUNNEL_WINDOW_DAYS,
+  MAX_HOLDER_LIFECYCLES,
+  MIN_COHORT_SIZE,
+} from "@nvhash/api-types";
+import { toUpkeepDistribution } from "../src/admin-derive.ts";
 import { mintAssertion, TEST_ASSERTION_KEY } from "./assertions.ts";
 import { startServer, type RunningServer } from "./helpers.ts";
 import { fakeReader, type FakeFacts } from "./reader-fake.ts";
@@ -143,7 +149,7 @@ describe("no admin endpoint returns an address (invariant 12, structural)", () =
       holderLifecycles: [{ firstDepositHeight: 1n, exitHeight: null }],
       holderPositions: [5n],
     });
-    const lifecycles = await reader.holderLifecycles();
+    const lifecycles = await reader.holderLifecycles(MAX_HOLDER_LIFECYCLES);
     expect(Object.keys(lifecycles[0]!).sort()).toEqual(["exitHeight", "firstDepositHeight"]);
     const positions = await reader.holderPositions(CONCENTRATION_BAND_DEPTH);
     expect(Object.keys(positions).sort()).toEqual(["holderCount", "topDesc", "totalPosition"]);
@@ -399,6 +405,31 @@ describe("holder cohorts (§8.8) and the minimum-group-size gate", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("bounds the depositor read and FLAGS it, rather than reading unbounded", async () => {
+    // The row set grows with depositor count and no operator action caps it
+    // (SECURITY.md: no unbounded work). The cap is exercised through the port's
+    // own limit so the fixture does not need 100 000 depositors: seeding past a
+    // small explicit limit proves both the trim and the flag.
+    const lifecycles = Array.from({ length: 8 }, (_, i) => ({
+      firstDepositHeight: BigInt(100 * (i + 1)),
+      exitHeight: null,
+    }));
+    const reader = fakeReader({ holderLifecycles: lifecycles });
+    const capped = await reader.holderLifecycles(5);
+    expect(capped).toHaveLength(5);
+    // ASC by first-deposit height: the trim drops the NEWEST cohorts, matching
+    // `adminEpochsAsc`, so the cohorts whose horizons have elapsed survive.
+    expect(capped.map((l) => Number(l.firstDepositHeight))).toEqual([100, 200, 300, 400, 500]);
+  });
+
+  it("bounds the upkeep sample and flags a capped distribution", async () => {
+    const reader = fakeReader({ redemptionLatencies: [10, 20, 30, 40, 50] });
+    expect(await reader.redemptionLatencySeconds(3)).toHaveLength(3);
+    // The flag is what keeps a bounded answer from reading as all history.
+    expect(toUpkeepDistribution([10, 20, 30], true).truncated).toBe(true);
+    expect(toUpkeepDistribution([10, 20, 30]).truncated).toBe(false);
   });
 
   it("reports adoption zero for an epoch nobody joined — a fact, not a gap", async () => {

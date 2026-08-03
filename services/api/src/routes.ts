@@ -39,6 +39,8 @@ import {
   FUNNEL_WINDOW_DAYS,
   MAX_ADMIN_EPOCH_POINTS,
   MAX_ADMIN_RETENTION_CURVES,
+  MAX_HOLDER_LIFECYCLES,
+  MAX_UPKEEP_SAMPLES,
   MIN_COHORT_SIZE,
 } from "@nvhash/api-types";
 import type { z } from "zod";
@@ -986,7 +988,7 @@ const adminHolderCohortsRoute = defineEnveloped<unknown>({
     const [heads, epochs, lifecycles, positions, mix] = await Promise.all([
       ctx.reader.heads(),
       ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
-      ctx.reader.holderLifecycles(),
+      ctx.reader.holderLifecycles(MAX_HOLDER_LIFECYCLES),
       // Only the deepest band's positions cross the wire. The holder count and
       // the denominator come back from the SAME statement, aggregated over
       // every positive position — so this cap bounds the transfer and can never
@@ -1004,6 +1006,7 @@ const adminHolderCohortsRoute = defineEnveloped<unknown>({
         retention_truncated: retention.length > MAX_ADMIN_RETENTION_CURVES,
         redemption_mix: mix,
         concentration: toConcentration(positions),
+        holders_truncated: lifecycles.length >= MAX_HOLDER_LIFECYCLES,
       } satisfies AdminHolderCohorts,
       source: "indexed" as const,
       chainHeight: heads.chainHeight,
@@ -1065,12 +1068,17 @@ const adminUpkeepRoute = defineEnveloped<unknown>({
     const [heads, epochs, latencies] = await Promise.all([
       ctx.reader.heads(),
       ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
-      ctx.reader.redemptionLatencySeconds(),
+      ctx.reader.redemptionLatencySeconds(MAX_UPKEEP_SAMPLES),
     ]);
     return {
       data: {
-        epoch_lag: toUpkeepDistribution(epochLagSeconds(epochs)),
-        redemption_latency: toUpkeepDistribution(latencies),
+        // The epoch series is already capped upstream, so its lag sample is
+        // bounded by the epoch cap and carries that flag rather than its own.
+        epoch_lag: toUpkeepDistribution(
+          epochLagSeconds(epochs),
+          epochs.length >= MAX_ADMIN_EPOCH_POINTS,
+        ),
+        redemption_latency: toUpkeepDistribution(latencies, latencies.length >= MAX_UPKEEP_SAMPLES),
         capture_cadence: null,
       } satisfies AdminUpkeepTimeliness,
       source: "indexed" as const,

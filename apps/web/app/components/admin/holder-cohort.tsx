@@ -111,6 +111,14 @@ export function HolderCohort({
                   {t(locale, "admin.series-truncated")}
                 </p>
               ) : null}
+              {/* A DIFFERENT caution from the one above: the depositor set was
+                  capped, so the newest cohorts are absent entirely and recent
+                  adoption reads low rather than the chart being short. */}
+              {data.holdersTruncated ? (
+                <p role="note" className="text-xs text-muted-foreground">
+                  {t(locale, "admin.holders-truncated")}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-2">

@@ -314,8 +314,15 @@ function percentile(sortedAsc: readonly number[], p: number): number | null {
  * An empty sample set yields every bucket at 0 with `sample_count: 0`, and the
  * panel renders "n/a" off the count rather than drawing a flat histogram that
  * looks like a measured result.
+ *
+ * `truncated` says the sample hit its cap and so describes the most recent
+ * `sample_count` events rather than all history — a real answer, but a
+ * different one, so it rides rather than being dropped.
  */
-export function toUpkeepDistribution(samples: readonly number[]): AdminUpkeepDistribution {
+export function toUpkeepDistribution(
+  samples: readonly number[],
+  truncated = false,
+): AdminUpkeepDistribution {
   const buckets: AdminUpkeepBucket[] = UPKEEP_BUCKET_EDGES.map((from, i) => ({
     from_seconds: from,
     to_seconds: UPKEEP_BUCKET_EDGES[i + 1] ?? null,
@@ -334,5 +341,6 @@ export function toUpkeepDistribution(samples: readonly number[]): AdminUpkeepDis
     median_seconds: percentile(sorted, 50),
     p90_seconds: percentile(sorted, 90),
     buckets,
+    truncated,
   };
 }

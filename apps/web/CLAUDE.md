@@ -226,6 +226,13 @@ no client script, beacon, pixel or cookie anywhere in the design. Totals are
 chain-derived terminal stage is kept structurally apart so the view cannot imply
 uniform precision.
 
+**The funnel vocabulary has ONE declaration.** `FUNNEL_STAGE_KEYS`,
+`FUNNEL_RETENTION_DAYS` and `FUNNEL_WINDOW_DAYS` live in `@nvhash/api-types`;
+`funnel.server.ts` re-exports them. The stage list is half the row ceiling
+(`stages × retention days`), so restating it here made two numbers agree by luck
+until someone added a stage. `test/funnel-counters.test.ts` also asserts the list
+equals the Prisma enum's members, so schema and code cannot drift either.
+
 **The funnel's two halves share ONE window.** Its upper stages are counters read
 here; its terminal stage is chain-derived in `services/api`. Both use
 `FUNNEL_WINDOW_DAYS` from `@nvhash/api-types` — one declaration, because two
@@ -241,6 +248,15 @@ ack read is `null`, never an empty map: `IncidentFeedVM.ackStateKnown` goes
 false, **no row offers an affordance**, and the panel says so. An empty map
 would render "unacknowledged" for incidents nobody could look up and re-offer
 "acknowledge" on one another admin had handled.
+
+**Reversal is a CONDITIONAL update, never find-then-update.**
+`unacknowledge` puts `unacknowledgedAt: null` in the WHERE of an `updateMany`,
+so the row is claimed in one statement and the loser of a concurrent reversal
+sees `count === 0` — C3 forbids last-write-wins on that column by name.
+`incidentId` is **BIGINT**, matching `indexed.incidents.id`; the app layer keeps
+the safe-integer domain the wire is guarded to and converts at the store
+boundary, so a narrower column can never refuse an acknowledgment the wire
+accepted.
 
 **Load the `dataviz` skill before touching `app/components/charts/`.**
 

@@ -994,7 +994,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return count === undefined ? null : toSafeInt(count, "depositor_count");
     },
 
-    async holderLifecycles(): Promise<HolderLifecycleFacts[]> {
+    async holderLifecycles(limit: number): Promise<HolderLifecycleFacts[]> {
       // One row per depositor, WITHOUT the address. The running position is a
       // window function so the fold happens in Postgres over an indexed scan
       // rather than by materializing every transaction in this process — the
@@ -1046,6 +1046,11 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         SELECT f.first_height AS "firstDepositHeight", e.exit_height AS "exitHeight"
         FROM first_deposit f
         LEFT JOIN exited e ON e."address" = f."address"
+        -- ASC + LIMIT: a truncated read drops the NEWEST cohorts, matching the
+        -- adminEpochsAsc convention. The ORDER BY is also what makes the trim
+        -- deterministic -- without it the dropped set would vary per plan.
+        ORDER BY f.first_height ASC
+        LIMIT ${limit}
       `);
       return rows.map((r) => ({
         firstDepositHeight: r.firstDepositHeight,
@@ -1187,11 +1192,18 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       return { enrolledNow, churnedTotal };
     },
 
-    async redemptionLatencySeconds(): Promise<number[]> {
+    async redemptionLatencySeconds(limit: number): Promise<number[]> {
       // Terminal requests only. A still-enqueued request has no latency yet,
       // and counting one as "fast so far" would understate the distribution.
+      //
+      // Newest first under a cap: redemption history grows permissionlessly, so
+      // an unbounded read would transfer the whole table and sort it in this
+      // process to find two percentiles. `lastHeight` is the terminating update
+      // for a settled request and carries its own index.
       const rows = await prisma.redemptionRequest.findMany({
         where: { status: { in: ["matured", "expedited", "refunded"] } },
+        orderBy: [{ lastHeight: "desc" }, { requestId: "desc" }],
+        take: limit,
         select: { enqueuedAt: true, expeditedAt: true, maturedAt: true, refundedAt: true },
       });
       const seconds: number[] = [];

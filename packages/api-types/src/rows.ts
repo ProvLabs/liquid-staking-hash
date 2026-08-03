@@ -924,6 +924,17 @@ export interface AdminHolderCohorts {
   retention_truncated: boolean;
   redemption_mix: AdminRedemptionMix;
   concentration: AdminConcentration | null;
+  /**
+   * True when the depositor read hit `MAX_HOLDER_LIFECYCLES`, so adoption and
+   * retention were computed over the OLDEST that many depositors rather than
+   * all of them.
+   *
+   * Distinct from `adoption_truncated`/`retention_truncated`, which report the
+   * per-EPOCH caps: this one bounds the *depositor* set, and its consequence is
+   * different — the newest cohorts are missing entirely, so recent adoption
+   * reads low rather than the series simply being short.
+   */
+  holders_truncated: boolean;
 }
 
 /** One epoch's point on the validator-cohort timeline. */
@@ -966,6 +977,15 @@ export interface AdminUpkeepDistribution {
   median_seconds: number | null;
   p90_seconds: number | null;
   buckets: AdminUpkeepBucket[];
+  /**
+   * True when the sample hit `MAX_UPKEEP_SAMPLES` — the distribution describes
+   * the most recent `sample_count` settled requests, not all history.
+   *
+   * A bounded sample of a bucketed distribution is a real answer; presenting it
+   * as "every redemption ever" would not be, which is why the flag rides rather
+   * than the cap being silent.
+   */
+  truncated: boolean;
 }
 
 /**

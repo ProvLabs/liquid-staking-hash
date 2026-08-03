@@ -460,7 +460,14 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
         // still gets a real all-time figure to contrast the window against.
         facts.holderLifecycles?.length ?? facts.firstDepositTimes?.length ?? null,
       ),
-    holderLifecycles: () => Promise.resolve([...(facts.holderLifecycles ?? [])]),
+    // ASC by first-deposit height then capped, mirroring the SQL: a fake that
+    // ignored the limit could not exercise `holders_truncated`.
+    holderLifecycles: (limit) =>
+      Promise.resolve(
+        [...(facts.holderLifecycles ?? [])]
+          .sort((a, b) => (a.firstDepositHeight < b.firstDepositHeight ? -1 : 1))
+          .slice(0, limit),
+      ),
     holderPositions: (bandDepth) => {
       // Mirrors the SQL exactly: the BAND is sliced, the aggregates are not.
       // A fake that derived the count and total from the sliced list would
@@ -496,16 +503,18 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
           churnedTotal: (facts.registry ?? []).filter((r) => r.unregisteredAt !== null).length,
         },
       ),
-    redemptionLatencySeconds: () =>
+    // Capped like the SQL, so `truncated` is reachable from a fixture.
+    redemptionLatencySeconds: (limit) =>
       Promise.resolve(
-        facts.redemptionLatencies !== undefined
+        (facts.redemptionLatencies !== undefined
           ? [...facts.redemptionLatencies]
           : // Derived through the SAME `payoutDurationSeconds` the Prisma
             // reader uses, over terminal requests only.
             (facts.redemptions ?? [])
               .filter((r) => r.status !== "enqueued")
               .map(payoutDurationSeconds)
-              .filter((s): s is number => s !== null),
+              .filter((s): s is number => s !== null)
+        ).slice(0, limit),
       ),
     adminIncidents: (p) =>
       Promise.resolve(

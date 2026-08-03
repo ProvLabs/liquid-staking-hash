@@ -1,6 +1,8 @@
 # App M7 — Governance & admin (milestone overview)
 
-**Status:** PLANNED 2026-07-28. This document is **not a build plan** — it is
+**Status:** **DELIVERED 2026-08-03** — all six rows (7.1–7.6) merged; see §8's
+closure entry and §7.5's post-milestone detector record. Planned 2026-07-28.
+This document is **not a build plan** — it is
 the milestone-level index. Each PR has its own plan (§5), and those are what
 executors read. This file carries only what is genuinely cross-cutting: the
 findings that reshaped the milestone (§2), the branch split and its file-count
@@ -391,6 +393,55 @@ evidence for the ceremony reading.
 > naming what to falsify. Keep C1–C3 and the drill rule; leave C4/C5 on probation
 > until 7.2 exercises them.
 
+> **RECORDED 2026-08-03 at MILESTONE closure — the two cells 7.1 left open.**
+> 7.1's record deferred exactly two of the five falsifiable claims to 7.5
+> (`incident_acks`'s key and the residual stale-admin window) and left **C4 and
+> C5 on probation** as formats. 7.5–7.6 is the first PR with a real UI state
+> matrix and the last of the series, so this is the closing entry. The detail is
+> in [the 7.5–7.6 plan §10.4](2026-07-28-app-m7.5-7.6-admin-analytics-and-funnel.md).
+>
+> **Both deferred claims landed and both changed the implementation.** C1's
+> "state the N>1 case" sent `incident_acks` to a surrogate id plus a partial
+> unique index instead of the obvious `incidentId` — and the constraint was then
+> verified against a real Postgres rather than reasoned about. The stale-admin
+> claim changed the **ADR**: the amendment now records the residual window as the
+> assertion's ≤ 60 s rather than implying zero. Neither was ceremony.
+>
+> **C4 was filled completely and still leaked, which is the pilot's sharpest
+> result.** The 7.5–7.6 §4b C4 table enumerated six incident states and their
+> affordances, and the shipped code still rendered "unacknowledged, here is the
+> button" for every open incident whenever the acknowledgment store was
+> unreadable — including ones another admin had handled, the one row the table
+> calls out by name. The gap was not a state the author failed to imagine; it was
+> that C4's axis is *record state* while the failure lives on a *different axis*:
+> the feed's two inputs come from two schemas and fail independently, so the real
+> matrix is `record state × per-input availability`. A hand-written table over one
+> axis cannot surface a cell on an axis it does not have.
+>
+> §7.5 predicted that a filled C4 leaking again means the remedy is generating
+> the matrix rather than tabulating it. **That prediction is now met once**, and
+> the direction it points is confirmed by the fix: the durable part was not the
+> new test but making the missing input a `Map | null` the type system forces
+> every consumer to handle. **Recommendation for M8: keep C1–C3 and the drill
+> rule as they are; replace C4's prose table with an enumeration over
+> `record state × {each input: ok, unavailable}` derived from the loader's own
+> inputs, and treat C5 as still untested** — every §8.8 panel was indexed-only,
+> so the plane-precedence format never got its exercise either.
+>
+> **A second, milder finding for C2.** The bounds registry works as designed for
+> pairs it can see, and cannot see a bound *misused at a call site*: a cap
+> declared for epoch points was passed as a holder limit, silently truncating a
+> denominator. The registry checks that declared pairs agree, not that a constant
+> is applied to the quantity it names. Cheap mitigation, adopted: name bounds for
+> their quantity (`CONCENTRATION_BAND_DEPTH`, `MAX_HOLDER_LIFECYCLES`) so the
+> mismatch reads wrong at the call site.
+>
+> **Net on the pilot:** C1, C2 and C3 each changed implementations across the
+> milestone and stay. The drill rule (§7.4) remains the strongest single item —
+> it caught four wrong assumptions in 7.1 that no table did. C4 is worth keeping
+> only in generated form. C6 (temporal spans) was added mid-pilot from a real
+> escape and has not yet been exercised by a second PR.
+
 ## 8. Revision log
 
 *2026-07-28: initial milestone overview and the six PR plans, written as the
@@ -475,3 +526,25 @@ from it would have hidden execute permanently. The remedy is a SECOND field —
 just confirm the state we are about to act on". Worth recording because it is an
 instance of §7.5's own warning in a new form: a filled cell can be right about
 the rule and still leave the mechanism to be discovered by building.*
+
+*2026-08-03 — **milestone closed.** All six rows delivered: 7.1 (2026-07-29),
+7.2 (2026-07-30), 7.3–7.4 (2026-07-30), 7.5–7.6 (2026-07-31), with a second
+review pass over 7.5–7.6 landing four fixes on 2026-08-03. The status line and
+§7.5's detector record are updated in this same change rather than left for a
+later tidy — a milestone index that still reads PLANNED while every plan it
+points at reads DELIVERED is the cheapest possible version of the parity failure
+this repo keeps finding in code.*
+
+*What the milestone actually cost against its estimate: the §3 table budgeted
+≈50 files for 7.5–7.6 and it landed at 63, the overrun entirely in tests and
+docs rather than surface. The 7.3–7.4 merge (D7) was the one scope decision that
+reversed itself in flight — the three-level relay guard shipped and was reduced
+within the same PR once the reasoning behind it was found backwards — which is
+recorded there and is the milestone's clearest instance of a plan being wrong in
+a way only implementation could show.*
+
+*The one durable claim to carry into M8: **the app side's defect-finding
+mechanism is the drill and the type system, not the prose table.** §4b's C1–C3
+each changed implementations and stay; C4 was filled completely and still leaked
+a real defect on an axis it does not model, and the fix that held was a type
+change rather than a test. §7.5's recommendations above are the M8 input.*

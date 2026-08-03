@@ -33,9 +33,18 @@
 
 model IncidentAck {
   id               BigInt    @id @default(autoincrement())
-  /** `indexed.incidents.id`. No cross-schema FK exists (ADR-001 Decision 1);
-   * the id is validated against a live read of the incident on write. */
-  incidentId       Int
+  /**
+   * `indexed.incidents.id`. No cross-schema FK exists (ADR-001 Decision 1); the
+   * id is validated against a live read of the incident on write.
+   *
+   * BIGINT to match `indexed.incidents.id`, which is a `BIGSERIAL`. A 32-bit
+   * `Int` here would be a narrower domain than the column it references, so an
+   * id past 2^31 would fail to insert — an acknowledgment lost to a type
+   * mismatch, in the one schema that is not rebuildable from chain. The app
+   * layer still works in the safe-integer domain the wire is guarded to; the
+   * conversion happens at the store boundary.
+   */
+  incidentId       BigInt
   /** bech32 address of the acknowledging admin — the SESSION address (public
    * chain data). Never a client-supplied actor. */
   acknowledgedBy   String

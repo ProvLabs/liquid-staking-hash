@@ -145,6 +145,7 @@ export function toHolderCohortsVM(
       top10_bps: number;
       holder_count: number;
     } | null;
+    holders_truncated: boolean;
   } | null,
 ): PanelState<HolderCohortsVM> {
   if (data === null) return { kind: "unavailable", reason: "read-failed" };
@@ -171,6 +172,7 @@ export function toHolderCohortsVM(
         })),
       })),
       retentionTruncated: data.retention_truncated,
+      holdersTruncated: data.holders_truncated,
       redemptionMix: data.redemption_mix,
       concentration:
         data.concentration === null
@@ -236,6 +238,7 @@ function toDistributionState(
     median_seconds: number | null;
     p90_seconds: number | null;
     buckets: Array<{ from_seconds: number; to_seconds: number | null; count: number }>;
+    truncated: boolean;
   } | null,
 ): PanelState<UpkeepDistributionVM> {
   if (d === null) return { kind: "unavailable", reason: "not-collected" };
@@ -253,6 +256,7 @@ function toDistributionState(
             : `${formatDuration(b.from_seconds)}–${formatDuration(b.to_seconds)}`,
         count: b.count,
       })),
+      truncated: d.truncated,
     },
   };
 }

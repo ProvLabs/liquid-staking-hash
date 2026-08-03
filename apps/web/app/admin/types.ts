@@ -60,6 +60,12 @@ export interface HolderCohortsVM {
   adoptionTruncated: boolean;
   curves: RetentionCurveVM[];
   retentionTruncated: boolean;
+  /**
+   * The DEPOSITOR set was capped, not just the per-epoch series. A different
+   * message from the two above: the newest cohorts are missing entirely, so
+   * recent adoption reads low rather than the chart simply being short.
+   */
+  holdersTruncated: boolean;
   redemptionMix: { enqueued: number; expedited: number; matured: number; refunded: number };
   /** Withheld below the minimum holder count — its own panel state (§7.1 Q7). */
   concentration: PanelState<{
@@ -90,6 +96,9 @@ export interface UpkeepDistributionVM {
   medianLabel: string | null;
   p90Label: string | null;
   buckets: Array<{ label: string; count: number }>;
+  /** The sample hit its cap: this describes the most recent `sampleCount`
+   * events, not all history. A bounded answer, and labeled as one. */
+  truncated: boolean;
 }
 
 export interface UpkeepVM {

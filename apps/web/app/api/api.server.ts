@@ -683,6 +683,10 @@ export const adminHolderCohortsSchema = z.object({
   redemption_mix: adminRedemptionMixSchema,
   // Nullable: withheld entirely below the minimum holder count (§7.1 Q7).
   concentration: adminConcentrationSchema.nullable(),
+  // The DEPOSITOR set was capped, not just the per-epoch series: adoption and
+  // retention cover the oldest N depositors, so the newest cohorts are absent
+  // entirely rather than the series merely being short.
+  holders_truncated: z.boolean(),
 }) satisfies z.ZodType<AdminHolderCohorts>;
 
 export const adminValidatorPointSchema = z.object({
@@ -713,6 +717,9 @@ export const adminUpkeepDistributionSchema = z.object({
   median_seconds: z.number().int().nonnegative().nullable(),
   p90_seconds: z.number().int().nonnegative().nullable(),
   buckets: z.array(adminUpkeepBucketSchema).max(MAX_ADMIN_UPKEEP_BUCKETS_WIRE),
+  // The sample hit its cap: the distribution covers the most recent
+  // `sample_count` events, not all history, and the panel says so.
+  truncated: z.boolean(),
 }) satisfies z.ZodType<AdminUpkeepDistribution>;
 
 export const adminUpkeepTimelinessSchema = z.object({

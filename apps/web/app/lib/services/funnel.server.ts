@@ -15,6 +15,13 @@
 // the two separate HERE and joined only at the storage boundary is what lets a
 // caller be unable to attach a page class to a stage that has none.
 
+import {
+  FUNNEL_RETENTION_DAYS,
+  FUNNEL_STAGE_KEYS,
+  MAX_FUNNEL_ROWS_TOTAL,
+  type FunnelStageKey,
+} from "@nvhash/api-types";
+
 /** Page classes, one per counted route. Closed (plan §7.1 Q3). */
 export type FunnelPageClass = "learn_index" | "validators" | "market";
 
@@ -34,16 +41,16 @@ export type FunnelEvent =
   | { readonly stage: "due_diligence_depth" }
   | { readonly stage: "connect" };
 
-/** The stored `FunnelStage` enum values, exactly as the migration declares them. */
-export const FUNNEL_STAGE_KEYS = [
-  "visit_learn_index",
-  "visit_validators",
-  "visit_market",
-  "due_diligence_depth",
-  "connect",
-] as const;
-
-export type FunnelStageKey = (typeof FUNNEL_STAGE_KEYS)[number];
+/**
+ * The stored `FunnelStage` enum values, exactly as the migration declares them.
+ *
+ * IMPORTED from `@nvhash/api-types`, not declared here: the funnel's row ceiling
+ * is `stages × retention days` and that product is stated there, so a stage list
+ * restated in this file would be a second declaration of half a bound — two
+ * numbers agreeing by luck until someone adds a stage. Re-exported so this
+ * module stays the one import site for the funnel vocabulary.
+ */
+export { FUNNEL_STAGE_KEYS, type FunnelStageKey };
 
 /** The `visit` stage's page class → stored key. Total by type, so a new page
  * class without a key is a compile error rather than a dropped count. */
@@ -74,18 +81,20 @@ export function utcDay(at: Date): string {
 
 /**
  * Retention: day rows older than this are swept (plan §7.1 Q4). Long enough
- * for year-over-year comparison, short enough to be a real bound. Stated here
- * and in the schema's allowlist entry, and ENFORCED by the notifier tick's
- * sweep — a retention window nothing deletes is an aspiration, not a bound.
+ * for year-over-year comparison, short enough to be a real bound. Declared in
+ * `@nvhash/api-types` beside the stage list it multiplies against, recorded in
+ * the schema's allowlist entry, and ENFORCED by the notifier tick's sweep — a
+ * retention window nothing deletes is an aspiration, not a bound.
  */
-export const FUNNEL_RETENTION_DAYS = 400;
+export { FUNNEL_RETENTION_DAYS };
 
 /**
  * The total row count the table can ever hold: stages × retention days, both
  * closed. C2 asks for the product to be stated rather than described, because
  * "bounded by two closed sets" is only reassuring if someone has multiplied it.
+ * Derived from the two shared declarations, so adding a stage moves it.
  */
-export const MAX_FUNNEL_ROWS = FUNNEL_STAGE_KEYS.length * FUNNEL_RETENTION_DAYS;
+export { MAX_FUNNEL_ROWS_TOTAL as MAX_FUNNEL_ROWS };
 
 /** The UTC day before which rows are swept, given `now`. */
 export function funnelRetentionCutoff(now: Date): string {

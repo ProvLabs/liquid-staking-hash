@@ -179,8 +179,20 @@ describe("invariant 14: panels degrade individually, with a stated reason", () =
 
   it("reports the capture-signal distribution as NOT COLLECTED, not as empty", () => {
     const upkeep = toUpkeepVM({
-      epoch_lag: { sample_count: 4, median_seconds: 7200, p90_seconds: 7200, buckets: [] },
-      redemption_latency: { sample_count: 0, median_seconds: null, p90_seconds: null, buckets: [] },
+      epoch_lag: {
+        sample_count: 4,
+        median_seconds: 7200,
+        p90_seconds: 7200,
+        buckets: [],
+        truncated: false,
+      },
+      redemption_latency: {
+        sample_count: 0,
+        median_seconds: null,
+        p90_seconds: null,
+        buckets: [],
+        truncated: false,
+      },
       capture_cadence: null,
     });
     expect(upkeep.epochLag.kind).toBe("data");
@@ -227,6 +239,7 @@ describe("invariant 12 at the view layer: withheld is not missing", () => {
     retention_truncated: false,
     redemption_mix: { enqueued: 1, expedited: 2, matured: 3, refunded: 0 },
     concentration: null,
+    holders_truncated: false,
   };
 
   it("renders a withheld concentration as `below-minimum`, not as absent data", () => {
@@ -237,6 +250,18 @@ describe("invariant 12 at the view layer: withheld is not missing", () => {
       // The threshold rides through as data, so the panel states the rule
       // rather than the web tier re-deciding it.
       expect(vm.data.minCohortSize).toBe(5);
+    }
+  });
+
+  it("surfaces a capped DEPOSITOR set as its own caution, not as a short chart", () => {
+    // `holders_truncated` and `adoption_truncated` mean different things and
+    // must not collapse: a short series is a display fact, a capped depositor
+    // set biases the newest points downward. The panel says which.
+    const vm = toHolderCohortsVM({ ...COHORTS, holders_truncated: true });
+    expect(vm.kind).toBe("data");
+    if (vm.kind === "data") {
+      expect(vm.data.holdersTruncated).toBe(true);
+      expect(vm.data.adoptionTruncated).toBe(false);
     }
   });
 

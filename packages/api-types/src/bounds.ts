@@ -202,6 +202,42 @@ export const MAX_ADMIN_INCIDENTS_PAGE = 200;
 export const MAX_ADMIN_INCIDENTS_PAGE_WIRE = 500;
 
 /**
+ * How many depositor lifecycles the cohort read transfers. NOT a wire bound —
+ * lifecycles are folded server-side and never cross the boundary — but a bound
+ * all the same, because the row set grows with **depositor count** and nothing
+ * an operator does caps it (`SECURITY.md`: no unbounded work).
+ *
+ * Measured on the dev database (postgres 17-alpine, 2026-08-03) because the
+ * scan cost is the part a cap does NOT fix: 400 k transactions / 40 k holders
+ * ran in 349 ms, and 1.2 M / 120 k in 1 407 ms — superlinear, since the window
+ * function sorts the whole table by `(address, height, msgIndex)` on every
+ * `/admin` load. **This cap bounds the transfer and this process's memory; it
+ * does not bound the scan.** The remedy for the scan is materializing holder
+ * lifecycle in the indexer, which is an indexer change and is recorded as a
+ * follow-on rather than implied to be done here.
+ *
+ * The read is ASC by first-deposit height, so a truncated set drops the NEWEST
+ * cohorts — the `adminEpochsAsc` convention, and the right direction here too:
+ * the newest cohorts are the ones whose retention horizons have not elapsed.
+ * `holders_truncated` says so; an unflagged trim would present a partial
+ * depositor set as the whole program.
+ */
+export const MAX_HOLDER_LIFECYCLES = 100_000;
+
+/**
+ * How many terminal redemption latencies the upkeep read transfers, newest
+ * first. Same class as `MAX_HOLDER_LIFECYCLES`: the row set grows with
+ * redemption history, permissionlessly.
+ *
+ * Newest-first is the meaningful direction — the panel measures how timely
+ * upkeep is *now* — and the distribution is bucketed, so a bounded sample is a
+ * bounded answer rather than a partial one. Measured at 300 k terminal requests:
+ * 49 ms in Postgres, but the whole set crossed into this process and was sorted
+ * in JS to find the percentiles, which is the cost this bounds.
+ */
+export const MAX_UPKEEP_SAMPLES = 50_000;
+
+/**
  * How many holder positions the concentration read transfers: exactly the
  * deepest band (`top10_bps`), and NOT one more.
  *
@@ -241,9 +277,41 @@ export const FUNNEL_WINDOW_DAYS = 90;
 export const MAX_ACK_NOTE_LENGTH = 500;
 
 /**
+ * The stored `FunnelStage` vocabulary (§14.10), and THE declaration of it —
+ * `apps/web` imports this list rather than restating it.
+ *
+ * A vocabulary in a bounds file is deliberate: the funnel's row ceiling is
+ * `stages × retention days`, so the stage list *is* half the bound. It was
+ * previously stated here as a literal `5` alongside a separate list in
+ * `apps/web`, which is the "two numbers that happen to agree" shape this file
+ * exists to prevent — a sixth stage would have left the ceiling silently wrong
+ * with both suites green.
+ *
+ * The page class is folded in (§14.10 delta (a)), and `first_deposit` is absent
+ * because it is chain-derived and nothing may ever write it.
+ * `apps/web/test/funnel-counters.test.ts` asserts this list equals the Prisma
+ * enum's members, so schema and code cannot drift either.
+ */
+export const FUNNEL_STAGE_KEYS = [
+  "visit_learn_index",
+  "visit_validators",
+  "visit_market",
+  "due_diligence_depth",
+  "connect",
+] as const;
+
+export type FunnelStageKey = (typeof FUNNEL_STAGE_KEYS)[number];
+
+/** Days of `funnel_counters` day rows kept before the notifier tick sweeps them
+ * (§14.10, plan §7.1 Q4). Must be ≥ `FUNNEL_WINDOW_DAYS`, or the panel would
+ * read a shorter series than its own caption claims. */
+export const FUNNEL_RETENTION_DAYS = 400;
+
+/**
  * `FunnelCounter` rows the §8.8 funnel panel can ever read: stages × retention
- * days, both closed sets (§14.10). Stated as the PRODUCT because "bounded by
- * two closed sets" is only reassuring once someone has multiplied it.
+ * days, both closed sets (§14.10). DERIVED from the two declarations above, not
+ * restated — stated as the PRODUCT because "bounded by two closed sets" is only
+ * reassuring once someone has multiplied it.
  *
  * The funnel panel is the one §8.8 surface with no wire pair to register: its
  * data lives in the `app` schema, which `api_reader` has no grants on, so it
@@ -251,9 +319,7 @@ export const MAX_ACK_NOTE_LENGTH = 500;
  * declared here anyway, beside its siblings, so a reader looking for the
  * funnel's cap finds it rather than concluding there is none.
  */
-export const MAX_FUNNEL_STAGES = 5;
-export const MAX_FUNNEL_RETENTION_DAYS = 400;
-export const MAX_FUNNEL_ROWS_TOTAL = MAX_FUNNEL_STAGES * MAX_FUNNEL_RETENTION_DAYS;
+export const MAX_FUNNEL_ROWS_TOTAL = FUNNEL_STAGE_KEYS.length * FUNNEL_RETENTION_DAYS;
 
 /**
  * THE registry the pairing test walks — one list, deliberately. A bounded field

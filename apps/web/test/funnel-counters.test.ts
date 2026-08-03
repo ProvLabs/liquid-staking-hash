@@ -54,6 +54,26 @@ describe("the event vocabulary is closed and identifier-free (invariant 7)", () 
     for (const key of FUNNEL_STAGE_KEYS) expect(FUNNEL_STAGE_KEYS).toContain(key);
   });
 
+  it("declares EXACTLY the Prisma enum's members, read from the schema", () => {
+    // The list lives in `@nvhash/api-types` (it is half the row ceiling) while
+    // the enum lives in the Prisma schema, so the two could drift in either
+    // direction: a stage the code can write that the column rejects, or a
+    // member nothing ever writes. Neither is visible from one side alone, so
+    // this reads the schema and compares.
+    const schema = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "prisma", "funnel_counters.prisma"),
+      "utf8",
+    );
+    const block = /enum\s+FunnelStage\s*\{([\s\S]*?)\}/.exec(schema);
+    expect(block, "FunnelStage enum missing from the schema").not.toBeNull();
+    const members = block![1]!
+      // Drop doc comments and the `@@schema` attribute; keep bare identifiers.
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[a-z_][a-z0-9_]*$/.test(line));
+    expect(members.slice().sort()).toEqual([...FUNNEL_STAGE_KEYS].sort());
+  });
+
   it("has no identifier-shaped parameter anywhere in the write path", () => {
     // The property is enforced by the TYPES; this asserts the ARITY those types
     // imply, so a future signature that quietly grew a third positional

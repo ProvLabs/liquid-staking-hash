@@ -1029,6 +1029,12 @@ export default {
   "admin.panel-below-minimum":
     "withheld: the group is too small to report without identifying its members.",
   "admin.panel-not-collected": "this build does not collect the input for this measure.",
+  // Distinct from `series-truncated`: that one means the CHART is short, this
+  // one means depositors are missing, which biases the newest points downward.
+  "admin.holders-truncated":
+    "The depositor set was capped for this read, oldest first — the most recent cohorts are not included, so recent adoption reads lower than it was.",
+  "admin.upkeep-truncated":
+    "Measured over the most recent {count} settled requests, not the whole history.",
   "admin.series-truncated":
     "This series is longer than the page shows and has been trimmed to its cap.",
 
