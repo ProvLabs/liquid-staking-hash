@@ -202,6 +202,32 @@ export const MAX_ADMIN_INCIDENTS_PAGE = 200;
 export const MAX_ADMIN_INCIDENTS_PAGE_WIRE = 500;
 
 /**
+ * How many holder positions the concentration read transfers: exactly the
+ * deepest band (`top10_bps`), and NOT one more.
+ *
+ * It is a band depth, not a bound on the holder set. `AdminConcentration`'s
+ * denominator and `holder_count` are aggregated over EVERY positive position in
+ * SQL, so this cap can never move a reported share — the two are read in one
+ * statement precisely so a deeper band and a wider program cannot drift apart.
+ * Borrowing an epoch cap for this (as the first cut did) silently truncated the
+ * denominator past that many holders and OVERSTATED every band.
+ */
+export const CONCENTRATION_BAND_DEPTH = 10;
+
+/**
+ * Days of history the §8.8 evaluator-funnel panel covers — the ONE declaration,
+ * imported by both tiers.
+ *
+ * It is shared rather than web-local because the funnel's terminal stage is
+ * chain-derived in `services/api` while its upper stages are counter-derived in
+ * `apps/web`. Two windows would make the panel's bottom incomparable with its
+ * top — a first-deposit total over all history under a caption reading "the last
+ * 90 days" — which is the §12.1 lie invariant 15 exists to prevent. One
+ * constant, so the mismatch is not expressible.
+ */
+export const FUNNEL_WINDOW_DAYS = 90;
+
+/**
  * `incident_acks.note` — the optional operator note on an acknowledgment
  * (app-spec §9.1; plan §7.1 Q2). ONE declaration, three consumers: the
  * `POST /admin/incidents/ack` body schema rejects over-length input, the

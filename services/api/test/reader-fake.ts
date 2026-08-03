@@ -106,7 +106,13 @@ export interface FakeFacts {
    */
   readonly adminEpochs?: readonly AdminEpochFacts[] | undefined;
   readonly holderLifecycles?: readonly HolderLifecycleFacts[] | undefined;
+  /** EVERY positive holder position, in any order. Seed more than
+   * `CONCENTRATION_BAND_DEPTH` of them to exercise the banded-transfer path. */
   readonly holderPositions?: readonly bigint[] | undefined;
+  /** One first-`swap_in` timestamp per depositor, over all history. The
+   * windowed funnel terminal is a filter over these; `undefined` is the
+   * unknown answer (null on the wire), distinct from a seeded empty list. */
+  readonly firstDepositTimes?: readonly Date[] | undefined;
   readonly validatorEpochAggregates?: readonly ValidatorEpochAggregateFacts[] | undefined;
   readonly validatorRegistryCounts?: { enrolledNow: number; churnedTotal: number } | undefined;
   readonly redemptionLatencies?: readonly number[] | undefined;
@@ -448,14 +454,30 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
     depositorCount: () =>
       Promise.resolve(
         // Null when nothing seeded it — the dataless answer, distinct from a
-        // seeded zero, exactly as the Prisma reader distinguishes them.
-        facts.holderLifecycles === undefined ? null : facts.holderLifecycles.length,
+        // seeded zero, exactly as the Prisma reader distinguishes them. Either
+        // holder fixture certifies the count: both enumerate the same set (one
+        // depositor per entry), so a case that seeds only first-deposit times
+        // still gets a real all-time figure to contrast the window against.
+        facts.holderLifecycles?.length ?? facts.firstDepositTimes?.length ?? null,
       ),
     holderLifecycles: () => Promise.resolve([...(facts.holderLifecycles ?? [])]),
-    holderPositionsDesc: (limit) =>
-      Promise.resolve(
-        [...(facts.holderPositions ?? [])].sort((a, b) => (a > b ? -1 : 1)).slice(0, limit),
-      ),
+    holderPositions: (bandDepth) => {
+      // Mirrors the SQL exactly: the BAND is sliced, the aggregates are not.
+      // A fake that derived the count and total from the sliced list would
+      // reproduce the defect it exists to catch and pass either way.
+      const all = [...(facts.holderPositions ?? [])].sort((a, b) => (a > b ? -1 : 1));
+      return Promise.resolve({
+        topDesc: all.slice(0, bandDepth),
+        holderCount: all.length,
+        totalPosition: all.reduce((sum, value) => sum + value, 0n),
+      });
+    },
+    firstDepositorsSince: (since) => {
+      // Same rule as the SQL: first-deposit time over ALL history, then
+      // filtered — never filtered then min'd.
+      if (facts.firstDepositTimes === undefined) return Promise.resolve(null);
+      return Promise.resolve(facts.firstDepositTimes.filter((at) => at >= since).length);
+    },
     redemptionMix: () => {
       const mix = { enqueued: 0, expedited: 0, matured: 0, refunded: 0 };
       for (const r of facts.redemptions ?? []) mix[r.status] += 1;

@@ -857,7 +857,11 @@ The cohort-satisfaction dashboard the no-backend console cannot render (register
 > returned.
 > **[R2] TVL concentration ships as banded shares only** — top-1/5/10 as
 > percentages, with **no addresses and no absolute amounts**. The payload has no
-> field for a total, so a top-1 amount cannot be reconstructed from it.
+> field for a total, so a top-1 amount cannot be reconstructed from it. Each band
+> is a share of **every** positive position, and `holder_count` is the whole
+> holder set: the read transfers only `CONCENTRATION_BAND_DEPTH` positions, and
+> the count and denominator are aggregated in the same SQL statement over the
+> full set, so the transfer cap can never move a reported share.
 > **[R3] Capture-signal cadence gaps are NOT delivered.** §8.8 names them as a
 > third upkeep distribution, but no capture-signal series is indexed — the NAV
 > marker is consumed at ingest and not retained as its own row — so the panel
@@ -875,11 +879,25 @@ The cohort-satisfaction dashboard the no-backend console cannot render (register
 > not a secret, and a 404 would make a real permissions problem indistinguishable
 > from a typo.
 >
+> **The incident feed's two inputs fail independently, and the surface says
+> which.** Incidents come from `indexed` through the API; acknowledgments come
+> from this tier's own `app` schema (ADR-001 Decision 1), so either read can fail
+> alone. When the acknowledgment read fails the rows still render, the feed is
+> flagged **acknowledgment state unknown**, and **no row offers an
+> acknowledge/un-acknowledge control** — acting on a state that could not be read
+> is not a coherent action, the same reason a degraded feed offers none.
+> Rendering the missing read as "nothing is acknowledged" would assert a fact
+> from an absent input (§12.1) and would re-offer "acknowledge" on an incident
+> another administrator had already handled, contradicting the state × affordance
+> rule directly above it.
+>
 > Gates: `services/api/test/admin-endpoints.test.ts` (including a structural
 > sweep proving no bech32-shaped string appears in any admin payload, run against
 > POPULATED facts so it cannot pass vacuously), the `ADMIN_PATHS` matrix in
 > `services/api/test/cross-address.test.ts`, `apps/web/test/admin-data.test.ts`
-> (the degradation matrix and C4's state × affordance), the offline
+> (the degradation matrix and C4's state × affordance, at the mapper AND at the
+> loader that feeds it — the mapper cases alone could not see a loader that
+> substituted an empty acknowledgment set for a failed read), the offline
 > `e2e/admin.spec.ts`, and `/admin` in the axe route list on both themes.
 
 ---
@@ -1470,6 +1488,26 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > membership on-chain per session refresh, not per cached role" a mechanism
 > rather than a description.
 >
+> **A failed membership read is `degraded`, never a denial.** The read has three
+> outcomes, not two: member, confirmed non-member, and unknown. Only a **404** on
+> the policy lookup is the fact "the contract's admin is a plain account, so
+> direct address equality answers the question"; every other policy failure and
+> every `groupMembers` failure is `degraded`, and `/admin` then renders "we could
+> not check" rather than "this address is not a program administrator". The
+> narrow 404 test is deliberate — x/group answers a missing proposal with 500 on
+> this build, so a status code carries no general "does not exist" meaning here.
+> Collapsing the unknown into a denial is fail-closed but states a fact the App
+> does not have (§12.1), and would lock a real administrator out whenever the
+> group endpoint flickered.
+>
+> **The role surface carries two degradation flags, not one**, because operator
+> and admin have different authorities and fail independently: `degraded` (the
+> contract read failed, neither role known) and `adminDegraded` (the contract
+> read succeeded, the membership read did not). `admin` is a finding only when
+> neither is set. One combined flag would blank the §4 operator view — which
+> needs only `Validators {}` — every time the unrelated x/group query flickered,
+> which is the same class of error in the opposite direction.
+>
 > **[R1] What this does NOT claim.** The fresh read does not reduce the
 > stale-admin window to zero. A revoked member's next request fails, but an
 > assertion already minted stays valid for its remaining lifetime — so the
@@ -2026,6 +2064,18 @@ Protocol and platform facts this design must respect (chain constraints identica
     letting the name imply scroll tracking.
     **(d) Retention is 400 days**, swept by the notifier tick; the whole table is
     bounded at 5 stages × 400 days = 2 000 rows.
+    **(e) The funnel's terminal stage is WINDOWED to match its counted stages.**
+    The panel reads `FUNNEL_WINDOW_DAYS` (90) of counters, so the chain-derived
+    `first_deposit` figure counts addresses whose FIRST `swap_in` fell in that
+    same window — served as `first_deposits_in_window`, distinct from the header
+    panel's all-time `depositor_count`. The two differ in **precision**, which
+    the panel's copy explains; they must not also differ in **period**, which no
+    copy could make honest — an all-time terminal under a 90-day caption puts the
+    bottom of the funnel above its top. `FUNNEL_WINDOW_DAYS` is one declaration
+    in `@nvhash/api-types`, imported by both tiers, because the two halves of the
+    panel are computed in different packages and two agreeing constants could
+    drift apart silently. "First" is taken over all history and then filtered,
+    never filtered and then min'd, so a returning depositor is not a new one.
     The increment is `ON CONFLICT DO UPDATE SET count = count + 1` — one atomic
     statement, measured on the dev database at 32-way contention on a single
     row: 82 000 concurrent increments produced a stored count of exactly 82 000,

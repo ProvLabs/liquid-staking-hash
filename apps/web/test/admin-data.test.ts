@@ -12,9 +12,24 @@
 //
 // Also C4: state × affordance for the incident feed, exhaustively.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { envelope, FUNNEL_WINDOW_DAYS } from "@nvhash/api-types";
+
+import { loadConfig } from "~/config/config.server";
+import {
+  getIncidentAckStore,
+  resetIncidentAckStoreForTests,
+} from "~/lib/models/incident-acks.server";
+import {
+  FIXTURE_CHAIN_ID,
+  FIXTURE_CONTRACT_ADDRESS,
+  FIXTURE_VAULT_ADDRESS,
+} from "~/mocks/handlers";
 
 import {
+  FUNNEL_WINDOW_DAYS as WEB_FUNNEL_WINDOW_DAYS,
+  loadAdminViewData,
   toFunnelVM,
   toHolderCohortsVM,
   toIncidentRowVMs,
@@ -26,8 +41,63 @@ import {
 const ADMIN_A = "tp1l39wu7cht0zcycc5rkcd90sdd4ksjmxwdf388y";
 const ADMIN_B = "tp1xj828fwstxajpn95mq07mw0ztn449lxx65skad";
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetIncidentAckStoreForTests();
+});
+
+/** No DATABASE_URL, so both `app`-schema stores are the in-memory ones. */
+const LOADER_CONFIG = loadConfig({
+  APP_ENV: "development",
+  CHAIN_ID: FIXTURE_CHAIN_ID,
+  LCD_URL: "http://lcd.mock:1317",
+  CONTRACT_ADDRESS: FIXTURE_CONTRACT_ADDRESS,
+  VAULT_ADDRESS: FIXTURE_VAULT_ADDRESS,
+  CONSOLE_URL: "https://console.example",
+  CONSOLE_CHAIN_ID: FIXTURE_CHAIN_ID,
+  API_URL: "http://api.mock:8787",
+} as NodeJS.ProcessEnv);
+
+/**
+ * The five §8.8 endpoints, served directly rather than through MSW: these cases
+ * are about what the LOADER does with a failing `app`-schema store, so the API
+ * side is held healthy and uninteresting. One open incident is enough — the
+ * question is whether its acknowledgment state is reported as unknown.
+ */
+const adminFetchStub = (url: string): Promise<Response> => {
+  const body = url.includes("/admin/incidents")
+    ? [
+        {
+          id: 1,
+          kind: "epoch_overdue",
+          severity: "warning",
+          opened_at: "2026-07-30T00:00:00.000Z",
+          closed_at: null,
+          height: 100,
+        },
+      ]
+    : url.includes("/admin/program-health")
+      ? // The two depositor figures differ, so a funnel that reads the
+        // all-time one is distinguishable from one that reads the window.
+        HEALTH
+      : // The other three panels are not under test here; an unparseable body
+        // degrades each to its own state, which is the point of per-panel reads.
+        null;
+  return Promise.resolve(
+    new Response(JSON.stringify(envelope(body, { source: "indexed" })), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+};
+
 const HEALTH = {
   depositor_count: 12,
+  // Deliberately SMALLER than `depositor_count`: the windowed terminal is a
+  // subset of the all-time one, and a fixture where they were equal could not
+  // tell the two apart if the funnel ever read the wrong field again.
+  first_deposits_in_window: 4,
+  funnel_window_days: FUNNEL_WINDOW_DAYS,
   epochs: [
     {
       epoch_index: 0,
@@ -54,7 +124,13 @@ describe("invariant 14: panels degrade individually, with a stated reason", () =
     // read it", which is the §12.1 lie in miniature.
     expect(toProgramHealthVM(null)).toEqual({ kind: "unavailable", reason: "read-failed" });
     expect(
-      toProgramHealthVM({ depositor_count: null, epochs: [], epochs_truncated: false }),
+      toProgramHealthVM({
+        depositor_count: null,
+        first_deposits_in_window: null,
+        funnel_window_days: FUNNEL_WINDOW_DAYS,
+        epochs: [],
+        epochs_truncated: false,
+      }),
     ).toEqual({ kind: "unavailable", reason: "cold-start" });
   });
 
@@ -222,6 +298,29 @@ describe("invariant 15: the funnel never overstates its precision", () => {
     }
   });
 
+  it("takes its terminal stage from the WINDOWED count, not the all-time one", () => {
+    // The two halves of this panel are derived in different tiers, and the
+    // regression was pairing a 90-day counter series with an all-time depositor
+    // total: the bottom of the funnel then counted a different span than the
+    // top and could exceed every stage above it. `HEALTH` carries both figures
+    // with different values precisely so reading the wrong one fails here.
+    const vm = toFunnelVM(ROWS, HEALTH.first_deposits_in_window, HEALTH.funnel_window_days);
+    expect(vm.kind).toBe("data");
+    if (vm.kind === "data") {
+      expect(vm.data.firstDeposits).toBe(4);
+      expect(vm.data.firstDeposits).not.toBe(HEALTH.depositor_count);
+      expect(vm.data.windowDays).toBe(FUNNEL_WINDOW_DAYS);
+    }
+  });
+
+  it("uses ONE window declaration across both tiers", () => {
+    // The counter read and the API's terminal count are computed in different
+    // packages. Two constants that happened to agree would let one move alone
+    // and produce a mismatched funnel with no test failing, so the web tier
+    // re-exports the shared declaration rather than restating 90.
+    expect(WEB_FUNNEL_WINDOW_DAYS).toBe(FUNNEL_WINDOW_DAYS);
+  });
+
   it("sums per-day rows into per-stage event totals", () => {
     const vm = toFunnelVM(ROWS, 3, 90);
     if (vm.kind === "data") {
@@ -266,9 +365,9 @@ describe("C4: incident state × affordance", () => {
     note: null,
   });
 
-  function affordanceOf(rows: Row[], acks: Map<number, ReturnType<typeof ackBy>>): string[] {
+  function affordanceOf(rows: Row[], acks: Map<number, ReturnType<typeof ackBy>> | null): string[] {
     const vm = toIncidentRowVMs(rows, acks, ADMIN_A);
-    return vm.kind === "data" ? vm.data.map((r) => r.affordance) : ["unavailable"];
+    return vm.kind === "data" ? vm.data.rows.map((r) => r.affordance) : ["unavailable"];
   }
 
   it("open + unacknowledged → acknowledge", () => {
@@ -286,9 +385,99 @@ describe("C4: incident state × affordance", () => {
     const vm = toIncidentRowVMs([open], new Map([[1, ackBy(ADMIN_B)]]), ADMIN_A);
     expect(vm.kind).toBe("data");
     if (vm.kind === "data") {
-      expect(vm.data[0]!.affordance).toBe("none");
-      expect(vm.data[0]!.ack).toMatchObject({ by: ADMIN_B, bySessionAdmin: false });
+      expect(vm.data.rows[0]!.affordance).toBe("none");
+      expect(vm.data.rows[0]!.ack).toMatchObject({ by: ADMIN_B, bySessionAdmin: false });
     }
+  });
+
+  it("ACK STORE down → rows render, no affordance, and the state is flagged unknown", () => {
+    // The cell the matrix was missing. The incidents read succeeded and the
+    // `app`-schema ack read did not — two different stores (ADR-001 Decision 1),
+    // so either can fail alone. Substituting an empty map made every open
+    // incident render as unacknowledged WITH an "acknowledge" button, including
+    // one another admin had already handled: a definite state asserted from a
+    // missing input (invariant 14) and a direct contradiction of the row above.
+    const vm = toIncidentRowVMs([open, closed], null, ADMIN_A);
+    expect(vm.kind).toBe("data");
+    if (vm.kind === "data") {
+      // The incidents are real and still shown — the failure is scoped.
+      expect(vm.data.rows.map((r) => r.id)).toEqual([1, 2]);
+      // But nothing is offered, and nothing claims to be unacknowledged.
+      expect(vm.data.rows.map((r) => r.affordance)).toEqual(["none", "none"]);
+      expect(vm.data.ackStateKnown).toBe(false);
+    }
+  });
+
+  it("LOADER: a failing ack store reaches the view as unknown, not as empty", async () => {
+    // The mapper cases above pin what `toIncidentRowVMs` does with `null`. This
+    // pins that the loader actually PRODUCES null when the `app`-schema read
+    // throws — the step that was wrong. Without it, restoring the empty-map
+    // catch leaves every case above passing while the dashboard again renders
+    // "unacknowledged" for incidents nobody could look up.
+    resetIncidentAckStoreForTests();
+    const store = await getIncidentAckStore({ appEnv: "development" });
+    vi.spyOn(store, "liveAcksFor").mockRejectedValue(new Error("app schema is down"));
+
+    const data = await loadAdminViewData(
+      LOADER_CONFIG,
+      { address: ADMIN_A },
+      { Authorization: "Bearer test" },
+      { fetchImpl: adminFetchStub },
+    );
+
+    expect(data.incidents.kind).toBe("data");
+    if (data.incidents.kind === "data") {
+      // The incidents themselves survive the ack failure — degradation is scoped.
+      expect(data.incidents.data.rows).toHaveLength(1);
+      expect(data.incidents.data.ackStateKnown).toBe(false);
+      expect(data.incidents.data.rows[0]!.affordance).toBe("none");
+    }
+  });
+
+  it("LOADER: a healthy ack store reports the state as KNOWN", async () => {
+    // The contrast case, so the assertion above cannot pass by the loader
+    // always reporting unknown.
+    resetIncidentAckStoreForTests();
+    await getIncidentAckStore({ appEnv: "development" });
+    const data = await loadAdminViewData(
+      LOADER_CONFIG,
+      { address: ADMIN_A },
+      { Authorization: "Bearer test" },
+      { fetchImpl: adminFetchStub },
+    );
+    expect(data.incidents.kind === "data" && data.incidents.data.ackStateKnown).toBe(true);
+  });
+
+  it("LOADER: the funnel's terminal stage comes from the WINDOWED field", async () => {
+    // The mapper case pins what `toFunnelVM` does with the windowed number;
+    // this pins that the loader hands it that one. `HEALTH` carries 12 all-time
+    // and 4 in-window, so reading `depositor_count` here — the original defect —
+    // fails on the value rather than on the shape.
+    resetIncidentAckStoreForTests();
+    const data = await loadAdminViewData(
+      LOADER_CONFIG,
+      { address: ADMIN_A },
+      { Authorization: "Bearer test" },
+      { fetchImpl: adminFetchStub },
+    );
+    expect(data.funnel.kind).toBe("data");
+    if (data.funnel.kind === "data") {
+      expect(data.funnel.data.firstDeposits).toBe(HEALTH.first_deposits_in_window);
+      expect(data.funnel.data.firstDeposits).not.toBe(HEALTH.depositor_count);
+      // And the caption covers the same span the figure was counted over.
+      expect(data.funnel.data.windowDays).toBe(HEALTH.funnel_window_days);
+    }
+  });
+
+  it("distinguishes ack-store-down from genuinely-nothing-acknowledged", () => {
+    // The two produce identical `ack: null` rows, so `ackStateKnown` is the
+    // only thing that can tell them apart — and the affordance must differ.
+    const unknown = toIncidentRowVMs([open], null, ADMIN_A);
+    const empty = toIncidentRowVMs([open], new Map(), ADMIN_A);
+    expect(unknown.kind === "data" && unknown.data.ackStateKnown).toBe(false);
+    expect(empty.kind === "data" && empty.data.ackStateKnown).toBe(true);
+    expect(affordanceOf([open], null)).toEqual(["none"]);
+    expect(affordanceOf([open], new Map())).toEqual(["acknowledge"]);
   });
 
   it("closed → read only, whether acknowledged or not", () => {

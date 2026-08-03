@@ -13,7 +13,7 @@
 // address the corpus was not captured from is a 404/error, like the real LCD
 // — mocks must not invent state (SECURITY.md: never lie about state).
 
-import { envelope } from "@nvhash/api-types";
+import { envelope, FUNNEL_WINDOW_DAYS } from "@nvhash/api-types";
 import { http, HttpResponse } from "msw";
 
 import manifest from "@nvhash/fixtures/manifest";
@@ -421,7 +421,13 @@ export const handlers = [
   http.get("*/api/v1/admin/program-health", () =>
     HttpResponse.json(
       envelope(
-        { depositor_count: null, epochs: [], epochs_truncated: false },
+        {
+          depositor_count: null,
+          first_deposits_in_window: null,
+          funnel_window_days: FUNNEL_WINDOW_DAYS,
+          epochs: [],
+          epochs_truncated: false,
+        },
         { source: "indexed" },
       ),
     ),

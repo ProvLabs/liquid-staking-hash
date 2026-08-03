@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { API_BASE } from "../src/index.ts";
-import { MIN_COHORT_SIZE } from "@nvhash/api-types";
+import { CONCENTRATION_BAND_DEPTH, FUNNEL_WINDOW_DAYS, MIN_COHORT_SIZE } from "@nvhash/api-types";
 import { mintAssertion, TEST_ASSERTION_KEY } from "./assertions.ts";
 import { startServer, type RunningServer } from "./helpers.ts";
 import { fakeReader, type FakeFacts } from "./reader-fake.ts";
@@ -47,8 +47,8 @@ function epochSeries(count: number, lagHours = 2): FakeFacts["adminEpochs"] {
   }));
 }
 
-function start(facts: FakeFacts): Promise<RunningServer> {
-  return startServer({ assertionKey: TEST_ASSERTION_KEY }, undefined, fakeReader(facts));
+function start(facts: FakeFacts, now?: () => Date): Promise<RunningServer> {
+  return startServer({ assertionKey: TEST_ASSERTION_KEY }, now, fakeReader(facts));
 }
 
 async function getAdmin(server: RunningServer, path: string): Promise<unknown> {
@@ -145,8 +145,9 @@ describe("no admin endpoint returns an address (invariant 12, structural)", () =
     });
     const lifecycles = await reader.holderLifecycles();
     expect(Object.keys(lifecycles[0]!).sort()).toEqual(["exitHeight", "firstDepositHeight"]);
-    const positions = await reader.holderPositionsDesc(10);
-    expect(positions.every((p) => typeof p === "bigint")).toBe(true);
+    const positions = await reader.holderPositions(CONCENTRATION_BAND_DEPTH);
+    expect(Object.keys(positions).sort()).toEqual(["holderCount", "topDesc", "totalPosition"]);
+    expect(positions.topDesc.every((p) => typeof p === "bigint")).toBe(true);
   });
 });
 
@@ -181,6 +182,54 @@ describe("program health (§8.8 header)", () => {
       expect(data.epochs[1]!.net_deposits).toBe("-50000");
       expect(data.epochs[0]!.net_deposits).toBe("250000");
       expect(data.epochs[0]!.tvv).toBe("1000000");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves the funnel's terminal stage WINDOWED, beside the all-time count", async () => {
+    // The two are different questions and the panel needs both: the header
+    // reports the program's depositors, the funnel's bottom must cover the same
+    // window as the counter-derived stages above it. One field serving both put
+    // an all-time total under a 90-day caption — a funnel whose bottom exceeds
+    // its top (plan invariant 15).
+    // Anchored to the real clock rather than a fixed instant: the shared
+    // `auth` header is minted at module load, so a server clock in the past
+    // would reject it as future-minted ([R7d] skew) and the 401 would look
+    // like a scope failure. The offsets below are exact, so the case is
+    // deterministic without the frozen instant.
+    const now = new Date();
+    const day = (offset: number) => new Date(now.getTime() - offset * 86_400_000);
+    const server = await start(
+      {
+        adminEpochs: epochSeries(2),
+        // Four inside the window, three outside it.
+        firstDepositTimes: [day(1), day(30), day(60), day(89), day(91), day(200), day(900)],
+      },
+      () => now,
+    );
+    try {
+      const data = (await getAdmin(server, `${API_BASE}/admin/program-health`)) as {
+        depositor_count: number | null;
+        first_deposits_in_window: number | null;
+        funnel_window_days: number;
+      };
+      expect(data.funnel_window_days).toBe(FUNNEL_WINDOW_DAYS);
+      expect(data.first_deposits_in_window).toBe(4);
+      // Distinct from the all-time figure, which counts all seven.
+      expect(data.depositor_count).toBe(7);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("reports the windowed terminal as NULL, not 0, when it cannot be counted", async () => {
+    const server = await start({ adminEpochs: epochSeries(2) });
+    try {
+      const data = (await getAdmin(server, `${API_BASE}/admin/program-health`)) as {
+        first_deposits_in_window: number | null;
+      };
+      expect(data.first_deposits_in_window).toBeNull();
     } finally {
       await server.close();
     }
@@ -309,6 +358,44 @@ describe("holder cohorts (§8.8) and the minimum-group-size gate", () => {
       // The shape carries shares and a count and NOTHING else — in particular
       // no absolute total, from which a top-1 amount could be reconstructed.
       expect(Object.keys(c).sort()).toEqual(["holder_count", "top10_bps", "top1_bps", "top5_bps"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("bands against EVERY holder, not just the ones transferred", async () => {
+    // The regression this case exists for: the bands were once divided by the
+    // sum of the TRANSFERRED positions, so past the band depth every share was
+    // a share of the top ten rather than of the program — overstated, plausible
+    // looking, and invisible on any fixture with ten holders or fewer.
+    //
+    // Ten holders of 100 plus ninety of 10 = 1900 total. The tail is more than
+    // half the program and none of it crosses the wire.
+    const positions = [
+      ...Array.from({ length: 10 }, () => 100n),
+      ...Array.from({ length: 90 }, () => 10n),
+    ];
+    const server = await start({ adminEpochs: epochSeries(2), holderPositions: positions });
+    try {
+      const data = (await getAdmin(server, `${API_BASE}/admin/holder-cohorts`)) as {
+        concentration: {
+          top1_bps: number;
+          top5_bps: number;
+          top10_bps: number;
+          holder_count: number;
+        } | null;
+      };
+      const c = data.concentration!;
+      // The count is the WHOLE holder set, not the band depth.
+      expect(c.holder_count).toBe(100);
+      expect(c.holder_count).toBeGreaterThan(CONCENTRATION_BAND_DEPTH);
+      // 100/1900, 500/1900, 1000/1900 — floor bps. Against the banded sum
+      // (1000) these would have read 1000 / 5000 / 10000: the last one a
+      // fully-concentrated program that does not exist.
+      expect(c.top1_bps).toBe(526);
+      expect(c.top5_bps).toBe(2_631);
+      expect(c.top10_bps).toBe(5_263);
+      expect(c.top10_bps).toBeLessThan(10_000);
     } finally {
       await server.close();
     }

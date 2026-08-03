@@ -187,29 +187,54 @@ export function toRetentionCurves(
 }
 
 /**
- * TVL concentration as banded shares. `positionsDesc` is the set of POSITIVE
- * held positions, descending — values only, no addresses (plan §7.1 Q7).
+ * The concentration read's facts: the deepest band's positions, plus the
+ * WHOLE-SET aggregates the bands are shares of.
+ *
+ * The aggregates are separate fields rather than something derivable from
+ * `topDesc` on purpose. `topDesc` is capped at `CONCENTRATION_BAND_DEPTH`, so
+ * summing or counting it answers a different question than the one the panel
+ * asks — and answers it with a number that looks right. The reader produces all
+ * three from ONE statement over the same holder set, so they cannot disagree.
+ */
+export interface HolderPositionFacts {
+  /** Positive held positions, descending, capped at the deepest band. Values
+   * only — the address is a GROUP BY key in SQL and is never selected. */
+  topDesc: readonly bigint[];
+  /** Every holder with a positive position, counted in SQL. Not `topDesc.length`. */
+  holderCount: number;
+  /** Sum of EVERY positive position — the denominator. Not `sum(topDesc)`. */
+  totalPosition: bigint;
+}
+
+/**
+ * TVL concentration as banded shares (plan §7.1 Q7) — no addresses, no absolute
+ * amounts.
  *
  * Null below `minCohortSize` holders, and that gate is the whole point: among
  * three holders a top-1 share of 82% names one of them to anyone who can see
- * the chain, which is everyone. No absolute amounts ride either, only shares.
+ * the chain, which is everyone.
+ *
+ * The denominator is `facts.totalPosition` — every positive position, not the
+ * banded slice. Using the slice made each band a share of the top ten rather
+ * than of the program, which reads as a plausible number and is wrong in the
+ * direction that matters: it OVERSTATES concentration, and does so only once
+ * the program outgrows the band depth.
  */
 export function toConcentration(
-  positionsDesc: readonly bigint[],
+  facts: HolderPositionFacts,
   minCohortSize: number = MIN_COHORT_SIZE,
 ): AdminConcentration | null {
-  if (positionsDesc.length < minCohortSize) return null;
-  const total = positionsDesc.reduce((sum, value) => sum + value, 0n);
-  if (total <= 0n) return null;
+  if (facts.holderCount < minCohortSize) return null;
+  if (facts.totalPosition <= 0n) return null;
   const shareBps = (n: number): number => {
-    const top = positionsDesc.slice(0, n).reduce((sum, value) => sum + value, 0n);
-    return toSafeInt((top * 10_000n) / total, "concentrationBps");
+    const top = facts.topDesc.slice(0, n).reduce((sum, value) => sum + value, 0n);
+    return toSafeInt((top * 10_000n) / facts.totalPosition, "concentrationBps");
   };
   return {
     top1_bps: shareBps(1),
     top5_bps: shareBps(5),
     top10_bps: shareBps(10),
-    holder_count: positionsDesc.length,
+    holder_count: facts.holderCount,
   };
 }
 

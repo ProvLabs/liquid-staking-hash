@@ -187,6 +187,28 @@ strip-only TS and must not acquire a runtime chain-client dependency. Note what
 this does NOT claim — the residual stale-admin window is the assertion's ≤ 60 s,
 not zero.
 
+**The membership read has THREE outcomes, not two.** Member, confirmed
+non-member, and **unknown** — `AdminCheck` carries `degraded` for the third.
+Only a **404** on the policy lookup is the fact "the admin is a plain account,
+so address equality answers it"; every other policy failure and every
+`groupMembers` failure is `degraded`, and `/admin` renders "we could not check"
+rather than "not an administrator". The 404-only test is the
+`governance.server.ts` `isNotFound` rule — x/group answers a missing proposal
+with **500** on this build, so a status code is not a general "does not exist"
+signal. `groupMembers` gets **no** equality fallback: the policy resolved, so a
+group exists, and answering membership from address equality decides it from a
+non-authoritative input. Collapsing unknown into a denial is fail-closed and
+still a lie about state, and it locks a real admin out on a flicker.
+
+**`Roles` carries TWO degradation flags because the two roles fail
+independently.** `degraded` = the contract read failed, neither role known;
+`adminDegraded` = the contract read succeeded and the x/group read did not, so
+`operator` is a fact and `admin: false` is a safe default. `admin` is a finding
+only when **neither** is set. Keep them separate: `validators-mine.tsx` gates its
+"we could not check" state on `degraded` alone and needs only `Validators {}`,
+so one combined flag would blank a working operator view whenever the unrelated
+group query flickered. `detectRoles` caches only when both are clear.
+
 **The admin gate is a CAPABILITY gate, never a safety gate** (`SECURITY.md`:
 never gate a safety property on who calls). Nothing behind `/admin` writes
 program state; every figure is derivable from public chain history, aggregated.
@@ -203,6 +225,22 @@ no client script, beacon, pixel or cookie anywhere in the design. Totals are
 **event totals, not unique people**, and the §8.8 panel says so; the
 chain-derived terminal stage is kept structurally apart so the view cannot imply
 uniform precision.
+
+**The funnel's two halves share ONE window.** Its upper stages are counters read
+here; its terminal stage is chain-derived in `services/api`. Both use
+`FUNNEL_WINDOW_DAYS` from `@nvhash/api-types` — one declaration, because two
+agreeing constants in two packages can drift and produce a funnel whose bottom
+counts a different span than its top. The terminal figure is
+`first_deposits_in_window`, **never** `depositor_count`, which is all-time and
+belongs to the header panel. The two differ in precision, which the copy
+explains; they must not differ in period, which no copy could make honest.
+
+**The incident feed's two inputs fail independently.** Incidents come from
+`indexed` via the API, acknowledgments from this tier's `app` schema. A failed
+ack read is `null`, never an empty map: `IncidentFeedVM.ackStateKnown` goes
+false, **no row offers an affordance**, and the panel says so. An empty map
+would render "unacknowledged" for incidents nobody could look up and re-offer
+"acknowledge" on one another admin had handled.
 
 **Load the `dataviz` skill before touching `app/components/charts/`.**
 

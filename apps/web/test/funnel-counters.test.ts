@@ -18,6 +18,8 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { FUNNEL_WINDOW_DAYS } from "@nvhash/api-types";
+
 import {
   getFunnelCounterStore,
   InMemoryFunnelCounterStore,
@@ -265,6 +267,14 @@ describe("retention is a bound, not an aspiration (invariant 16)", () => {
   it("states the total row ceiling as a product of two closed sets", () => {
     expect(FUNNEL_RETENTION_DAYS).toBe(400);
     expect(MAX_FUNNEL_ROWS).toBe(FUNNEL_STAGE_KEYS.length * FUNNEL_RETENTION_DAYS);
+  });
+
+  it("keeps the panel's read window inside the retention window", () => {
+    // The §8.8 panel reads `FUNNEL_WINDOW_DAYS` of history out of a table swept
+    // at `FUNNEL_RETENTION_DAYS`. If retention ever dropped below the read
+    // window the panel would silently serve a shorter series under its own
+    // caption — a smaller funnel presented as the stated period.
+    expect(FUNNEL_WINDOW_DAYS).toBeLessThanOrEqual(FUNNEL_RETENTION_DAYS);
   });
 
   it("computes the cutoff day at the stated window", () => {

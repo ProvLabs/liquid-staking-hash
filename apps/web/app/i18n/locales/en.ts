@@ -1095,8 +1095,12 @@ export default {
   "admin.funnel-due-diligence": "Reached a due-diligence page",
   "admin.funnel-connect": "Connected a wallet",
   "admin.funnel-first-deposits": "First deposits",
+  // Says BOTH ways the terminal stage differs from the ones above it: it is
+  // exact where they are event totals, and it covers the same window as they
+  // do. The window clause is not decoration — an all-time figure here would
+  // make the bottom of the funnel wider than its top.
   "admin.funnel-first-deposits-note":
-    "Counted from chain history, so this figure is exact and counts distinct addresses — unlike the stage totals above. The two are shown separately because their precision differs.",
+    "Addresses whose first deposit fell in the same window as the stages above. Counted from chain history, so this figure is exact and counts distinct addresses — unlike the stage totals, which count events. The two are shown separately because their precision differs, not their period.",
 
   // Upkeep timeliness
   "admin.upkeep-title": "Upkeep timeliness",
@@ -1122,6 +1126,11 @@ export default {
   "admin.ack-action": "Acknowledge",
   "admin.unack-action": "Undo my acknowledgement",
   "admin.ack-failed": "That did not go through.",
+  // The incidents read succeeded, the acknowledgment read did not. It must not
+  // read as "nothing is acknowledged" — that is a fact we do not have, and it
+  // would invite acknowledging something a colleague already handled.
+  "admin.ack-state-unknown":
+    "We could not read acknowledgements just now, so this list does not show who has acknowledged what. The incidents themselves are current. Acknowledging is unavailable until the check succeeds — reload to try again.",
 
   "theme.toggle-label": "Theme",
   "theme.auto": "Auto",

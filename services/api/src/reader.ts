@@ -44,6 +44,7 @@ import {
 import type {
   AdminEpochFacts,
   HolderLifecycleFacts,
+  HolderPositionFacts,
   ValidatorEpochAggregateFacts,
 } from "./admin-derive.ts";
 import type { AdminIncidentFacts } from "./derive.ts";
@@ -186,17 +187,33 @@ export interface IndexedReader {
    * cardinality), and the incident feed paginates.
    */
   adminEpochsAsc(limit: number): Promise<AdminEpochFacts[]>;
-  /** Distinct addresses with at least one `swap_in`; null when unknown. */
+  /** Distinct addresses with at least one `swap_in`, over all history; null
+   * when unknown. */
   depositorCount(): Promise<number | null>;
+  /**
+   * Distinct addresses whose FIRST `swap_in` fell at or after `since` — the
+   * evaluator funnel's terminal stage, windowed to match its upper stages.
+   *
+   * "First" is taken over ALL history and then filtered, never filtered and
+   * then min'd: a depositor who returns after a year is not a new one.
+   */
+  firstDepositorsSince(since: Date): Promise<number | null>;
   /**
    * One row per depositor: first-deposit height and exit height (or null while
    * still holding). NO ADDRESS — cohort arithmetic does not need identity, so
    * the shape does not carry it.
    */
   holderLifecycles(): Promise<HolderLifecycleFacts[]>;
-  /** Positive held positions, DESCENDING, values only — the concentration
-   * panel's input. Addresses are absent by design (plan §7.1 Q7). */
-  holderPositionsDesc(limit: number): Promise<bigint[]>;
+  /**
+   * The concentration panel's input: the top `bandDepth` positive positions
+   * descending, PLUS the holder count and total position over the whole set.
+   *
+   * All three come from one statement. `bandDepth` bounds only what crosses the
+   * wire — it must not bound the aggregates, or every band becomes a share of
+   * the banded slice instead of the program. Addresses are absent by design
+   * (plan §7.1 Q7): the address is a GROUP BY key in SQL and is never selected.
+   */
+  holderPositions(bandDepth: number): Promise<HolderPositionFacts>;
   /** Terminal-status counts across all indexed redemption requests. */
   redemptionMix(): Promise<{
     enqueued: number;
@@ -283,8 +300,11 @@ export const emptyReader: IndexedReader = {
   // Null, not 0: "we cannot count depositors" and "nobody has deposited" are
   // different answers, and the header renders them differently.
   depositorCount: () => Promise.resolve(null),
+  firstDepositorsSince: () => Promise.resolve(null),
   holderLifecycles: () => Promise.resolve([]),
-  holderPositionsDesc: () => Promise.resolve([]),
+  // No holders, so no denominator — `toConcentration` withholds the panel on
+  // the count, exactly as it does for a real program below the minimum.
+  holderPositions: () => Promise.resolve({ topDesc: [], holderCount: 0, totalPosition: 0n }),
   redemptionMix: () => Promise.resolve({ enqueued: 0, expedited: 0, matured: 0, refunded: 0 }),
   validatorEpochAggregates: () => Promise.resolve([]),
   validatorRegistryCounts: () => Promise.resolve({ enrolledNow: 0, churnedTotal: 0 }),

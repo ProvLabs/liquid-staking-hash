@@ -68,6 +68,23 @@ non-`meta:` worker checkpoint with a null chain head.
 | `/api/v1/internal/alert-facts/` | `internal:notifier` | Identity/ordinal fields only, **never amounts** |
 | `/api/v1/admin/` | `admin` | §8.8 program-wide aggregates. **No fact shape carries an address** — where one is needed to compute a figure it is a GROUP BY key inside SQL and is never selected out |
 
+**A transfer cap is not a denominator.** `holderPositions(bandDepth)` returns the
+top-`CONCENTRATION_BAND_DEPTH` positions **plus** the holder count and total
+position, aggregated over the whole set in the **same statement**. Deriving
+either aggregate from the returned rows caps the count and shrinks the
+denominator, so every concentration band becomes a share of the banded slice —
+overstated, plausible-looking, and wrong only once the program outgrows the band
+depth. The reader fake mirrors the split for the same reason. Do not reuse a cap
+declared for one quantity (`MAX_ADMIN_EPOCH_POINTS`) to bound another.
+
+**`/admin/program-health` serves two depositor figures and they are not
+interchangeable.** `depositor_count` is all-time (the header panel);
+`first_deposits_in_window` counts addresses whose FIRST `swap_in` fell inside
+`FUNNEL_WINDOW_DAYS` and is the evaluator funnel's terminal stage, matching the
+window of the counters `apps/web` pairs it with. "First" is min'd over all
+history and then filtered — filtering first would count a returning depositor as
+new.
+
 CSV exports (`?format=csv`) serve the **complete** indexed history ascending;
 `limit`/`offset` bound only the JSON view. Exports stream by SQL row comparison
 (`$queryRaw` — Prisma cannot express it), never `OFFSET` chunking. See the

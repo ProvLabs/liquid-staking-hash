@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { MAX_ACK_NOTE_LENGTH } from "@nvhash/api-types";
 
-import type { IncidentRowVM, PanelState } from "~/admin/types";
+import type { IncidentFeedVM, IncidentRowVM, PanelState } from "~/admin/types";
 import { t, type Locale } from "~/i18n";
 import { PanelBody, PanelShell } from "./panel";
 
@@ -102,13 +102,13 @@ export function IncidentFeed({
   onChanged,
 }: {
   locale: Locale;
-  state: PanelState<IncidentRowVM[]>;
+  state: PanelState<IncidentFeedVM>;
   onChanged: () => void;
 }) {
   return (
     <PanelShell title={t(locale, "admin.incidents-title")}>
       <PanelBody locale={locale} state={state}>
-        {(rows) =>
+        {({ rows, ackStateKnown }) =>
           rows.length === 0 ? (
             <p
               role="status"
@@ -117,35 +117,49 @@ export function IncidentFeed({
               {t(locale, "admin.incidents-empty")}
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {rows.map((row) => (
-                <li key={row.id} className="rounded-lg border bg-card p-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    {/* Severity as a WORD, never colour alone. */}
-                    <span className="font-medium">{row.kind}</span>
-                    <span className="text-xs text-muted-foreground">{row.severity}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {row.openedAt.slice(0, 10)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {row.open
-                        ? t(locale, "admin.incident-open")
-                        : t(locale, "admin.incident-closed")}
-                    </span>
-                  </div>
-                  {row.ack === null ? null : (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t(locale, "admin.ack-by", {
-                        address: row.ack.by,
-                        at: row.ack.at.slice(0, 10),
-                      })}
-                      {row.ack.note === null ? null : ` — ${row.ack.note}`}
-                    </p>
-                  )}
-                  <AckControls locale={locale} row={row} onDone={onChanged} />
-                </li>
-              ))}
-            </ul>
+            <>
+              {/* The incidents read succeeded and the ACK read did not. Said
+                  once, above the list, because every row below is affected:
+                  an unmarked row here means "we do not know", not
+                  "unacknowledged" — and no row offers a control. */}
+              {ackStateKnown ? null : (
+                <p
+                  role="status"
+                  className="mb-2 rounded-lg border bg-card p-3 text-sm text-muted-foreground"
+                >
+                  {t(locale, "admin.ack-state-unknown")}
+                </p>
+              )}
+              <ul className="flex flex-col gap-2">
+                {rows.map((row) => (
+                  <li key={row.id} className="rounded-lg border bg-card p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {/* Severity as a WORD, never colour alone. */}
+                      <span className="font-medium">{row.kind}</span>
+                      <span className="text-xs text-muted-foreground">{row.severity}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {row.openedAt.slice(0, 10)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {row.open
+                          ? t(locale, "admin.incident-open")
+                          : t(locale, "admin.incident-closed")}
+                      </span>
+                    </div>
+                    {row.ack === null ? null : (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t(locale, "admin.ack-by", {
+                          address: row.ack.by,
+                          at: row.ack.at.slice(0, 10),
+                        })}
+                        {row.ack.note === null ? null : ` — ${row.ack.note}`}
+                      </p>
+                    )}
+                    <AckControls locale={locale} row={row} onDone={onChanged} />
+                  </li>
+                ))}
+              </ul>
+            </>
           )
         }
       </PanelBody>

@@ -828,9 +828,25 @@ export interface AdminHealthPoint {
 
 /** `GET /api/v1/admin/program-health` — the §8.8 header panel. */
 export interface AdminProgramHealth {
-  /** Distinct addresses with at least one `swap_in`. Null when no height
-   * certifies the count yet — never 0, which would claim "nobody deposited". */
+  /** Distinct addresses with at least one `swap_in`, over ALL history. Null
+   * when no height certifies the count yet — never 0, which would claim
+   * "nobody deposited". This is the header panel's figure. */
   depositor_count: number | null;
+  /**
+   * Distinct addresses whose FIRST `swap_in` fell inside the last
+   * `funnel_window_days` — the evaluator funnel's terminal stage, and the ONLY
+   * first-deposit figure that stage may use.
+   *
+   * Separate from `depositor_count` because the funnel's upper stages are
+   * windowed counters: pairing them with an all-time total would put a bottom
+   * larger than its top under a window caption. "First" is taken over all
+   * history and then filtered, never filtered and then min'd, so a returning
+   * depositor is not counted as new.
+   */
+  first_deposits_in_window: number | null;
+  /** The window the field above covers, riding in the payload as data so the
+   * web tier labels and queries against one number it did not choose. */
+  funnel_window_days: number;
   /** Ascending by epoch index. */
   epochs: AdminHealthPoint[];
   /** True when the series hit its cap; the panel says so rather than
@@ -885,7 +901,16 @@ export interface AdminConcentration {
   top1_bps: number;
   top5_bps: number;
   top10_bps: number;
-  /** Holders with a positive position — the denominator, and the gate. */
+  /**
+   * EVERY holder with a positive position — the gate's subject, and the count
+   * behind the denominator the bands are shares of.
+   *
+   * Aggregated in SQL over the whole holder set, never derived from the length
+   * of the banded list: the read transfers only `CONCENTRATION_BAND_DEPTH`
+   * positions, so counting those would cap this figure and shrink the
+   * denominator, overstating every band on a program with more holders than
+   * bands.
+   */
   holder_count: number;
 }
 

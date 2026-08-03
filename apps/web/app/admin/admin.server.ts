@@ -25,7 +25,7 @@
 // mints nothing and this seam is never reached.
 
 import type { FetchLike } from "@nvhash/chain-client";
-import type { FreshnessMeta } from "@nvhash/api-types";
+import { FUNNEL_WINDOW_DAYS, type FreshnessMeta } from "@nvhash/api-types";
 
 import {
   adminHolderCohortsEnvelopeSchema,
@@ -46,7 +46,7 @@ import type {
   AdminViewData,
   FunnelVM,
   HolderCohortsVM,
-  IncidentRowVM,
+  IncidentFeedVM,
   PanelState,
   ProgramHealthVM,
   UpkeepDistributionVM,
@@ -59,8 +59,18 @@ export type { AdminViewData } from "./types";
 /** Incident feed page size. Bounded here as well as at the API. */
 export const INCIDENT_PAGE_SIZE = 50;
 
-/** Days of funnel history the panel reads. Inside the 400-day retention. */
-export const FUNNEL_WINDOW_DAYS = 90;
+/**
+ * Days of funnel history the panel reads — re-exported from `@nvhash/api-types`
+ * rather than declared here.
+ *
+ * The funnel's upper stages are counter-derived in this tier and its terminal
+ * stage is chain-derived in `services/api`. A web-local 90 could drift from the
+ * API's window and produce a funnel whose bottom counts a different span than
+ * its top — silently, since both numbers would look reasonable. One declaration
+ * makes that unrepresentable. It is inside the 400-day counter retention, which
+ * `test/funnel-counters.test.ts` asserts.
+ */
+export { FUNNEL_WINDOW_DAYS };
 
 function hash(base: string): string {
   return formatBaseAmount(BigInt(base), HASH_EXPONENT, 2);
@@ -76,6 +86,8 @@ function hash(base: string): string {
 export function toProgramHealthVM(
   data: {
     depositor_count: number | null;
+    first_deposits_in_window: number | null;
+    funnel_window_days: number;
     epochs: Array<{
       epoch_index: number;
       ended_at: string;
@@ -286,43 +298,55 @@ export function toIncidentRowVMs(
     closed_at: string | null;
     height: number | null;
   }> | null,
-  acks: Map<number, { acknowledgedBy: string; acknowledgedAt: Date; note: string | null }>,
+  acks: Map<number, { acknowledgedBy: string; acknowledgedAt: Date; note: string | null }> | null,
   sessionAddress: string,
-): PanelState<IncidentRowVM[]> {
+): PanelState<IncidentFeedVM> {
   if (rows === null) return { kind: "unavailable", reason: "read-failed" };
+  // NULL acks means the `app`-schema read failed — NOT that nothing is
+  // acknowledged. An empty map would be indistinguishable from it here and
+  // would make every open incident render as unacknowledged with an
+  // "acknowledge" button, including one another admin has already handled: a
+  // definite state asserted from a missing input (invariant 14), and the C4 row
+  // that says an ack by another admin is never re-offered as if unacked.
+  const ackStateKnown = acks !== null;
   return {
     kind: "data",
-    data: rows.map((row) => {
-      const ack = acks.get(row.id) ?? null;
-      const open = row.closed_at === null;
-      const bySessionAdmin = ack !== null && ack.acknowledgedBy === sessionAddress;
-      return {
-        id: row.id,
-        kind: row.kind,
-        severity: row.severity,
-        openedAt: row.opened_at,
-        closedAt: row.closed_at,
-        height: row.height,
-        open,
-        ack:
-          ack === null
-            ? null
-            : {
-                by: ack.acknowledgedBy,
-                at: ack.acknowledgedAt.toISOString(),
-                note: ack.note,
-                bySessionAdmin,
-              },
-        // A closed incident is read-only: there is no retroactive ack, and no
-        // un-acking history.
-        affordance:
-          !open || (ack !== null && !bySessionAdmin)
-            ? "none"
-            : ack === null
-              ? "acknowledge"
-              : "unacknowledge",
-      };
-    }),
+    data: {
+      ackStateKnown,
+      rows: rows.map((row) => {
+        const ack = acks?.get(row.id) ?? null;
+        const open = row.closed_at === null;
+        const bySessionAdmin = ack !== null && ack.acknowledgedBy === sessionAddress;
+        return {
+          id: row.id,
+          kind: row.kind,
+          severity: row.severity,
+          openedAt: row.opened_at,
+          closedAt: row.closed_at,
+          height: row.height,
+          open,
+          ack:
+            ack === null
+              ? null
+              : {
+                  by: ack.acknowledgedBy,
+                  at: ack.acknowledgedAt.toISOString(),
+                  note: ack.note,
+                  bySessionAdmin,
+                },
+          // A closed incident is read-only: there is no retroactive ack, and no
+          // un-acking history. Unknown ack state offers nothing at all — acting
+          // on a state you could not read is not a coherent action, the same
+          // reason a degraded feed offers no control.
+          affordance:
+            !ackStateKnown || !open || (ack !== null && !bySessionAdmin)
+              ? "none"
+              : ack === null
+                ? "acknowledge"
+                : "unacknowledge",
+        };
+      }),
+    },
   };
 }
 
@@ -335,6 +359,13 @@ export function toIncidentRowVMs(
  * counts again — while the terminal stage is exact, chain-derived. Presenting
  * them as one series would imply uniform precision the data does not have, and
  * the panel's copy says which is which.
+ *
+ * `firstDeposits` must be the API's WINDOWED count (`first_deposits_in_window`),
+ * never the all-time `depositor_count`: the stage totals cover `windowDays`, so
+ * an all-time terminal would sit under the window caption and could exceed
+ * every stage above it — a funnel wider at the bottom than at the top. The two
+ * differ in precision, which the copy explains; they must not also differ in
+ * span, which no copy could make honest.
  */
 export function toFunnelVM(
   rows: Array<{ stage: string; day: string; count: number }> | null,
@@ -405,14 +436,15 @@ export async function loadAdminViewData(
   // their own panel state like every other input.
   const incidentRows = incidents?.data ?? null;
   const acks = await (async () => {
-    if (incidentRows === null) return new Map<number, never>();
+    if (incidentRows === null) return null;
     try {
       const store = await getIncidentAckStore(config);
       return await store.liveAcksFor(incidentRows.map((r) => r.id));
     } catch {
-      // A failed ack read must not hide the incidents themselves: the feed
-      // renders without acknowledgment state rather than not at all.
-      return new Map<number, never>();
+      // NULL, not an empty map. A failed ack read must not hide the incidents
+      // themselves — but it must not be reported as "nothing is acknowledged"
+      // either, which is what an empty map would become one line later.
+      return null;
     }
   })();
 
@@ -433,9 +465,15 @@ export async function loadAdminViewData(
     validatorCohorts: toValidatorCohortsVM(validators?.data ?? null),
     upkeep: toUpkeepVM(upkeep?.data ?? null),
     incidents: toIncidentRowVMs(incidentRows, acks, session.address),
-    // The chain-derived terminal stage comes from the health panel's depositor
-    // count — the exact figure, not a counter.
-    funnel: toFunnelVM(funnelRows, health?.data.depositor_count ?? null, FUNNEL_WINDOW_DAYS),
+    // The chain-derived terminal stage: the health panel's WINDOWED first-
+    // deposit count, computed by the API over the same `FUNNEL_WINDOW_DAYS` the
+    // counter read above used. Not `depositor_count`, which is all-time and
+    // belongs to the header panel.
+    funnel: toFunnelVM(
+      funnelRows,
+      health?.data.first_deposits_in_window ?? null,
+      FUNNEL_WINDOW_DAYS,
+    ),
     // Surfaced so a stale indexed read is visibly stale rather than presented
     // as current (C5). Any panel's envelope will do — they share a reader.
     freshness:

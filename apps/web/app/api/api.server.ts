@@ -631,6 +631,10 @@ export const adminHealthPointSchema = z.object({
 
 export const adminProgramHealthSchema = z.object({
   depositor_count: z.number().int().nonnegative().nullable(),
+  // The funnel's terminal stage, windowed. Nullable for the same reason
+  // `depositor_count` is: "we could not count" is not "nobody deposited".
+  first_deposits_in_window: z.number().int().nonnegative().nullable(),
+  funnel_window_days: z.number().int().positive(),
   epochs: z.array(adminHealthPointSchema).max(MAX_ADMIN_EPOCH_POINTS_WIRE),
   epochs_truncated: z.boolean(),
 }) satisfies z.ZodType<AdminProgramHealth>;

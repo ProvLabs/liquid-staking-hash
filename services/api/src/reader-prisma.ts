@@ -36,6 +36,7 @@ import {
 import type {
   AdminEpochFacts,
   HolderLifecycleFacts,
+  HolderPositionFacts,
   ValidatorEpochAggregateFacts,
 } from "./admin-derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
@@ -1052,36 +1053,81 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       }));
     },
 
-    async holderPositionsDesc(limit: number): Promise<bigint[]> {
+    async holderPositions(bandDepth: number): Promise<HolderPositionFacts> {
       // Values only — the address is the GROUP BY key and is never selected.
-      // `LIMIT` bounds the transfer; the concentration bands only ever read the
-      // top 10, and `holder_count` comes from a separate COUNT so a truncated
-      // list cannot understate the denominator.
-      const rows = await prisma.$queryRaw<Array<{ position: Prisma.Decimal }>>(Prisma.sql`
-        SELECT SUM(
-                 CASE "kind"
-                   WHEN 'swap_in'           THEN "shares"
-                   WHEN 'transfer_in'       THEN "shares"
-                   WHEN 'redemption_payout' THEN -"shares"
-                   WHEN 'transfer_out'      THEN -"shares"
-                   ELSE 0
-                 END
-               ) AS position
-        FROM "indexed"."transactions"
-        GROUP BY "address"
-        HAVING SUM(
-                 CASE "kind"
-                   WHEN 'swap_in'           THEN "shares"
-                   WHEN 'transfer_in'       THEN "shares"
-                   WHEN 'redemption_payout' THEN -"shares"
-                   WHEN 'transfer_out'      THEN -"shares"
-                   ELSE 0
-                 END
-               ) > 0
-        ORDER BY position DESC
-        LIMIT ${limit}
+      //
+      // ONE statement for the bands AND the aggregates. `LIMIT` bounds only
+      // what crosses the wire; `COUNT`/`SUM` run over the FULL `positions` CTE,
+      // so the denominator and the holder count are the program's, not the
+      // banded slice's. Deriving either from the returned rows caps the count
+      // at `bandDepth` and shrinks the denominator, which overstates every band
+      // — silently, and only once the program has more holders than bands.
+      //
+      // The aggregates ride on every row (CROSS JOIN) rather than in a second
+      // query so they cannot be computed against a different snapshot than the
+      // bands they divide.
+      const rows = await prisma.$queryRaw<
+        Array<{ position: Prisma.Decimal; holderCount: bigint; totalPosition: Prisma.Decimal }>
+      >(Prisma.sql`
+        WITH positions AS (
+          SELECT SUM(
+                   CASE "kind"
+                     WHEN 'swap_in'           THEN "shares"
+                     WHEN 'transfer_in'       THEN "shares"
+                     WHEN 'redemption_payout' THEN -"shares"
+                     WHEN 'transfer_out'      THEN -"shares"
+                     ELSE 0
+                   END
+                 ) AS position
+          FROM "indexed"."transactions"
+          GROUP BY "address"
+          HAVING SUM(
+                   CASE "kind"
+                     WHEN 'swap_in'           THEN "shares"
+                     WHEN 'transfer_in'       THEN "shares"
+                     WHEN 'redemption_payout' THEN -"shares"
+                     WHEN 'transfer_out'      THEN -"shares"
+                     ELSE 0
+                   END
+                 ) > 0
+        ),
+        totals AS (
+          SELECT COUNT(*)::bigint AS "holderCount",
+                 COALESCE(SUM(position), 0) AS "totalPosition"
+          FROM positions
+        )
+        SELECT p.position, t."holderCount", t."totalPosition"
+        FROM positions p CROSS JOIN totals t
+        ORDER BY p.position DESC
+        LIMIT ${bandDepth}
       `);
-      return rows.map((r) => toBigint(r.position));
+      // No rows means no positive holders at all — the CROSS JOIN yields
+      // nothing, so the zero aggregates are read from the empty set rather than
+      // from a row that does not exist.
+      const first = rows[0];
+      if (first === undefined) return { topDesc: [], holderCount: 0, totalPosition: 0n };
+      return {
+        topDesc: rows.map((r) => toBigint(r.position)),
+        holderCount: toSafeInt(first.holderCount, "holder_count"),
+        totalPosition: toBigint(first.totalPosition),
+      };
+    },
+
+    async firstDepositorsSince(since: Date): Promise<number | null> {
+      // MIN over ALL history, THEN filtered. Filtering first and taking the min
+      // would count a depositor who returned inside the window as a new one,
+      // which would inflate the funnel's terminal stage with repeat business.
+      const rows = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+        SELECT COUNT(*)::bigint AS count FROM (
+          SELECT "address", MIN("blockTime") AS first_at
+          FROM "indexed"."transactions"
+          WHERE "kind" = 'swap_in'
+          GROUP BY "address"
+        ) f
+        WHERE f.first_at >= ${since}
+      `);
+      const count = rows[0]?.count;
+      return count === undefined ? null : toSafeInt(count, "first_depositors_in_window");
     },
 
     async redemptionMix(): Promise<{

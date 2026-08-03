@@ -115,9 +115,29 @@ export interface IncidentRowVM {
    *   "acknowledge"    — open and unacknowledged
    *   "unacknowledge"  — open and acked BY THIS ADMIN
    *   "none"           — closed, or acked by ANOTHER admin (never re-offered as
-   *                      if unacked), or the feed is degraded
+   *                      if unacked), or acknowledgment state is UNKNOWN, or
+   *                      the feed is degraded
    */
   affordance: "acknowledge" | "unacknowledge" | "none";
+}
+
+/**
+ * The incident feed: its rows, plus whether acknowledgment state could be read
+ * at all.
+ *
+ * `ackStateKnown` is a field rather than an assumption because the incidents
+ * and their acks come from DIFFERENT stores — the feed from `indexed` through
+ * the API, the acks from this tier's `app` schema (ADR-001 Decision 1) — so
+ * either can fail without the other. When the ack store is unreadable, every
+ * row's `ack` is null for want of data, and rendering that as "unacknowledged"
+ * would state a fact from a missing input (plan invariant 14) and re-offer
+ * "acknowledge" on an incident another admin has already handled (C4).
+ */
+export interface IncidentFeedVM {
+  rows: IncidentRowVM[];
+  /** False when the `app`-schema ack read failed: rows are real, ack state is
+   * not known, and NO row carries an affordance. */
+  ackStateKnown: boolean;
 }
 
 export interface FunnelStageVM {
@@ -145,7 +165,7 @@ export interface AdminViewData {
   holderCohorts: PanelState<HolderCohortsVM>;
   validatorCohorts: PanelState<ValidatorCohortsVM>;
   upkeep: UpkeepVM;
-  incidents: PanelState<IncidentRowVM[]>;
+  incidents: PanelState<IncidentFeedVM>;
   funnel: PanelState<FunnelVM>;
   /** Surfaced on the dashboard so a stale indexed read is visibly stale (C5). */
   freshness: FreshnessMeta | null;

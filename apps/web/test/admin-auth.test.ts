@@ -108,6 +108,22 @@ describe("admin: assertion minting (invariant 2 — fresh read, or nothing)", ()
     expect(result).toEqual({ ok: false, reason: "degraded" });
   });
 
+  it("reports DEGRADED when only the x/group read fails — not `not-admin`", async () => {
+    // The contract `Config {}` read succeeds and the membership query is what
+    // fails. `not-admin` here would render "this address is not a program
+    // administrator" to a real administrator on the strength of a read that
+    // never happened; `/admin` must say "we could not check" instead
+    // (plan invariant 17).
+    server.use(
+      ...groupHandlers([MEMBER]).slice(0, 1),
+      http.get("*/cosmos/group/v1/group_members/:groupId", () =>
+        HttpResponse.json({ code: 2, message: "unavailable", details: [] }, { status: 503 }),
+      ),
+    );
+    const result = await adminApiHeaders(adminConfig, MEMBER, {}, VECTOR_IAT);
+    expect(result).toEqual({ ok: false, reason: "degraded" });
+  });
+
   it("mints NOTHING with no assertion key, and never reaches the chain to find out", async () => {
     // `onUnhandledRequest: "error"` is the assertion here: with no key
     // configured there must be no membership read at all — the answer cannot

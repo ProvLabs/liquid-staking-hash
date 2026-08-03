@@ -87,7 +87,14 @@ describe("role detection (live chain facts, spec §4)", () => {
   it("detects operator from the contract Validators {} operator set", async () => {
     server.use(...groupHandlers([]));
     const roles = await detectRoles(config, OPERATOR);
-    expect(roles).toEqual({ operator: true, admin: false, degraded: false });
+    // `admin: false` here is a FINDING — the group read succeeded and returned
+    // an empty member set — which is what both flags being clear records.
+    expect(roles).toEqual({
+      operator: true,
+      admin: false,
+      degraded: false,
+      adminDegraded: false,
+    });
   });
 
   it("detects admin from group-policy membership behind Config.admin", async () => {
@@ -133,14 +140,25 @@ describe("role detection (live chain facts, spec §4)", () => {
         HttpResponse.json({ code: 2, message: "unavailable", details: [] }, { status: 503 }),
       ),
     );
+    // The CONTRACT read failed, so neither role could be decided: both flags.
     const degraded = await detectRoles(config, OPERATOR);
-    expect(degraded).toEqual({ operator: false, admin: false, degraded: true });
+    expect(degraded).toEqual({
+      operator: false,
+      admin: false,
+      degraded: true,
+      adminDegraded: true,
+    });
 
     // Chain recovers: the very next call re-reads (no cached failure).
     server.resetHandlers();
     server.use(...groupHandlers([]));
     const recovered = await detectRoles(config, OPERATOR);
-    expect(recovered).toEqual({ operator: true, admin: false, degraded: false });
+    expect(recovered).toEqual({
+      operator: true,
+      admin: false,
+      degraded: false,
+      adminDegraded: false,
+    });
   });
 });
 
@@ -223,5 +241,101 @@ describe("admin membership at MINT time bypasses the role cache (invariant 2)", 
     server.resetHandlers();
     server.use(...groupHandlers([NOBODY]));
     expect(await verifyAdminUncached(config, NOBODY)).toEqual({ admin: true, degraded: false });
+  });
+});
+
+// ── A failed group read is UNKNOWN, never "not an admin" ────────────────────
+//
+// The cell the degraded case above does not reach: the contract `Config {}`
+// read SUCCEEDS and the x/group query is the one that fails. Reporting
+// `admin: false` there tells a real administrator "this address is not a
+// program administrator" on the strength of a read that never happened —
+// fail-closed, but a stated fact the App does not have (SECURITY.md: never lie
+// about state; plan invariant 17). The distinction is narrow on purpose: only a
+// 404 on the policy lookup means "the admin is a plain account".
+
+describe("a group-read failure degrades — it never denies as a fact", () => {
+  /** Policy resolves; the MEMBER list is what fails. */
+  function policyOkMembersFailing(status: number) {
+    return [
+      ...groupHandlers([NOBODY]).slice(0, 1),
+      http.get("*/cosmos/group/v1/group_members/:groupId", () =>
+        HttpResponse.json({ code: 2, message: "unavailable", details: [] }, { status }),
+      ),
+    ];
+  }
+
+  it("degrades when groupMembers fails, rather than reporting a non-member", async () => {
+    server.use(...policyOkMembersFailing(503));
+    expect(await verifyAdminUncached(config, NOBODY)).toEqual({ admin: false, degraded: true });
+  });
+
+  it("degrades when the POLICY lookup fails with anything but a 404", async () => {
+    // 500 specifically: x/group answers a missing proposal with 500 on this
+    // build, so a non-404 error carries no "does not exist" meaning at all.
+    server.use(
+      http.get("*/cosmos/group/v1/group_policy_info/:address", () =>
+        HttpResponse.json({ code: 2, message: "internal", details: [] }, { status: 500 }),
+      ),
+    );
+    expect(await verifyAdminUncached(config, NOBODY)).toEqual({ admin: false, degraded: true });
+    // And the plain-account fallback does NOT fire on a 500: an unreachable
+    // group endpoint must not promote the admin account itself to a confirmed
+    // member on the strength of address equality.
+    expect(await verifyAdminUncached(config, CONTRACT_ADMIN)).toEqual({
+      admin: false,
+      degraded: true,
+    });
+  });
+
+  it("still treats a 404 policy lookup as the plain-account FACT", async () => {
+    // The one case that is a real answer, kept working so the fix narrows the
+    // fallback rather than removing it.
+    server.use(
+      http.get("*/cosmos/group/v1/group_policy_info/:address", () =>
+        HttpResponse.json({ code: 2, message: "not found", details: [] }, { status: 404 }),
+      ),
+    );
+    expect(await verifyAdminUncached(config, CONTRACT_ADMIN)).toEqual({
+      admin: true,
+      degraded: false,
+    });
+    expect(await verifyAdminUncached(config, NOBODY)).toEqual({ admin: false, degraded: false });
+  });
+
+  it("flags adminDegraded WITHOUT degrading the operator fact", async () => {
+    const deps = { now: () => 1_750_000_000_000 };
+    server.use(...policyOkMembersFailing(503));
+    // The two roles have different authorities and fail independently. The
+    // operator fact came from `Validators {}`, which succeeded, so it stays a
+    // fact; only `admin` is a safe default.
+    //
+    // `degraded: false` is the load-bearing assertion here, not an incidental
+    // one: `validators-mine.tsx` returns its "we could not check" state on that
+    // flag alone, so folding the membership failure into it would blank a
+    // working operator view every time the unrelated x/group query flickered.
+    expect(await detectRoles(config, OPERATOR, deps)).toEqual({
+      operator: true,
+      admin: false,
+      degraded: false,
+      adminDegraded: true,
+    });
+  });
+
+  it("does not cache a run whose membership read failed", async () => {
+    const deps = { now: () => 1_750_000_000_000 };
+    server.use(...policyOkMembersFailing(503));
+    expect((await detectRoles(config, OPERATOR, deps)).adminDegraded).toBe(true);
+
+    // Clock unmoved: had the failed run been cached, `admin: false` would be
+    // served for a full TTL and one flicker would pin "not an admin".
+    server.resetHandlers();
+    server.use(...groupHandlers([OPERATOR]));
+    expect(await detectRoles(config, OPERATOR, deps)).toEqual({
+      operator: true,
+      admin: true,
+      degraded: false,
+      adminDegraded: false,
+    });
   });
 });

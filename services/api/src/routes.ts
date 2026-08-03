@@ -35,6 +35,8 @@ import type {
   EpochRow,
 } from "@nvhash/api-types";
 import {
+  CONCENTRATION_BAND_DEPTH,
+  FUNNEL_WINDOW_DAYS,
   MAX_ADMIN_EPOCH_POINTS,
   MAX_ADMIN_RETENTION_CURVES,
   MIN_COHORT_SIZE,
@@ -920,6 +922,13 @@ const governancePoliciesRoute = defineEnveloped<unknown>({
  *
  * `depositor_count` is null rather than 0 on a dataless process: "we cannot
  * count depositors" and "nobody has deposited" are different answers.
+ *
+ * It also carries the funnel's terminal stage, `first_deposits_in_window`,
+ * windowed to `FUNNEL_WINDOW_DAYS`. It lives here because this is the route
+ * that owns depositor facts — and it is a SEPARATE field from
+ * `depositor_count` because the funnel's upper stages are windowed counters:
+ * one all-time figure under a windowed caption would put the bottom of the
+ * funnel above its top (plan invariant 15).
  */
 const adminProgramHealthRoute = defineEnveloped<unknown>({
   method: "GET",
@@ -929,14 +938,21 @@ const adminProgramHealthRoute = defineEnveloped<unknown>({
   querySchema: null,
   summary: "Admin: program-health header + per-epoch trend",
   handle: async (ctx) => {
-    const [heads, epochs, depositorCount] = await Promise.all([
+    // The window is computed from one shared constant, not a query parameter:
+    // the funnel's two halves are derived in different tiers, so the window is
+    // not the caller's to vary (and an unbounded one would need bounding).
+    const windowStart = new Date(ctx.now().getTime() - FUNNEL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [heads, epochs, depositorCount, firstDepositsInWindow] = await Promise.all([
       ctx.reader.heads(),
       ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
       ctx.reader.depositorCount(),
+      ctx.reader.firstDepositorsSince(windowStart),
     ]);
     return {
       data: {
         depositor_count: depositorCount,
+        first_deposits_in_window: firstDepositsInWindow,
+        funnel_window_days: FUNNEL_WINDOW_DAYS,
         epochs: toHealthPoints(epochs),
         // A full page is reported as truncated rather than assumed complete —
         // an unflagged trim presents a partial trend as the whole history.
@@ -971,9 +987,11 @@ const adminHolderCohortsRoute = defineEnveloped<unknown>({
       ctx.reader.heads(),
       ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
       ctx.reader.holderLifecycles(),
-      // Only the top 10 are banded, but the gate needs a real holder count, so
-      // the list is read past the bands and counted from the same read.
-      ctx.reader.holderPositionsDesc(MAX_ADMIN_EPOCH_POINTS),
+      // Only the deepest band's positions cross the wire. The holder count and
+      // the denominator come back from the SAME statement, aggregated over
+      // every positive position — so this cap bounds the transfer and can never
+      // move a reported share.
+      ctx.reader.holderPositions(CONCENTRATION_BAND_DEPTH),
       ctx.reader.redemptionMix(),
     ]);
     const retention = toRetentionCurves(epochs, lifecycles);
