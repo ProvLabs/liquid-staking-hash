@@ -826,6 +826,90 @@ The cohort-satisfaction dashboard the no-backend console cannot render (register
 - **Incident feed:** §9.6 incidents with severity, acknowledgment, and durable history.
 - Support/complaint signals are out of scope for v1 (manual/off-tool) and said so explicitly.
 
+> **Revision 2026-07-31 (PRs 7.5–7.6, admin analytics + funnel delivered):**
+> `/admin` ships in `apps/web` (`app/routes/admin.tsx` + `app/admin/admin.server.ts`
+> composing five `admin`-scoped endpoints plus the tier's own funnel counters;
+> panels under `app/components/admin/`). Every panel is its own endpoint and its
+> own `PanelState`, so **panels degrade individually**: an unavailable input
+> renders "n/a" with a stated reason and never a 0. Four reasons are
+> distinguished deliberately — *read failed*, *cold start*, *withheld below the
+> minimum group size*, and *not collected in this build* — because an
+> administrator acts differently on each, and collapsing them into one "no data"
+> would be the §12.1 lie in miniature.
+>
+> **Delivered shape.** *Program health*: depositor count plus the per-settlement
+> TVL / net-APR / net-flow trend, with a net-outflow settlement marked by word
+> and sign rather than colour. *Holder cohort*: adoption per settlement,
+> retention curves by first-deposit cohort at 1/3/6/12 settlements, redemption
+> mix, and TVL concentration. *Validator cohort*: enrollment/churn totals plus
+> the per-settlement sampled/eligible/arrears/TIP/purge timeline. *Evaluator
+> funnel*: the §14.10 aggregate counters. *Upkeep timeliness*: bucketed lag
+> distributions. *Incident feed*: §9.6 incidents with acknowledgment.
+>
+> **Three recorded facts, each a deliberate limit rather than a gap.**
+> **[R1] A minimum group size of 5 is a PRIVACY threshold, not a display
+> nicety.** It is applied server-side in `derive.ts` and rides the payload as
+> data (the `/redemptions/stats` precedent). A cohort below it renders every
+> point withheld with `below_minimum: true` — distinguishable from a horizon that
+> simply has not elapsed — and TVL concentration is withheld **entirely** below
+> it. "Derivable from public data" is not the same as "singles nobody out": a
+> top-1 share among three holders names a holder without any address being
+> returned.
+> **[R2] TVL concentration ships as banded shares only** — top-1/5/10 as
+> percentages, with **no addresses and no absolute amounts**. The payload has no
+> field for a total, so a top-1 amount cannot be reconstructed from it. Each band
+> is a share of **every** positive position, and `holder_count` is the whole
+> holder set: the read transfers only `CONCENTRATION_BAND_DEPTH` positions, and
+> the count and denominator are aggregated in the same SQL statement over the
+> full set, so the transfer cap can never move a reported share.
+> **[R4] Every §8.8 read is bounded, and a bounded read says so.** The two that
+> grow permissionlessly — depositor lifecycles and terminal redemption latencies
+> — carry explicit caps with `holders_truncated` and a per-distribution
+> `truncated`. A capped depositor set is a *different* caution from a short
+> series and renders as one: the newest cohorts are absent, so recent adoption
+> reads low. The caps bound transfer and server memory, **not** the underlying
+> scan: the lifecycle fold measured 349 ms at 400 k transactions and 1 407 ms at
+> 1.2 M on the dev database, superlinear and uncached. Materializing holder
+> lifecycle in the indexer is the remedy for that and is a recorded follow-on,
+> not something this release did.
+> **[R3] Capture-signal cadence gaps are NOT delivered.** §8.8 names them as a
+> third upkeep distribution, but no capture-signal series is indexed — the NAV
+> marker is consumed at ingest and not retained as its own row — so the panel
+> renders "this build does not collect the input for this measure". Deriving it
+> is an indexer change, not an API one. Serving an empty histogram instead would
+> read as a measured result of zero gaps.
+>
+> **The admin gate is a capability gate, never a safety gate** (`SECURITY.md`:
+> never gate a safety property on who calls). Nothing behind `/admin` is a write
+> to program state — the sole write is the incident acknowledgment, and it
+> writes only to `app` — and every figure is derivable from public chain history,
+> aggregated. The gate exists because the *aggregation* is a product surface for
+> administrators, not because the underlying facts are secret. A non-admin gets
+> an explanation and a 200, deliberately **not** a 404: the route's existence is
+> not a secret, and a 404 would make a real permissions problem indistinguishable
+> from a typo.
+>
+> **The incident feed's two inputs fail independently, and the surface says
+> which.** Incidents come from `indexed` through the API; acknowledgments come
+> from this tier's own `app` schema (ADR-001 Decision 1), so either read can fail
+> alone. When the acknowledgment read fails the rows still render, the feed is
+> flagged **acknowledgment state unknown**, and **no row offers an
+> acknowledge/un-acknowledge control** — acting on a state that could not be read
+> is not a coherent action, the same reason a degraded feed offers none.
+> Rendering the missing read as "nothing is acknowledged" would assert a fact
+> from an absent input (§12.1) and would re-offer "acknowledge" on an incident
+> another administrator had already handled, contradicting the state × affordance
+> rule directly above it.
+>
+> Gates: `services/api/test/admin-endpoints.test.ts` (including a structural
+> sweep proving no bech32-shaped string appears in any admin payload, run against
+> POPULATED facts so it cannot pass vacuously), the `ADMIN_PATHS` matrix in
+> `services/api/test/cross-address.test.ts`, `apps/web/test/admin-data.test.ts`
+> (the degradation matrix and C4's state × affordance, at the mapper AND at the
+> loader that feeds it — the mapper cases alone could not see a loader that
+> substituted an empty acknowledgment set for a failed read), the offline
+> `e2e/admin.spec.ts`, and `/admin` in the axe route list on both themes.
+
 ---
 
 ## 9. Backend & Data Layer
@@ -989,6 +1073,59 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 > for a pruned proposal that label exists nowhere else, so omitting them would
 > make closed history unreadable. `proposer` is **removed** in favour of
 > `proposers`, as the note specified.
+
+> **Revision 2026-07-31 (PRs 7.5–7.6, the `app`-schema admin domain):** two
+> tables land in the `app` schema under ONE data-minimization review, with the
+> allowlist gate extended in the same change.
+>
+> **`incident_acks`** — `id` (surrogate PK), `incidentId`, `acknowledgedBy`,
+> `acknowledgedAt`, `unacknowledgedAt`, `note` (`VarChar(500)`).
+> Three recorded decisions. (a) **The key is a surrogate id plus a PARTIAL
+> unique index** on `(incidentId, acknowledgedBy) WHERE unacknowledgedAt IS
+> NULL`, hand-written in the migration because Prisma cannot express a partial
+> unique. `incidentId` alone is the obvious key and is wrong the moment two
+> admins acknowledge, or one re-acknowledges after a reversal — later writes
+> would silently overwrite earlier ones. (b) **The constraint is also the
+> concurrency remedy**: two admins racing are separated by the database, never
+> by an application-level "already acked?" read-then-write. (c) **Reversal
+> stamps `unacknowledgedAt` rather than deleting**, so the audit trail survives
+> and the index frees the pair for a fresh acknowledgment. `acknowledgedBy` is
+> always the SESSION address — the request body has no actor field to forge.
+> The `note` column is the one judgement call and was taken deliberately: it is
+> operator text about an *incident*, not about a person, and it is bounded so it
+> cannot become unbounded free text in the one schema not rebuildable from chain.
+>
+> **`funnel_counters`** — `stage`, `day`, `count`, and **nothing else, ever**
+> (§14.10). Two shipped details differ from the §14.10 sketch and are recorded
+> rather than left to inference. **[R1] The page class is folded INTO the stage
+> enum, not carried as a fourth column**: §14.10 describes "a closed page-class
+> enum on `visit`" while the column set is pinned at three, and a `pageClass`
+> column would satisfy the first by breaking the second. The stored enum is
+> therefore the product — `visit_learn_index`, `visit_validators`,
+> `visit_market`, `due_diligence_depth`, `connect` — while the call-site API
+> keeps stage and page class as separate closed types over a discriminated
+> union, so a caller still cannot attach a page class to a stage that has none.
+> **[R2] `learn_deep` and `spec_link` are NOT shipped**, and `first_deposit` is
+> not an enum member. The first two are not server-observable — Learn is a
+> single route with in-page disclosure and the spec links are external
+> anchors — so counting them would need the client instrumentation §14.10
+> forbids; the third is derived from chain history. An enum member nothing can
+> write would be a claim the schema cannot keep.
+> `day` is **UTC**, stated in the column comment so the series cannot go
+> silently discontinuous across a DST boundary. Retention is **400 days** of day
+> rows, swept by the notifier tick — the one scheduled process with `app`-schema
+> write access — which is what makes the window an enforced bound rather than a
+> comment. The whole table is bounded at 5 stages × 400 days = **2 000 rows**.
+>
+> Gate: `apps/web/test/app-schema-allowlist.test.ts`, extended with both models
+> AND a funnel-specific forbidden-substring denylist (`address`, `wallet`,
+> `session`, `device`, `ip`, `user`, `fingerprint`) applied to `FunnelCounter`
+> alone — `address` is legitimate on `Session` and forbidden here, which only a
+> per-model rule can express. This is the master plan §4 security-executable
+> check and it gates `apps/web` CI from these PRs on. Its limit is stated in the
+> suite: it checks column NAMES, not cardinality, so the stage enum's membership
+> is a privacy decision made in review, not something the gate can decide.
+
 
 ### 9.2 Indexer workers
 
@@ -1338,6 +1475,72 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > is BigInt-only and returns **null for undecidable** — an unrecognized policy
 > type, a malformed count, or a percentage rule with no electorate weight. A
 > boolean there would look authoritative while resting on a guess.
+
+> **Revision 2026-07-31 (PRs 7.5–7.6, the `admin` scope + the §8.8 endpoints):**
+> the scope vocabulary gains a THIRD kind and the registry gains five routes.
+>
+> **`admin:<bech32>` joins the union** (ADR-001 Decision 2, amendment
+> 2026-07-28). §8.8 data is program-wide rather than address-scoped, so neither
+> existing scope fits: it is not personal, but it is not public either. Routes
+> now declare `public | address | internal:notifier | admin`. The **envelope is
+> unchanged** — same HMAC over `{scope, iat, exp}`, same `exp − iat ≤ 60 s`,
+> constant-time compare, 10 s forward-skew bound, fail-closed with no key, one
+> undifferentiated 401 — and the golden vectors stay cross-pinned in both suites,
+> now with an `admin:` vector alongside the other two.
+>
+> **`services/api` stays DB-only.** It verifies the scope's SHAPE in-process and
+> never re-reads chain membership: it has no chain client by design. That the
+> address is genuinely an admin was established by the web tier BEFORE minting,
+> and that ordering is the security-critical part — **minting an `admin:`
+> assertion performs a fresh on-chain group-membership read that bypasses the
+> 60 s role cache in both directions, and a degraded read mints nothing**. A
+> cached role is a stale privilege; this is what makes §12's "re-verify group
+> membership on-chain per session refresh, not per cached role" a mechanism
+> rather than a description.
+>
+> **A failed membership read is `degraded`, never a denial.** The read has three
+> outcomes, not two: member, confirmed non-member, and unknown. Only a **404** on
+> the policy lookup is the fact "the contract's admin is a plain account, so
+> direct address equality answers the question"; every other policy failure and
+> every `groupMembers` failure is `degraded`, and `/admin` then renders "we could
+> not check" rather than "this address is not a program administrator". The
+> narrow 404 test is deliberate — x/group answers a missing proposal with 500 on
+> this build, so a status code carries no general "does not exist" meaning here.
+> Collapsing the unknown into a denial is fail-closed but states a fact the App
+> does not have (§12.1), and would lock a real administrator out whenever the
+> group endpoint flickered.
+>
+> **The role surface carries two degradation flags, not one**, because operator
+> and admin have different authorities and fail independently: `degraded` (the
+> contract read failed, neither role known) and `adminDegraded` (the contract
+> read succeeded, the membership read did not). `admin` is a finding only when
+> neither is set. One combined flag would blank the §4 operator view — which
+> needs only `Validators {}` — every time the unrelated x/group query flickered,
+> which is the same class of error in the opposite direction.
+>
+> **[R1] What this does NOT claim.** The fresh read does not reduce the
+> stale-admin window to zero. A revoked member's next request fails, but an
+> assertion already minted stays valid for its remaining lifetime — so the
+> residual window is the assertion's **≤ 60 s**, down from the cache's 60 s
+> *plus* the assertion's, not down to nothing.
+>
+> Five routes ship, all `auth: "admin"`, all GET, all enveloped:
+> `/api/v1/admin/program-health`, `/admin/holder-cohorts`,
+> `/admin/validator-cohorts`, `/admin/upkeep`, and `/admin/incidents`
+> (paginated; it carries the incident `id` the public `/incidents` row omits,
+> because acknowledgment references an incident by id across the schema
+> boundary). The §8.8 funnel panel has **no endpoint at all**: its counters live
+> in the `app` schema, which `api_reader` has no grants on, so they never cross
+> this boundary and the web tier reads them from its own store.
+>
+> Gate: an **`ADMIN_PATHS`** matrix joins `services/api/test/cross-address.test.ts`
+> alongside the registry-derived `PERSONAL_PATHS`/`INTERNAL_PATHS`, exercising the
+> full scope-kind × path-class cross-product in BOTH directions — `address:` on
+> an admin path → 403 (the case that matters most, since the same session
+> address can mint either); `internal:notifier` on an admin path → 403; `admin:`
+> on any personal or internal path → 403; absent/expired/over-long/future-minted
+> → 401; `admin:` on an admin path → 200. Being registry-derived, a future admin
+> route joins it automatically.
 
 ### 9.5 Derived metrics (formulas)
 
@@ -1848,6 +2051,54 @@ Protocol and platform facts this design must respect (chain constraints identica
     - **Honesty consequence, accepted:** without an identifier the counters cannot deduplicate visitors, so a returning reader increments `visit` again. These are **event totals, not unique people**, and the surfaces say so. The funnel's terminal stage is exact (chain-derived) while its top is not, and the view must not imply uniform precision across stages. Acquiring an identifier to make a prettier number is not an available trade.
     - **Retention:** a stated, enforced window recorded in the allowlist comment, after which day rows aggregate up or drop.
     - **Enforcement:** the master plan §4 security-executable check — analytics counters never keyed by wallet, session, or device — is `apps/web/test/app-schema-allowlist.test.ts`, extended with this model's exact column set and a domain-specific forbidden-substring denylist (`address`, `wallet`, `session`, `device`, `ip`, `user`, `fingerprint`), gating `apps/web` CI from PR 7.6 on. A migration without the allowlist edit fails CI; adding a column is a design-review event, not an implementation choice.
+    **[IMPLEMENTED 2026-07-31, PRs 7.5–7.6.]** Shipped as specified, with four
+    recorded deltas — each a limit this decision's own constraints force, not a
+    softening of them.
+    **(a) The page class is folded INTO the stage enum** rather than carried as
+    a fourth column, because the column set is pinned at three and a `pageClass`
+    column would break that to satisfy the sketch. The stored enum is the
+    product; the call-site API keeps stage and page class as separate closed
+    types over a discriminated union, so a caller still cannot attach a class to
+    a stage that has none.
+    **(b) The page-class set is three, not five.** `learn_index`, `validators`,
+    `market` ship; `learn_deep` and `spec_link` do not, because neither is
+    server-observable — Learn is a single route with in-page disclosure and the
+    spec links are external anchors — and observing them would require exactly
+    the client instrumentation this decision forbids. Three broad classes also
+    make the cardinality hazard smaller than five would.
+    **(c) `due_diligence_depth` is a load of `/validators` or `/market`.** §8.1.7
+    words the stage "scroll depth / due-diligence sections", and **scroll depth
+    is not measurable at all** without a client script. The stage is therefore
+    defined as what a loader can honestly observe — the visitor went past the
+    front page into the program's evidence — and the surfaces say so rather than
+    letting the name imply scroll tracking.
+    **(d) Retention is 400 days**, swept by the notifier tick; the whole table is
+    bounded at 5 stages × 400 days = 2 000 rows.
+    **(e) The funnel's terminal stage is WINDOWED to match its counted stages.**
+    The panel reads `FUNNEL_WINDOW_DAYS` (90) of counters, so the chain-derived
+    `first_deposit` figure counts addresses whose FIRST `swap_in` fell in that
+    same window — served as `first_deposits_in_window`, distinct from the header
+    panel's all-time `depositor_count`. The two differ in **precision**, which
+    the panel's copy explains; they must not also differ in **period**, which no
+    copy could make honest — an all-time terminal under a 90-day caption puts the
+    bottom of the funnel above its top. `FUNNEL_WINDOW_DAYS` is one declaration
+    in `@nvhash/api-types`, imported by both tiers, because the two halves of the
+    panel are computed in different packages and two agreeing constants could
+    drift apart silently. "First" is taken over all history and then filtered,
+    never filtered and then min'd, so a returning depositor is not a new one.
+    The increment is `ON CONFLICT DO UPDATE SET count = count + 1` — one atomic
+    statement, measured on the dev database at 32-way contention on a single
+    row: 82 000 concurrent increments produced a stored count of exactly 82 000,
+    at 10.06 ms mean latency (`apps/web/scripts/measure-funnel-contention.sh`).
+    No in-process buffer is built; the contention that would have justified one
+    is not there. The consent posture is unchanged and no banner ships, because
+    nothing personal is collected. Gates:
+    `apps/web/test/app-schema-allowlist.test.ts` (the schema half, including a
+    case proving the denylist fails when it should) and
+    `apps/web/test/funnel-counters.test.ts` (the code half — the signature has no
+    identifier-shaped parameter, every call site is READ FROM SOURCE and asserted
+    identifier-free, a write failure is swallowed without failing a page, and the
+    failure log carries the stage and nothing else).
 11. **[DECIDED 2026-07-15, Ira] CSV export & cost-basis method.** The export is a **statement of fact, not a computed tax position**, and splits into two role-scoped exports:
     - **Holder export (§8.2):** raw per-event rows — one per `SwapIn`/`SwapOut` — carrying the **share price in HASH (NAV) at the event**, so the holder (or their accountant) does their own cost-basis math. Proposed columns: `datetime_utc`, `block_height`, `event_type` (swap_in | swap_out | refund | transfer_in | transfer_out), `nvhash_amount`, `hash_amount`, `nav_hash_per_nvhash` (share price in HASH at event), `txhash`. No FIFO/average lot-matching is computed in the export.
     - **Validator/operator export (§8.6 `/validators/mine`):** a record of **commission/TIP payment amounts and times** so a participating validator has a complete fact set for their own tax analysis. Proposed columns: `datetime_utc`, `block_height`, `epoch_index`, `payment_type` (commission | tip), `hash_amount`, `txhash`.

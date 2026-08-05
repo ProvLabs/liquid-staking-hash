@@ -41,10 +41,30 @@ import {
   type GovVoteFacts,
   type TransactionFacts,
 } from "./derive.ts";
+import type {
+  AdminEpochFacts,
+  HolderLifecycleFacts,
+  HolderPositionFacts,
+  ValidatorEpochAggregateFacts,
+} from "./admin-derive.ts";
+import type { AdminIncidentFacts } from "./derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Pagination } from "./query.ts";
 
 export type { Heads } from "./derive.ts";
+
+/**
+ * A capped latency sample and whether the cap bound it.
+ *
+ * `truncated` is a property of the READ, not of `seconds`: rows that yield no
+ * payout time are dropped, so the array can be shorter than the limit on a read
+ * that was nonetheless truncated. Returning both together is what stops a
+ * caller inferring one from the other and under-reporting.
+ */
+export interface RedemptionLatencies {
+  readonly seconds: number[];
+  readonly truncated: boolean;
+}
 
 /** Reads the M3.1/3.2 public program endpoints need. 3.3 extends this. */
 export interface IndexedReader {
@@ -168,6 +188,80 @@ export interface IndexedReader {
   ): Promise<{ proposal: GovProposalFacts; votes: GovVoteFacts[] } | null>;
   /** The HISTORICAL policy set observed in the mirror, newest activity first. */
   listGovPolicies(): Promise<GovPolicyFacts[]>;
+  /**
+   * §8.8 admin-analytics reads (`admin` scope). Program-wide aggregates, so
+   * they take no address and — deliberately — RETURN no address: every fact
+   * shape below carries heights, counts and positions only. That is what makes
+   * "no admin endpoint returns a per-wallet behavioral record" a property of
+   * the port rather than of the care taken in each handler (plan invariant 12).
+   *
+   * All are bounded: the epoch-keyed reads take an explicit cap, the
+   * holder-keyed reads are bounded by holder count (the panel's own
+   * cardinality), and the incident feed paginates.
+   */
+  adminEpochsAsc(limit: number): Promise<AdminEpochFacts[]>;
+  /** Distinct addresses with at least one `swap_in`, over all history; null
+   * when unknown. */
+  depositorCount(): Promise<number | null>;
+  /**
+   * Distinct addresses whose FIRST `swap_in` fell at or after `since` — the
+   * evaluator funnel's terminal stage, windowed to match its upper stages.
+   *
+   * "First" is taken over ALL history and then filtered, never filtered and
+   * then min'd: a depositor who returns after a year is not a new one.
+   */
+  firstDepositorsSince(since: Date): Promise<number | null>;
+  /**
+   * One row per depositor, ASCENDING by first-deposit height and capped at
+   * `limit`: first-deposit height and exit height (or null while still
+   * holding). NO ADDRESS — cohort arithmetic does not need identity, so the
+   * shape does not carry it.
+   *
+   * The cap is required, not defensive: the row set grows with depositor count
+   * and no operator action bounds it. ASC so a truncated read drops the NEWEST
+   * cohorts (the `adminEpochsAsc` convention) — the ones whose retention
+   * horizons have not elapsed anyway. A caller that hits the cap must flag it.
+   */
+  holderLifecycles(limit: number): Promise<HolderLifecycleFacts[]>;
+  /**
+   * The concentration panel's input: the top `bandDepth` positive positions
+   * descending, PLUS the holder count and total position over the whole set.
+   *
+   * All three come from one statement. `bandDepth` bounds only what crosses the
+   * wire — it must not bound the aggregates, or every band becomes a share of
+   * the banded slice instead of the program. Addresses are absent by design
+   * (plan §7.1 Q7): the address is a GROUP BY key in SQL and is never selected.
+   */
+  holderPositions(bandDepth: number): Promise<HolderPositionFacts>;
+  /** Terminal-status counts across all indexed redemption requests. */
+  redemptionMix(): Promise<{
+    enqueued: number;
+    expedited: number;
+    matured: number;
+    refunded: number;
+  }>;
+  /** Per-epoch validator-set aggregates, ascending by epoch. */
+  validatorEpochAggregates(limit: number): Promise<ValidatorEpochAggregateFacts[]>;
+  /** Registry enrollment/churn totals as of the mirror. */
+  validatorRegistryCounts(): Promise<{ enrolledNow: number; churnedTotal: number }>;
+  /**
+   * Enqueue→payout durations in seconds for PAID-OUT requests, NEWEST first and
+   * capped at `limit`, with whether the cap bound the read.
+   *
+   * Bounded for the same reason as `holderLifecycles`: redemption history grows
+   * permissionlessly. Newest-first is the meaningful direction — the panel
+   * measures how timely upkeep is now — and the output is bucketed, so a
+   * bounded sample is a bounded answer rather than a partial one.
+   *
+   * `truncated` comes back FROM THE READ rather than being inferred from
+   * `seconds.length` by the caller: rows are dropped when they yield no
+   * duration, so the returned array is not authoritative for "did the cap
+   * bind" and a caller comparing its length to the limit under-reports.
+   */
+  redemptionLatencySeconds(limit: number): Promise<RedemptionLatencies>;
+  /** The incident feed WITH ids, newest first, paginated (the public
+   * `/incidents` row omits the id; acknowledgment needs it). */
+  adminIncidents(page: Pagination): Promise<AdminIncidentFacts[]>;
 }
 
 /**
@@ -231,4 +325,21 @@ export const emptyReader: IndexedReader = {
   // exists but is empty" are different answers.
   govProposal: () => Promise.resolve(null),
   listGovPolicies: () => Promise.resolve([]),
+  // A dataless process has no history to aggregate. Every §8.8 panel therefore
+  // reports its honest empty state and the dashboard says "n/a" with a reason —
+  // NOT zeros, which would claim a measured program with nothing in it.
+  adminEpochsAsc: () => Promise.resolve([]),
+  // Null, not 0: "we cannot count depositors" and "nobody has deposited" are
+  // different answers, and the header renders them differently.
+  depositorCount: () => Promise.resolve(null),
+  firstDepositorsSince: () => Promise.resolve(null),
+  holderLifecycles: () => Promise.resolve([]),
+  // No holders, so no denominator — `toConcentration` withholds the panel on
+  // the count, exactly as it does for a real program below the minimum.
+  holderPositions: () => Promise.resolve({ topDesc: [], holderCount: 0, totalPosition: 0n }),
+  redemptionMix: () => Promise.resolve({ enqueued: 0, expedited: 0, matured: 0, refunded: 0 }),
+  validatorEpochAggregates: () => Promise.resolve([]),
+  validatorRegistryCounts: () => Promise.resolve({ enrolledNow: 0, churnedTotal: 0 }),
+  redemptionLatencySeconds: () => Promise.resolve({ seconds: [], truncated: false }),
+  adminIncidents: () => Promise.resolve([]),
 };

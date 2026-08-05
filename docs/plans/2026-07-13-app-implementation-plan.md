@@ -175,8 +175,8 @@ waiting for implementations.
 | 7.2 | **Governance center read UI** (§8.7): decoded proposals, tallies, per-member status, outcome history. | 7.1, 4.1 |
 | 7.3 ⟂ | **Vote/execute signing:** `MsgVote`/`MsgExec` through the 5.2 lifecycle, would-fail simulation before sign; carries the §12.3 relay amendment. | 7.2, 5.2 |
 | 7.4 ⟂ | **Template proposal composer** (§8.7, §14.6): decoded admin-action templates with a config diff view, behind a three-level `MsgSubmitProposal` guard. | 7.3 |
-| 7.5 [P] ⟂ | **Admin analytics endpoints + dashboard** (§8.8): program health, holder/validator cohorts, upkeep timeliness, incident feed w/ acknowledgment; admin gate re-verifies group membership on-chain. | 3.1, 2.x, 5.1; **ADR-001 Decision 2 amendment (`admin:` scope)** |
-| 7.6 [P] ⟂ | **Aggregate funnel counters** (§14.10 taxonomy): first-party, aggregate-only stage tallies + the Learn funnel view; includes the executable no-per-wallet-keying test (§4). | 1.3 |
+| 7.5 [P] ⟂ ✅ | **Admin analytics endpoints + dashboard** (§8.8): program health, holder/validator cohorts, upkeep timeliness, incident feed w/ acknowledgment; admin gate re-verifies group membership on-chain. **Delivered 2026-07-31** with 7.6, as scheduled. | 3.1, 2.x, 5.1; **ADR-001 Decision 2 amendment (`admin:` scope)** |
+| 7.6 [P] ⟂ ✅ | **Aggregate funnel counters** (§14.10 taxonomy): first-party, aggregate-only stage tallies. **Delivered 2026-07-31.** The "Learn funnel view" is **not** built: §8.8 puts the funnel behind `/admin` and a public view needs honesty labeling the admin panel does not (plan §7.1 Q6). | 1.3 |
 
 ⟂ marks rows **delivered as a paired PR**: 7.3+7.4 as
 [m7.3–7.4 governance write path](2026-07-28-app-m7.3-7.4-governance-write-path.md),
@@ -301,7 +301,7 @@ Each layer is introduced in the milestone that creates its subject and then
 | API contract | Vitest supertest-style harness | M3 | Envelope shape (`meta.source`, heights) on every endpoint; zod bounds on every query param; rate-limit behavior; CSV column set |
 | e2e (offline) | Playwright + MSW | M4 | Every page renders from mocks: content, banners, freshness labels, verify-link hrefs, **cold-start/below-threshold states**, chart honesty (step-after NAV present, no interpolation, "n/a" under minimum window) |
 | e2e (live) | Playwright against the 1.5 stack + `contracts/drills/` | M5 | Fund-moving flows signed on devnet through full drill cycles; every redemption terminal state (expedite, matured, refund) rendered from real chain history |
-| Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device; personal endpoints reject cross-address access (the `PERSONAL_PATHS` matrix is registry-derived since 6.4, so a new address-scoped route joins automatically); push-token deletion on opt-out; **the broadcast relay stays closed** — the 6.4 two-level allowlist's rejection matrix proves no `MsgExecuteContract` outside the six operator variants, on the configured contract, in canonical form, can be relayed; **operator ownership** — an unowned valoper answers honest-empty, indistinguishable from a nonexistent one, never a 403 that would reveal who operates what; **M7 governance additions** — the relay stays closed across the governance amendment (7.3's two-level matrix admits only `MsgVote`/`MsgExec` in canonical form with `MsgVote.exec` pinned, and 7.4's three-level matrix admits `MsgSubmitProposal` only when **every** inner message is an exact template instance, while the 6.4 direct-admin variants stay rejected throughout); **the mirror never claims chain state it no longer holds** — `x/group` prunes, so a 404 preserves the indexed row and stamps `prunedAtHeight` rather than deleting, and no verify affordance is offered for it (7.1); **admin capability is never served from a cached role** — minting an `admin:` assertion performs a fresh on-chain membership read and bypasses the 60 s role cache, so a revoked member's next request fails (7.5) |
+| Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device (**gating `apps/web` CI from 7.5–7.6 on**: `test/app-schema-allowlist.test.ts` pins `FunnelCounter`'s columns at exactly `{stage, day, count}` and applies a per-model identifier denylist that `address` trips on this model though it is legitimate on `Session`; `test/funnel-counters.test.ts` reads every `recordFunnelEvent` call site from source and asserts it identifier-free); personal endpoints reject cross-address access (the `PERSONAL_PATHS` matrix is registry-derived since 6.4, so a new address-scoped route joins automatically); push-token deletion on opt-out; **the broadcast relay stays closed** — the 6.4 two-level allowlist's rejection matrix proves no `MsgExecuteContract` outside the six operator variants, on the configured contract, in canonical form, can be relayed; **operator ownership** — an unowned valoper answers honest-empty, indistinguishable from a nonexistent one, never a 403 that would reveal who operates what; **M7 governance additions** — the relay stays closed across the governance amendment (7.3's two-level matrix admits only `MsgVote`/`MsgExec` in canonical form with `MsgVote.exec` pinned, and 7.4's three-level matrix admits `MsgSubmitProposal` only when **every** inner message is an exact template instance, while the 6.4 direct-admin variants stay rejected throughout); **the mirror never claims chain state it no longer holds** — `x/group` prunes, so a 404 preserves the indexed row and stamps `prunedAtHeight` rather than deleting, and no verify affordance is offered for it (7.1); **admin capability is never served from a cached role** — minting an `admin:` assertion performs a fresh on-chain membership read and bypasses the 60 s role cache, so a revoked member's next request fails (7.5) |
 | Accessibility | axe in Playwright + manual walk | M4, M8 | WCAG AA both themes, keyboard operability, reduced-motion |
 | Visual/design | palette validator in CI | M1 | Both theme token sets pass the dataviz validation on every change |
 | Degradation drills | Playwright scenarios (8.1) | M8 | The honesty machinery works under failure: reconciler alarm, indexer outage, LCD outage each produce the specified labeled degradation, never silence |
@@ -351,7 +351,7 @@ and recorded in `app-spec.md` §14.
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
 | §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages); **brand pass DELIVERED 2026-07-17 (PR 1.4): web-local accent/status tokens, both themes validated by `check:palette` + `test/brand-tokens.test.ts`** | 0.3, 1.4 |
 | §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
-| §14.10 analytics taxonomy | DECIDED 2026-07-28, Ira (one `app`-schema `funnel_counters` table keyed `(stage, day)` with an integer count and no other columns; closed stage + page-class enums; incremented **server-side in the loader**; no cookie, no client script, no consent surface because nothing personal is collected; stated retention; totals labeled as events, not unique people) | 7.6 |
+| §14.10 analytics taxonomy | **IMPLEMENTED 2026-07-31 (PRs 7.5–7.6)**; DECIDED 2026-07-28, Ira (one `app`-schema `funnel_counters` table keyed `(stage, day)` with an integer count and no other columns; closed stage + page-class enums; incremented **server-side in the loader**; no cookie, no client script, no consent surface because nothing personal is collected; stated retention; totals labeled as events, not unique people). Shipped with four recorded deltas, all forced by the decision's own constraints: the page class folds into the stage enum rather than adding a column; the class set is three, not five (`learn_deep`/`spec_link` are not server-observable without the client script §14.10 forbids); `due_diligence_depth` is a load of `/validators` or `/market`, since scroll depth is not measurable at all; retention is 400 days. See app-spec §14.10. | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |
 | §14.12 typical-payout sample threshold | DECIDED 2026-07-15 (≥ 10 terminal requests, else the 60-day guarantee alone; epoch-metric cold-start rules; calendar-month cadence — E-CAL delivered 2026-07-22) | 5.4, 6.2 |
 | §14.13 console entity anchors | FOLLOW-ON (console repo/area) — schedule with console work before 8.4 | 4.x verify links, 8.4 |
@@ -873,3 +873,89 @@ so the first deployment we intend to keep is also the last moment the choice
 exists. §6 gains the matching trust-surface row: if an upgrade path is adopted,
 it is a spec amendment plus a drill that an unauthorized migrate is rejected,
 not a deployment assumption about who holds a key.*
+
+*2026-07-31 — **rows 7.5 and 7.6 delivered as one PR**, per the 2026-07-28 scope
+decision. The merge paid off exactly where it was argued it would: the two
+`app`-schema tables landed under a single data-minimization review, and 7.5's
+evaluator-funnel panel never needed the "not yet collected" placeholder a split
+would have required. Four things are worth recording because they changed the
+shipped surface relative to the plan, and each is a limit the plan's own
+constraints forced rather than a softening of them.*
+
+*First, **§14.10's page-class enum shrank from five members to three.** Two of
+the proposed classes — `learn_deep` and `spec_link` — are not server-observable:
+Learn is a single route with in-page progressive disclosure, and the spec links
+are plain external anchors. Counting either needs client instrumentation, which
+§14.10 forbids outright, so shipping them would have meant breaking that rule or
+carrying enum members nothing could ever write. The same discovery reshaped
+`due_diligence_depth`, which §8.1.7 words as "scroll depth": scroll depth is not
+measurable here at all, so the stage is defined as what a loader can honestly
+observe — a load of `/validators` or `/market` — and the surfaces say so rather
+than letting the name imply tracking that does not exist. The privacy property
+Q3 was asked for is unaffected and slightly stronger, since three broad classes
+name no niche page.*
+
+*Second, **the page class is stored inside the stage enum rather than as a
+fourth column.** §2.4 described "a closed page-class enum on `visit`" while
+invariant 6 pinned the column set at exactly `{stage, day, count}`; a `pageClass`
+column would have satisfied the prose by breaking the invariant. The call-site
+API still keeps stage and page class as separate closed types over a
+discriminated union, so a caller cannot attach a class to a stage that has none —
+three columns, and the impossible call unrepresentable.*
+
+*Third, **§2.4's buffering question is closed by measurement, not by argument.**
+The plan recorded a guess that concentrating a day's visits onto one row might
+need a bounded in-process buffer. Measured on the dev database with every client
+deliberately on the same row: 0.21 ms uncontended, 2.05 ms at 8 clients, 10.06 ms
+at 32, zero failures — and 82 000 concurrent increments produced a stored count
+of exactly 82 000, which is the property that matters and the reason the
+single-statement upsert is the whole remedy. No buffer is built; it would have
+added a flush-on-shutdown loss window to avoid a cost that is not there. The
+measurement is reproducible (`apps/web/scripts/measure-funnel-contention.sh`).*
+
+*Fourth, **§8.8's capture-signal cadence distribution is not delivered**, and
+that is stated on the panel rather than left as an empty chart. No
+capture-signal series is indexed — the NAV marker is consumed at ingest and not
+retained as its own row — so deriving it is an indexer change, not an API one.
+An empty histogram would have read as a measured result of zero gaps, which is a
+different claim from "we do not collect this".*
+
+*One structural note for future readers: the `admin:` mint gate lives in
+`app/lib/services/admin-auth.server.ts`, separate from `assertion.server.ts`,
+because `notifier/index.ts` loads the minting module under Node's strip-only TS
+and must not acquire a runtime chain-client dependency. Minting stays pure so
+the golden vectors can pin its bytes; the fresh-membership precondition lives
+beside the chain read. And the ADR amendment was tightened rather than merely
+confirmed: a fresh read at mint time reduces the stale-admin window from "60 s
+cache plus the assertion" to "the assertion", not to zero, and the ADR now says
+so instead of implying otherwise.*
+
+*2026-08-03 — **M7 closed**, and a second review pass over 7.5–7.6 landed nine
+fixes plus the milestone's closure records. Four were honesty defects of one
+shape — the gate for an invariant tested the layer next to the one that was
+wrong — and are tabled in that PR's plan §10.4: concentration bands divided by a
+truncated denominator; a 90-day funnel whose terminal stage counted all history;
+a failed acknowledgment read rendered as "nothing is acknowledged"; and a
+transient x/group failure reported as "not an administrator" rather than as
+unknown. Five were the hygiene items from the same pass: two admin reads that
+grew without bound (now capped and flagged, with the scan cost **measured** at
+two depths rather than asserted), literal NUL bytes that made a source file
+undiffable in git, a funnel bound declared twice in two packages, a read-then-write
+on the acknowledgment reversal, and an `incidentId` column narrower than the id
+it references.*
+
+*The load-bearing lesson is recorded in the milestone overview §7.5 rather than
+here: **§4b's C1–C3 each changed implementations and stay; C4 was filled
+completely and still leaked**, because its axis is record state while the defect
+lived on per-input availability — two schemas that fail independently. The fix
+that held was a type change (`Map | null`) rather than the new test beside it.
+M8 should generate C4's matrix from the loader's own inputs instead of tabulating
+it by hand, and C5 remains untested as a format.*
+
+*One process note worth keeping: every fix in this pass was verified by
+**disproof** — reintroduce the defect locally, confirm the new case goes red,
+revert. That is what surfaced two gates that were passing for the wrong reason
+(both tested a pure mapper while the defect was in the loader feeding it), and
+one fix that would have introduced a regression in the opposite direction
+(folding an x/group failure into the flag the operator view gates on). Neither
+was visible from reading the diff.*

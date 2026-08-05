@@ -285,6 +285,30 @@ jobs:
           API_READER_DATABASE_URL: postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed
           INDEXER_WRITER_DATABASE_URL: postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed
 
+      # The `app` half of the same idea. The unit suites drive the IN-MEMORY
+      # stores, which cannot exhibit what the C3 concurrency remedies exist
+      # for — a Map write never loses an update, and a find-then-set is atomic
+      # in single-threaded JS — so the atomic upsert, the conditional
+      # acknowledgment reversal and the partial unique index's error mapping
+      # are only real against Postgres. Migrated AS app_writer so the tables
+      # are owned by the role that uses them (ADR-001 Decision 1).
+      - name: Migrate app schema (as app_writer)
+        if: needs.changes.outputs.app == 'true'
+        run: corepack pnpm --filter @nvhash/web run migrate:deploy
+        env:
+          DATABASE_URL: postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app
+      # NOTE: this script runs `prisma generate` itself, and must. `apps/web`
+      # and `services/indexer` both generate to the hoisted, shared
+      # `@prisma/client` (neither declares an `output`), so the db-indexed
+      # generate two steps above leaves it holding `indexed` models — the app
+      # models this suite needs would be missing. Generating inside the script
+      # keeps it correct regardless of where it sits in this job.
+      - name: App-schema store gate (test:db — real Prisma stores as app_writer)
+        if: needs.changes.outputs.app == 'true'
+        run: corepack pnpm --filter @nvhash/web run test:db
+        env:
+          APP_WRITER_DATABASE_URL: postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app
+
   # apps/console is deliberately OUTSIDE the pnpm workspace (ADR-001 Decision 4,
   # pnpm-workspace.yaml), so `pnpm -r` reaches none of it. Biome lints it from
   # the root, but nothing type-checked it until this job: an internal tool is

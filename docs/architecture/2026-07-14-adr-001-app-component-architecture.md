@@ -189,6 +189,28 @@ personal endpoint → 403; public endpoints accept no-credential requests.
 > cache-bypass case in `apps/web/test/roles.test.ts` proving that a revoked
 > member's **next** admin request fails rather than succeeding for up to 60 s.
 
+> **Implemented 2026-07-31 (PRs 7.5–7.6).** Two things are recorded here because
+> a reader of the amendment above would otherwise have to infer them.
+>
+> **The residual window is NOT zero, and this ADR must not imply it is.** A
+> fresh read at mint time reduces the stale-admin window from *60 s cache +
+> ≤ 60 s assertion* to *≤ 60 s assertion*: an already-minted assertion stays
+> valid for its remaining lifetime after membership is revoked. Claiming the
+> invariant eliminates stale-admin access would be false. What it eliminates is
+> the cache's contribution to it.
+>
+> **The gate lives in its own module, not in the minter.**
+> `mintAdminAssertion` is pure and unguarded so the golden vectors can pin its
+> bytes; `apps/web/app/lib/services/admin-auth.server.ts` holds the precondition
+> and is its only sanctioned caller. The split is not cosmetic —
+> `notifier/index.ts` loads the minting module directly under Node's strip-only
+> TS, so minting must not acquire a runtime dependency on the chain client.
+>
+> `apps/web/test/roles.test.ts` additionally pins that the uncached read neither
+> CONSULTS nor POPULATES the cache: a mint-time check that warmed the render
+> cache would leak a privilege check into it. Both cases run on a FROZEN clock,
+> so a pass cannot be the TTL quietly expiring instead of the bypass working.
+
 ## Decision 3 — Notifier: a worker process in `apps/web`, reading through the API
 
 The notifier (alert-rule evaluation on indexer ticks) is app-state machinery:
@@ -290,7 +312,11 @@ To revisit:
    notifier worker `apps/web/notifier/` reads them and holds no `indexed`
    grant; cross-pinned assertion vector + registry-derived `INTERNAL_PATHS`
    gate).
-7. [ ] PR 7.5: the `admin:<bech32>` scope of the 2026-07-28 amendment —
-   cache-bypassing mint in `apps/web`, `RouteAuth`/`VerifiedScope` extension in
-   `services/api`, the `ADMIN_PATHS` matrix, and the `app`-schema
-   `incident_acks` table that Decision 1 assigns to the web tier.
+7. [x] PRs 7.5–7.6: the `admin:<bech32>` scope of the 2026-07-28 amendment —
+   cache-bypassing mint in `apps/web`
+   (`app/lib/services/admin-auth.server.ts`, the sole caller of
+   `mintAdminAssertion`), `RouteAuth`/`VerifiedScope` extension in
+   `services/api`, the `ADMIN_PATHS` matrix in
+   `services/api/test/cross-address.test.ts`, and the `app`-schema
+   `incident_acks` table that Decision 1 assigns to the web tier (landed
+   alongside `funnel_counters` under one data-minimization review).

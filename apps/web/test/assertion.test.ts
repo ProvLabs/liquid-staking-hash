@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   ASSERTION_LIFETIME_SECONDS,
   mintAddressAssertion,
+  mintAdminAssertion,
   mintInternalAssertion,
   personalApiHeaders,
 } from "~/lib/services/assertion.server";
@@ -30,6 +31,10 @@ export const VECTOR_HEADER =
 // services/api/test/assertion-vectors.test.ts.
 export const VECTOR_INTERNAL_HEADER =
   "Bearer eyJzY29wZSI6ImludGVybmFsOm5vdGlmaWVyIiwiaWF0IjoxNzUwMDAwMDAwLCJleHAiOjE3NTAwMDAwNjB9.4lQonJSxF49FCo2K7mV4YXnnSiiRZiUv0-1UCw7_DsQ";
+// The admin:<bech32> vector (ADR-001 Decision 2, amendment 2026-07-28) —
+// IDENTICAL to the literal in services/api/test/assertion-vectors.test.ts.
+export const VECTOR_ADMIN_HEADER =
+  "Bearer eyJzY29wZSI6ImFkbWluOnRwMWwzOXd1N2NodDB6Y3ljYzVya2NkOTBzZGQ0a3NqbXh3ZGYzODh5IiwiaWF0IjoxNzUwMDAwMDAwLCJleHAiOjE3NTAwMDAwNjB9.tMsTx8S-yCi74FfCttrEJoaqn8qWIUixrhjxLmfUQYc";
 // ─────────────────────────────────────────────────────────────────────────
 
 describe("service-assertion minting (ADR-001 Decision 2)", () => {
@@ -67,5 +72,18 @@ describe("service-assertion minting (ADR-001 Decision 2)", () => {
     ) as { iat: number; exp: number; scope: string };
     expect(payload.scope).toBe("internal:notifier");
     expect(payload.exp - payload.iat).toBe(60);
+  });
+
+  it("mints the admin:<bech32> golden-vector header (cross-pinned)", () => {
+    expect(mintAdminAssertion(VECTOR_KEY, VECTOR_ADDRESS, VECTOR_IAT)).toBe(VECTOR_ADMIN_HEADER);
+    const payload = JSON.parse(
+      Buffer.from(VECTOR_ADMIN_HEADER.slice("Bearer ".length).split(".")[0]!, "base64url").toString(
+        "utf8",
+      ),
+    ) as { iat: number; exp: number; scope: string };
+    // The envelope is UNCHANGED by the new scope: same field order, same
+    // 60 s lifetime. Only the scope literal differs.
+    expect(payload.scope).toBe(`admin:${VECTOR_ADDRESS}`);
+    expect(payload.exp - payload.iat).toBe(ASSERTION_LIFETIME_SECONDS);
   });
 });

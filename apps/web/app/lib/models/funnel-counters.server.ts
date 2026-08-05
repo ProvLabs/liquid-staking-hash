@@ -1,0 +1,241 @@
+// Funnel-counter persistence — the models layer (a Prisma import site; the
+// AlertStore precedent, so routes and unit suites run storeless). Two
+// implementations behind one port, both exercised by
+// test/funnel-counters.test.ts.
+//
+// THREE PROPERTIES THIS FILE IS RESPONSIBLE FOR:
+//
+// 1. THE INCREMENT IS ONE ATOMIC STATEMENT. `INSERT … ON CONFLICT DO UPDATE
+//    SET count = count + 1` — never a read-then-write, which is how a
+//    concurrent pair of visits loses one (plan §4b C3; the M6.3 P1 precedent).
+//    It is written as raw SQL rather than a Prisma `upsert` so the property is
+//    visible in the source and does not depend on what the query engine chooses
+//    to compile an upsert into.
+//
+// 2. A COUNTER FAILURE NEVER FAILS A PAGE. `recordFunnelEvent` returns void and
+//    swallows — a metrics table must not be able to take a user-facing surface
+//    down. It is deliberately NOT awaited by its callers, so a slow write does
+//    not become slow SSR either.
+//
+// 3. NOTHING IDENTIFYING CAN REACH IT. The only inputs are a closed
+//    `FunnelEvent` and the store config: no address, no session, no request, no
+//    headers anywhere in the signature (plan invariant 7). The schema-side
+//    counterpart is the denylist in test/app-schema-allowlist.test.ts.
+
+// RELATIVE, with the extension, and not `~`: the notifier entrypoint loads this
+// module under Node's strip-only TS to run the retention sweep, so a bundler
+// alias would not resolve (the `push.server.ts` → `session.server.ts`
+// precedent). The import is a RUNTIME one — `funnelStageKey` and `utcDay` are
+// values — so it cannot be type-only the way the alert store's is.
+import {
+  funnelRetentionCutoff,
+  funnelStageKey,
+  utcDay,
+  type FunnelEvent,
+  type FunnelStageKey,
+} from "../services/funnel.server.ts";
+
+/** One stored aggregate. The row IS the aggregate — there is nothing else. */
+export interface FunnelCounterRow {
+  stage: FunnelStageKey;
+  /** UTC calendar day, `YYYY-MM-DD`. */
+  day: string;
+  count: number;
+}
+
+export interface FunnelCounterStore {
+  /**
+   * Add one to `(stage, day)`, creating the row if absent. Atomic in a single
+   * statement. `day` is a `YYYY-MM-DD` UTC day string.
+   */
+  increment(stage: FunnelStageKey, day: string): Promise<void>;
+  /**
+   * Every counter row from `fromDay` (inclusive) onward, ascending by
+   * `(day, stage)`. Bounded by construction: stages × retention days.
+   */
+  since(fromDay: string): Promise<FunnelCounterRow[]>;
+  /** Delete day rows strictly before `cutoffDay` (retention). Returns deleted. */
+  sweep(cutoffDay: string): Promise<number>;
+}
+
+// ── In-memory implementation ─────────────────────────────────────────────
+
+export class InMemoryFunnelCounterStore implements FunnelCounterStore {
+  private readonly counts = new Map<string, number>(); // `${stage}\0${day}` → count
+
+  async increment(stage: FunnelStageKey, day: string): Promise<void> {
+    const key = `${stage}\0${day}`;
+    this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
+  }
+
+  async since(fromDay: string): Promise<FunnelCounterRow[]> {
+    const rows: FunnelCounterRow[] = [];
+    for (const [key, count] of this.counts) {
+      const [stage, day] = key.split("\0") as [FunnelStageKey, string];
+      if (day >= fromDay) rows.push({ stage, day, count });
+    }
+    // Same order as the SQL implementation, so a test cannot pass against one
+    // store and fail against the other on ordering alone.
+    rows.sort((a, b) =>
+      a.day === b.day ? a.stage.localeCompare(b.stage) : a.day < b.day ? -1 : 1,
+    );
+    return rows;
+  }
+
+  async sweep(cutoffDay: string): Promise<number> {
+    let deleted = 0;
+    for (const key of [...this.counts.keys()]) {
+      const day = key.split("\0")[1]!;
+      if (day < cutoffDay) {
+        this.counts.delete(key);
+        deleted += 1;
+      }
+    }
+    return deleted;
+  }
+}
+
+// ── Prisma implementation (lazy import: generated code the unit suites skip) ──
+
+/** Structural view of exactly what this store touches (the AlertStore
+ * precedent — a type-only import cannot drag the generated client in). */
+interface FunnelPrismaLike {
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
+  $queryRaw<T>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
+}
+
+export class PrismaFunnelCounterStore implements FunnelCounterStore {
+  private readonly prisma: FunnelPrismaLike;
+
+  constructor(prisma: FunnelPrismaLike) {
+    this.prisma = prisma;
+  }
+
+  async increment(stage: FunnelStageKey, day: string): Promise<void> {
+    // ONE statement. The `DO UPDATE` reads the CURRENT row inside the same
+    // statement, under the row lock the conflict already took, so concurrent
+    // increments serialize instead of overwriting each other. The casts are
+    // required because both parameters bind as text.
+    await this.prisma.$executeRaw`
+      INSERT INTO "app"."funnel_counters" ("stage", "day", "count")
+      VALUES (${stage}::"app"."FunnelStage", ${day}::date, 1)
+      ON CONFLICT ("stage", "day")
+      DO UPDATE SET "count" = "app"."funnel_counters"."count" + 1
+    `;
+  }
+
+  async since(fromDay: string): Promise<FunnelCounterRow[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ stage: string; day: string; count: number }>>`
+      SELECT "stage"::text AS "stage", to_char("day", 'YYYY-MM-DD') AS "day", "count"
+      FROM "app"."funnel_counters"
+      WHERE "day" >= ${fromDay}::date
+      ORDER BY "day" ASC, "stage" ASC
+    `;
+    return rows.map((r) => ({
+      stage: r.stage as FunnelStageKey,
+      day: r.day,
+      count: Number(r.count),
+    }));
+  }
+
+  async sweep(cutoffDay: string): Promise<number> {
+    return this.prisma.$executeRaw`
+      DELETE FROM "app"."funnel_counters" WHERE "day" < ${cutoffDay}::date
+    `;
+  }
+}
+
+// ── Process-wide store ────────────────────────────────────────────────────
+
+/** The config the store needs — deliberately narrow. Nothing request-shaped
+ * can be threaded through it (plan invariant 7). */
+export interface FunnelStoreConfig {
+  databaseUrl?: string | undefined;
+  appEnv: string;
+}
+
+// The PROMISE is the singleton, not the store: `await import` yields the event
+// loop, so caching the resolved store would let two concurrent first calls both
+// construct a PrismaClient (the alerts-store precedent).
+let storePromise: Promise<FunnelCounterStore> | undefined;
+
+async function createStore(config: FunnelStoreConfig): Promise<FunnelCounterStore> {
+  if (config.databaseUrl !== undefined) {
+    const { PrismaClient } = await import("@prisma/client");
+    return new PrismaFunnelCounterStore(
+      new PrismaClient({
+        datasources: { db: { url: config.databaseUrl } },
+      }) as unknown as FunnelPrismaLike,
+    );
+  }
+  return new InMemoryFunnelCounterStore();
+}
+
+/**
+ * Process-wide funnel-counter store: Prisma when DATABASE_URL is configured,
+ * else the non-durable in-memory store (the session/alert-store posture).
+ *
+ * No warning is logged when it falls back, unlike the alert store: losing
+ * counters on restart costs an analytics figure, not a user's notification.
+ */
+export function getFunnelCounterStore(config: FunnelStoreConfig): Promise<FunnelCounterStore> {
+  if (storePromise === undefined) {
+    const promise = createStore(config);
+    promise.catch(() => {
+      if (storePromise === promise) storePromise = undefined;
+    });
+    storePromise = promise;
+  }
+  return storePromise;
+}
+
+/** Test seam: reset the process-wide store singleton. */
+export function resetFunnelCounterStoreForTests(): void {
+  storePromise = undefined;
+}
+
+/**
+ * Record one funnel event. **Fire-and-forget by contract**: returns `void`, not
+ * a promise, and swallows every failure — a loader calls it and moves on.
+ *
+ * Both halves matter. Returning void means a caller cannot accidentally make a
+ * page wait on a metrics write; swallowing means a counter failure cannot fail
+ * the page (plan invariant 9). The failure is logged at debug level and
+ * carries NO identifiers — the event has none to carry (invariant 18).
+ *
+ * `now` is injectable so tests do not depend on the wall clock; it decides only
+ * which UTC day the count lands on.
+ */
+export function recordFunnelEvent(
+  config: FunnelStoreConfig,
+  event: FunnelEvent,
+  now: Date = new Date(),
+): void {
+  void (async () => {
+    try {
+      const store = await getFunnelCounterStore(config);
+      await store.increment(funnelStageKey(event), utcDay(now));
+    } catch (error) {
+      // Swallowed on purpose. The message names the STAGE and nothing else:
+      // the event carries no address, session or device, so there is nothing
+      // identifying available to log even by accident.
+      console.debug("[nvhash-web] funnel counter increment failed", {
+        stage: funnelStageKey(event),
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  })();
+}
+
+/**
+ * Delete day rows past the retention window. Called from the notifier tick
+ * alongside the notification sweep — what makes the stated window an enforced
+ * bound rather than a claim in a comment.
+ */
+export async function sweepFunnelCounters(
+  config: FunnelStoreConfig,
+  now: Date = new Date(),
+): Promise<number> {
+  const store = await getFunnelCounterStore(config);
+  return store.sweep(funnelRetentionCutoff(now));
+}

@@ -7,6 +7,12 @@
 // order (401 before 400 before 403) and the [R7d] clock-skew bound are part
 // of the matrix, as are the §14.11 CSV export contract ([R3] freshness
 // headers + the pinned column set).
+//
+// The `admin:` scope joins it as ADMIN_PATHS (ADR-001 Decision 2, amendment
+// 2026-07-28), exhaustively across the scope-kind × path-class cross-product:
+// every scope kind is tried against every path class in BOTH directions, so
+// "admin grants §8.8" and "admin grants nothing else" are each asserted rather
+// than one being inferred from the other.
 
 import { describe, expect, it } from "vitest";
 import { API_BASE, routes, TRANSACTIONS_CSV_COLUMNS, csvField } from "../src/index.ts";
@@ -118,6 +124,21 @@ function personalQuery(path: string, address: string): string {
 // route cannot slip past the gate.
 const INTERNAL_PATHS = routes.filter((r) => r.auth === "internal:notifier").map((r) => r.path);
 
+// Registry-derived like the two above (ADR-001 Decision 2, amendment
+// 2026-07-28): every current AND future `auth: "admin"` route joins the matrix
+// automatically, so a §8.8 panel's endpoint cannot land without its scope
+// enforcement being exercised.
+const ADMIN_PATHS = routes.filter((r) => r.auth === "admin").map((r) => r.path);
+
+/** Admin routes whose zod schema requires a param; without it a 400 would mask
+ * the 403 under test, exactly as `personalQuery` exists to prevent. */
+const ADMIN_REQUIRED_QUERY: Record<string, string> = {};
+
+function adminUrl(baseUrl: string, path: string): string {
+  const query = ADMIN_REQUIRED_QUERY[path];
+  return `${baseUrl}${path}${query === undefined ? "" : `?${query}`}`;
+}
+
 describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
   it("rejects an assertion for A requesting B with 403 on every personal route", async () => {
     const server = await startAuthServer();
@@ -225,6 +246,104 @@ describe("cross-address rejection (standing gate, ADR-001 Decision 2)", () => {
         const body = (await notifier.json()) as { data: unknown; meta: { source: string } };
         expect(Array.isArray(body.data), `${path} data is an array`).toBe(true);
         expect(body.meta.source).toBe("indexed");
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("holds the ADMIN_PATHS matrix: the full scope-kind × path cross-product", async () => {
+    const server = await startAuthServer();
+    try {
+      expect(ADMIN_PATHS.length, "the §8.8 admin routes exist").toBeGreaterThan(0);
+      for (const path of ADMIN_PATHS) {
+        const url = adminUrl(server.baseUrl, path);
+
+        // No credential → 401 (credential validity precedes everything else).
+        expect((await fetch(url)).status, `${path} no-cred`).toBe(401);
+
+        // An `address:` scope never grants an admin path → 403. This is the
+        // case that matters most: the SAME session address can mint both, so
+        // holding one must not imply the other.
+        const addrScope = await fetch(url, {
+          headers: { authorization: mintAssertion(`address:${ADDR_A}`) },
+        });
+        expect(addrScope.status, `${path} address-scope`).toBe(403);
+
+        // `internal:notifier` never grants an admin path → 403.
+        const notifier = await fetch(url, {
+          headers: { authorization: mintAssertion("internal:notifier") },
+        });
+        expect(notifier.status, `${path} notifier-scope`).toBe(403);
+
+        // Expired / over-long-lifetime / future-minted admin scopes → 401, not
+        // 403: the credential is invalid before its kind is ever considered.
+        const now = Math.floor(Date.now() / 1000);
+        for (const authorization of [
+          mintAssertion(`admin:${ADDR_A}`, { iat: now - 120, exp: now - 65 }),
+          mintAssertion(`admin:${ADDR_A}`, { iat: now, exp: now + 120 }),
+          mintAssertion(`admin:${ADDR_A}`, { iat: now + 60, exp: now + 115 }),
+          mintAssertion(`admin:${ADDR_A}`, { key: "wrong-key-wrong-key-wrong-key-wrong" }),
+        ]) {
+          expect((await fetch(url, { headers: { authorization } })).status, `${path} bad`).toBe(
+            401,
+          );
+        }
+
+        // The `admin:` scope is accepted → 200 (enveloped).
+        const admin = await fetch(url, {
+          headers: { authorization: mintAssertion(`admin:${ADDR_A}`) },
+        });
+        expect(admin.status, `${path} admin-scope`).toBe(200);
+        const body = (await admin.json()) as { data: unknown; meta: { source: string } };
+        expect(body.meta.source, path).toBe("indexed");
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects an admin: scope on every PERSONAL route with 403", async () => {
+    // The other direction of the cross-product: admin is program-wide and grants
+    // no address's personal reads — not even the address it carries.
+    const server = await startAuthServer();
+    try {
+      for (const path of PERSONAL_PATHS) {
+        const res = await fetch(`${server.baseUrl}${path}?${personalQuery(path, ADDR_A)}`, {
+          headers: { authorization: mintAssertion(`admin:${ADDR_A}`) },
+        });
+        expect(res.status, path).toBe(403);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects an admin: scope on every INTERNAL route with 403", async () => {
+    const server = await startAuthServer();
+    try {
+      for (const path of INTERNAL_PATHS) {
+        const res = await fetch(`${server.baseUrl}${path}`, {
+          headers: { authorization: mintAssertion(`admin:${ADDR_A}`) },
+        });
+        expect(res.status, path).toBe(403);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("declares every admin route's required query, so no 403 is really a 400", async () => {
+    // The `personalQuery` discipline, applied to the admin family: a route with
+    // an undeclared required param would 400 on every case above, and a 400 is
+    // not the refusal those assertions claim to observe.
+    const server = await startAuthServer();
+    try {
+      for (const path of ADMIN_PATHS) {
+        const res = await fetch(adminUrl(server.baseUrl, path), {
+          headers: { authorization: mintAssertion(`admin:${ADDR_A}`) },
+        });
+        expect(res.status, `${path} needs an ADMIN_REQUIRED_QUERY entry`).not.toBe(400);
       }
     } finally {
       await server.close();

@@ -9,6 +9,20 @@
 import type {
   AccrualMarker,
   AccrualPoint,
+  AdminAdoptionPoint,
+  AdminConcentration,
+  AdminHealthPoint,
+  AdminHolderCohorts,
+  AdminIncidentRow,
+  AdminProgramHealth,
+  AdminRedemptionMix,
+  AdminRetentionCurve,
+  AdminRetentionPoint,
+  AdminUpkeepBucket,
+  AdminUpkeepDistribution,
+  AdminUpkeepTimeliness,
+  AdminValidatorCohorts,
+  AdminValidatorPoint,
   AlertArrearsFact,
   AlertIncidentFact,
   AlertRedemptionFact,
@@ -56,6 +70,10 @@ import type {
 // is now asserted in packages/api-types/test/bounds.test.ts.
 import {
   MARKER_CAP_WIRE,
+  MAX_ADMIN_EPOCH_POINTS_WIRE,
+  MAX_ADMIN_INCIDENTS_PAGE_WIRE,
+  MAX_ADMIN_RETENTION_CURVES_WIRE,
+  MAX_ADMIN_UPKEEP_BUCKETS_WIRE,
   MAX_ACCRUAL_POINTS_WIRE,
   MAX_BECH32_LENGTH,
   MAX_GOV_METADATA_LENGTH,
@@ -592,3 +610,140 @@ export async function fetchApiJson(
     clearTimeout(timer);
   }
 }
+
+// §8.8 admin analytics (the `admin`-scoped reads). Same posture as every other
+// boundary schema here: closed unions pinned, every collection capped by an
+// IMPORTED bound, and nullability preserved exactly — a `null` that arrives as
+// a withheld or unknown figure must not be coerced into a number on the way in.
+//
+// Note what is NOT in any of these schemas: an address field. The API does not
+// send one on these routes by construction (plan invariant 12), and declaring
+// none here means an address that somehow appeared would be dropped at the
+// boundary rather than rendered.
+export const adminHealthPointSchema = z.object({
+  epoch_index: z.number().int().nonnegative(),
+  ended_at: isoTimestamp,
+  tvv: baseUnitString,
+  net_apr_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
+  // SIGNED: a net-outflow epoch is a real state (see AdminHealthPoint).
+  net_deposits: signedBaseUnitString,
+}) satisfies z.ZodType<AdminHealthPoint>;
+
+export const adminProgramHealthSchema = z.object({
+  depositor_count: z.number().int().nonnegative().nullable(),
+  // The funnel's terminal stage, windowed. Nullable for the same reason
+  // `depositor_count` is: "we could not count" is not "nobody deposited".
+  first_deposits_in_window: z.number().int().nonnegative().nullable(),
+  funnel_window_days: z.number().int().positive(),
+  epochs: z.array(adminHealthPointSchema).max(MAX_ADMIN_EPOCH_POINTS_WIRE),
+  epochs_truncated: z.boolean(),
+}) satisfies z.ZodType<AdminProgramHealth>;
+
+export const adminAdoptionPointSchema = z.object({
+  epoch_index: z.number().int().nonnegative(),
+  ended_at: isoTimestamp,
+  new_depositors: z.number().int().nonnegative(),
+}) satisfies z.ZodType<AdminAdoptionPoint>;
+
+export const adminRetentionPointSchema = z.object({
+  horizon: z.number().int().positive(),
+  // Null means EITHER "the horizon has not elapsed" OR "withheld below the
+  // minimum cohort" — `below_minimum` on the curve says which, so the panel can
+  // give the right reason instead of one that might be wrong.
+  retained_bps: z.number().int().min(0).max(10_000).nullable(),
+}) satisfies z.ZodType<AdminRetentionPoint>;
+
+export const adminRetentionCurveSchema = z.object({
+  cohort_epoch: z.number().int().nonnegative(),
+  cohort_size: z.number().int().nonnegative(),
+  points: z.array(adminRetentionPointSchema).max(16),
+  below_minimum: z.boolean(),
+}) satisfies z.ZodType<AdminRetentionCurve>;
+
+export const adminRedemptionMixSchema = z.object({
+  enqueued: z.number().int().nonnegative(),
+  expedited: z.number().int().nonnegative(),
+  matured: z.number().int().nonnegative(),
+  refunded: z.number().int().nonnegative(),
+}) satisfies z.ZodType<AdminRedemptionMix>;
+
+export const adminConcentrationSchema = z.object({
+  top1_bps: z.number().int().min(0).max(10_000),
+  top5_bps: z.number().int().min(0).max(10_000),
+  top10_bps: z.number().int().min(0).max(10_000),
+  holder_count: z.number().int().nonnegative(),
+}) satisfies z.ZodType<AdminConcentration>;
+
+export const adminHolderCohortsSchema = z.object({
+  min_cohort_size: z.number().int().positive(),
+  adoption: z.array(adminAdoptionPointSchema).max(MAX_ADMIN_EPOCH_POINTS_WIRE),
+  adoption_truncated: z.boolean(),
+  retention: z.array(adminRetentionCurveSchema).max(MAX_ADMIN_RETENTION_CURVES_WIRE),
+  retention_truncated: z.boolean(),
+  redemption_mix: adminRedemptionMixSchema,
+  // Nullable: withheld entirely below the minimum holder count (§7.1 Q7).
+  concentration: adminConcentrationSchema.nullable(),
+  // The DEPOSITOR set was capped, not just the per-epoch series: adoption and
+  // retention cover the oldest N depositors, so the newest cohorts are absent
+  // entirely rather than the series merely being short.
+  holders_truncated: z.boolean(),
+}) satisfies z.ZodType<AdminHolderCohorts>;
+
+export const adminValidatorPointSchema = z.object({
+  epoch_index: z.number().int().nonnegative(),
+  ended_at: isoTimestamp,
+  sampled: z.number().int().nonnegative(),
+  eligible: z.number().int().nonnegative(),
+  in_arrears: z.number().int().nonnegative(),
+  tip_paying: z.number().int().nonnegative(),
+  purged: z.number().int().nonnegative(),
+}) satisfies z.ZodType<AdminValidatorPoint>;
+
+export const adminValidatorCohortsSchema = z.object({
+  enrolled_now: z.number().int().nonnegative(),
+  churned_total: z.number().int().nonnegative(),
+  timeline: z.array(adminValidatorPointSchema).max(MAX_ADMIN_EPOCH_POINTS_WIRE),
+  timeline_truncated: z.boolean(),
+}) satisfies z.ZodType<AdminValidatorCohorts>;
+
+export const adminUpkeepBucketSchema = z.object({
+  from_seconds: z.number().int().nonnegative(),
+  to_seconds: z.number().int().nonnegative().nullable(),
+  count: z.number().int().nonnegative(),
+}) satisfies z.ZodType<AdminUpkeepBucket>;
+
+export const adminUpkeepDistributionSchema = z.object({
+  sample_count: z.number().int().nonnegative(),
+  median_seconds: z.number().int().nonnegative().nullable(),
+  p90_seconds: z.number().int().nonnegative().nullable(),
+  buckets: z.array(adminUpkeepBucketSchema).max(MAX_ADMIN_UPKEEP_BUCKETS_WIRE),
+  // The sample hit its cap: the distribution covers the most recent
+  // `sample_count` events, not all history, and the panel says so.
+  truncated: z.boolean(),
+}) satisfies z.ZodType<AdminUpkeepDistribution>;
+
+export const adminUpkeepTimelinessSchema = z.object({
+  epoch_lag: adminUpkeepDistributionSchema,
+  redemption_latency: adminUpkeepDistributionSchema,
+  // Nullable and, in this build, always null: §8.8 names it but no
+  // capture-signal series is indexed. The panel says so rather than showing an
+  // empty histogram that would look measured.
+  capture_cadence: adminUpkeepDistributionSchema.nullable(),
+}) satisfies z.ZodType<AdminUpkeepTimeliness>;
+
+export const adminIncidentRowSchema = z.object({
+  id: z.number().int().nonnegative(),
+  kind: incidentKindSchema,
+  severity: incidentSeveritySchema,
+  opened_at: isoTimestamp,
+  closed_at: isoTimestamp.nullable(),
+  height: z.number().int().nonnegative().nullable(),
+}) satisfies z.ZodType<AdminIncidentRow>;
+
+export const adminProgramHealthEnvelopeSchema = envelopeSchema(adminProgramHealthSchema);
+export const adminHolderCohortsEnvelopeSchema = envelopeSchema(adminHolderCohortsSchema);
+export const adminValidatorCohortsEnvelopeSchema = envelopeSchema(adminValidatorCohortsSchema);
+export const adminUpkeepEnvelopeSchema = envelopeSchema(adminUpkeepTimelinessSchema);
+export const adminIncidentsEnvelopeSchema = envelopeSchema(
+  z.array(adminIncidentRowSchema).max(MAX_ADMIN_INCIDENTS_PAGE_WIRE),
+);

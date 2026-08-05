@@ -1003,6 +1003,143 @@ export default {
   "governance.submitted-note":
     "Your proposal was submitted. It appears in the list once the chain has it; do not sign again — a second signature creates a second proposal.",
 
+  // --- §8.8 admin analytics -------------------------------------------------
+  "admin.title": "Admin analytics",
+  "admin.viewing-address": "Signed in as {address}.",
+  "admin.connect-prompt":
+    "Connect the wallet of a program administrator to view the analytics dashboard.",
+  "admin.not-admin": "This address is not a member of the program's administrator group.",
+  // NOT a denial. A failed chain read is not evidence that someone is not an
+  // admin, and saying so would state a fact we do not have.
+  "admin.membership-unknown":
+    "We could not check your administrator membership on chain just now. This is not a decision about your access — try again shortly.",
+  "admin.unconfigured":
+    "Admin analytics are not available in this environment: no API service credential is configured.",
+  "admin.freshness": "Indexed as of height {height}, generated {at} UTC.",
+  "admin.derivable-note":
+    "Every figure here is derived from public chain history and aggregated. Nothing on this page is a record of an individual wallet's behaviour.",
+  "admin.support-out-of-scope":
+    "Support and complaint signals are out of scope for v1 and are handled outside this tool.",
+
+  // Panel states. Four distinct reasons, never one flat \"no data\": an
+  // administrator acts differently on each.
+  "admin.panel-na": "n/a —",
+  "admin.panel-read-failed": "we could not read this. It may be available on the next reload.",
+  "admin.panel-cold-start": "there is no history for this yet.",
+  "admin.panel-below-minimum":
+    "withheld: the group is too small to report without identifying its members.",
+  "admin.panel-not-collected": "this build does not collect the input for this measure.",
+  // Distinct from `series-truncated`: that one means the CHART is short, this
+  // one means depositors are missing, which biases the newest points downward.
+  "admin.holders-truncated":
+    "The depositor set was capped for this read, oldest first — the most recent cohorts are not included, so recent adoption reads lower than it was.",
+  "admin.upkeep-truncated":
+    "Measured over the most recent {count} settled requests, not the whole history.",
+  "admin.series-truncated":
+    "This series is longer than the page shows and has been trimmed to its cap.",
+
+  // Program health
+  "admin.health-title": "Program health",
+  "admin.health-depositors": "Depositors (distinct addresses that have deposited)",
+  "admin.health-table-caption": "Total value, net APR and net deposit flow per settlement.",
+  "admin.col-epoch": "Settlement",
+  "admin.col-settled": "Settled",
+  "admin.col-tvl": "Total value (HASH)",
+  "admin.col-net-apr": "Net APR",
+  "admin.col-net-flow": "Net flow (HASH)",
+  "admin.net-outflow": "net outflow",
+
+  // Holder cohort
+  "admin.holders-title": "Holder cohort",
+  "admin.holders-mix": "Redemption mix",
+  "admin.mix-matured": "Matured",
+  "admin.mix-expedited": "Expedited",
+  "admin.mix-refunded": "Refunded",
+  "admin.mix-enqueued": "In progress",
+  "admin.holders-concentration": "Value concentration",
+  "admin.conc-top1": "Largest holder",
+  "admin.conc-top5": "Top 5",
+  "admin.conc-top10": "Top 10",
+  "admin.conc-holders": "Holders",
+  "admin.conc-shares-only":
+    "Shares of total value only. No addresses and no amounts are shown, and the whole measure is withheld while the program has too few holders to band without identifying one.",
+  "admin.holders-adoption": "Adoption",
+  "admin.col-new-depositors": "New depositors",
+  "admin.holders-retention": "Retention by first-deposit cohort",
+  "admin.retention-minimum":
+    "Cohorts smaller than {min} depositors are withheld rather than charted: with so few members, a retention figure identifies them.",
+  "admin.col-cohort": "Cohort",
+  "admin.col-cohort-size": "Size",
+  "admin.retention-withheld": "withheld",
+  "admin.retention-not-yet": "—",
+  "admin.retention-not-yet-long": "This many settlements have not elapsed yet.",
+
+  // Validator cohort
+  "admin.validators-title": "Validator cohort",
+  "admin.validators-enrolled": "Enrolled now",
+  "admin.validators-churned": "Unregistered to date",
+  "admin.validators-table-caption":
+    "Sampled, eligible, in-arrears, TIP-paying and purged validators per settlement.",
+  "admin.col-sampled": "Sampled",
+  "admin.col-eligible": "Eligible",
+  "admin.col-arrears": "In arrears",
+  "admin.col-tip": "Paid TIP",
+  "admin.col-purged": "Purged",
+
+  // Evaluator funnel (§14.10)
+  "admin.funnel-title": "Evaluator funnel",
+  "admin.funnel-window": "Counted over the last {days} days.",
+  // The honesty label. It is above the figures, not footnoted below them.
+  "admin.funnel-event-totals":
+    "These are event totals, not unique people. The counters carry no cookie, no session and no device identifier, so a returning reader is counted again. Treat them as a measure of traffic, never of audience size.",
+  "admin.funnel-table-caption": "Event totals per funnel stage.",
+  "admin.col-stage": "Stage",
+  "admin.col-events": "Events",
+  "admin.funnel-visit-learn": "Visited the home page",
+  "admin.funnel-visit-validators": "Visited validators",
+  "admin.funnel-visit-market": "Visited market",
+  "admin.funnel-due-diligence": "Reached a due-diligence page",
+  "admin.funnel-connect": "Connected a wallet",
+  "admin.funnel-first-deposits": "First deposits",
+  // Says BOTH ways the terminal stage differs from the ones above it: it is
+  // exact where they are event totals, and it covers the same window as they
+  // do. The window clause is not decoration — an all-time figure here would
+  // make the bottom of the funnel wider than its top.
+  "admin.funnel-first-deposits-note":
+    "Addresses whose first deposit fell in the same window as the stages above. Counted from chain history, so this figure is exact and counts distinct addresses — unlike the stage totals, which count events. The two are shown separately because their precision differs, not their period.",
+
+  // Upkeep timeliness
+  "admin.upkeep-title": "Upkeep timeliness",
+  "admin.upkeep-caption":
+    "How long the permissionless cranks take once they become runnable. Derived from the timing of the crank transactions themselves.",
+  "admin.upkeep-epoch-lag": "Settlement run after it became eligible",
+  "admin.upkeep-redemption": "Redemption request to payout",
+  "admin.upkeep-capture": "Capture-signal cadence gaps",
+  "admin.upkeep-median": "Median",
+  "admin.upkeep-p90": "90th percentile",
+  "admin.upkeep-samples": "{count} samples",
+  "admin.col-lag": "Lag",
+  "admin.col-count": "Count",
+
+  // Incident feed (§9.6)
+  "admin.incidents-title": "Incident feed",
+  "admin.incidents-empty":
+    "No incidents recorded. This list is generated from chain history, not curated.",
+  "admin.incident-open": "open",
+  "admin.incident-closed": "closed",
+  "admin.ack-by": "Acknowledged by {address} on {at}",
+  // The C4 distinction the affordance already makes, said in the label too.
+  "admin.ack-by-you": "Acknowledged by you on {at}",
+  "admin.ack-note-label": "Note (optional)",
+  "admin.ack-action": "Acknowledge",
+  "admin.unack-action": "Undo my acknowledgement",
+  "admin.ack-failed": "That did not go through.",
+  // The incidents read succeeded, the acknowledgment read did not. It must not
+  // read as "nothing is acknowledged" — that is a fact we do not have, and it
+  // would invite acknowledging something a colleague already handled.
+  "admin.ack-state-unknown":
+    "We could not read acknowledgements just now, so this list does not show who has acknowledged what. The incidents themselves are current. Acknowledging is unavailable until the check succeeds — reload to try again.",
+
   "theme.toggle-label": "Theme",
   "theme.auto": "Auto",
   "theme.light": "Light",

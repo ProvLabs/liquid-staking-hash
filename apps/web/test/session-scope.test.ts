@@ -99,8 +99,18 @@ describe("personal-route session scope (standing gate, plan §4)", () => {
   });
 });
 
-describe("alerts + push routes join the standing gate (M6.2 §2.6, M6.3 §2.2)", () => {
-  for (const path of ["/alerts/notifications", "/alerts/rules", "/push/subscription"]) {
+describe("alerts + push + admin-ack routes join the standing gate", () => {
+  // `/admin/incidents/ack` is here because the session is its FIRST gate, not
+  // its only one: the acting address must come from the session (there is no
+  // actor field in the body), and a fresh on-chain admin membership read gates
+  // it after that. Being logged in is not being an admin — that half is pinned
+  // in test/admin-auth.test.ts.
+  for (const path of [
+    "/alerts/notifications",
+    "/alerts/rules",
+    "/push/subscription",
+    "/admin/incidents/ack",
+  ]) {
     it(`requireSession rejects an anonymous ${path} request with a reasonless 401`, async () => {
       const store = new InMemorySessionStore();
       const request = new Request(`http://app.local${path}`);

@@ -33,11 +33,18 @@ import {
   toTransactionRow,
   type ValidatorEpochFacts,
 } from "./derive.ts";
+import type {
+  AdminEpochFacts,
+  HolderLifecycleFacts,
+  HolderPositionFacts,
+  ValidatorEpochAggregateFacts,
+} from "./admin-derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
-import type { Heads, IndexedReader } from "./reader.ts";
+import type { Heads, IndexedReader, RedemptionLatencies } from "./reader.ts";
 import { MAX_GOV_POLICIES, MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
 import type { Pagination } from "./query.ts";
 import type {
+  AdminIncidentFacts,
   EpochBoundary,
   GovPolicyFacts,
   GovProposalFacts,
@@ -937,6 +944,309 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
         if (rows.length < CHUNK) break;
       }
       return boundaries;
+    },
+
+    // --- §8.8 admin analytics ---------------------------------------------
+    //
+    // Every read here is program-wide, and every one of them RETURNS NO
+    // ADDRESS. Where an address is needed to compute a figure it is used
+    // inside SQL — as a GROUP BY key or a window partition — and never
+    // selected out. That is what keeps "no admin endpoint returns a per-wallet
+    // behavioral record" (plan invariant 12) a property of the queries rather
+    // than of the mapping above them.
+
+    async adminEpochsAsc(limit: number): Promise<AdminEpochFacts[]> {
+      const rows = await prisma.epochSnapshot.findMany({
+        // ASC with `take`, so a truncated series drops the NEWEST epochs and
+        // the panel's flag says so. Taking the newest instead would silently
+        // change where the trend starts on every new settlement.
+        orderBy: { epochIndex: "asc" },
+        take: limit,
+        select: {
+          epochIndex: true,
+          endedAtSeconds: true,
+          endHeight: true,
+          tvvAfter: true,
+          netAprBps: true,
+          netDeposits: true,
+          validatorsPurged: true,
+        },
+      });
+      return rows.map((r) => ({
+        epochIndex: r.epochIndex,
+        endedAtSeconds: r.endedAtSeconds,
+        endHeight: r.endHeight,
+        tvvAfter: toBigint(r.tvvAfter),
+        netAprBps: r.netAprBps,
+        netDeposits: toBigint(r.netDeposits),
+        validatorsPurged: r.validatorsPurged,
+      }));
+    },
+
+    async depositorCount(): Promise<number | null> {
+      // COUNT(DISTINCT …) stays in SQL — the address set never crosses the
+      // wire, which is both the fast answer and the private one.
+      const rows = await prisma.$queryRaw<Array<{ count: bigint }>>(
+        Prisma.sql`SELECT COUNT(DISTINCT "address")::bigint AS count
+                   FROM "indexed"."transactions" WHERE "kind" = 'swap_in'`,
+      );
+      const count = rows[0]?.count;
+      return count === undefined ? null : toSafeInt(count, "depositor_count");
+    },
+
+    async holderLifecycles(limit: number): Promise<HolderLifecycleFacts[]> {
+      // One row per depositor, WITHOUT the address. The running position is a
+      // window function so the fold happens in Postgres over an indexed scan
+      // rather than by materializing every transaction in this process — the
+      // `operator_payments` lesson applied to a table with the same
+      // permissionless-growth problem.
+      //
+      // The delta convention matches derivePortfolioMetrics: `swap_out_request`
+      // and `redemption_refund` move value between held and escrow and are net
+      // zero on the TOTAL position, so they contribute nothing here.
+      //
+      // The exit is the first height at or after the first deposit where the
+      // running total reaches zero. "At or after" matters: a transfer-in before
+      // any deposit would otherwise register as an exit at height zero.
+      const rows = await prisma.$queryRaw<
+        Array<{ firstDepositHeight: bigint; exitHeight: bigint | null }>
+      >(Prisma.sql`
+        WITH deltas AS (
+          SELECT "address", "height", "msgIndex",
+                 CASE "kind"
+                   WHEN 'swap_in'           THEN "shares"
+                   WHEN 'transfer_in'       THEN "shares"
+                   WHEN 'redemption_payout' THEN -"shares"
+                   WHEN 'transfer_out'      THEN -"shares"
+                   ELSE 0
+                 END AS delta
+          FROM "indexed"."transactions"
+        ),
+        running AS (
+          SELECT "address", "height",
+                 SUM(delta) OVER (
+                   PARTITION BY "address" ORDER BY "height", "msgIndex"
+                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                 ) AS position
+          FROM deltas
+        ),
+        first_deposit AS (
+          SELECT "address", MIN("height") AS first_height
+          FROM "indexed"."transactions"
+          WHERE "kind" = 'swap_in'
+          GROUP BY "address"
+        ),
+        exited AS (
+          SELECT r."address", MIN(r."height") AS exit_height
+          FROM running r
+          JOIN first_deposit f ON f."address" = r."address"
+          WHERE r."height" >= f.first_height AND r.position <= 0
+          GROUP BY r."address"
+        )
+        SELECT f.first_height AS "firstDepositHeight", e.exit_height AS "exitHeight"
+        FROM first_deposit f
+        LEFT JOIN exited e ON e."address" = f."address"
+        -- ASC + LIMIT: a truncated read drops the NEWEST cohorts, matching the
+        -- adminEpochsAsc convention. The ORDER BY is also what makes the trim
+        -- deterministic -- without it the dropped set would vary per plan.
+        ORDER BY f.first_height ASC
+        LIMIT ${limit}
+      `);
+      return rows.map((r) => ({
+        firstDepositHeight: r.firstDepositHeight,
+        exitHeight: r.exitHeight,
+      }));
+    },
+
+    async holderPositions(bandDepth: number): Promise<HolderPositionFacts> {
+      // Values only — the address is the GROUP BY key and is never selected.
+      //
+      // ONE statement for the bands AND the aggregates. `LIMIT` bounds only
+      // what crosses the wire; `COUNT`/`SUM` run over the FULL `positions` CTE,
+      // so the denominator and the holder count are the program's, not the
+      // banded slice's. Deriving either from the returned rows caps the count
+      // at `bandDepth` and shrinks the denominator, which overstates every band
+      // — silently, and only once the program has more holders than bands.
+      //
+      // The aggregates ride on every row (CROSS JOIN) rather than in a second
+      // query so they cannot be computed against a different snapshot than the
+      // bands they divide.
+      const rows = await prisma.$queryRaw<
+        Array<{ position: Prisma.Decimal; holderCount: bigint; totalPosition: Prisma.Decimal }>
+      >(Prisma.sql`
+        WITH positions AS (
+          SELECT SUM(
+                   CASE "kind"
+                     WHEN 'swap_in'           THEN "shares"
+                     WHEN 'transfer_in'       THEN "shares"
+                     WHEN 'redemption_payout' THEN -"shares"
+                     WHEN 'transfer_out'      THEN -"shares"
+                     ELSE 0
+                   END
+                 ) AS position
+          FROM "indexed"."transactions"
+          GROUP BY "address"
+          HAVING SUM(
+                   CASE "kind"
+                     WHEN 'swap_in'           THEN "shares"
+                     WHEN 'transfer_in'       THEN "shares"
+                     WHEN 'redemption_payout' THEN -"shares"
+                     WHEN 'transfer_out'      THEN -"shares"
+                     ELSE 0
+                   END
+                 ) > 0
+        ),
+        totals AS (
+          SELECT COUNT(*)::bigint AS "holderCount",
+                 COALESCE(SUM(position), 0) AS "totalPosition"
+          FROM positions
+        )
+        SELECT p.position, t."holderCount", t."totalPosition"
+        FROM positions p CROSS JOIN totals t
+        ORDER BY p.position DESC
+        LIMIT ${bandDepth}
+      `);
+      // No rows means no positive holders at all — the CROSS JOIN yields
+      // nothing, so the zero aggregates are read from the empty set rather than
+      // from a row that does not exist.
+      const first = rows[0];
+      if (first === undefined) return { topDesc: [], holderCount: 0, totalPosition: 0n };
+      return {
+        topDesc: rows.map((r) => toBigint(r.position)),
+        holderCount: toSafeInt(first.holderCount, "holder_count"),
+        totalPosition: toBigint(first.totalPosition),
+      };
+    },
+
+    async firstDepositorsSince(since: Date): Promise<number | null> {
+      // MIN over ALL history, THEN filtered. Filtering first and taking the min
+      // would count a depositor who returned inside the window as a new one,
+      // which would inflate the funnel's terminal stage with repeat business.
+      const rows = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+        SELECT COUNT(*)::bigint AS count FROM (
+          SELECT "address", MIN("blockTime") AS first_at
+          FROM "indexed"."transactions"
+          WHERE "kind" = 'swap_in'
+          GROUP BY "address"
+        ) f
+        WHERE f.first_at >= ${since}
+      `);
+      const count = rows[0]?.count;
+      return count === undefined ? null : toSafeInt(count, "first_depositors_in_window");
+    },
+
+    async redemptionMix(): Promise<{
+      enqueued: number;
+      expedited: number;
+      matured: number;
+      refunded: number;
+    }> {
+      const grouped = await prisma.redemptionRequest.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      });
+      const mix = { enqueued: 0, expedited: 0, matured: 0, refunded: 0 };
+      for (const row of grouped) {
+        mix[row.status as keyof typeof mix] = row._count._all;
+      }
+      return mix;
+    },
+
+    async validatorEpochAggregates(limit: number): Promise<ValidatorEpochAggregateFacts[]> {
+      // Aggregated in SQL: the per-validator rows are `validators × epochs` and
+      // only five integers per epoch are wanted, so materializing them here
+      // would transfer the whole table to compute a handful of counts.
+      const rows = await prisma.$queryRaw<
+        Array<{
+          epochIndex: bigint;
+          sampled: bigint;
+          eligible: bigint;
+          inArrears: bigint;
+          tipPaying: bigint;
+        }>
+      >(Prisma.sql`
+        SELECT "epochIndex",
+               COUNT(*)::bigint                                      AS "sampled",
+               COUNT(*) FILTER (WHERE "eligible")::bigint            AS "eligible",
+               COUNT(*) FILTER (WHERE "commissionDue" > 0)::bigint   AS "inArrears",
+               COUNT(*) FILTER (WHERE "tip" > 0)::bigint             AS "tipPaying"
+        FROM "indexed"."validator_epochs"
+        GROUP BY "epochIndex"
+        ORDER BY "epochIndex" ASC
+        LIMIT ${limit}
+      `);
+      return rows.map((r) => ({
+        epochIndex: r.epochIndex,
+        sampled: toSafeInt(r.sampled, "sampled"),
+        eligible: toSafeInt(r.eligible, "eligible"),
+        inArrears: toSafeInt(r.inArrears, "inArrears"),
+        tipPaying: toSafeInt(r.tipPaying, "tipPaying"),
+      }));
+    },
+
+    async validatorRegistryCounts(): Promise<{ enrolledNow: number; churnedTotal: number }> {
+      const [enrolledNow, churnedTotal] = await Promise.all([
+        prisma.validatorRegistry.count({ where: { unregisteredAt: null } }),
+        prisma.validatorRegistry.count({ where: { NOT: { unregisteredAt: null } } }),
+      ]);
+      return { enrolledNow, churnedTotal };
+    },
+
+    async redemptionLatencySeconds(limit: number): Promise<RedemptionLatencies> {
+      // PAID-OUT requests only, matching what `payoutDurationSeconds` can
+      // actually measure: it reads `expeditedAt ?? maturedAt`, so a `refunded`
+      // request yields null and contributes nothing. Selecting refunds anyway
+      // spent the cap on rows that were then discarded — a program with many
+      // refunds would get a far smaller effective sample than the limit — and
+      // it also made `seconds.length` a bad proxy for "did the cap bind".
+      // `payoutStats` draws the same line for the same reason: a refund-only
+      // request never paid out.
+      //
+      // Newest first under a cap: redemption history grows permissionlessly, so
+      // an unbounded read would transfer the whole table and sort it in this
+      // process to find two percentiles. `lastHeight` is the terminating update
+      // for a settled request and carries its own index.
+      const rows = await prisma.redemptionRequest.findMany({
+        where: { status: { in: ["matured", "expedited"] } },
+        orderBy: [{ lastHeight: "desc" }, { requestId: "desc" }],
+        take: limit,
+        select: { enqueuedAt: true, expeditedAt: true, maturedAt: true, refundedAt: true },
+      });
+      const seconds: number[] = [];
+      for (const row of rows) {
+        const duration = payoutDurationSeconds({
+          requestId: "",
+          owner: "",
+          shares: 0n,
+          status: "matured",
+          enqueuedAt: row.enqueuedAt,
+          expeditedAt: row.expeditedAt,
+          maturedAt: row.maturedAt,
+          refundedAt: row.refundedAt,
+          lastHeight: 0n,
+          lastTxhash: "",
+        });
+        if (duration !== null) seconds.push(duration);
+      }
+      // Truncation is judged on the ROWS READ, before the null filter above.
+      return { seconds, truncated: rows.length >= limit };
+    },
+
+    async adminIncidents(page: Pagination): Promise<AdminIncidentFacts[]> {
+      const rows = await prisma.incident.findMany({
+        orderBy: [{ openedAt: "desc" }, { id: "desc" }],
+        skip: page.offset,
+        take: page.limit,
+        select: {
+          id: true,
+          kind: true,
+          severity: true,
+          openedAt: true,
+          closedAt: true,
+          openedHeight: true,
+        },
+      });
+      return rows;
     },
 
     close: () => prisma.$disconnect(),

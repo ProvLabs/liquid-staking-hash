@@ -22,6 +22,7 @@
 // runtime `~` import of its own (the models layer's `~` import is type-only,
 // erased), so `node notifier/index.ts` runs directly (the services/* precedent).
 import { mintInternalAssertion } from "../app/lib/services/assertion.server.ts";
+import { sweepFunnelCounters } from "../app/lib/models/funnel-counters.server.ts";
 import {
   alertArrearsEnvelopeSchema,
   alertIncidentsEnvelopeSchema,
@@ -81,6 +82,18 @@ export interface NotifierDeps {
   /** The push transport, or undefined when Web Push is unconfigured (no VAPID)
    *  — fan-out then no-ops and in-app delivery stands alone (§10.4). */
   pushSender?: PushSender;
+  // ── Funnel-counter retention (§14.10) ──
+  /**
+   * Sweep §14.10 funnel day rows past their stated 400-day window, returning
+   * the count deleted. Optional so the notifier's pure-core tests need not wire
+   * an `app`-schema store they do not exercise; absent, retention is a no-op
+   * for that process and the production entrypoint always supplies it.
+   *
+   * It rides the tick because a retention window nothing deletes is an
+   * aspiration rather than a bound — and this is the one process that already
+   * runs on a schedule with `app`-schema write access.
+   */
+  sweepFunnel?: (now: Date) => Promise<number>;
 }
 
 /** Deliver a stream's newly-inserted notifications to push (never throws). */
@@ -235,6 +248,8 @@ export interface TickResult {
   swept: number;
   /** Orphaned push subscriptions removed by the invariant sweep (plan §2.4). */
   pushSwept: number;
+  /** Funnel day rows removed by the §14.10 retention sweep. */
+  funnelSwept: number;
 }
 
 /**
@@ -276,7 +291,17 @@ export async function runTick(deps: NotifierDeps): Promise<TickResult> {
       reason: err instanceof Error ? err.message : String(err),
     });
   }
-  return { inserted, errors, swept, pushSwept };
+  let funnelSwept = 0;
+  try {
+    funnelSwept = (await deps.sweepFunnel?.(deps.now())) ?? 0;
+  } catch (err) {
+    // Isolated like every other sweep: analytics retention failing must not
+    // stop notification delivery or push hygiene.
+    deps.log.error("funnel retention sweep failed", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return { inserted, errors, swept, pushSwept, funnelSwept };
 }
 
 /** Drive `runTick` every `tickSeconds` until `signal` aborts. */
@@ -291,6 +316,7 @@ export async function runLoop(
     deps.log.info("notifier tick", {
       inserted: result.inserted,
       swept: result.swept,
+      funnelSwept: result.funnelSwept,
       failed: Object.keys(result.errors),
     });
     if (signal.aborted) return;
@@ -330,6 +356,11 @@ async function main(): Promise<void> {
     log: consoleLogger,
     pushStore,
     pushSender,
+    // §14.10 retention, enforced here because this is the one scheduled process
+    // with `app`-schema write access. Relative import: this entrypoint runs
+    // under Node's strip-only TS, like every other import in this file.
+    sweepFunnel: (at) =>
+      sweepFunnelCounters({ databaseUrl: config.databaseUrl, appEnv: "production" }, at),
   };
 
   const controller = new AbortController();

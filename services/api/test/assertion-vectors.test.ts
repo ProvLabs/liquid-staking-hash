@@ -5,6 +5,7 @@
 // drifts, exactly one of the two suites fails — the contract cannot move on
 // one side silently.
 
+import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { verifyAssertion } from "../src/auth.ts";
 
@@ -18,6 +19,10 @@ const VECTOR_HEADER =
 // IDENTICAL literals to apps/web/test/assertion.test.ts (`mintInternalAssertion`).
 const VECTOR_INTERNAL_HEADER =
   "Bearer eyJzY29wZSI6ImludGVybmFsOm5vdGlmaWVyIiwiaWF0IjoxNzUwMDAwMDAwLCJleHAiOjE3NTAwMDAwNjB9.4lQonJSxF49FCo2K7mV4YXnnSiiRZiUv0-1UCw7_DsQ";
+// The admin:<bech32> golden vector, same key/iat/exp — IDENTICAL literals to
+// apps/web/test/assertion.test.ts (`mintAdminAssertion`).
+const VECTOR_ADMIN_HEADER =
+  "Bearer eyJzY29wZSI6ImFkbWluOnRwMWwzOXd1N2NodDB6Y3ljYzVya2NkOTBzZGQ0a3NqbXh3ZGYzODh5IiwiaWF0IjoxNzUwMDAwMDAwLCJleHAiOjE3NTAwMDAwNjB9.tMsTx8S-yCi74FfCttrEJoaqn8qWIUixrhjxLmfUQYc";
 // ─────────────────────────────────────────────────────────────────────────
 
 describe("web-minted assertion verifies here (one contract, two ends)", () => {
@@ -55,5 +60,45 @@ describe("web-minted internal:notifier assertion verifies here (M6.2)", () => {
       verifyAssertion(VECTOR_INTERNAL_HEADER, "some-other-key-0123456789abcdefghij", VECTOR_IAT + 1)
         .ok,
     ).toBe(false);
+  });
+});
+
+describe("web-minted admin: assertion verifies here (ADR-001 amendment 2026-07-28)", () => {
+  it("verifies the admin golden-vector header to the admin scope", () => {
+    const result = verifyAssertion(VECTOR_ADMIN_HEADER, VECTOR_KEY, VECTOR_IAT + 1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The kind is `admin`, NOT `address` — the two are distinct arms of the
+      // union, so an admin scope can never satisfy a personal route's
+      // scope↔target check by carrying the same address.
+      expect(result.scope).toEqual({ kind: "admin", address: VECTOR_ADDRESS });
+    }
+  });
+
+  it("rejects the admin vector once expired and under a different key", () => {
+    expect(verifyAssertion(VECTOR_ADMIN_HEADER, VECTOR_KEY, VECTOR_IAT + 61).ok).toBe(false);
+    expect(
+      verifyAssertion(VECTOR_ADMIN_HEADER, "some-other-key-0123456789abcdefghij", VECTOR_IAT + 1)
+        .ok,
+    ).toBe(false);
+  });
+
+  it("rejects an admin scope whose address is not bech32 (bounded like address:)", () => {
+    // Hand-forged under the real key: the scope SHAPE is bounded here even for
+    // a correctly-signed payload, so a malformed scope is a 401 rather than a
+    // string that flows into the handler.
+    const forge = (scope: string): string => {
+      const payload = JSON.stringify({ scope, iat: VECTOR_IAT, exp: VECTOR_IAT + 60 });
+      const b = Buffer.from(payload, "utf8").toString("base64url");
+      return `Bearer ${b}.${createHmac("sha256", VECTOR_KEY).update(b).digest("base64url")}`;
+    };
+    for (const bad of ["admin:", "admin:NOT_BECH32", "admin:tp1SHOUTING", "admin"]) {
+      expect(verifyAssertion(forge(bad), VECTOR_KEY, VECTOR_IAT + 1).ok, bad).toBe(false);
+    }
+    // The control: the same forging path with a WELL-FORMED scope verifies, so
+    // the rejections above are the bound and not a broken forger.
+    expect(verifyAssertion(forge(`admin:${VECTOR_ADDRESS}`), VECTOR_KEY, VECTOR_IAT + 1).ok).toBe(
+      true,
+    );
   });
 });

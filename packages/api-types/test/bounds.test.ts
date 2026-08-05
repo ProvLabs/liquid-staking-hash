@@ -8,7 +8,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_BOUNDED_FIELDS,
   GOVERNANCE_BOUNDED_FIELDS,
+  FUNNEL_RETENTION_DAYS,
+  MAX_FUNNEL_ROWS_TOTAL,
+  FUNNEL_STAGE_KEYS,
   MARKER_CAP,
   MARKER_CAP_WIRE,
   MAX_ACCRUAL_POINTS,
@@ -59,6 +63,31 @@ describe("wire bounds: producer inside consumer", () => {
     for (const field of GOVERNANCE_BOUNDED_FIELDS) {
       expect(registered.has(field)).toBe(true);
     }
+  });
+
+  it("registers every §8.8 admin bounded field", () => {
+    // Same cross-check, same reason. Each of these grows without operator
+    // action — with epoch count, holder count or incident count — so an
+    // unregistered one is precisely the class of bound that goes unnoticed
+    // until a long-running program's payload stops parsing.
+    const registered = new Set(WIRE_BOUNDS.map((b) => b.field));
+    for (const field of ADMIN_BOUNDED_FIELDS) {
+      expect(registered.has(field)).toBe(true);
+    }
+  });
+
+  it("states the funnel's row ceiling as a product, not as a description", () => {
+    // The funnel is the one §8.8 surface with no wire pair: its rows live in
+    // the `app` schema, which `api_reader` cannot read, so they never cross the
+    // boundary. Its bound is still a real bound, and "closed × closed" is only
+    // reassuring once multiplied — 5 stages × 400 days = 2 000 rows, ever.
+    // DERIVED from the stage list, not from a restated count: the ceiling was
+    // once a literal `5` here while the stage list lived in `apps/web`, so a
+    // sixth stage would have left this number wrong with both suites green.
+    expect(MAX_FUNNEL_ROWS_TOTAL).toBe(FUNNEL_STAGE_KEYS.length * FUNNEL_RETENTION_DAYS);
+    expect(MAX_FUNNEL_ROWS_TOTAL).toBe(2_000);
+    // The stage list is the one that must move for the ceiling to move.
+    expect(FUNNEL_STAGE_KEYS).toHaveLength(5);
   });
 
   it("has no duplicate field entries", () => {

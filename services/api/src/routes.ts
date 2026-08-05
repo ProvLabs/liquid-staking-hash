@@ -18,6 +18,11 @@
 // fallback).
 
 import type {
+  AdminHolderCohorts,
+  AdminIncidentRow,
+  AdminProgramHealth,
+  AdminUpkeepTimeliness,
+  AdminValidatorCohorts,
   FreshnessSource,
   IncidentRow,
   OperatorEpochRow,
@@ -29,7 +34,25 @@ import type {
   ProgramMetrics,
   EpochRow,
 } from "@nvhash/api-types";
+import {
+  CONCENTRATION_BAND_DEPTH,
+  FUNNEL_WINDOW_DAYS,
+  MAX_ADMIN_EPOCH_POINTS,
+  MAX_ADMIN_RETENTION_CURVES,
+  MAX_HOLDER_LIFECYCLES,
+  MAX_UPKEEP_SAMPLES,
+  MIN_COHORT_SIZE,
+} from "@nvhash/api-types";
 import type { z } from "zod";
+import {
+  epochLagSeconds,
+  toAdoption,
+  toConcentration,
+  toHealthPoints,
+  toRetentionCurves,
+  toUpkeepDistribution,
+  toValidatorPoints,
+} from "./admin-derive.ts";
 import {
   operatorPaymentsCsvHeader,
   operatorPaymentsCsvRows,
@@ -38,6 +61,7 @@ import {
 } from "./csv.ts";
 import {
   deriveOperatorSummary,
+  toAdminIncidentRow,
   toGovPolicyRow,
   toGovProposalDetail,
   toGovProposalRow,
@@ -107,8 +131,12 @@ export interface EnvelopedPayload {
  *   absent/expired/invalid assertion → 401).
  * - "internal:notifier": the notifier's read-only surface (ADR-001
  * Decision 3) — never grants address routes.
+ * - "admin": the §8.8 admin analytics surface (ADR-001 Decision 2, amendment
+ *   2026-07-28). Requires an `admin:<bech32>` assertion. Program-wide, so
+ *   there is NO scope↔target match to make — and no other scope kind reaches
+ *   it (403), including `address:` for the very address that minted it.
  */
-export type RouteAuth = "public" | "address" | "internal:notifier";
+export type RouteAuth = "public" | "address" | "internal:notifier" | "admin";
 
 interface BaseRoute<Q> {
   readonly method: "GET";
@@ -873,6 +901,225 @@ const governancePoliciesRoute = defineEnveloped<unknown>({
   },
 });
 
+// --- §8.8 admin analytics (`admin` scope) ------------------------------
+//
+// The cohort-satisfaction dashboard the no-backend console cannot render
+// (app-spec §8.8). All `auth: "admin"`, so they join the ADMIN_PATHS matrix in
+// test/cross-address.test.ts automatically — no scope but `admin:` reaches
+// them, and `admin:` reaches nothing else.
+//
+// THE GATE IS A CAPABILITY GATE, NEVER A SAFETY GATE (SECURITY.md: never gate a
+// safety property on who calls). Nothing here is a write to program state, and
+// every figure is derivable from public chain history, aggregated. The gate
+// exists because the AGGREGATION is a product surface for administrators, not
+// because the underlying facts are secret. Stated so nobody later reasons "it
+// is behind the admin gate, therefore it is safe to expose X."
+//
+// Panels degrade INDIVIDUALLY: each is its own endpoint, so an unavailable
+// input nulls one panel rather than blanking the dashboard.
+
+/**
+ * `GET /api/v1/admin/program-health` — TVL and net-APR trend, net deposit flow
+ * per epoch, and the depositor count (app-spec §8.8 header panel).
+ *
+ * `depositor_count` is null rather than 0 on a dataless process: "we cannot
+ * count depositors" and "nobody has deposited" are different answers.
+ *
+ * It also carries the funnel's terminal stage, `first_deposits_in_window`,
+ * windowed to `FUNNEL_WINDOW_DAYS`. It lives here because this is the route
+ * that owns depositor facts — and it is a SEPARATE field from
+ * `depositor_count` because the funnel's upper stages are windowed counters:
+ * one all-time figure under a windowed caption would put the bottom of the
+ * funnel above its top (plan invariant 15).
+ */
+const adminProgramHealthRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/admin/program-health`,
+  auth: "admin",
+  enveloped: true,
+  querySchema: null,
+  summary: "Admin: program-health header + per-epoch trend",
+  handle: async (ctx) => {
+    // The window is computed from one shared constant, not a query parameter:
+    // the funnel's two halves are derived in different tiers, so the window is
+    // not the caller's to vary (and an unbounded one would need bounding).
+    const windowStart = new Date(ctx.now().getTime() - FUNNEL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [heads, epochs, depositorCount, firstDepositsInWindow] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
+      ctx.reader.depositorCount(),
+      ctx.reader.firstDepositorsSince(windowStart),
+    ]);
+    return {
+      data: {
+        depositor_count: depositorCount,
+        first_deposits_in_window: firstDepositsInWindow,
+        funnel_window_days: FUNNEL_WINDOW_DAYS,
+        epochs: toHealthPoints(epochs),
+        // A full page is reported as truncated rather than assumed complete —
+        // an unflagged trim presents a partial trend as the whole history.
+        epochs_truncated: epochs.length >= MAX_ADMIN_EPOCH_POINTS,
+      } satisfies AdminProgramHealth,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/admin/holder-cohorts` — adoption, retention curves by
+ * first-deposit epoch, redemption mix, and banded TVL concentration (§8.8).
+ *
+ * The minimum-group-size gate is applied HERE, server-side, and `min_cohort_size`
+ * rides in the payload as data so the web tier renders the honest state without
+ * re-deciding the rule (the `/redemptions/stats` precedent). Concentration is
+ * null entirely below it: a top-1 share among three holders names one of them
+ * without any address being returned.
+ */
+const adminHolderCohortsRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/admin/holder-cohorts`,
+  auth: "admin",
+  enveloped: true,
+  querySchema: null,
+  summary: "Admin: holder adoption, retention, redemption mix, concentration",
+  handle: async (ctx) => {
+    const [heads, epochs, lifecycles, positions, mix] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
+      ctx.reader.holderLifecycles(MAX_HOLDER_LIFECYCLES),
+      // Only the deepest band's positions cross the wire. The holder count and
+      // the denominator come back from the SAME statement, aggregated over
+      // every positive position — so this cap bounds the transfer and can never
+      // move a reported share.
+      ctx.reader.holderPositions(CONCENTRATION_BAND_DEPTH),
+      ctx.reader.redemptionMix(),
+    ]);
+    const retention = toRetentionCurves(epochs, lifecycles);
+    return {
+      data: {
+        min_cohort_size: MIN_COHORT_SIZE,
+        adoption: toAdoption(epochs, lifecycles),
+        adoption_truncated: epochs.length >= MAX_ADMIN_EPOCH_POINTS,
+        retention: retention.slice(0, MAX_ADMIN_RETENTION_CURVES),
+        retention_truncated: retention.length > MAX_ADMIN_RETENTION_CURVES,
+        redemption_mix: mix,
+        concentration: toConcentration(positions),
+        holders_truncated: lifecycles.length >= MAX_HOLDER_LIFECYCLES,
+      } satisfies AdminHolderCohorts,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/admin/validator-cohorts` — enrollment/churn totals plus the
+ * per-epoch eligibility, arrears, TIP-participation and purge timeline (§8.8).
+ */
+const adminValidatorCohortsRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/admin/validator-cohorts`,
+  auth: "admin",
+  enveloped: true,
+  querySchema: null,
+  summary: "Admin: validator enrollment, eligibility, arrears, TIP, purges",
+  handle: async (ctx) => {
+    const [heads, epochs, aggregates, counts] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
+      ctx.reader.validatorEpochAggregates(MAX_ADMIN_EPOCH_POINTS),
+      ctx.reader.validatorRegistryCounts(),
+    ]);
+    return {
+      data: {
+        enrolled_now: counts.enrolledNow,
+        churned_total: counts.churnedTotal,
+        timeline: toValidatorPoints(epochs, aggregates),
+        timeline_truncated: epochs.length >= MAX_ADMIN_EPOCH_POINTS,
+      } satisfies AdminValidatorCohorts,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/admin/upkeep` — time-lag distributions for the permissionless
+ * cranks (§8.8), derived from crank timing already in the indexed history. No
+ * new indexing: epoch lag comes from the settlement series, redemption latency
+ * from the request lifecycle.
+ *
+ * `capture_cadence` is null and stays null — §8.8 names it, but no
+ * capture-signal series is indexed, so serving it as null with the panel saying
+ * why is the honest answer. Deriving it is an indexer change, not an API one.
+ */
+const adminUpkeepRoute = defineEnveloped<unknown>({
+  method: "GET",
+  path: `${API_BASE}/admin/upkeep`,
+  auth: "admin",
+  enveloped: true,
+  querySchema: null,
+  summary: "Admin: upkeep-timeliness lag distributions",
+  handle: async (ctx) => {
+    const [heads, epochs, latencies] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.adminEpochsAsc(MAX_ADMIN_EPOCH_POINTS),
+      ctx.reader.redemptionLatencySeconds(MAX_UPKEEP_SAMPLES),
+    ]);
+    return {
+      data: {
+        // The epoch series is already capped upstream, so its lag sample is
+        // bounded by the epoch cap and carries that flag rather than its own.
+        epoch_lag: toUpkeepDistribution(
+          epochLagSeconds(epochs),
+          epochs.length >= MAX_ADMIN_EPOCH_POINTS,
+        ),
+        // The flag comes FROM the read: rows that yield no payout time are
+        // dropped, so `seconds.length` cannot answer "did the cap bind".
+        redemption_latency: toUpkeepDistribution(latencies.seconds, latencies.truncated),
+        capture_cadence: null,
+      } satisfies AdminUpkeepTimeliness,
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
+/**
+ * `GET /api/v1/admin/incidents` — the §9.6 incident feed WITH ids, newest
+ * first, paginated under the shared page bound.
+ *
+ * The id is the only difference from public `/incidents`, and it is the point:
+ * acknowledgment references an incident by id across the schema boundary
+ * (ADR-001 Decision 1), and the ack route validates a submitted id against
+ * THIS read rather than trusting the client's number.
+ */
+const adminIncidentsRoute = defineEnveloped({
+  method: "GET",
+  path: `${API_BASE}/admin/incidents`,
+  auth: "admin",
+  enveloped: true,
+  querySchema: paginationSchema,
+  summary: "Admin: incident feed with ids (paginated, newest first)",
+  handle: async (ctx) => {
+    const [heads, rows] = await Promise.all([
+      ctx.reader.heads(),
+      ctx.reader.adminIncidents(ctx.query as Pagination),
+    ]);
+    return {
+      data: rows.map(toAdminIncidentRow) satisfies AdminIncidentRow[],
+      source: "indexed" as const,
+      chainHeight: heads.chainHeight,
+      indexedHeight: heads.indexedHeight,
+    };
+  },
+});
+
 /**
  * `GET /api/v1/health` — operational liveness for load balancers. Deliberately
  * NOT enveloped: it is not chain-derived data, so forcing a freshness envelope
@@ -910,6 +1157,11 @@ export const routes: readonly Route[] = [
   governanceProposalsRoute,
   governanceProposalRoute,
   governancePoliciesRoute,
+  adminProgramHealthRoute,
+  adminHolderCohortsRoute,
+  adminValidatorCohortsRoute,
+  adminUpkeepRoute,
+  adminIncidentsRoute,
   healthRoute,
 ];
 

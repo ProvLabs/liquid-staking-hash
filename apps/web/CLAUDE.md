@@ -175,6 +175,89 @@ involvement; it holds no keys, performs no fetches, and renders from the closed
 `{ kind, url }` payload. No token outlives its session (four deletion paths, see
 design notes).
 
+**The `admin:` scope is the ONE scope with a precondition beyond the key.**
+`mintAdminAssertion` is pure and unguarded (the golden vectors pin its bytes);
+`app/lib/services/admin-auth.server.ts` holds the gate and is its only
+sanctioned caller. Minting performs a **fresh on-chain group-membership read
+that bypasses the 60 s role cache in both directions** — it neither consults nor
+populates it — and a degraded read mints **nothing** rather than a hopeful
+assertion (ADR-001 Decision 2, amendment 2026-07-28). The split into two modules
+is load-bearing, not cosmetic: `notifier/` loads the minting module under Node's
+strip-only TS and must not acquire a runtime chain-client dependency. Note what
+this does NOT claim — the residual stale-admin window is the assertion's ≤ 60 s,
+not zero.
+
+**The membership read has THREE outcomes, not two.** Member, confirmed
+non-member, and **unknown** — `AdminCheck` carries `degraded` for the third.
+Only a **404** on the policy lookup is the fact "the admin is a plain account,
+so address equality answers it"; every other policy failure and every
+`groupMembers` failure is `degraded`, and `/admin` renders "we could not check"
+rather than "not an administrator". The 404-only test is the
+`governance.server.ts` `isNotFound` rule — x/group answers a missing proposal
+with **500** on this build, so a status code is not a general "does not exist"
+signal. `groupMembers` gets **no** equality fallback: the policy resolved, so a
+group exists, and answering membership from address equality decides it from a
+non-authoritative input. Collapsing unknown into a denial is fail-closed and
+still a lie about state, and it locks a real admin out on a flicker.
+
+**`Roles` carries TWO degradation flags because the two roles fail
+independently.** `degraded` = the contract read failed, neither role known;
+`adminDegraded` = the contract read succeeded and the x/group read did not, so
+`operator` is a fact and `admin: false` is a safe default. `admin` is a finding
+only when **neither** is set. Keep them separate: `validators-mine.tsx` gates its
+"we could not check" state on `degraded` alone and needs only `Validators {}`,
+so one combined flag would blank a working operator view whenever the unrelated
+group query flickered. `detectRoles` caches only when both are clear.
+
+**The admin gate is a CAPABILITY gate, never a safety gate** (`SECURITY.md`:
+never gate a safety property on who calls). Nothing behind `/admin` writes
+program state; every figure is derivable from public chain history, aggregated.
+Do not reason "it is behind the admin gate, therefore it is safe to expose X."
+
+**Funnel counters (§14.10) are aggregates BY CONSTRUCTION.** `FunnelCounter`'s
+columns are exactly `{stage, day, count}` and may not grow — raise a column for
+design review instead of adding one. `recordFunnelEvent` takes a closed event
+and the store config and **nothing else**: no address, session, request or
+headers appear in its signature, so the mistake is unavailable rather than
+merely forbidden. Increments are **server-side in loaders**, fire-and-forget,
+and swallowed on failure — a metrics table never takes a page down, and there is
+no client script, beacon, pixel or cookie anywhere in the design. Totals are
+**event totals, not unique people**, and the §8.8 panel says so; the
+chain-derived terminal stage is kept structurally apart so the view cannot imply
+uniform precision.
+
+**The funnel vocabulary has ONE declaration.** `FUNNEL_STAGE_KEYS`,
+`FUNNEL_RETENTION_DAYS` and `FUNNEL_WINDOW_DAYS` live in `@nvhash/api-types`;
+`funnel.server.ts` re-exports them. The stage list is half the row ceiling
+(`stages × retention days`), so restating it here made two numbers agree by luck
+until someone added a stage. `test/funnel-counters.test.ts` also asserts the list
+equals the Prisma enum's members, so schema and code cannot drift either.
+
+**The funnel's two halves share ONE window.** Its upper stages are counters read
+here; its terminal stage is chain-derived in `services/api`. Both use
+`FUNNEL_WINDOW_DAYS` from `@nvhash/api-types` — one declaration, because two
+agreeing constants in two packages can drift and produce a funnel whose bottom
+counts a different span than its top. The terminal figure is
+`first_deposits_in_window`, **never** `depositor_count`, which is all-time and
+belongs to the header panel. The two differ in precision, which the copy
+explains; they must not differ in period, which no copy could make honest.
+
+**The incident feed's two inputs fail independently.** Incidents come from
+`indexed` via the API, acknowledgments from this tier's `app` schema. A failed
+ack read is `null`, never an empty map: `IncidentFeedVM.ackStateKnown` goes
+false, **no row offers an affordance**, and the panel says so. An empty map
+would render "unacknowledged" for incidents nobody could look up and re-offer
+"acknowledge" on one another admin had handled.
+
+**Reversal is a CONDITIONAL update, never find-then-update.**
+`unacknowledge` puts `unacknowledgedAt: null` in the WHERE of an `updateMany`,
+so the row is claimed in one statement and the loser of a concurrent reversal
+sees `count === 0` — C3 forbids last-write-wins on that column by name.
+`incidentId` is **BIGINT**, matching `indexed.incidents.id`; the app layer keeps
+the safe-integer domain the wire is guarded to and converts at the store
+boundary, so a narrower column can never refuse an acknowledgment the wire
+accepted.
+
 **Load the `dataviz` skill before touching `app/components/charts/`.**
 
 ## Commands
@@ -234,8 +317,50 @@ All fail CI on violation.
   params have no effect); anonymous requests prompt-and-explain (page) or 401
   (resource route); cookie flags, nonce single-use/replay, and expiry bounds are
   pinned. **Every new personal or public-by-design route joins this suite.**
+- **`test:db` runs `prisma generate` FIRST, and that is load-bearing.**
+  `apps/web/prisma` and `services/indexer/prisma` both declare a generator with
+  **no `output`**, so both write the SAME hoisted `node_modules/@prisma/client`
+  — the last `prisma generate` in a process tree wins, globally. `pnpm -r`
+  ordering hides this (apps/web generates last), but the `db-grants` CI job
+  generates `@nvhash/db-indexed` after it, leaving the shared client holding
+  `indexed` models: `prisma.incidentAck` is then `undefined` and every case in
+  this suite fails on the first line. Generating inside the script makes the
+  suite independent of step order — the same `prisma generate && …` idiom
+  `typecheck` already uses. **Do not remove it as redundant.** The durable fix
+  is an explicit `output` for one of the two schemas (the `@nvhash/db-indexed`
+  precedent); it is a follow-on, not done here.
+- **`app`-schema store gate** (`test:db`, `test/integration/app-stores.test.ts`)
+  — the REAL Prisma stores as `app_writer` against a migrated Postgres. It is
+  separate from the unit suites on purpose and it is **not** redundant with
+  them: the unit suites drive the in-memory stand-ins, which cannot exhibit the
+  behaviour the C3 remedies exist for. An in-memory `Map` write never loses an
+  update however the SQL is written, and a find-then-set is atomic in
+  single-threaded JS — so the `ON CONFLICT DO UPDATE SET count = count + 1`
+  increment, the conditional `updateMany` reversal, the partial unique index's
+  `AckConflict` (SQLSTATE 23505 / P2002) and the BIGINT `incidentId` are all
+  only real here. Excluded from the default config so `pnpm -r run test` stays
+  Postgres-free.
 - **App-schema allowlist** (`test/app-schema-allowlist.test.ts`) — the
-  data-minimization gate; forbids any role/identity/device column.
+  data-minimization gate; forbids any role/identity/device column. It carries
+  TWO gates: the global per-model allowlist, and a **funnel-specific identifier
+  denylist** applied to `FunnelCounter` alone (`address` trips there though it
+  is legitimate on `Session`). The second is the master plan §4
+  security-executable check and gates CI from PR 7.5–7.6 on. Its limit is stated
+  in the suite: it checks column NAMES, not cardinality.
+- **Funnel counters** (`test/funnel-counters.test.ts`) — the code half of the
+  same check: the write path has no identifier-shaped parameter, **every
+  `recordFunnelEvent` call site is read from source** and asserted
+  identifier-free (a new counted surface must join the expected list
+  deliberately), a write failure is swallowed without failing a page, and the
+  failure log carries the stage and nothing else.
+- **Admin analytics** (`test/admin-data.test.ts`) — the §8.8 honesty matrix:
+  every panel degrades individually with a stated reason, "withheld below the
+  minimum cohort" stays distinguishable from "the horizon has not elapsed", and
+  C4's incident state × affordance is exhaustive (an incident acknowledged by
+  ANOTHER admin is never re-offered as if unacknowledged).
+  `test/admin-auth.test.ts` pins the mint gate; `test/incident-acks.test.ts`
+  pins the live-ack constraint, reversal-preserves-history, and that the store
+  touches exactly one Prisma model.
 - **Push-token deletion** (`test/push-token-deletion.test.ts`) — makes the
   SECURITY.md accepted exception's *condition* mechanical: a token is deleted on
   opt-out, logout, session expiry/removal, dead-endpoint (404/410) pruning, and
@@ -271,3 +396,7 @@ All fail CI on violation.
   status family stays on its values in both themes.
 - **axe** (`e2e/axe.spec.ts`): WCAG A/AA on both themes. **New routes join its
   route list.**
+- **No client-side analytics** (`e2e/admin.spec.ts`): the counted pages issue no
+  request that looks like analytics and none that leaves the app's origin, and
+  set no cookie beyond the theme preference. §14.10's "no beacon, no pixel, no
+  cookie" as an observable property rather than a promise.

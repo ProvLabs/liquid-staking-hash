@@ -38,8 +38,10 @@ Read it before changing a read path, a cursor, or an auth rule.
 ## Layout
 
 - `src/routes.ts` — the route registry. Each route declares
-  `auth: "public" | "address" | "internal:notifier"`; the handler pipeline
-  enforces it in the pinned order **429→404→405→401→400→403**.
+  `auth: "public" | "address" | "internal:notifier" | "admin"`; the handler
+  pipeline enforces it in the pinned order **429→404→405→401→400→403**.
+  `admin` and `internal:notifier` match on scope KIND alone — they are
+  program-wide and have no `?address=` target to compare against.
 - `src/auth.ts` — in-process service-assertion verification (ADR-001
   Decision 2): constant-time compare, `exp − iat ≤ 60 s`, 10 s `iat` skew.
   Every failure is a bare 401 with no distinguishing detail.
@@ -64,6 +66,42 @@ non-`meta:` worker checkpoint with a null chain head.
 | `/api/v1/portfolio*`, `/transactions` | `address` | Scope must match the requested address exactly |
 | `/api/v1/operator/` | `address` | Second boundary: address→valoper resolved server-side from `validator_registry.operator` |
 | `/api/v1/internal/alert-facts/` | `internal:notifier` | Identity/ordinal fields only, **never amounts** |
+| `/api/v1/admin/` | `admin` | §8.8 program-wide aggregates. **No fact shape carries an address** — where one is needed to compute a figure it is a GROUP BY key inside SQL and is never selected out |
+
+**Every §8.8 read is capped, including the two that look like folds.**
+`holderLifecycles` and `redemptionLatencySeconds` grow with depositor count and
+redemption history — permissionlessly — so both take an explicit limit and both
+flag a capped read (`holders_truncated`, `AdminUpkeepDistribution.truncated`).
+Lifecycles read ASC so a trim drops the newest cohorts (the `adminEpochsAsc`
+convention); latencies read newest-first, because that panel measures upkeep
+*now*, and select only **paid-out** statuses — `payoutDurationSeconds` reads
+`expeditedAt ?? maturedAt`, so a refunded request yields nothing and selecting
+one would spend the cap on a row that is then discarded (the `payoutStats`
+line, for the same reason). `redemptionLatencySeconds` returns `truncated`
+**with** the sample rather than letting the caller infer it from
+`seconds.length`: rows are dropped after the read, so that length is not
+authoritative for "did the cap bind" and a caller comparing it under-reports. **The cap bounds the transfer and this process's memory, not the scan:**
+measured on the dev DB, the lifecycle window function ran 349 ms at 400 k
+transactions / 40 k holders and 1 407 ms at 1.2 M / 120 k — superlinear, on every
+`/admin` load, uncached. The remedy for the scan is materializing holder
+lifecycle in the indexer; it is a follow-on, not something these caps did.
+
+**A transfer cap is not a denominator.** `holderPositions(bandDepth)` returns the
+top-`CONCENTRATION_BAND_DEPTH` positions **plus** the holder count and total
+position, aggregated over the whole set in the **same statement**. Deriving
+either aggregate from the returned rows caps the count and shrinks the
+denominator, so every concentration band becomes a share of the banded slice —
+overstated, plausible-looking, and wrong only once the program outgrows the band
+depth. The reader fake mirrors the split for the same reason. Do not reuse a cap
+declared for one quantity (`MAX_ADMIN_EPOCH_POINTS`) to bound another.
+
+**`/admin/program-health` serves two depositor figures and they are not
+interchangeable.** `depositor_count` is all-time (the header panel);
+`first_deposits_in_window` counts addresses whose FIRST `swap_in` fell inside
+`FUNNEL_WINDOW_DAYS` and is the evaluator funnel's terminal stage, matching the
+window of the counters `apps/web` pairs it with. "First" is min'd over all
+history and then filtered — filtering first would count a returning depositor as
+new.
 
 CSV exports (`?format=csv`) serve the **complete** indexed history ascending;
 `limit`/`offset` bound only the JSON view. Exports stream by SQL row comparison
