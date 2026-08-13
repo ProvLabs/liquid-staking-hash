@@ -207,12 +207,15 @@ The rows keep their numbers for attribution and for §5's cross-references; see
 
 | PR | Scope | Depends on |
 | --- | --- | --- |
+| 8.0a | **M8 planning + M0–M7 carryover triage** (docs-only): the [milestone overview](2026-08-05-app-m8-hardening-and-pilot.md) with the milestone's three-phase structure (testnet readiness → certification pause → mainnet rollout), the carryover register of every unresolved M0–M7 item with proposed dispositions, the Phase B certification checklist, and the §4b v2 format. The register's dispositions are ratified at this PR's review. | — |
+| 8.0b [P] | **Carryover small-fix tranche** (overview §3): explicit Prisma generator `output` (ends the dual-generate race), web switch to the shared `navHashPerShare` helper, web-only collection bounds adopted into `bounds.ts`, `cargo audit`/`pnpm audit` CI gates (closes `SECURITY.md`'s "CI enforcement to follow" tail). | 8.0a dispositions |
 | 8.0 | **Upstream vault release vetting (hard gate).** When the vault module cuts its formal release: pin the released version, re-capture the 0.2 fixture corpus against the released build, diff against the dev-build corpus, resolve any decoder/flow divergence, and re-run the full test suite (unit, property, fixture-decode, live-devnet drills) against it. Until this passes, everything vault-facing is compatible-by-feature-probe only (§1 upstream status) and **no App release can be certified**. | formal vault module release (external, timing not ours) |
 | 8.1 [P] | **Degradation drills as e2e:** corrupt an indexed row → reconciler incident → surfaces flip to live-read + "history temporarily degraded"; kill the indexer → canonical values survive, history dims; kill the LCD → indexed values carry stale labels. | 2.5, M4 |
 | 8.2 [P] | **Load test + rate-limit tuning** on the public API. | M3 |
 | 8.3 [P] | **Accessibility walk** on both themes, keyboard-only pass, reduced-motion audit; fixes. | M4–M7 |
 | 8.4a | **Migration-mode entry point (decision).** The row after which the program is no longer in complete reset-and-rebuild mode. Three parts land together. **(i) Contract upgradability** — decide whether `nvhash-staking` gains a `migrate` entry point (`contracts/src/contract.rs` exposes `instantiate`/`execute`/`query` only; the cw2 marker it already writes at instantiate is the version prerequisite such a path checks) and who holds the **wasmd contract admin** that authorizes `MsgMigrateContract` — a different authority from `InstantiateMsg.admin`, set by `--admin` at instantiate (`infra/devnet/bootstrap/nvhash-deploy-p2p.sh`, today the deployer key). A contract instantiated with **no** admin can never be given one, so the choice is irreversible per deployment and must be settled before anything is deployed that we intend to keep. A migrate path is a new **admin capability**: `liquid-staking-spec.md` §12 trust surface and `contracts/IMPLEMENTATION-STATUS.md` are amended in the same change, and the authorization is established by a devnet drill under `contracts/drills/` (an unauthorized migrate is rejected; post-migrate state and cw2 version asserted) rather than by reading wasmd's semantics — the `chain-facts` rule. **(ii) Database schemas leave baseline mode** — `services/indexer` and `apps/web` stop regenerating their single baseline migration and begin appending incremental ones. The trigger is the first environment whose contents cannot be recreated: `app` (sessions, notification log, push subscriptions) crosses it before `indexed`, which is rebuildable from chain by definition. **(iii)** The reset-and-rebuild rule in `services/indexer/CLAUDE.md`, `apps/web/CLAUDE.md` and `indexer-design-notes.md` is replaced by the migration rule in the same change, so no environment is left following stale instructions. | a decision, not code-blocked; **blocks 8.4** — nothing non-devnet deploys until it is made |
-| 8.4 | **Deployment configs** (`infra/`: Docker images per component, ArgoCD, per-environment profiles) + **testnet pilot** alongside the Console — the verify-link contract is only testable with both deployed (needs console follow-on §14.13 for entity anchors). | all; **8.0 (release certification blocked until upstream vetting passes)**; **8.4a (the contract admin it deploys with is irreversible)** |
+| 8.4b | **Console testnet-readiness tranche**: the §14.13 entity anchors (recorded in console-spec §14 in the same change — the item exists today only in app-spec), the console governance panel + the App's `governance` verify-link target (one pair, M7 D8), the extension-wallet adapter (re-adding only the needed `@cosmjs/*` at current audited versions per the recorded `elliptic`-advisory constraint), the stale 1905nhash gas price, the CSP `connect-src` per-environment mechanism, and console §14 items 5–7. | 8.0a |
+| 8.4 | **Deployment configs** (`infra/`: Docker images per component, ArgoCD, per-environment profiles) + **testnet pilot** alongside the Console — the verify-link contract is only testable with both deployed (entity anchors delivered by 8.4b). Also: per-environment secrets/config posture (overview D24), webfont self-hosting via build-time fetch, bootstrap scripts encoding the per-environment ledger requirements (receipt-marker Transfer grant, NAV-authority rotation, group-before-deploy), and an early testnet measurement of the ~639 KB artifact's ≈4.26 M-gas store against the per-tx cap. | all; **8.0 (release certification blocked until upstream vetting passes)**; **8.4a (the contract admin it deploys with is irreversible)**; 8.4b |
 | 8.5 | **Mainnet launch checklist:** remaining §14 closures (naming/domain §14.14, locale set §14.9 confirmation), security review against `SECURITY.md`, runbook in `docs/user/`. | 8.0–8.4 |
 
 > **Row 8.4a added 2026-07-30 (Ira's direction).** Every row before it assumes a
@@ -229,6 +232,23 @@ The rows keep their numbers for attribution and for §5's cross-references; see
 > Row numbering is unchanged: 8.4a is **inserted, not renumbered**, so §5/§6
 > cross-references and PR-title attribution stay valid (the M7 precedent). Work
 > after 8.4a should assume migrations, not rebuilds.
+>
+> **Rows 8.0a, 8.0b and 8.4b added 2026-08-05 (M8 planning), same insertion
+> rule.** M8 runs in three phases per Ira's direction — Phase A ends at the
+> 8.4 testnet pilot; a certification pause follows (8.0 on the external
+> release clock, plus the wallet-certification, testnet-verification and
+> security-review/audit ledgers, which are checklist-shaped rather than
+> PR-shaped); Phase C is 8.5 and the mainnet rollout. The
+> [M8 overview](2026-08-05-app-m8-hardening-and-pilot.md) is the index: its §4
+> carryover register carries every unresolved M0–M7 item into the 8.0a
+> re-review, its §5 checklist is the Phase B exit criteria, and its §2 records
+> the governing sequencing fact that the third-party audit freezes the
+> contract — every open contract-side decision (migrate entry point,
+> redemption-margin configurability, `ReceiptAccounting`, dual-policy
+> topology) must be decided and landed in Phase A. Per-PR plans are written at
+> branch open rather than all at once (overview D28): 8.0's and 8.5's content
+> depends on external events, so plans written now would be stale by Phase B —
+> the M5 Tranche-B precedent applied to the milestone.
 
 ## 3. Parallelization map
 
@@ -241,7 +261,9 @@ M0 ─ M1 ─┬─ services lane:  2.1 ∥ 2.2 ∥ 2.3 ∥ 2.4 → 2.5 → 3.1 
                                           (5.4 also needs 3.3)
 M6: 6.1 → 6.2 → 6.3 → 6.4          (planned 6.1 ∥ 6.2 ∥ 6.4 → 6.3; ran serialized)
 M7: 7.0 → 7.1 → 7.2 → [7.3+7.4]  ∥  [7.5+7.6]    — 4 PRs; 7.1 also needs a devnet x/group substrate
-M8: (8.0 external gate) ∥ 8.1 ∥ 8.2 ∥ 8.3 → 8.4a → 8.4 → 8.5   (8.4/8.5 also gated on 8.0)
+M8: 8.0a → (8.0b ∥ 8.1 ∥ 8.2 ∥ 8.3 ∥ 8.4b) → 8.4a → 8.4        Phase A (testnet pilot)
+    ⇒ [pause: 8.0 (external) ∥ W1 wallet cert ∥ T1 testnet verify ∥ S1 review+audit]
+    ⇒ 8.5 → mainnet                                             Phase C (8.5 gated on 8.0 + the Phase B exit checklist)
 ```
 
 Practical staffing note: the web lane never blocks on the services lane —
@@ -350,11 +372,11 @@ and recorded in `app-spec.md` §14.
 | §14.6 governance composer scope | DECIDED 2026-07-15 (template-scoped creation ships in v1; the App is **not** vote/execute-only; free-form compose stays Console-only). Operator side IMPLEMENTED 2026-07-27 (PR 6.4); governance side **DELIVERED 2026-07-30** (PRs 7.3–7.4): template-scoped creation ships with four of the five §8.7 surfaces — bridge config is **absent, not stubbed**, since no contract variant backs it while §14.3 is unresolved — and admin program-ops reach the chain only as §8.7 templates, gated by the §12.3 amendment of the same date | DISCHARGED (row amended 2026-07-28 — the "may move post-v1" caveat was stale) |
 | §14.7 notification channels | DECIDED 2026-07-13 (Web Push, no email) | 6.3 |
 | §14.8 design-system packaging | DECIDED 2026-07-14 (ADR-001 Decision 4: web-local tokens, shared validation method, root pnpm workspace for shared packages); **brand pass DELIVERED 2026-07-17 (PR 1.4): web-local accent/status tokens, both themes validated by `check:palette` + `test/brand-tokens.test.ts`** | 0.3, 1.4 |
-| §14.9 locale set | DECIDE — `en` assumed; confirm at 8.5 | 1.3, 8.5 |
+| §14.9 locale set | DECIDED 2026-07-15 (`en` only; future locales additive, not in v1 — app-spec §14.9). This row read DECIDE until 2026-08-05, stale against the recorded decision; 8.5 keeps a confirmation line only | 1.3, 8.5 |
 | §14.10 analytics taxonomy | **IMPLEMENTED 2026-07-31 (PRs 7.5–7.6)**; DECIDED 2026-07-28, Ira (one `app`-schema `funnel_counters` table keyed `(stage, day)` with an integer count and no other columns; closed stage + page-class enums; incremented **server-side in the loader**; no cookie, no client script, no consent surface because nothing personal is collected; stated retention; totals labeled as events, not unique people). Shipped with four recorded deltas, all forced by the decision's own constraints: the page class folds into the stage enum rather than adding a column; the class set is three, not five (`learn_deep`/`spec_link` are not server-observable without the client script §14.10 forbids); `due_diligence_depth` is a load of `/validators` or `/market`, since scroll depth is not measurable at all; retention is 400 days. See app-spec §14.10. | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |
 | §14.12 typical-payout sample threshold | DECIDED 2026-07-15 (≥ 10 terminal requests, else the 60-day guarantee alone; epoch-metric cold-start rules; calendar-month cadence — E-CAL delivered 2026-07-22) | 5.4, 6.2 |
-| §14.13 console entity anchors | FOLLOW-ON (console repo/area) — schedule with console work before 8.4 | 4.x verify links, 8.4 |
+| §14.13 console entity anchors | FOLLOW-ON — **scheduled as PR 8.4b (2026-08-05)**, which also records the item in console-spec §14 in the same change (it exists today only in app-spec) | 4.x verify links, 8.4b, 8.4 |
 | §14.14 name & domain | DECIDE — launch decision | 8.5 |
 
 Decisions are recorded where the repo already records them: architecture-shaping
@@ -959,3 +981,25 @@ revert. That is what surfaced two gates that were passing for the wrong reason
 one fix that would have introduced a regression in the opposite direction
 (folding an x/group failure into the flag the operator view gates on). Neither
 was visible from reading the diff.*
+
+*2026-08-05: **M8 planned and documented (PR 8.0a, docs-only).** The
+[M8 overview](2026-08-05-app-m8-hardening-and-pilot.md) structures the
+milestone in three phases per Ira's direction — testnet readiness & pilot
+deploy, a certification pause on external clocks (the formal vault release and
+the third-party audit), then the mainnet rollout — and carries the register of
+every unresolved M0–M7 item (compiled from `docs/plans/`, the spec §14
+ledgers, `contracts/IMPLEMENTATION-STATUS.md`, area `CLAUDE.md`s and the
+design notes) into the 8.0a re-review with proposed dispositions. §2 gains
+rows 8.0a/8.0b/8.4b (inserted, not renumbered); §3's M8 line becomes the
+phase map; §5's stale §14.9 row is corrected against the recorded 2026-07-15
+decision and §14.13 is scheduled as 8.4b. Two sequencing facts the planning
+pass established: the audit freezes the contract, so every open contract-side
+decision (migrate entry point + wasmd admin, redemption-margin
+configurability, `ReceiptAccounting`, dual-policy topology) must be decided
+and landed in Phase A; and the certification pause spans calendar-month
+boundaries by construction, which is what lets the E-CAL live-boundary
+observations run on testnet without the deferred accelerated-clock harness.
+Per-PR plans are written at branch open (overview D28) — the M5 Tranche-B
+precedent — rather than all at 8.0a, because 8.0's and 8.5's content depends
+on external events. §4b v2 (C7 gate-property check, generated C4,
+attacker-gain line) is adopted for M8 plans pending overview D26.*
