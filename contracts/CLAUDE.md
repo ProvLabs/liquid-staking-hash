@@ -16,6 +16,14 @@ Provenance.
 ## Pinned stack and conventions
 
 - cosmwasm-std 2.2, provwasm-std 2.8.0, provwasm-test-tube 0.5.0.
+- **Vault module v1.2.4** (devnet image
+  `ghcr.io/provlabs/vault-dev-node:v1.2.4-rc2`). provwasm-std 2.8.0 predates
+  it, so `src/vault_ext.rs` hand-rolls `AcceptAsset` and `UpdateVaultNAV`
+  against that tag's protos. Three of its rules shape the epoch crank:
+  settlement approvals carry the full payment and must match it exactly,
+  repricing a held asset requires a paused vault while settling requires a
+  live one, and an outbound settlement that drains a denom removes its NAV
+  entry.
 - Release profile has `overflow-checks = true`: saturating/checked/
   multiply_ratio math only, floor arithmetic everywhere.
 - The optimized wasm artifact is never committed (repo policy): build it on

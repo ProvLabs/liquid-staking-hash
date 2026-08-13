@@ -228,15 +228,54 @@ attribution, slash write-down); the full record is in spec §14. Still open:
       Recommendation: make REDEMPTION_MARGIN_BPS admin-configurable and size
       it at or above expected epoch yield x the unbonding/delay fraction; the
       soak's refund counter quantifies any chosen setting
-- [ ] Vault module version gating: `AcceptAsset` exists ONLY on vault main as
-      of 2026-07-08 (v1.0.15 and v1.1.0 lack it) — no formal upstream release
-      ships it yet, so until one is cut, "compatible vault" is established by
-      **feature probe** (`AcceptAsset` present ⇒ development build), never by
-      version pin (2026-07-13, Ira). When the vault release lands: pin the
-      version, re-run the contract drills and the App fixture/test suites
-      against the released build (app plan PR 8.0), and only then certify any
-      release — the launch chain must ship that release; share NAV uint64
-      publish behavior
+- [ ] Vault module version gating — **pinned 2026-08-13 to v1.2.4**,
+      superseding the feature-probe rule of 2026-07-13. The 1.2.x line is the
+      first to ship `AcceptAsset` (v1.2.0, 2026-07-21) and the contract's
+      settlement path is now shaped for **v1.2.4** specifically: the approval
+      carries the full payment, repricing a held asset requires a paused
+      vault, and a drained denom's NAV entry is removed. Devnet runs
+      `ghcr.io/provlabs/vault-dev-node:v1.2.4-rc2`. Share-NAV uint64 publish
+      behavior is resolved upstream (vault #233, in v1.2.0). Remaining tails:
+      the write-down half of the drill coverage (see the [VERIFY] block
+      below), the App fixture/test suites (app plan PR 8.0), and confirmation
+      that the launch chain ships v1.2.4 or later — no release is certified
+      until all three are green
+- [x] **Deploy-settlement path re-drilled against v1.2.4** — 2026-08-13,
+      image `vault-dev-node:v1.2.4-rc2` (digest
+      `sha256:740970d4…166c556`), contract built from this branch. Bootstrap
+      (`nvhash-deploy-p2p.sh`, including the new `tx vault create [authority]
+      [admin] …` signature) and `p2p-drill.sh` phases 0–3 pass: enrollment,
+      swap-in, and the full deploy settlement, with all four accounting
+      invariants, TVV neutrality, and an unpaused vault at the end. The crank
+      landed as ONE successful transaction (`DA781F01…`, height 105) emitting
+      `EventNAVUpdated` → `EventPaymentCreated` → `EventPaymentAccepted` →
+      `EventAssetAccepted`. This closes [VERIFY] (a) below: a
+      `MsgAcceptAssetRequest` carrying the full payment terms settles against
+      the pending payment, so the v1.2.4 exact-match check passes on the terms
+      the contract builds. It also confirms the par NAV restate is accepted on
+      a LIVE vault that HOLDS the receipt — the vault's NAV table now carries
+      the entry with `source: "nvhash-nav-assert"` — which is the assumption
+      the defensive restate rests on
+- [x] **`gov-drill.sh` re-run against v1.2.4** — 2026-08-13, same chain, exit
+      0. All ten proposals reached their expected outcomes and every recorded
+      x/group behavior is unchanged on this image: execution-success prunes
+      immediately, votes unreadable after tally, a vote change is rejected,
+      two proposers in one signature refused, a missing proposal returns 500
+      (not 404) with a body identical for pruned and never-existing, and
+      `PROPOSAL_STATUS_ABORTED` remains unreachable (lands ACCEPTED).
+      `Config.admin` was the group policy throughout
+- [ ] Runtime [VERIFY] items still open after the 2026-08-13 drill. Each needs
+      a SECOND epoch crank in a later calendar month, or a real slash, so none
+      could run in this session (see the drill-coverage note in §4):
+      (b) a full-return epoch drains the receipt and removes its NAV entry
+      (`EventNAVRemoved`), and the next crank's par restate re-creates it and
+      settles; (c) the close-out pause is entered while the receipt is marked
+      at zero, so confirm `PausedBalance`, the restore, and unpause leave TVV
+      exact — the `total-value` crisis invariant registered in v1.2.4 is the
+      cross-check; (d) two pause/unpause cycles in one transaction perturb
+      neither AUM-fee accrual nor the accrual queue (all windows share a block
+      timestamp). Until (b)–(d) are drilled, the **write-down bracket is
+      verified only in unit tests**, not on a chain
 - [ ] valcons derivation under consensus KEY ROTATION (drill validator never
       rotated)
 
@@ -254,16 +293,41 @@ boundary domain): deterministic edge scenarios in CI — dust economy
 each asserting the targeted edge was actually exercised. The `run_epoch`
 message-sequence lock also landed 2026-07-13 (`src/epoch.rs` sequence_tests,
 via provwasm-mocks): the full mocked-querier crank asserts the exact emitted
-order (claims → undelegate → return settlement → write-down sandwich →
-pause/deposit/unpause → transfer-then-burn → mint/deploy → delegate) on both
-the reward-deposit and write-down paths, so refactors cannot silently
-reorder legs.
+order (claims → undelegate → par NAV restate → return settlement →
+bracketed write-down sandwich → pause/restore-or-deposit/unpause →
+transfer-then-burn → mint/deploy → delegate) on both the reward-deposit and
+write-down paths, so refactors cannot silently reorder legs. Extended
+2026-08-13 for the v1.2.4 pause rules with four further locks: every
+settlement pair's create and accept legs carry identical terms (the vault
+settles only on an exact match); every `AcceptAsset` is emitted with the
+vault live and every off-par receipt repricing with it paused; every par
+settlement is immediately preceded by its own par NAV restate, with the
+write-down extraction the sole exception (a settlement that drains a denom
+removes its NAV entry, so one restate per crank would let a full-unwind
+return leg delete the entry the same crank's deploy leg needs); and the
+write-down and reward-deposit paths are mutually exclusive on any crank.
 
 **NOT covered (the honest headline):** no automated test moves value end to
 end in CI — provwasm-test-tube 0.5.0 ships a vault module without
 `AcceptAsset`, so every in-test `RunEpoch` takes the empty-vault path. The
 money-path invariants are unit-asserted on the plan functions and drilled
-live on devnet, but never checked against actual vault state in CI.
+live on devnet, but never checked against actual vault state in CI. The
+sequence locks above assert the messages the crank *emits*; only the devnet
+drills prove the chain accepts them.
+
+**Drill coverage is capped at one epoch per calendar month (E-CAL
+consequence).** `RunEpoch` eligibility is `civil_month(block_time) >
+civil_month(last_run)`, block time on a single-node devnet tracks the
+container's real wall clock, and the dev image carries no libfaketime — so a
+freshly bootstrapped contract gets exactly ONE crank, and every drill phase
+past the first settlement is unreachable until the next month rollover
+(`calendar-drill.sh` documents the same limit). The 2026-08-13 v1.2.4 run
+therefore verified the deploy settlement and stopped at `p2p-drill.sh` phase
+4 with `too soon: next run allowed at 1788220800` (2026-09-01). Anything
+needing a second crank — the return settlement, the burn leg, expedites, and
+the whole **write-down bracket** — waits for a month boundary or the
+accelerated-clock harness E-CAL deferred. This is a standing environmental
+constraint, not a regression; plan drill sessions across a rollover.
 
 - [x] Message-sequence assertion test for `run_epoch` — done 2026-07-13, see
       above
@@ -273,7 +337,10 @@ live on devnet, but never checked against actual vault state in CI.
       100 reward claims + 100 assessment query sets) against the per-tx gas
       limit, with claim batching across cranks as the fallback
 - [ ] Upgrade provwasm-test-tube when a release ships the current vault
-      module, so the money path runs in CI rather than only on devnet
+      module, so the money path runs in CI rather than only on devnet.
+      Still blocked 2026-08-13: provwasm-test-tube 0.5.0 and provwasm-std
+      2.8.0 remain the latest published crates, and neither carries vault
+      1.2.x — which is also why `src/vault_ext.rs` is still hand-rolled
 
 ---
 
@@ -283,14 +350,18 @@ Devnet lifecycle, bootstrap, and per-operation action scripts are organized
 under [`infra/devnet/`](../infra/devnet/); drills under
 [`drills/`](drills/). Facts that carry over:
 
-- The dev node uses `ghcr.io/provlabs/vault-dev-node:latest` (pulled
-  automatically by `infra/devnet/dev-node.sh`), an image built with the
-  settlement-era vault module. To build an equivalent image locally instead
-  (set `IMAGE` to its tag): from a Provenance checkout with a `go.mod`
-  replace pointing `github.com/provlabs/vault` at a vault checkout on main,
-  plus an `app/app.go` patch wiring vault main's new keeper deps (Name,
-  Attribute, and a small `vaultExchangeAdapter` for the exchange keeper's
-  GetPaymentsWithTarget query). Rebuild: `GOTOOLCHAIN=go1.25.8 make
+- The dev node uses `ghcr.io/provlabs/vault-dev-node:v1.2.4-rc2` (pulled
+  automatically by `infra/devnet/dev-node.sh`), which ships vault module
+  v1.2.4. To build an equivalent image locally instead (set `IMAGE` to its
+  tag): from a Provenance checkout whose `go.mod` pins
+  `github.com/provlabs/vault v1.2.4`, plus an `app/app.go` patch wiring the
+  vault keeper deps (Name, Attribute, exchange). The `vaultExchangeAdapter`
+  shim that patch previously needed for the exchange keeper's
+  GetPaymentsWithTarget query is likely obsolete — vault v1.2.0 split out an
+  `ExchangeQueryServer` dependency so apps can wire
+  `exchangekeeper.NewQueryServer` directly — but that is unverified here,
+  since the published image is what the drills run. Rebuild:
+  `GOTOOLCHAIN=go1.25.8 make
   docker-build-dev`.
 - Drill genesis tweaks (applied by the lifecycle script):
   `staking.params.unbonding_time = "120s"`; `config.toml indexer = "kv"`

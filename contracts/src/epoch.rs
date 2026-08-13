@@ -404,26 +404,76 @@ fn prost_coin(denom: &str, amount: Uint128) -> ProstCoin {
     }
 }
 
-/// Build the create-payment message for a settlement with the vault: the contract
-/// (source) offers `source_amount` in exchange for `target_amount` from the vault
-/// (target). Accepted in the same tx via vault_ext::accept_asset_msg under the
-/// contract's asset-manager authority. [VERIFY] payment target account (vault
-/// address vs principal marker address) together with the vault_ext shim.
-fn create_payment_msg(
+/// Both messages of one settlement with the vault, in emission order:
+/// `[create_payment, accept_asset]`. The contract (source) offers
+/// `source_amount` in exchange for `target_amount` from the vault (target), and
+/// accepts it in the same tx under its asset-manager authority.
+///
+/// The vault settles only when the pending payment matches the terms carried in
+/// the approval exactly, so both messages are built here from one set of
+/// arguments — the two cannot describe different deals.
+fn settlement_msgs(
     env: &Env,
     cfg: &Config,
     source_amount: Vec<ProstCoin>,
     target_amount: Vec<ProstCoin>,
     external_id: &str,
-) -> CosmosMsg {
-    MsgCreatePaymentRequest {
+) -> [CosmosMsg; 2] {
+    let create = MsgCreatePaymentRequest {
         payment: Some(Payment {
             source: env.contract.address.to_string(),
-            source_amount,
+            source_amount: source_amount.clone(),
             target: cfg.vault_address.to_string(),
-            target_amount,
+            target_amount: target_amount.clone(),
             external_id: external_id.to_string(),
         }),
+    }
+    .into();
+    let accept = accept_asset_msg(
+        env.contract.address.as_str(),
+        cfg.vault_address.as_str(),
+        env.contract.address.as_str(),
+        source_amount,
+        target_amount,
+        external_id,
+    );
+    [create, accept]
+}
+
+/// Restate the receipt's internal NAV entry at its par 1:1.
+///
+/// An outbound settlement that drains the vault's holding of a denom removes
+/// that denom's NAV entry, and a settlement whose asset denom has no entry is
+/// rejected. Emitting this before the crank's first settlement leg keeps the
+/// entry present without a read. It is legal on a live vault in every reachable
+/// state: if the entry was dropped the vault holds no receipt (removal implies
+/// drained), and otherwise the entry is already par so this restates the same
+/// price — both cases the unpaused-reprice rules allow.
+fn nav_assert_msg(env: &Env, cfg: &Config) -> CosmosMsg {
+    update_vault_nav_msg(
+        env.contract.address.as_str(),
+        cfg.vault_address.as_str(),
+        &cfg.receipt_denom,
+        &cfg.underlying_denom,
+        1,
+        1,
+        "nvhash-nav-assert",
+    )
+}
+
+fn pause_msg(env: &Env, cfg: &Config, reason: &str) -> CosmosMsg {
+    MsgPauseVaultRequest {
+        authority: env.contract.address.to_string(),
+        vault_address: cfg.vault_address.to_string(),
+        reason: reason.to_string(),
+    }
+    .into()
+}
+
+fn unpause_msg(env: &Env, cfg: &Config) -> CosmosMsg {
+    MsgUnpauseVaultRequest {
+        authority: env.contract.address.to_string(),
+        vault_address: cfg.vault_address.to_string(),
     }
     .into()
 }
@@ -620,27 +670,26 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         let rewards_dep = liquid.saturating_sub(ret.settle);
 
         // Return settlement (unpaused): contract pays `settle` nhash, the vault
-        // pays back `settle` receipt at the 1:1 internal NAV.
+        // pays back `settle` receipt at the 1:1 internal NAV. Guarded against a
+        // missing entry (see nav_assert_msg) — as is the deploy leg below, which
+        // needs its own guard because THIS leg can be the settlement that drains
+        // the vault's receipt and takes the entry with it (a full unwind settles
+        // every minted receipt back).
         if !ret.settle.is_zero() {
-            msgs.push(create_payment_msg(
+            msgs.push(nav_assert_msg(&env, &cfg));
+            msgs.extend(settlement_msgs(
                 &env,
                 &cfg,
                 vec![prost_coin(&cfg.underlying_denom, ret.settle)],
                 vec![prost_coin(&cfg.receipt_denom, ret.settle)],
                 RETURN_PAYMENT_ID,
             ));
-            msgs.push(accept_asset_msg(
-                env.contract.address.as_str(),
-                cfg.vault_address.as_str(),
-                env.contract.address.as_str(),
-                RETURN_PAYMENT_ID,
-            ));
         }
 
-        // Slash write-down (unpaused): the vault rejects WithdrawPrincipalFunds
-        // of a non-accepted denom (verified on devnet 2026-07-09), so the D5
-        // markdown runs as a GUARDRAIL SANDWICH under the contract's NAV
-        // authority (rotated in at bootstrap via update-nav-authority):
+        // Slash write-down: the vault rejects WithdrawPrincipalFunds of a
+        // non-accepted denom (verified on devnet 2026-07-09), so the D5 markdown
+        // runs as a GUARDRAIL SANDWICH under the contract's NAV authority
+        // (rotated in at bootstrap via update-nav-authority):
         //   1. set the receipt's internal NAV to 0 nhash per write_down units
         //      (zero price is valid for a non-accepted denom),
         //   2. settle exactly write_down receipt OUT via a zero-priced payment
@@ -650,7 +699,17 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         //      exactly at par.
         // A fractional markdown instead of the sandwich would poison future
         // legs: the guardrail is exact cross-multiplication against the entry.
-        if !ret.write_down.is_zero() {
+        //
+        // Each repricing of the receipt — an asset the vault holds — requires a
+        // PAUSED vault, while the extraction between them requires a LIVE one
+        // (the vault refuses to settle assets while paused). The sandwich is
+        // therefore bracketed: pause/mark/unpause, settle, pause/restore/unpause.
+        // The reward deposit, which also demands a paused vault, joins the
+        // close-out bracket rather than opening a third. The whole crank is one
+        // transaction, so no user message can observe an intermediate state.
+        let writing_down = !ret.write_down.is_zero();
+        if writing_down {
+            msgs.push(pause_msg(&env, &cfg, "nvhash-writedown"));
             msgs.push(update_vault_nav_msg(
                 env.contract.address.as_str(),
                 cfg.vault_address.as_str(),
@@ -660,57 +719,48 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
                 ret.write_down.u128(),
                 "nvhash-writedown",
             ));
-            msgs.push(create_payment_msg(
+            msgs.push(unpause_msg(&env, &cfg));
+            msgs.extend(settlement_msgs(
                 &env,
                 &cfg,
                 vec![],
                 vec![prost_coin(&cfg.receipt_denom, ret.write_down)],
                 WRITEDOWN_PAYMENT_ID,
             ));
-            msgs.push(accept_asset_msg(
-                env.contract.address.as_str(),
-                cfg.vault_address.as_str(),
-                env.contract.address.as_str(),
-                WRITEDOWN_PAYMENT_ID,
-            ));
-            msgs.push(update_vault_nav_msg(
-                env.contract.address.as_str(),
-                cfg.vault_address.as_str(),
-                &cfg.receipt_denom,
-                &cfg.underlying_denom,
-                1,
-                1,
-                "nvhash-writedown-restore",
-            ));
         }
 
-        // Phase C: atomic pause window, the reward deposit ONLY (pause, deposit,
-        // unpause in one bundle; partial failure reverts the whole tx).
-        if !rewards_dep.is_zero() {
-            msgs.push(
-                MsgPauseVaultRequest {
-                    authority: env.contract.address.to_string(),
-                    vault_address: cfg.vault_address.to_string(),
-                    reason: "epoch".to_string(),
-                }
-                .into(),
-            );
+        // Phase C: the atomic pause window. It carries the 1:1 restore when this
+        // crank wrote down, the reward deposit when there is one, or both;
+        // partial failure reverts the whole tx. plan_return settles the whole
+        // matured amount whenever liquid covers it, so today exactly one of the
+        // two occurs on any crank (pinned by write_down_and_reward_deposit_are
+        // _mutually_exclusive); the window carries either so it stays correct
+        // if that ever changes.
+        if writing_down || !rewards_dep.is_zero() {
+            msgs.push(pause_msg(&env, &cfg, "epoch"));
+            if writing_down {
+                msgs.push(update_vault_nav_msg(
+                    env.contract.address.as_str(),
+                    cfg.vault_address.as_str(),
+                    &cfg.receipt_denom,
+                    &cfg.underlying_denom,
+                    1,
+                    1,
+                    "nvhash-writedown-restore",
+                ));
+            }
             // The NAV step-up: pure value in, no counter-leg.
-            msgs.push(
-                MsgDepositPrincipalFundsRequest {
-                    authority: env.contract.address.to_string(),
-                    vault_address: cfg.vault_address.to_string(),
-                    amount: Some(prost_coin(&cfg.underlying_denom, rewards_dep)),
-                }
-                .into(),
-            );
-            msgs.push(
-                MsgUnpauseVaultRequest {
-                    authority: env.contract.address.to_string(),
-                    vault_address: cfg.vault_address.to_string(),
-                }
-                .into(),
-            );
+            if !rewards_dep.is_zero() {
+                msgs.push(
+                    MsgDepositPrincipalFundsRequest {
+                        authority: env.contract.address.to_string(),
+                        vault_address: cfg.vault_address.to_string(),
+                        amount: Some(prost_coin(&cfg.underlying_denom, rewards_dep)),
+                    }
+                    .into(),
+                );
+            }
+            msgs.push(unpause_msg(&env, &cfg));
         }
 
         // Burn everything returned or written down (outside pause, same tx).
@@ -751,17 +801,12 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
                 }
                 .into(),
             );
-            msgs.push(create_payment_msg(
+            msgs.push(nav_assert_msg(&env, &cfg));
+            msgs.extend(settlement_msgs(
                 &env,
                 &cfg,
                 vec![prost_coin(&cfg.receipt_denom, deployable)],
                 vec![prost_coin(&cfg.underlying_denom, deployable)],
-                DEPLOY_PAYMENT_ID,
-            ));
-            msgs.push(accept_asset_msg(
-                env.contract.address.as_str(),
-                cfg.vault_address.as_str(),
-                env.contract.address.as_str(),
                 DEPLOY_PAYMENT_ID,
             ));
         }
@@ -1293,6 +1338,7 @@ mod sequence_tests {
             kinds,
             vec![
                 "claim",          // Phase A: withdraw rewards
+                "update_nav",     // par restate: the settlements below need the entry
                 "create_payment", // return settlement (unpaused)
                 "accept_asset",
                 "pause",             // Phase C: pause window opens
@@ -1300,23 +1346,30 @@ mod sequence_tests {
                 "unpause",           // window closes
                 "transfer_receipt",  // burn leg: receipt into the marker account
                 "burn_receipt",
-                "mint_receipt", // deploy settlement
-                "create_payment",
+                "mint_receipt",   // deploy settlement
+                "update_nav",     // its own par restate: the return leg above may
+                "create_payment", // have drained the entry
                 "accept_asset",
                 "delegate", // fresh stake last
             ],
             "run_epoch message order changed — the pause-window and settlement \
              safety story depends on this exact sequence"
         );
+        // The par restate prices 1 receipt unit at 1 nhash and nothing else.
+        let assert_nav: crate::vault_ext::MsgUpdateVaultNavRequest =
+            decode_any(&res.messages[1].msg, "update_nav");
+        assert_eq!(assert_nav.price.unwrap().amount, "1");
+        assert_eq!(assert_nav.volume, "1");
+        assert_eq!(assert_nav.denom, "nvhash.staked");
         // The deposit inside the window is exactly liquid - settle = 300.
         let dep: MsgDepositPrincipalFundsRequest =
-            decode_any(&res.messages[4].msg, "deposit_principal");
+            decode_any(&res.messages[5].msg, "deposit_principal");
         assert_eq!(dep.amount.unwrap().amount, "300");
         // Burn is exactly the matured receipt.
-        let burn: MsgBurnRequest = decode_any(&res.messages[7].msg, "burn_receipt");
+        let burn: MsgBurnRequest = decode_any(&res.messages[8].msg, "burn_receipt");
         assert_eq!(burn.amount.unwrap().amount, "500");
         // Receipt counter: 1500 outstanding + 9950 deployed - 500 burned.
-        let minted: MsgMintRequest = decode_any(&res.messages[8].msg, "mint_receipt");
+        let minted: MsgMintRequest = decode_any(&res.messages[9].msg, "mint_receipt");
         assert_eq!(minted.amount.unwrap().amount, "9950");
         assert_eq!(
             RECEIPT_MINTED.load(&deps.storage).unwrap(),
@@ -1326,46 +1379,214 @@ mod sequence_tests {
 
     /// Write-down path: liquid (300) under-covers matured (500), so the 200
     /// shortfall is a slash loss recognized THIS crank via the NAV guardrail
-    /// sandwich, and with no surplus there is no pause window at all. Locks the
-    /// sandwich order (mark to zero -> settle out -> restore 1:1) and that the
-    /// burn covers settle + write_down.
+    /// sandwich. Locks the bracketed sandwich (pause/mark, settle live,
+    /// pause/restore) and that the burn covers settle + write_down.
     #[test]
-    fn run_epoch_orders_write_down_sandwich_without_pause() {
+    fn run_epoch_orders_write_down_sandwich_in_pause_brackets() {
         let (mut deps, env) = setup(300, 0, 0);
         let res = run_epoch(deps.as_mut(), env).unwrap();
         let kinds: Vec<&str> = res.messages.iter().map(|m| kind(&m.msg)).collect();
         assert_eq!(
             kinds,
             vec![
+                "update_nav",     // par restate before the first settlement
                 "create_payment", // return settlement for the backed 300
                 "accept_asset",
-                "update_nav",     // sandwich: mark receipt to 0 for 200 units
-                "create_payment", // zero-priced settlement extracts the receipt
+                "pause",      // mark bracket: repricing a held asset needs a pause
+                "update_nav", // mark receipt to 0 for 200 units
+                "unpause",
+                "create_payment", // zero-priced extraction, vault live again
                 "accept_asset",
+                "pause",      // close-out bracket
                 "update_nav", // restore the exact 1:1 entry
+                "unpause",
                 "transfer_receipt",
                 "burn_receipt", // settle + write_down burned together
             ],
-            "write-down sandwich order changed — a fractional markdown or a \
-             reordered restore poisons future 1:1 settlement legs"
+            "write-down sandwich order changed — a fractional markdown, a \
+             reordered restore, or an unbracketed reprice breaks the money path"
         );
-        // Sandwich prices: first update_nav marks 200 units at price 0, the
-        // second restores 1 nhash per 1 unit.
+        // Sandwich prices: the mark prices 200 units at 0, the restore returns
+        // the entry to 1 nhash per 1 unit.
         let mark: crate::vault_ext::MsgUpdateVaultNavRequest =
-            decode_any(&res.messages[2].msg, "update_nav");
+            decode_any(&res.messages[4].msg, "update_nav");
         assert_eq!(mark.price.unwrap().amount, "0");
         assert_eq!(mark.volume, "200");
         let restore: crate::vault_ext::MsgUpdateVaultNavRequest =
-            decode_any(&res.messages[5].msg, "update_nav");
+            decode_any(&res.messages[9].msg, "update_nav");
         assert_eq!(restore.price.unwrap().amount, "1");
         assert_eq!(restore.volume, "1");
-        // No pause window anywhere: the write-down path deposits nothing.
-        assert!(!kinds.iter().any(|k| *k == "pause" || *k == "unpause"));
-        let burn: MsgBurnRequest = decode_any(&res.messages[7].msg, "burn_receipt");
+        // Nothing is deposited on this path: the close-out bracket carries the
+        // restore alone.
+        assert!(!kinds.contains(&"deposit_principal"));
+        let burn: MsgBurnRequest = decode_any(&res.messages[12].msg, "burn_receipt");
         assert_eq!(burn.amount.unwrap().amount, "500");
         assert_eq!(
             RECEIPT_MINTED.load(&deps.storage).unwrap(),
             Uint128::new(1_000)
         );
+    }
+
+    /// The vault settles a payment only when the pending payment matches the
+    /// terms carried in the approval exactly, so the create-payment leg and the
+    /// accept-asset leg of one settlement must never describe different deals.
+    /// Walks every settlement pair the crank emits on both paths.
+    #[test]
+    fn settlement_pairs_carry_identical_terms() {
+        for (liquid, vault_liquid, reward) in [(800u128, 10_000u128, 100u128), (300, 0, 0)] {
+            let (mut deps, env) = setup(liquid, vault_liquid, reward);
+            let contract = env.contract.address.to_string();
+            let vault = CONFIG
+                .load(&deps.storage)
+                .unwrap()
+                .vault_address
+                .to_string();
+            let res = run_epoch(deps.as_mut(), env).unwrap();
+            let kinds: Vec<&str> = res.messages.iter().map(|m| kind(&m.msg)).collect();
+
+            let pairs: Vec<usize> = kinds
+                .iter()
+                .enumerate()
+                .filter(|(_, k)| **k == "create_payment")
+                .map(|(i, _)| i)
+                .collect();
+            assert!(!pairs.is_empty(), "expected settlements for {liquid}");
+            for i in pairs {
+                assert_eq!(kinds[i + 1], "accept_asset", "accept must follow create");
+                let created: MsgCreatePaymentRequest =
+                    decode_any(&res.messages[i].msg, "create_payment");
+                let accepted: crate::vault_ext::MsgAcceptAssetRequest =
+                    decode_any(&res.messages[i + 1].msg, "accept_asset");
+                let created = created.payment.expect("create carries a payment");
+                let approved = accepted.payment.expect("accept carries a payment");
+
+                assert_eq!(created.source, approved.source);
+                assert_eq!(created.external_id, approved.external_id);
+                assert_eq!(created.target, approved.target);
+                assert_eq!(created.source_amount.len(), approved.source_amount.len());
+                for (a, b) in created.source_amount.iter().zip(&approved.source_amount) {
+                    assert_eq!((&a.denom, &a.amount), (&b.denom, &b.amount));
+                }
+                assert_eq!(created.target_amount.len(), approved.target_amount.len());
+                for (a, b) in created.target_amount.iter().zip(&approved.target_amount) {
+                    assert_eq!((&a.denom, &a.amount), (&b.denom, &b.amount));
+                }
+                // The contract sources every settlement; the vault is always the
+                // target, which the vault itself requires.
+                assert_eq!(created.source, contract);
+                assert_eq!(approved.target, vault);
+            }
+        }
+    }
+
+    /// The vault refuses to settle assets while paused and refuses to reprice a
+    /// held asset while live. Walks the emitted sequence tracking pause depth and
+    /// asserts each message sits on the side of that line it needs: every
+    /// accept_asset live, every receipt repricing that moves the price paused.
+    #[test]
+    fn settlements_run_live_and_repricings_run_paused() {
+        for (liquid, vault_liquid, reward) in [(800u128, 10_000u128, 100u128), (300, 0, 0)] {
+            let (mut deps, env) = setup(liquid, vault_liquid, reward);
+            let res = run_epoch(deps.as_mut(), env).unwrap();
+            let mut paused = false;
+            for msg in res.messages.iter() {
+                match kind(&msg.msg) {
+                    "pause" => {
+                        assert!(!paused, "double pause: the vault rejects it");
+                        paused = true;
+                    }
+                    "unpause" => {
+                        assert!(paused, "unpause without a pause");
+                        paused = false;
+                    }
+                    "accept_asset" => assert!(
+                        !paused,
+                        "settlement emitted while paused — the vault rejects it"
+                    ),
+                    "deposit_principal" => {
+                        assert!(paused, "principal deposit requires a paused vault")
+                    }
+                    "update_nav" => {
+                        let nav: crate::vault_ext::MsgUpdateVaultNavRequest =
+                            decode_any(&msg.msg, "update_nav");
+                        // Restating the entry at its existing par price is legal
+                        // live; any other price moves a held asset's value and
+                        // requires the pause.
+                        let is_par = nav.price.as_ref().map(|p| p.amount.as_str()) == Some("1")
+                            && nav.volume == "1";
+                        assert!(
+                            paused || is_par,
+                            "off-par repricing while live — the vault rejects it"
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            assert!(!paused, "crank ended with the vault paused");
+        }
+    }
+
+    /// A settlement whose asset denom has no internal NAV entry is rejected, and
+    /// an outbound settlement that drains the vault's holding of a denom removes
+    /// that entry — so a full-unwind return leg can delete the entry the deploy
+    /// leg later in the SAME crank depends on. Every par settlement must
+    /// therefore be immediately preceded by its own par restate. The write-down
+    /// extraction is the sole exception: it settles at the marked-down price on
+    /// purpose, so a par restate in front of it would defeat the sandwich.
+    #[test]
+    fn every_par_settlement_is_preceded_by_a_par_restate() {
+        for (liquid, vault_liquid, reward) in [(800u128, 10_000u128, 100u128), (300, 0, 0)] {
+            let (mut deps, env) = setup(liquid, vault_liquid, reward);
+            let res = run_epoch(deps.as_mut(), env).unwrap();
+            let kinds: Vec<&str> = res.messages.iter().map(|m| kind(&m.msg)).collect();
+
+            for (i, k) in kinds.iter().enumerate() {
+                if *k != "create_payment" {
+                    continue;
+                }
+                let approved: crate::vault_ext::MsgAcceptAssetRequest =
+                    decode_any(&res.messages[i + 1].msg, "accept_asset");
+                let payment = approved.payment.unwrap();
+                if payment.external_id == WRITEDOWN_PAYMENT_ID {
+                    // The extraction rides the marked-down entry: the message
+                    // before it is the unpause closing the mark bracket.
+                    assert_eq!(kinds[i - 1], "unpause");
+                    continue;
+                }
+                assert_eq!(
+                    kinds[i - 1],
+                    "update_nav",
+                    "settlement '{}' is not guarded by a par restate",
+                    payment.external_id
+                );
+                let guard: crate::vault_ext::MsgUpdateVaultNavRequest =
+                    decode_any(&res.messages[i - 1].msg, "update_nav");
+                assert_eq!(guard.price.unwrap().amount, "1");
+                assert_eq!(guard.volume, "1");
+                assert_eq!(guard.denom, "nvhash.staked");
+            }
+        }
+    }
+
+    /// The close-out pause window carries the 1:1 restore, the reward deposit, or
+    /// both. Today it is never both: plan_return settles the entire matured
+    /// amount whenever liquid covers it, so a crank that writes down has no
+    /// surplus left to deposit. Pinned because the epoch sequence tests only
+    /// cover the two reachable shapes.
+    #[test]
+    fn write_down_and_reward_deposit_are_mutually_exclusive() {
+        for liquid in [0u128, 1, 299, 300, 499, 500, 501, 5_000] {
+            let ret = plan_return(
+                Uint128::new(1_500),
+                Uint128::new(1_000),
+                Uint128::zero(),
+                Uint128::new(liquid),
+            );
+            let rewards_dep = Uint128::new(liquid).saturating_sub(ret.settle);
+            assert!(
+                ret.write_down.is_zero() || rewards_dep.is_zero(),
+                "liquid={liquid} produced both a write-down and a deposit"
+            );
+        }
     }
 }

@@ -9,17 +9,24 @@
 #   infra/devnet/dev-node.sh bootstrap   up (if needed) + nvhash-deploy-p2p.sh
 #   infra/devnet/dev-node.sh status      container + block height
 #
-# IMAGE: defaults to `ghcr.io/provlabs/vault-dev-node:latest`, pulled
-# automatically when absent. It contains the settlement-era vault module
-# (AcceptAsset); no provenance repo is needed — the image's entrypoint
+# IMAGE: defaults to `ghcr.io/provlabs/vault-dev-node:v1.2.4-rc2`, pulled
+# automatically when absent. It ships vault module v1.2.4, which the contract's
+# settlement path requires: the approval carries the full payment, repricing a
+# held asset requires a paused vault, and `tx vault create` takes a leading
+# authority argument. No provenance repo is needed — the image's entrypoint
 # generates genesis/config into the mounted state dir on first run. To use a
-# locally built image instead (e.g. `make docker-build-dev` from a provenance
-# checkout wired to pre-release vault main), set IMAGE to its tag.
+# locally built image instead, set IMAGE to its tag (build from a provenance
+# checkout whose go.mod pins github.com/provlabs/vault v1.2.4:
+# `GOTOOLCHAIN=go1.25.8 make docker-build-dev`).
+#
+# The pin is deliberate. Compatibility with the vault module is established by
+# version, not by probing for a message, so an image floating on `:latest` is
+# not a substitute.
 #
 # Environment overrides:
 #   DEVNET_HOME=infra/devnet/state  state dir (bind-mounted at /provenance)
 #   CONTAINER=dev-node         container name
-#   IMAGE=ghcr.io/provlabs/vault-dev-node:latest
+#   IMAGE=ghcr.io/provlabs/vault-dev-node:v1.2.4-rc2
 #   UNBONDING=120s             staking unbonding_time patched into genesis
 #   PUBLISH_PORTS=1            expose 26657/9090/1317 on localhost (0 = off)
 #   SLASH_WINDOW=              if set, slashing signed_blocks_window patched
@@ -34,7 +41,7 @@ set -euo pipefail
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEVNET_HOME="${DEVNET_HOME:-$SDIR/state}"
 CONTAINER="${CONTAINER:-dev-node}"
-IMAGE="${IMAGE:-ghcr.io/provlabs/vault-dev-node:latest}"
+IMAGE="${IMAGE:-ghcr.io/provlabs/vault-dev-node:v1.2.4-rc2}"
 UNBONDING="${UNBONDING:-120s}"
 PUBLISH_PORTS="${PUBLISH_PORTS:-1}"
 CMD="${1:-up}"
@@ -50,8 +57,10 @@ require_image() {
   docker pull "$IMAGE" && return 0
   echo "pull of '$IMAGE' failed." >&2
   echo "Either authenticate to the registry (docker login ghcr.io) or build a" >&2
-  echo "local image from a provenance checkout wired to the settlement-era" >&2
-  echo "vault module (make docker-build-dev) and set IMAGE to its tag." >&2
+  echo "local image from a provenance checkout whose go.mod pins" >&2
+  echo "github.com/provlabs/vault v1.2.4 (make docker-build-dev) and set IMAGE" >&2
+  echo "to its tag. Do not substitute an older or floating vault image: the" >&2
+  echo "contract's settlement messages are v1.2.4-shaped." >&2
   exit 1
 }
 
