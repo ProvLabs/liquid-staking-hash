@@ -230,8 +230,23 @@ jobs:
           # Link first, so every build-script shared library exists, then put
           # their directories on the loader path before any binary runs.
           cargo test --locked --no-run
+          # provwasm-test-tube's Go shared libraries are build-script output in a
+          # per-build-hash OUT_DIR, and they are not in the restored cache. On a
+          # warm cache the crate is already fresh, so the link above re-runs
+          # nothing and the libraries are simply absent: the search below then
+          # finds nothing, LD_LIBRARY_PATH is empty, and every test binary dies
+          # with "cannot open shared object file" (exit 127). Discarding just
+          # that crate forces its build script to run and re-emit them.
+          if ! find target "$HOME/.cargo/registry" -name 'libwasmvm*.so' -type f -print -quit 2>/dev/null | grep -q .; then
+            echo "libwasmvm absent after link — forcing provwasm-test-tube to rebuild"
+            cargo clean --locked -p provwasm-test-tube
+            cargo test --locked --no-run
+          fi
           libdirs="$(find target "$HOME/.cargo/registry" -name 'lib*.so' -type f -printf '%h\n' 2>/dev/null | sort -u | tr '\n' ':' || true)"
           export LD_LIBRARY_PATH="${libdirs}${LD_LIBRARY_PATH:-}"
+          # A silent miss here becomes an unreadable exit 127 below, so say so.
+          echo "$libdirs" | tr ':' '\n' | grep -q . \
+            || echo "WARNING: no shared-library directories found; tests may fail to load libwasmvm"
           cargo test --locked
 
   # The chain-free simulation soak. Bounded and fixed-seed so it terminates and
