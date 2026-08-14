@@ -178,7 +178,11 @@ if [ -n "$VAULT" ] && [ "$VAULT" != "null" ]; then
   echo "  vault for share '$SHARE' exists at $VAULT — skipping create"
 else
   echo "== vault create (share=$SHARE, underlying=$UNDERLYING, delay=$WITHDRAWAL_DELAY) =="
-  tx vault create "$ADMIN" "$SHARE" "$UNDERLYING" \
+  # create [authority] [admin] [share_denom] [underlying_asset]: the authority
+  # signs. It must be the governance module account only where the module's
+  # gov_only_vault_creation param is enabled, which the param defaults to off
+  # and this dev chain leaves off — so the admin creates its own vault directly.
+  tx vault create "$ADMIN_ADDR" "$ADMIN_ADDR" "$SHARE" "$UNDERLYING" \
       --withdrawal-delay-seconds "$WITHDRAWAL_DELAY" --from "$ADMIN" >/dev/null
   VAULT="$(vault_addr "$SHARE")"
 fi

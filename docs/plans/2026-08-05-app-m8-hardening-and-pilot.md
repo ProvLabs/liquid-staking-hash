@@ -206,6 +206,15 @@ recorded decision. Results are recorded where the repo already records them:
 table, spec revision notes, `chain-facts.md` provenance columns.
 
 **8.0 — vault release vetting (hard gate, external clock):**
+
+*Status 2026-08-13: the release exists (ProvLabs/vault v1.2.4, cut
+2026-08-12) and the **contracts/devnet half is in flight** on branch
+`upgrade-vault-version` —
+[plan](2026-08-13-m8.0-contracts-vault-1.2.4-upgrade.md). The rows below stay
+unticked: each also covers app-side work (fixture re-capture, suite re-runs)
+that PR excludes, and its own drill coverage is partial until a session spans
+a month rollover.*
+
 - [ ] Formal vault release pinned; feature-probe language retired.
 - [ ] Fixture corpus re-captured against the released build (full reset; the
       E-CAL boundary constraint resolved per CO-30) and diffed against the
