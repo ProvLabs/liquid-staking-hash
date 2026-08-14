@@ -264,6 +264,18 @@ attribution, slash write-down); the full record is in spec §14. Still open:
       (not 404) with a body identical for pruned and never-existing, and
       `PROPOSAL_STATUS_ABORTED` remains unreachable (lands ACCEPTED).
       `Config.admin` was the group policy throughout
+- [x] **Migrate entry point drilled end-to-end** — 2026-08-14, image
+      `vault-dev-node:v1.2.4-rc2`. The contract now exports `migrate`
+      (empty `MigrateMsg`, cw2 name guard, version re-stamp; spec §11).
+      Devnet drill: bootstrap deployed the PRE-entry-point 0.1.0 artifact,
+      a `MsgMigrateContract` onto a re-store of that artifact failed with
+      `Missing export migrate` (negative control), migration onto the 0.1.1
+      artifact succeeded emitting `from_version=0.1.0 to_version=0.1.1`,
+      `contract_info.code_id` moved, the cw2 record re-stamped, and `Config`
+      was byte-identical across the migration. Unit coverage:
+      `migrate_restamps_cw2_version_and_rejects_foreign_code` (missing cw2
+      record errors; foreign contract name rejected; same-version re-migrate
+      allowed)
 - [ ] Runtime [VERIFY] items still open after the 2026-08-13 drill. Each needs
       a SECOND epoch crank in a later calendar month, or a real slash, so none
       could run in this session (see the drill-coverage note in §4):
