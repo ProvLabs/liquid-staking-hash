@@ -453,6 +453,15 @@ Privileged endpoints check the caller against the configured `admin` authority (
 | `ClearPendingDelegations {}` | admin | Recovery hatch: drop stuck continuation queues (§9.9). |
 | `PauseVault { reason }` / `UnpauseVault {}` | admin | Manual vault pause/unpause through the contract's asset-manager authority. |
 
+**Migration.** The contract exports a `migrate` entry point taking an empty
+`MigrateMsg {}`. Authorization is wasmd's, not the contract's: only the
+contract's **CosmWasm admin** (§12.1) may execute `MsgMigrateContract`. The
+entry point rejects an artifact whose cw2 contract name differs from the stored
+record (wrong-artifact guard), then re-stamps the cw2 version and touches no
+other state — the storage layout is shared across code versions, and a future
+layout change must ship its transformation in this entry point. Same-version
+migration is permitted.
+
 ### 11.3 Query endpoints
 `Config {}`; `Validators {}` (every enrolled validator with its live assessment — uptime, jailed/tombstoned, commission accrued/paid/due and arrears, TIP, eligibility, concentration headroom — sorted by program priority, the reverse of the drain order; this single endpoint carries the priority, commission and tip views); `EpochStatus {}` (phase, halted, last run, `receipt_minted`, pending continuation queues — the §5.1 invariant view); `JailReports {}` (open reports with their purge-ready times); `EpochSnapshot {}` (the last epoch's value decomposition, §9.10); `Apr {}` (gross and net-of-drags APR in bps with the full breakdown, §9.10 / §17 R2).
 
@@ -488,6 +497,7 @@ Every administrative and operations function in the system is gated behind **`x/
 
 - **Vault admin** (top-level: `SetAssetManager`, swap toggles, bridge config `SetBridgeAddress`/`ToggleBridgeEnabled`) → an **admin group policy**.
 - **Program config** (`UpdateConfig`: thresholds, commission rate, epoch length, safety offset, tolerances) → an **operations group policy** (a distinct group from admin, with its own membership and threshold). *(There is no plan submission — the rebalance is computed in-contract, §9.0.)*
+- **Contract code replacement** (`MsgMigrateContract`, plus `MsgUpdateAdmin`/`MsgClearAdmin` over the admin itself) → the **admin group policy**, installed as the contract's CosmWasm admin at deployment handoff. This authority subsumes every other power the contract holds — it can install arbitrary code carrying the asset-manager, mint/burn, and NAV authorities — so it is never left with a single key after bring-up, and the §11 migrate entry point is its only in-contract surface.
 - **Note:** uptime/performance is **not** a governed input — it is read on-chain (§10.3), so no group submits it. This removes a whole class of trusted data submission from the governance surface.
 - The Staking Contract authorizes these calls by checking the caller against the configured group-policy address(es); proposals/votes/execution are handled by the group module.
 - **On-chain verifiability:** the `x/group` queries (`GroupInfo`, `GroupPolicyInfo`, `GroupMembers`, …) are in the ProvWasm stargate whitelist, so the contract (or auditors/monitors) can verify policy membership and thresholds on-chain.

@@ -12,6 +12,9 @@ pub enum ContractError {
     #[error("invalid config: {reason}")]
     InvalidConfig { reason: String },
 
+    #[error("cannot migrate: stored contract is {stored}, this code is {expected}")]
+    InvalidMigration { stored: String, expected: String },
+
     #[error("halted: cranks are disabled by the admin")]
     Halted {},
 

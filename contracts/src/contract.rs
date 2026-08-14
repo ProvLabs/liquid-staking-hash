@@ -8,8 +8,8 @@ use cw2::set_contract_version;
 use provwasm_std::types::provlabs::vault::v1::{MsgPauseVaultRequest, MsgUnpauseVaultRequest};
 
 use crate::msg::{
-    ConfigResponse, EpochStatusResponse, ExecuteMsg, InstantiateMsg, PendingDelegation, QueryMsg,
-    ValidatorStatus, ValidatorsResponse,
+    ConfigResponse, EpochStatusResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, PendingDelegation,
+    QueryMsg, ValidatorStatus, ValidatorsResponse,
 };
 use crate::state::{
     Config, EpochPhase, EpochState, CONFIG, EPOCH, HALTED, PENDING_DELEGATIONS, RECEIPT_MINTED,
@@ -73,6 +73,27 @@ pub fn instantiate(
     crate::state::PENDING_REDELEGATIONS.save(deps.storage, &vec![])?;
     HALTED.save(deps.storage, &false)?;
     Ok(Response::new().add_attribute("action", "instantiate"))
+}
+
+/// Handles `MsgMigrateContract` (wasmd already verified the CosmWasm admin).
+/// Errors if the stored cw2 contract name is not [`CONTRACT_NAME`] — wrong
+/// artifact — otherwise re-stamps the cw2 version and touches no other state.
+/// Same-version migration is allowed; a future storage-layout change must add
+/// its transformation here.
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let stored = cw2::get_contract_version(deps.storage)?;
+    if stored.contract != CONTRACT_NAME {
+        return Err(ContractError::InvalidMigration {
+            stored: stored.contract,
+            expected: CONTRACT_NAME.to_string(),
+        });
+    }
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("from_version", stored.version)
+        .add_attribute("to_version", CONTRACT_VERSION))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

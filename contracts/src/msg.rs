@@ -115,6 +115,11 @@ pub enum ExecuteMsg {
     RunEpoch {},
 }
 
+/// Migration message. Empty: no state transformation is needed, so migration
+/// only re-stamps the cw2 version record.
+#[cw_serde]
+pub struct MigrateMsg {}
+
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {

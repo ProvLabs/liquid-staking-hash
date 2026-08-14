@@ -1,6 +1,6 @@
 {
   "contract_name": "nvhash-staking",
-  "contract_version": "0.1.0",
+  "contract_version": "0.1.1",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -561,7 +561,13 @@
       }
     ]
   },
-  "migrate": null,
+  "migrate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MigrateMsg",
+    "description": "Migration message. Empty: no state transformation is needed, so migration only re-stamps the cw2 version record.",
+    "type": "object",
+    "additionalProperties": false
+  },
   "sudo": null,
   "responses": {
     "apr": {

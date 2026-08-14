@@ -692,3 +692,47 @@ fn run_epoch_enforces_calendar_month_and_leaves_vault_unpaused() {
     assert!(status.pending_delegations.is_empty());
     assert_eq!(status.receipt_minted, Uint128::zero());
 }
+
+#[test]
+fn migrate_restamps_cw2_version_and_rejects_foreign_code() {
+    use crate::contract::{migrate, CONTRACT_NAME, CONTRACT_VERSION};
+    use crate::msg::MigrateMsg;
+    use crate::ContractError;
+    use cosmwasm_std::testing::{mock_dependencies, mock_env};
+
+    let mut deps = mock_dependencies();
+
+    // No cw2 record (contract never instantiated): migrate must error, not panic.
+    migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap_err();
+
+    // Migrating from an older version of this contract re-stamps the record
+    // and reports the transition; a repeat at the same version still succeeds.
+    cw2::set_contract_version(deps.as_mut().storage, CONTRACT_NAME, "0.0.9").unwrap();
+    for expected_from in ["0.0.9", CONTRACT_VERSION] {
+        let res = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap();
+        let attr = |k: &str| {
+            res.attributes
+                .iter()
+                .find(|a| a.key == k)
+                .map(|a| a.value.clone())
+                .unwrap()
+        };
+        assert_eq!(attr("action"), "migrate");
+        assert_eq!(attr("from_version"), expected_from);
+        assert_eq!(attr("to_version"), CONTRACT_VERSION);
+        let stored = cw2::get_contract_version(deps.as_mut().storage).unwrap();
+        assert_eq!(stored.contract, CONTRACT_NAME);
+        assert_eq!(stored.version, CONTRACT_VERSION);
+    }
+
+    // A cw2 record naming a different contract is a wrong artifact: rejected.
+    cw2::set_contract_version(deps.as_mut().storage, "crates.io:other", "9.9.9").unwrap();
+    let err = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidMigration {
+            stored: "crates.io:other".to_string(),
+            expected: CONTRACT_NAME.to_string(),
+        }
+    );
+}
