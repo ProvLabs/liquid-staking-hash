@@ -78,7 +78,7 @@ Internal testing/operations web console.
   implementation; the console's own `test/tx-fee.test.ts` gates the mirror
   beside the App's `apps/web/test/tx-fee.test.ts`.
 - The index.html CSP `connect-src` is **generated per profile** from
-  `VITE_LCD_URL` (`build/csp.ts` via `vite.config.ts`; gated by
+  `VITE_LCD_URL` (`scripts/csp.ts` via `vite.config.ts`; gated by
   `test/csp.test.ts`) — one exact origin, `localhost` only on devnet, and the
   build throws on a wildcard or blanket scheme. Never hand-edit a host into
   `index.html`; a deployment on a different LCD changes the profile's

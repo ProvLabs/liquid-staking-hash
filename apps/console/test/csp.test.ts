@@ -4,7 +4,7 @@
 // red; hand-editing index.html back to a static list fails the token case.
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { connectSrcFor } from "../build/csp";
+import { connectSrcFor } from "../scripts/csp";
 
 describe("connectSrcFor — exact origin per profile", () => {
   it("pins the exact origin of the profile's LCD, nothing else", () => {

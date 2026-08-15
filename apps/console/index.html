@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Self-contained delivery (spec §12): strict CSP, only the configured LCD as a
          network peer. connect-src is GENERATED per profile from VITE_LCD_URL — the
-         token below is replaced by vite.config.ts (build/csp.ts, which throws on
+         token below is replaced by vite.config.ts (scripts/csp.ts, which throws on
          anything wider than one exact origin) — never a hand-edited host list and
          never a blanket https: (SECURITY.md: injected code must not be able to
          exfiltrate to arbitrary hosts). Server headers may tighten further (8.4). -->

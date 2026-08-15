@@ -46,7 +46,7 @@ metadata:
   name: console
   annotations:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # The CSP header: same directives as the built meta tag (build/csp.ts is
+    # The CSP header: same directives as the built meta tag (scripts/csp.ts is
     # the connect-src authority — lcd.test.provenance.io must equal the
     # overlay's LCD host) + frame-ancestors 'none' (headers-only directive;
     # without it the public pilot is framable — clickjacking on a

@@ -207,10 +207,10 @@ echo; echo "########## 5/6  POST-MIGRATE STATE IS BYTE-IDENTICAL (contract_info 
 assert_eq "cw2 version advanced" "$(cw2_version)" "0.1.1"
 DUMP_AFTER="$(state_dump)"
 # Diff the dumps excluding the cw2 marker key (base64 of "contract_info").
-CW2_KEY="Y29udHJhY3RfaW5mbw=="
+CW2_STATE_ENTRY_B64="Y29udHJhY3RfaW5mbw=="
 DIFF_KEYS="$(jq -n --argjson a "$DUMP_BEFORE" --argjson b "$DUMP_AFTER" '
   [($a - $b)[].key, ($b - $a)[].key] | unique')"
-assert_eq "changed raw keys" "$(echo "$DIFF_KEYS" | jq -c '.')" "[\"$CW2_KEY\"]"
+assert_eq "changed raw keys" "$(echo "$DIFF_KEYS" | jq -c '.')" "[\"$CW2_STATE_ENTRY_B64\"]"
 # Belt and braces at the interface level: the three primary queries answer
 # post-migrate (the raw dump above is the byte-level equality).
 for q in '{"config":{}}' '{"epoch_status":{}}' '{"validators":{}}'; do

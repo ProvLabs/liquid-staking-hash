@@ -55,6 +55,7 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     await writer.validatorEpoch.deleteMany();
     await writer.validatorRegistry.deleteMany();
     await writer.transaction.deleteMany();
+    await writer.holderLifecycle.deleteMany();
     await writer.redemptionRequest.deleteMany();
     await writer.epochSnapshot.deleteMany();
     await writer.marketSample.deleteMany();
@@ -80,6 +81,19 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
         deltas: {},
         withinTolerance: true,
       },
+    });
+    // The MATERIALIZED lifecycles the reader now serves (8.2 commit D): in
+    // production the chain-events worker recomputes these from `transactions`
+    // inside each window — that writer-side equality is gated by the
+    // indexer's holder-lifecycle-materialization suite, so THIS suite seeds
+    // the materialized rows as fixtures consistent with the transactions
+    // below (alice first deposit @100, no exit — her swap_out_request is net
+    // zero on the total position; bob @200, no exit) and tests the READER.
+    await writer.holderLifecycle.createMany({
+      data: [
+        { address: "pb1alice", firstDepositHeight: 100n, exitHeight: null },
+        { address: "pb1bob", firstDepositHeight: 200n, exitHeight: null },
+      ],
     });
     await writer.transaction.createMany({
       data: [
@@ -914,13 +928,14 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     }
   });
 
-  it("folds holder lifecycles in SQL, ascending and capped, with no address", async () => {
+  it("serves materialized holder lifecycles, ascending and capped, with no address", async () => {
     const lifecycles = await reader.holderLifecycles(100);
     expect(lifecycles).toHaveLength(2);
     // ASC by first-deposit height: alice (100) before bob (200).
     expect(lifecycles.map((l) => Number(l.firstDepositHeight))).toEqual([100, 200]);
-    // Neither has exited: `swap_out_request` moves value to escrow and is net
-    // zero on the total position, which is the derivePortfolioMetrics rule.
+    // Neither has exited (the materialized rows mirror the transactions:
+    // `swap_out_request` moves value to escrow and is net zero on the total
+    // position, the derivePortfolioMetrics rule).
     expect(lifecycles.every((l) => l.exitHeight === null)).toBe(true);
     // The shape carries no identity, asserted against the REAL query.
     expect(Object.keys(lifecycles[0]!).sort()).toEqual(["exitHeight", "firstDepositHeight"]);

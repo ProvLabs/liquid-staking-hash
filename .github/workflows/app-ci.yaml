@@ -433,7 +433,7 @@ jobs:
             echo "ok (refused): $*"
           }
           expect_refusal env INDEXER_WRITER_PASSWORD=placeholder-value \
-            API_READER_PASSWORD=some-realistic-password-1 APP_WRITER_PASSWORD=some-realistic-password-2 \
+            API_READER_PASSWORD=example-password-000000001 APP_WRITER_PASSWORD=example-password-000000002 \
             PROVISION_DATABASE_URL=postgresql://admin@db/x \
             bash infra/deploy/k8s/base/jobs/provision-roles.sh
           expect_refusal env -u PROVISION_DATABASE_URL \
