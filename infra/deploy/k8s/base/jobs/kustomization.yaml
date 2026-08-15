@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - jobs.yaml
+configMapGenerator:
+  # The provisioning SQL wrapper rides as a ConfigMap-mounted script; the
+  # file lives HERE (not a shared ../db/) because kustomize's load
+  # restriction forbids file sources outside the kustomization root.
+  - name: db-provision-script
+    files:
+      - provision-roles.sh

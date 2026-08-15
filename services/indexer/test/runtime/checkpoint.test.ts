@@ -6,7 +6,7 @@
 // throwing worker body reaches neither the cursor upsert nor a commit.
 
 import { describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../../src/prisma.ts";
 import { readCheckpoint, runWindow, trailingTarget } from "../../src/runtime/checkpoint.ts";
 
 interface UpsertCall {

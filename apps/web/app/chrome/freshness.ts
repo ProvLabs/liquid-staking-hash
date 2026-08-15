@@ -8,13 +8,23 @@ export type FreshnessDisplay =
   | { kind: "na" }
   | { kind: "indexed"; height: number; ageSeconds: number };
 
-/** Classify freshness meta for the footer. `nowMs` is injectable for tests. */
-export function describeFreshness(meta: FreshnessMeta | null, nowMs: number): FreshnessDisplay {
+/**
+ * Classify freshness meta for the footer. `nowMs` is injectable for tests.
+ *
+ * The age derives from `reconciledAt ?? generated_at` — the DATA'S age when
+ * the API reports one (the reconciler run's ranAt), falling back to the
+ * response clock only when no data age exists (cold start, or an older API).
+ * With a dead indexer, `generated_at` stays current while `reconciledAt`
+ * grows: "(5m ago)" must describe the data, not the HTTP response (8.1 §2.2).
+ */
+export function describeFreshness(
+  meta: FreshnessMeta | null,
+  nowMs: number,
+  reconciledAt: string | null = null,
+): FreshnessDisplay {
   if (meta === null || meta.indexed_height === null) return { kind: "na" };
-  const generated = Date.parse(meta.generated_at);
-  const ageSeconds = Number.isFinite(generated)
-    ? Math.max(0, Math.round((nowMs - generated) / 1000))
-    : 0;
+  const stamp = Date.parse(reconciledAt ?? meta.generated_at);
+  const ageSeconds = Number.isFinite(stamp) ? Math.max(0, Math.round((nowMs - stamp) / 1000)) : 0;
   return { kind: "indexed", height: meta.indexed_height, ageSeconds };
 }
 

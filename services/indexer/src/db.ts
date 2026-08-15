@@ -3,7 +3,7 @@
 // read-only client for the same schema is published separately as
 // `@nvhash/db-indexed` for `services/api` (/1.3).
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "./prisma.ts";
 
 let client: PrismaClient | undefined;
 

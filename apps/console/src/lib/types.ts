@@ -17,6 +17,9 @@ export interface ConfigResponse {
   concentration_safety_offset_bps: number;
   commission_bps: number;
   jail_unbond_delay_secs: number;
+  /** Absent on pre-8.4a deployed builds (the field's serde default is 50 on
+   *  chain, but an old binary omits the key entirely) — optional, never 0. */
+  redemption_margin_bps?: number;
 }
 
 export type EpochPhase = "Idle" | "Releasing";
@@ -137,4 +140,83 @@ export interface LedgerRow extends EpochSnapshot {
   net_apr_bps: number;
   gross_apr_bps: number;
   observed_at: number;
+}
+
+// ---- x/group governance reads (spec §8.0 /governance; PR 8.4b) -------------
+// Mirror-tracked against the LCD shapes the indexer's governance worker reads
+// (services/indexer/src/workers/governance/{policies,state}.ts) — update in
+// the same change as any route or field the worker's decode moves to.
+
+export interface GroupPolicyInfo {
+  address: string;
+  group_id: string;
+  admin: string;
+  metadata: string;
+  version: string;
+  /** Raw decision policy Any — threshold and windows read defensively. */
+  decision_policy: {
+    "@type"?: string;
+    threshold?: string;
+    percentage?: string;
+    windows?: { voting_period?: string; min_execution_period?: string };
+  } & Record<string, unknown>;
+}
+
+export interface GroupInfo {
+  id: string;
+  admin: string;
+  metadata: string;
+  version: string;
+  total_weight: string;
+}
+
+export interface GroupMember {
+  group_id: string;
+  member: { address: string; weight: string; metadata: string; added_at?: string };
+}
+
+export type ProposalStatus =
+  | "PROPOSAL_STATUS_SUBMITTED"
+  | "PROPOSAL_STATUS_ACCEPTED"
+  | "PROPOSAL_STATUS_REJECTED"
+  | "PROPOSAL_STATUS_ABORTED"
+  | "PROPOSAL_STATUS_WITHDRAWN";
+
+export interface TallyCounts {
+  yes_count: string;
+  no_count: string;
+  abstain_count: string;
+  no_with_veto_count: string;
+}
+
+export interface GroupProposal {
+  id: string;
+  group_policy_address: string;
+  metadata: string;
+  proposers: string[];
+  submit_time: string;
+  group_version: string;
+  group_policy_version: string;
+  status: ProposalStatus;
+  /** Zeros until the module tallies — NEVER rendered for an open proposal
+   *  (chain-facts §x/group 7); the live tally comes from the Tally query. */
+  final_tally_result: TallyCounts;
+  voting_period_end: string;
+  executor_result: string;
+  messages: unknown[];
+}
+
+export interface GroupVote {
+  proposal_id: string;
+  voter: string;
+  option: string;
+  metadata: string;
+  submit_time: string;
+}
+
+/** A bounded LCD sweep: `truncated` means the page cap was hit — the list is
+ *  a prefix, never evidence of absence (chain-facts §x/group 9). */
+export interface Bounded<T> {
+  items: T[];
+  truncated: boolean;
 }

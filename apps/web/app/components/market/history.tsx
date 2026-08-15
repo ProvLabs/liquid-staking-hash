@@ -52,7 +52,14 @@ export function History({
     <section aria-label={t(locale, "market.history-title")} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-xl font-semibold">{t(locale, "market.history-title")}</h2>
-        <VerifyLink locale={locale} target="overview" />
+        {/* Anchored to the LATEST settled epoch — the row this section's
+            newest figures derive from. The chart tables are generated cells,
+            so the section link is the anchor's carrier, one per surface. */}
+        <VerifyLink
+          locale={locale}
+          target="overview"
+          anchor={rows.length > 0 ? { epochIndex: rows[rows.length - 1]!.epoch_index } : undefined}
+        />
       </div>
       {navRows.length < 2 ? (
         <ColdState locale={locale} epochs={epochs} title={t(locale, "market.history-nav-title")} />

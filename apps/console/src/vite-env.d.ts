@@ -23,3 +23,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Baked at build by vite.config.ts from packages/fixtures manifest.json's
+ *  status (plan 8.4 §2.7.2): true only once 8.0's re-capture certifies the
+ *  corpus. Not an env var — there is no per-environment flag to lie with. */
+declare const __CORPUS_CERTIFIED__: boolean;

@@ -1,4 +1,6 @@
 import { t, type Locale, type MessageKey } from "~/i18n";
+import type { Completeness } from "~/api/completeness";
+import { VerifyLink } from "~/components/verify-link";
 import type { RedemptionVM } from "~/portfolio/types";
 
 // §8.2 active redemptions: self-contained status rows from the
@@ -6,6 +8,11 @@ import type { RedemptionVM } from "~/portfolio/types";
 // console-§11.2 family). No link to /exit until 5.4 ships that tracker; a
 // recorded deferral note stands in. The VM carries no maturity estimate yet,
 // so no countdown is fabricated.
+//
+// `completeness` renders the honesty state of the SET: "partial" says the
+// producer trimmed to the newest N (never an unlabeled prefix), "unknown"
+// (older API, no flag) withholds the completeness claim. Gated by
+// test/portfolio-data.test.ts.
 
 const STATUS: Record<
   RedemptionVM["status"],
@@ -45,13 +52,24 @@ function dateOf(iso: string): string {
 export function ActiveRedemptions({
   locale,
   redemptions,
+  completeness,
 }: {
   locale: Locale;
   redemptions: RedemptionVM[];
+  completeness: Completeness;
 }) {
   return (
     <section aria-label={t(locale, "portfolio.redemptions-title")} className="flex flex-col gap-3">
       <h2 className="text-xl font-semibold">{t(locale, "portfolio.redemptions-title")}</h2>
+      {completeness === "partial" ? (
+        <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+          {t(locale, "portfolio.redemptions-partial", { count: String(redemptions.length) })}
+        </p>
+      ) : completeness === "unknown" && redemptions.length > 0 ? (
+        <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+          {t(locale, "portfolio.redemptions-completeness-unknown")}
+        </p>
+      ) : null}
       {redemptions.length === 0 ? (
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
           {t(locale, "portfolio.redemptions-empty")}
@@ -90,17 +108,31 @@ export function ActiveRedemptions({
                     {settledLabel !== null ? ` · ${settledLabel}` : ""}
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1.5 text-sm">
-                  <svg
-                    aria-hidden="true"
-                    focusable="false"
-                    viewBox="0 0 16 16"
-                    className="h-3 w-3 shrink-0"
-                    style={{ fill: status.token }}
-                  >
-                    <path d={status.iconPath} />
-                  </svg>
-                  {t(locale, status.labelKey)}
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-sm">
+                    <svg
+                      aria-hidden="true"
+                      focusable="false"
+                      viewBox="0 0 16 16"
+                      className="h-3 w-3 shrink-0"
+                      style={{ fill: status.token }}
+                    >
+                      <path d={status.iconPath} />
+                    </svg>
+                    {t(locale, status.labelKey)}
+                  </span>
+                  {/* Anchored per row only while the request is still on the
+                      chain's queue — a matured/refunded request has left it,
+                      and the App must not offer an anchor it knows resolves
+                      to nothing (§12.2, the per-row D8 rule). */}
+                  {(r.status === "enqueued" || r.status === "expedited") &&
+                  /^\d{1,15}$/.test(r.requestId) ? (
+                    <VerifyLink
+                      locale={locale}
+                      target="redemptions"
+                      anchor={{ requestId: Number(r.requestId) }}
+                    />
+                  ) : null}
                 </span>
               </li>
             );

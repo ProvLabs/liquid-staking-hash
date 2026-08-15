@@ -14,6 +14,7 @@
 
 import { Prisma, PrismaClient } from "@nvhash/db-indexed";
 import {
+  deriveMarketSummary,
   derivePayoutStats,
   derivePortfolio,
   deriveHeads,
@@ -25,10 +26,8 @@ import {
   toAlertArrearsFact,
   toAlertIncidentFact,
   toAlertRedemptionFact,
-  toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
-  toMarketSample,
   toSafeInt,
   toTransactionRow,
   type ValidatorEpochFacts,
@@ -41,7 +40,13 @@ import type {
 } from "./admin-derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Heads, IndexedReader, RedemptionLatencies } from "./reader.ts";
-import { MAX_GOV_POLICIES, MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
+import {
+  MAX_ACTIVE_REDEMPTIONS,
+  MAX_BRIDGED_SUPPLY_ROWS,
+  MAX_GOV_POLICIES,
+  MAX_GOV_VOTES_PER_PROPOSAL,
+  MAX_VALIDATOR_REGISTRY_ROWS,
+} from "@nvhash/api-types";
 import type { Pagination } from "./query.ts";
 import type {
   AdminIncidentFacts,
@@ -437,7 +442,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     async heads(): Promise<Heads> {
       const run = await prisma.reconcilerRun.findFirst({
         orderBy: { ranAt: "desc" },
-        select: { chainHeight: true, indexedHeight: true },
+        select: { chainHeight: true, indexedHeight: true, ranAt: true },
       });
       if (run !== null) return deriveHeads(run, null);
       return deriveHeads(null, await maxWorkerCheckpoint());
@@ -511,8 +516,12 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     },
 
     async listValidators(): Promise<ValidatorsPayload> {
+      // Detect-then-trim (the `MAX_GOV_VOTES_PER_PROPOSAL + 1` idiom): the
+      // registry accumulates churn forever, so the read is bounded and the
+      // one extra row is how `deriveValidatorsPayload` knows to flag.
       const registry = await prisma.validatorRegistry.findMany({
         orderBy: [{ moniker: "asc" }, { valoper: "asc" }],
+        take: MAX_VALIDATOR_REGISTRY_ROWS + 1,
         select: { valoper: true, moniker: true, unregisteredAt: true },
       });
       // Latest sampled epoch per validator, via `DISTINCT ON` (2026-07-28
@@ -560,12 +569,15 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       });
       // Latest reading per remote chain (ordered desc within each chain,
       // `distinct` keeps the first = latest — the validators pattern).
+      // Detect-then-trim: one row per remote chain, chain count externally
+      // governed, so the read is bounded and the extra row drives the flag.
       const bridged = await prisma.bridgeSupplySample.findMany({
         orderBy: [{ chain: "asc" }, { sampledAt: "desc" }, { id: "desc" }],
         distinct: ["chain"],
+        take: MAX_BRIDGED_SUPPLY_ROWS + 1,
         select: { chain: true, remoteSupply: true, sampledAt: true },
       });
-      let sample = null;
+      let nav: bigint | null = null;
       if (raw !== null) {
         // [R6] the premium denominator is the NAV current AT THE SAMPLE'S
         // time: the last epoch settled at or before sampledAt — never a
@@ -576,31 +588,28 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           orderBy: { epochIndex: "desc" },
           select: { tvvAfter: true, totalShares: true },
         });
-        const nav =
+        nav =
           navEpoch === null
             ? null
             : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
-        sample = toMarketSample(
-          {
-            venue: raw.venue,
-            pool: raw.pool,
-            priceNhash: toBigint(raw.price),
-            depthBands: raw.depthBands,
-            sampledAt: raw.sampledAt,
-          },
-          nav,
-        );
       }
-      return {
-        sample,
-        bridged_supply: bridged.map((row) =>
-          toBridgedSupplyRow({
-            chain: row.chain,
-            remoteSupply: toBigint(row.remoteSupply),
-            sampledAt: row.sampledAt,
-          }),
-        ),
-      };
+      return deriveMarketSummary(
+        raw === null
+          ? null
+          : {
+              venue: raw.venue,
+              pool: raw.pool,
+              priceNhash: toBigint(raw.price),
+              depthBands: raw.depthBands,
+              sampledAt: raw.sampledAt,
+            },
+        nav,
+        bridged.map((row) => ({
+          chain: row.chain,
+          remoteSupply: toBigint(row.remoteSupply),
+          sampledAt: row.sampledAt,
+        })),
+      );
     },
 
     async payoutStats(): Promise<PayoutStats> {
@@ -645,9 +654,13 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           select: { blockTime: true },
         }),
         prisma.transaction.count({ where: { address } }),
+        // Detect-then-trim: enqueueing is permissionless, so the read is
+        // bounded and the one extra row is how `derivePortfolio` knows to
+        // flag (newest-first, so a trim drops the oldest).
         prisma.redemptionRequest.findMany({
           where: { owner: address, status: { in: ["enqueued", "expedited"] } },
           orderBy: { enqueuedAt: "desc" },
+          take: MAX_ACTIVE_REDEMPTIONS + 1,
         }),
       ]);
       return derivePortfolio(
@@ -995,63 +1008,23 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     },
 
     async holderLifecycles(limit: number): Promise<HolderLifecycleFacts[]> {
-      // One row per depositor, WITHOUT the address. The running position is a
-      // window function so the fold happens in Postgres over an indexed scan
-      // rather than by materializing every transaction in this process — the
-      // `operator_payments` lesson applied to a table with the same
-      // permissionless-growth problem.
+      // One row per depositor, WITHOUT the address — the column exists on the
+      // table and is deliberately never selected (the fact shape carries the
+      // two heights only). The window-function fold this read once ran on
+      // every /admin load is MATERIALIZED into `holder_lifecycles` by the
+      // chain-events worker (PR 8.2 commit D, landed on T3's breaching
+      // measurement: 21.6 s p95 at 1.2 M transactions against the 2.5 s
+      // criterion); this is now an indexed ORDER BY + LIMIT. The equality
+      // gate in the indexer's integration suite holds the table to the fold's
+      // output.
       //
-      // The delta convention matches derivePortfolioMetrics: `swap_out_request`
-      // and `redemption_refund` move value between held and escrow and are net
-      // zero on the TOTAL position, so they contribute nothing here.
-      //
-      // The exit is the first height at or after the first deposit where the
-      // running total reaches zero. "At or after" matters: a transfer-in before
-      // any deposit would otherwise register as an exit at height zero.
-      const rows = await prisma.$queryRaw<
-        Array<{ firstDepositHeight: bigint; exitHeight: bigint | null }>
-      >(Prisma.sql`
-        WITH deltas AS (
-          SELECT "address", "height", "msgIndex",
-                 CASE "kind"
-                   WHEN 'swap_in'           THEN "shares"
-                   WHEN 'transfer_in'       THEN "shares"
-                   WHEN 'redemption_payout' THEN -"shares"
-                   WHEN 'transfer_out'      THEN -"shares"
-                   ELSE 0
-                 END AS delta
-          FROM "indexed"."transactions"
-        ),
-        running AS (
-          SELECT "address", "height",
-                 SUM(delta) OVER (
-                   PARTITION BY "address" ORDER BY "height", "msgIndex"
-                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                 ) AS position
-          FROM deltas
-        ),
-        first_deposit AS (
-          SELECT "address", MIN("height") AS first_height
-          FROM "indexed"."transactions"
-          WHERE "kind" = 'swap_in'
-          GROUP BY "address"
-        ),
-        exited AS (
-          SELECT r."address", MIN(r."height") AS exit_height
-          FROM running r
-          JOIN first_deposit f ON f."address" = r."address"
-          WHERE r."height" >= f.first_height AND r.position <= 0
-          GROUP BY r."address"
-        )
-        SELECT f.first_height AS "firstDepositHeight", e.exit_height AS "exitHeight"
-        FROM first_deposit f
-        LEFT JOIN exited e ON e."address" = f."address"
-        -- ASC + LIMIT: a truncated read drops the NEWEST cohorts, matching the
-        -- adminEpochsAsc convention. The ORDER BY is also what makes the trim
-        -- deterministic -- without it the dropped set would vary per plan.
-        ORDER BY f.first_height ASC
-        LIMIT ${limit}
-      `);
+      // ASC + LIMIT: a truncated read drops the NEWEST cohorts, matching the
+      // adminEpochsAsc convention; the caller flags `holders_truncated`.
+      const rows = await prisma.holderLifecycle.findMany({
+        orderBy: [{ firstDepositHeight: "asc" }, { address: "asc" }],
+        take: limit,
+        select: { firstDepositHeight: true, exitHeight: true },
+      });
       return rows.map((r) => ({
         firstDepositHeight: r.firstDepositHeight,
         exitHeight: r.exitHeight,

@@ -70,12 +70,17 @@ import type {
 // is now asserted in packages/api-types/test/bounds.test.ts.
 import {
   MARKER_CAP_WIRE,
+  MAX_ACTIVE_REDEMPTIONS_WIRE,
   MAX_ADMIN_EPOCH_POINTS_WIRE,
   MAX_ADMIN_INCIDENTS_PAGE_WIRE,
   MAX_ADMIN_RETENTION_CURVES_WIRE,
   MAX_ADMIN_UPKEEP_BUCKETS_WIRE,
   MAX_ACCRUAL_POINTS_WIRE,
   MAX_BECH32_LENGTH,
+  MAX_BRIDGED_SUPPLY_ROWS_WIRE,
+  MAX_FAILING_REASONS_WIRE,
+  MAX_MARKET_DEPTH_BANDS_WIRE,
+  MAX_VALIDATOR_REGISTRY_ROWS_WIRE,
   MAX_GOV_METADATA_LENGTH,
   MAX_GOV_POLICIES_WIRE,
   MAX_GOV_PROPOSAL_MESSAGES_WIRE,
@@ -174,6 +179,10 @@ export const payoutStatsSchema = z.object({
 
 // Owns /validators: ValidatorsPayload = per-validator rows (registry
 // enrollment joined to the latest sample) plus the set-health aggregates.
+// The `*_truncated` honesty flags are `.optional()` for DEPLOY SKEW only —
+// services/api and apps/web ship separately (8.4), so a newer web against an
+// older API must not reject the whole payload over a missing flag. Absence is
+// carried to the surfaces as UNKNOWN, never as "complete".
 export const apiValidatorRowSchema = z.object({
   valoper: z.string().max(90),
   moniker: z.string().max(128),
@@ -181,7 +190,8 @@ export const apiValidatorRowSchema = z.object({
   epoch_index: z.number().int().nonnegative().nullable(),
   uptime_bps: z.number().int().min(0).max(1_000_000).nullable(),
   eligible: z.boolean().nullable(),
-  failing_reasons: z.array(z.string().max(64)).max(32),
+  failing_reasons: z.array(z.string().max(64)).max(MAX_FAILING_REASONS_WIRE),
+  failing_reasons_truncated: z.boolean().optional(),
   program_delegation: decimalString.nullable(),
   commission_due: decimalString.nullable(),
 }) satisfies z.ZodType<ValidatorRow>;
@@ -194,8 +204,9 @@ export const validatorSetHealthSchema = z.object({
 }) satisfies z.ZodType<ValidatorSetHealth>;
 
 export const validatorsPayloadSchema = z.object({
-  validators: z.array(apiValidatorRowSchema).max(500),
+  validators: z.array(apiValidatorRowSchema).max(MAX_VALIDATOR_REGISTRY_ROWS_WIRE),
   set_health: validatorSetHealthSchema,
+  validators_truncated: z.boolean().optional(),
 }) satisfies z.ZodType<ValidatorsPayload>;
 
 // The /market shapes: market data has no chain-canonical plane, so the
@@ -212,7 +223,7 @@ export const marketSampleSchema = z.object({
   pool: z.string().min(1).max(90),
   price: baseUnitString,
   premium_discount_bps: z.number().int().min(-1_000_000).max(1_000_000).nullable(),
-  depth_bands: z.array(marketDepthBandSchema).max(32),
+  depth_bands: z.array(marketDepthBandSchema).max(MAX_MARKET_DEPTH_BANDS_WIRE),
   sampled_at: isoTimestamp,
 }) satisfies z.ZodType<MarketSample>;
 
@@ -224,7 +235,9 @@ export const bridgedSupplyRowSchema = z.object({
 
 export const marketSummarySchema = z.object({
   sample: marketSampleSchema.nullable(),
-  bridged_supply: z.array(bridgedSupplyRowSchema).max(64),
+  bridged_supply: z.array(bridgedSupplyRowSchema).max(MAX_BRIDGED_SUPPLY_ROWS_WIRE),
+  depth_bands_truncated: z.boolean().optional(),
+  bridged_supply_truncated: z.boolean().optional(),
 }) satisfies z.ZodType<MarketSummary>;
 
 // Personal surfaces (address-scoped /portfolio, /portfolio/metrics,
@@ -257,7 +270,8 @@ export const portfolioSummarySchema = z.object({
   first_activity_at: isoTimestamp.nullable(),
   transaction_count: z.number().int().nonnegative(),
   escrowed_shares: baseUnitString,
-  active_redemptions: z.array(redemptionRowSchema).max(500),
+  active_redemptions: z.array(redemptionRowSchema).max(MAX_ACTIVE_REDEMPTIONS_WIRE),
+  active_redemptions_truncated: z.boolean().optional(),
 }) satisfies z.ZodType<PortfolioSummary>;
 
 export const transactionKindSchema = z.enum([
@@ -338,7 +352,7 @@ export const operatorValidatorRowSchema = z.object({
   epoch_index: z.number().int().nonnegative().nullable(),
   uptime_bps: z.number().int().min(0).max(1_000_000).nullable(),
   eligible: z.boolean().nullable(),
-  failing_reasons: z.array(z.string().max(64)).max(32),
+  failing_reasons: z.array(z.string().max(64)).max(MAX_FAILING_REASONS_WIRE),
   program_delegation: baseUnitString.nullable(),
   tip: baseUnitString.nullable(),
   commission_accrued: baseUnitString.nullable(),
@@ -359,7 +373,7 @@ export const operatorEpochRowSchema = z.object({
   epoch_index: z.number().int().nonnegative(),
   uptime_bps: z.number().int().min(0).max(1_000_000),
   eligible: z.boolean(),
-  failing_reasons: z.array(z.string().max(64)).max(32),
+  failing_reasons: z.array(z.string().max(64)).max(MAX_FAILING_REASONS_WIRE),
   tip: baseUnitString,
   commission_accrued: baseUnitString,
   commission_paid: baseUnitString,
@@ -574,7 +588,15 @@ export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
 export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
 export const payoutStatsEnvelopeSchema = envelopeSchema(payoutStatsSchema);
-export const statusEnvelopeSchema = envelopeSchema(z.unknown());
+// The `/status` data half the chrome consumes: `reconciled_at` is the DATA'S
+// age (the reconciler run's ranAt), never the response clock. `.optional()`
+// for deploy skew (an older API ships no field — unknown, so the chrome
+// computes no staleness and falls back to `generated_at`); `.nullable()` for
+// cold start (no run row). Passthrough keeps the untyped descriptor fields.
+export const statusDataSchema = z
+  .object({ reconciled_at: isoTimestamp.nullable().optional() })
+  .passthrough();
+export const statusEnvelopeSchema = envelopeSchema(statusDataSchema);
 export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
 export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);
 export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));

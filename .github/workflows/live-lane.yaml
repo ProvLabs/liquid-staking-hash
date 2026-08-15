@@ -1,0 +1,105 @@
+# Live-stack lanes (app M8.1 §2.7): the devnet-dependent suites that per-PR CI
+# deliberately excludes (app-ci.yaml's standing policy — the
+# ghcr.io/provlabs/vault-dev-node image carries the pre-release vault module
+# until PR 8.0 pins a released one).
+#
+# ACTIVATION IS GATED ON 8.0, deliberately: both jobs land
+# workflow_dispatch-only, with their cron blocks present but COMMENTED. The PR
+# that closes 8.0's release pin flips both crons on in the same change that
+# retires the pre-release-image rationale (8.1 §7.1, forward obligation 1) —
+# otherwise the drills exist but never run, which is the failure mode this
+# whole harness is built to prevent, one level up. Until that flip,
+# "scheduled" is operated by dispatch, with its runbook page in docs/user/.
+#
+# [VERIFY at first dispatch: the runner can pull ghcr.io/provlabs/vault-dev-node
+# and has the ~4 GB image headroom.]
+name: live-lane
+
+on:
+  workflow_dispatch:
+  # UNCOMMENT AT 8.0 (release pin), not before:
+  # schedule:
+  #   - cron: "0 6 * * 1"   # live-stack: weekly, Monday 06:00 UTC
+  #   - cron: "0 6 1 * *"   # jail-lane: monthly, the 1st 06:00 UTC
+
+# The two jobs must NEVER share a chain: the jail lane's chain is reset with
+# the default slash window and destroyed; the stack lane's chain carries the
+# state every other live spec depends on.
+concurrency:
+  group: live-lane
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # CO-15/CO-16/CO-17's home: the full e2e-live suite (governance write leg
+  # included — the member key is provisioned here), the degradation drill
+  # sequence, and the indexer's live-transport governance suite.
+  live-stack:
+    name: live · full stack + degradation drills
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - name: Boot the dev chain (reset + governance bootstrap + contract)
+        run: |
+          infra/devnet/dev-node.sh reset
+          infra/devnet/bootstrap/nvhash-group-bootstrap.sh
+          infra/devnet/dev-node.sh bootstrap
+      - name: Install workspace dependencies (containerized toolchain)
+        run: ./dev pnpm install --frozen-lockfile
+      - name: Bring the app stack up (postgres + roles + migrations + services)
+        run: infra/devnet/stack.sh up
+      - name: Provision throwaway e2e keys (signer + gov member)
+        run: |
+          eval "$(infra/devnet/actions/e2e-keys.sh)"
+          {
+            echo "E2E_LIVE_SIGNER_KEY=$E2E_LIVE_SIGNER_KEY"
+            echo "E2E_LIVE_GOV_MEMBER_KEY=$E2E_LIVE_GOV_MEMBER_KEY"
+            echo "E2E_LIVE_BASE_URL=$E2E_LIVE_BASE_URL"
+            echo "E2E_LIVE_LCD_URL=$E2E_LIVE_LCD_URL"
+            echo "E2E_LIVE_VAULT_ADDRESS=$E2E_LIVE_VAULT_ADDRESS"
+          } >> "$GITHUB_ENV"
+      - name: e2e-live suite (governance write leg included), fresh bundle
+        run: infra/devnet/stack.sh e2e
+      - name: Degradation drill sequence
+        run: infra/devnet/drills.sh run
+      - name: Indexer live-transport governance suite
+        run: |
+          GOV_LIVE_LCD="http://localhost:1317" \
+          GOV_LIVE_RPC="http://localhost:26657" \
+          GOV_LIVE_CONTRACT="$(docker exec dev-node provenanced query vault list -t --home /provenance/nodedev -o json | jq -r '.vaults[0].base_account.address' | xargs -I{} docker exec dev-node provenanced query vault get {} -t --home /provenance/nodedev -o json | jq -r '.vault.asset_manager')" \
+          ./dev pnpm --filter @nvhash/indexer exec vitest run test/workers/governance-live.test.ts
+
+  # CO-19 / D30: the DEDICATED-chain jail lane. Real downtime jailing needs
+  # the default slash window, which only a purpose-reset chain has — the reset
+  # destroys the state every other live spec depends on, which is exactly why
+  # this chain is created and destroyed inside this job and never shared. It
+  # asserts what per-PR CI cannot: the only live jailed-validator rendering,
+  # purge preflight against real jail state, and the jail incident lifecycle.
+  jail-lane:
+    name: live · jail drill (dedicated chain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [] # ordering comes from the concurrency group, not job deps
+    steps:
+      - uses: actions/checkout@v5
+      - name: Boot a dedicated chain WITHOUT the shortened slash window
+        run: |
+          infra/devnet/dev-node.sh reset
+          infra/devnet/bootstrap/nvhash-group-bootstrap.sh
+          infra/devnet/dev-node.sh bootstrap
+      - name: Install workspace dependencies (containerized toolchain)
+        run: ./dev pnpm install --frozen-lockfile
+      - name: Bring the app stack up
+        run: infra/devnet/stack.sh up
+      - name: Jail drill with the app-observation hook
+        run: |
+          JAIL_OBSERVE_CMD="./dev pw --filter @nvhash/web exec playwright test --config playwright.live.config.ts e2e-live/drills/jail.spec.ts" \
+            contracts/drills/jail-drill.sh
+      - name: Tear the dedicated chain down
+        if: always()
+        run: |
+          infra/devnet/stack.sh down --all || true
+          docker rm -f dev-node || true

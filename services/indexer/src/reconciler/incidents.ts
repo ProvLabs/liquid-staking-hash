@@ -11,12 +11,15 @@
 //   - point-in-time (a historical fact; opened once, never auto-closed):
 //     slash_write_down, redemption_refund.
 //
-// Deferred to a documented fast-follow (each needs a live decoder this PR does
-// not add — noted in app-spec §9.6): vault_paused (vault query), jail_report
-// (jail lifecycle), epoch_overdue (config interval + calendar-month), and the
-// queue-length delta (vault pending_swap_outs).
+// Still deferred (noted in app-spec §9.6): epoch_overdue and the queue-length
+// delta. epoch_overdue's constraint is not the decoder — it is that no
+// falsifiable drill exists until a calendar-month boundary can pass with the
+// crank withheld (the E-CAL constraint); its first exercise is Phase B's T1
+// calendar-month observation window (M8 overview §5 T1.6).
 
+import type { JailReport } from "../workers/validator-sampler/decode.ts";
 import { computeDeltas, type LiveSnapshot } from "./deltas.ts";
+import type { VaultPause } from "./decode.ts";
 import { computeLag } from "./lag.ts";
 import type { Tolerances } from "./tolerances.ts";
 
@@ -24,6 +27,8 @@ export type IncidentKind =
   | "reconciler_divergence"
   | "indexer_lag"
   | "contract_halted"
+  | "vault_paused"
+  | "jail_report"
   | "slash_write_down"
   | "redemption_refund";
 
@@ -33,6 +38,11 @@ export interface LivePlane {
   head: bigint;
   snapshot: LiveSnapshot | null;
   halted: boolean;
+  /** Never null: a failed vault read skips the whole pass (§2.3 all-or-nothing
+   * rule) — an unknown pause state must never derive as "unpaused". */
+  pause: VaultPause;
+  /** The contract's live jail reports; bounded by its validator bound. */
+  jailReports: JailReport[];
 }
 
 export interface IndexedPlane {
@@ -49,6 +59,10 @@ export interface IndexedPlane {
    * open ONLY genuinely-new ones each pass instead of re-upserting the entire
    * lifetime history every 30 s (bounded per-pass work). */
   existingPointInTimeKeys: Set<string>;
+  /** dedupeKeys of currently-OPEN jail_report incidents — the set the live
+   * reports are diffed against so an ended episode closes (a report absent
+   * from the live plane means purged or cleared). */
+  openJailReportKeys: string[];
 }
 
 /** Composite membership key for a point-in-time incident. */
@@ -156,6 +170,48 @@ export function deriveActions(
     });
   } else {
     close.push({ kind: "contract_halted", dedupeKey: "halted" });
+  }
+
+  // --- vault paused (the contract_halted shape; §9.6 durable pause record) ---
+  // `warning`, seating pause below halt (`critical`) — 8.1 plan §7.1 Q2.
+  if (live.pause.paused) {
+    open.push({
+      kind: "vault_paused",
+      dedupeKey: "paused",
+      severity: "warning",
+      openedHeight: live.head,
+      payload: { reason: live.pause.reason },
+    });
+  } else {
+    close.push({ kind: "vault_paused", dedupeKey: "paused" });
+  }
+
+  // --- jail reports (closeable per EPISODE) ---
+  // The episode is the natural key: `valoper:{addr}:{reportedAtSeconds}`. A
+  // bare valoper key would reopen-in-place and silently merge a re-jail into
+  // the first episode's `openedAt` (the M6.4 overwrite shape). Open while the
+  // report exists on chain; an open incident whose report is gone (purged or
+  // cleared) closes.
+  const liveJailKeys = new Set<string>();
+  for (const report of live.jailReports) {
+    const dedupeKey = `valoper:${report.valoper}:${report.reportedAtSeconds}`;
+    liveJailKeys.add(dedupeKey);
+    open.push({
+      kind: "jail_report",
+      dedupeKey,
+      severity: "warning",
+      openedHeight: live.head,
+      payload: {
+        valoper: report.valoper,
+        reportedAtSeconds: report.reportedAtSeconds.toString(),
+        purgeReadyAtSeconds: report.purgeReadyAtSeconds.toString(),
+      },
+    });
+  }
+  for (const openKey of indexed.openJailReportKeys) {
+    if (!liveJailKeys.has(openKey)) {
+      close.push({ kind: "jail_report", dedupeKey: openKey });
+    }
   }
 
   // --- point-in-time facts (opened once, never auto-closed) ---

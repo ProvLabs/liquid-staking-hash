@@ -4,13 +4,20 @@
 // fabricates. Chain reads come from the @nvhash/fixtures corpus via the MSW
 // harness; API envelopes are built with the @nvhash/api-types producers.
 
-import { envelope } from "@nvhash/api-types";
+import { envelope, type IncidentRow } from "@nvhash/api-types";
 import { http, HttpResponse } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import vaultGet from "@nvhash/fixtures/queries/vault/get";
 
-import { DEGRADED_LAG_BLOCKS, loadChromeState } from "~/chrome/chrome.server";
+import {
+  DEGRADED_LAG_BLOCKS,
+  DEGRADED_STALE_SECONDS,
+  deriveChromeState,
+  loadChromeState,
+  type ChromeLiveFacts,
+  type ChromeStatusFacts,
+} from "~/chrome/chrome.server";
 import { describeFreshness, formatAge } from "~/chrome/freshness";
 import { loadConfig } from "~/config/config.server";
 import {
@@ -285,5 +292,136 @@ describe("degraded banner (§8.0: indexer lagging or reconciler alarm)", () => {
     );
     const state = await loadChromeState(config());
     expect(state.banner).toEqual({ kind: "paused", reason: "maintenance" });
+  });
+
+  it("stale reconciled_at flips degraded even with the height delta frozen (8.1 §2.2)", async () => {
+    // A dead indexer freezes chain and indexed heights TOGETHER — the lag
+    // clause alone renders it healthy forever. The data's age is the tell.
+    const stale = new Date(Date.now() - (DEGRADED_STALE_SECONDS + 60) * 1000);
+    server.use(
+      http.get("*/api/v1/status", () =>
+        HttpResponse.json(
+          envelope(
+            { reconciled_at: stale.toISOString() },
+            { source: "indexed", chainHeight: 1200, indexedHeight: 1199 },
+          ),
+        ),
+      ),
+    );
+    const state = await loadChromeState(config());
+    expect(state.banner).toEqual({ kind: "degraded" });
+    expect(state.reconciledAt).toBe(stale.toISOString());
+  });
+
+  it("a fresh reconciled_at does not degrade, and cold start stays cold start", async () => {
+    server.use(
+      http.get("*/api/v1/status", () =>
+        HttpResponse.json(
+          envelope(
+            { reconciled_at: new Date().toISOString() },
+            { source: "indexed", chainHeight: 1200, indexedHeight: 1199 },
+          ),
+        ),
+      ),
+    );
+    expect((await loadChromeState(config())).banner).toBeNull();
+
+    // Cold start: null heights + null reconciled_at (the default mock) is a
+    // distinct honest state, deliberately NOT degraded.
+    server.resetHandlers();
+    const cold = await loadChromeState(config());
+    expect(cold.banner).toBeNull();
+    expect(cold.freshness?.indexed_height).toBeNull();
+    expect(cold.reconciledAt).toBeNull();
+  });
+});
+
+// The generated state × affordance matrix (8.1 §4b C4): every combination of
+// the loader's own inputs is asserted, so no cell goes untested (the M7.5–7.6
+// round-2 lesson: a hand-tabulated matrix leaks exactly the cell nobody
+// wrote). Expectations derive from the STATED rules — precedence
+// halted > paused > degraded, paused/halted only from a successful live read,
+// degraded from lag / staleness / an open degraded-kind incident — not from
+// re-running the implementation.
+describe("generated chrome matrix (live × status × incidents)", () => {
+  const NOW = Date.parse("2026-08-14T12:00:00Z");
+  const FRESH = new Date(NOW - 30 * 1000).toISOString();
+  const STALE = new Date(NOW - (DEGRADED_STALE_SECONDS + 60) * 1000).toISOString();
+
+  const incidentRow = (kind: IncidentRow["kind"]): IncidentRow => ({
+    kind,
+    severity: "warning",
+    opened_at: "2026-08-14T00:00:00Z",
+    closed_at: null,
+    height: null,
+  });
+
+  const LIVE_STATES = {
+    "ok-nominal": { paused: false, pausedReason: "", halted: false },
+    "ok-paused": { paused: true, pausedReason: "maintenance", halted: false },
+    "ok-halted": { paused: false, pausedReason: "", halted: true },
+    failed: null,
+  } satisfies Record<string, ChromeLiveFacts | null>;
+
+  const STATUS_STATES = {
+    "ok-fresh": {
+      meta: { chain_height: 1200, indexed_height: 1199, generated_at: FRESH, source: "indexed" },
+      reconciledAt: FRESH,
+    },
+    "ok-stale": {
+      meta: { chain_height: 1200, indexed_height: 1199, generated_at: FRESH, source: "indexed" },
+      reconciledAt: STALE,
+    },
+    "ok-coldstart": {
+      meta: { chain_height: null, indexed_height: null, generated_at: FRESH, source: "indexed" },
+      reconciledAt: null,
+    },
+    failed: null,
+  } satisfies Record<string, ChromeStatusFacts | null>;
+
+  const INCIDENT_STATES = {
+    "none-open": [] as IncidentRow[],
+    "divergence-open": [incidentRow("reconciler_divergence")],
+    "lag-open": [incidentRow("indexer_lag")],
+    failed: null,
+  } satisfies Record<string, IncidentRow[] | null>;
+
+  for (const [liveKey, liveState] of Object.entries(LIVE_STATES)) {
+    for (const [statusKey, statusState] of Object.entries(STATUS_STATES)) {
+      for (const [incKey, incState] of Object.entries(INCIDENT_STATES)) {
+        it(`live=${liveKey} status=${statusKey} incidents=${incKey}`, () => {
+          const state = deriveChromeState(liveState, statusState, incState, NOW);
+
+          // Expected banner from the stated rules alone.
+          const degraded =
+            statusKey === "ok-stale" || incKey === "divergence-open" || incKey === "lag-open";
+          const expectedBanner =
+            liveKey === "ok-halted"
+              ? { kind: "halted" }
+              : liveKey === "ok-paused"
+                ? { kind: "paused", reason: "maintenance" }
+                : degraded
+                  ? { kind: "degraded" }
+                  : null;
+
+          expect(state.banner).toEqual(expectedBanner);
+          // A failed live read is never health, and never suppresses the
+          // indexed plane's own degraded claim.
+          expect(state.liveStatusOk).toBe(liveState !== null);
+          // The footer inputs pass through unfabricated.
+          expect(state.freshness).toEqual(statusState?.meta ?? null);
+          expect(state.reconciledAt).toBe(statusState?.reconciledAt ?? null);
+        });
+      }
+    }
+  }
+
+  it("the coldstart pairing (heights without reconciled_at) is unrepresentable from the API", () => {
+    // Both derive from the same reconciler_runs row: the API cannot serve
+    // run heights with a null reconciled_at. Asserted here as the matrix's
+    // boundary note — the ok-* states above are the only reachable ones.
+    const cold = STATUS_STATES["ok-coldstart"];
+    expect(cold.meta.indexed_height).toBeNull();
+    expect(cold.reconciledAt).toBeNull();
   });
 });

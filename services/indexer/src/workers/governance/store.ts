@@ -21,7 +21,7 @@
 // boundary as canonical integer STRINGS. They are unbounded chain integers, so
 // the JS-number boundary is never crossed (app-spec §5.8).
 
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../../prisma.ts";
 import type { ProposalStatus, ExecutorResult, Tally, VoteOption } from "./events.ts";
 
 /** A full proposal observation — the authoritative state-plane row. */

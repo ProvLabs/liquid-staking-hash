@@ -32,16 +32,24 @@ allowlist, or a live/indexed composition.
   only through `services/api`. `DATABASE_URL` is optional — absent, sessions run
   on a non-durable in-memory store. `test/app-schema-allowlist.test.ts` gates
   additions and forbids any role/identity/device column.
-- **The schema is ONE baseline migration, not a history.** Nothing runs this
-  schema outside dev and CI, so a schema change edits the models and is
-  regenerated into `prisma/migrations/20260723000000_init_sessions` rather than
-  appended to. Regenerate with `prisma migrate diff --from-empty
-  --to-schema-datamodel prisma --script`, keeping the file's hand-written
-  header, and rebuild the database (`./dev pg reset`, `migrate:deploy`).
-  Unlike `indexed`, this schema is NOT rebuildable from chain — a rebuild drops
-  sessions, notifications and push subscriptions — so the first environment
-  whose contents must survive is the point at which incremental migrations
-  start.
+- **Migration history is append-only from a frozen baseline** (PR 8.4a — the
+  point at which incremental migrations start is behind us).
+  `prisma/migrations/20260723000000_init_sessions` is frozen migration 0 —
+  never regenerated or edited (`test/migration-freeze.test.ts` pins its
+  SHA-256). A schema change edits the models, then appends a new timestamped
+  migration produced with `prisma migrate diff --from-migrations
+  --to-schema-datamodel prisma --script`, hand-written SQL included where the
+  datamodel cannot express the constraint. The fold gate (app-ci "Migrations
+  match the models", `--from-migrations … --exit-code`) fails a model edit
+  without its appended migration and vice versa. This schema is NOT
+  rebuildable from chain — sessions, notifications and push subscriptions
+  exist only here — which is why history froze before the first deployed
+  environment, not after. The frozen file's two hand-written blocks are
+  frozen-baseline facts guarded by the freeze gate: the existence-checked
+  schema-creation DO block (`CREATE SCHEMA IF NOT EXISTS` needs CREATE on the
+  DATABASE, which `app_writer` must not hold) and the PARTIAL unique index on
+  live incident acknowledgments (Prisma cannot express it; a plain unique
+  would forbid re-acknowledging after a reversal).
 - Accessibility and responsive layout are requirements, not nice-to-haves.
 - Security ([`SECURITY.md`](../../SECURITY.md)): never touch private keys or
   mnemonics — wallet adapters own signing; everything in the client bundle and
@@ -285,10 +293,26 @@ Playwright runs in the official Playwright image on the same compose file:
   unlocks the enroll/unregister leg, and `E2E_LIVE_GOV_MEMBER_KEY` the
   governance write leg — the latter must be a funded throwaway key that is
   **also a group member**, since proposing and voting are membership-gated and
-  the generic signer key cannot reach them. Runs on the stack schedule, not
-  offline CI.
-  **Restart the compose `web` service before trusting a green live run** — it
-  builds at container start, so a long-running stack serves a stale bundle.
+  the generic signer key cannot reach them. Both keys are provisioned by
+  `infra/devnet/actions/e2e-keys.sh` (eval its output; devnet-only by
+  chain-id guard). Runs on the stack schedule (`live-lane.yaml`,
+  dispatch-until-8.0), not offline CI.
+  **Run live suites through `infra/devnet/stack.sh e2e`** — it restarts the
+  compose `web` service (which builds at container start, so a long-running
+  stack serves a stale bundle), exports `E2E_LIVE_STACK_PREPARED_AT`, and the
+  `e2e-live/drills/stale-bundle.spec.ts` gate FAILS any prepared session
+  served by an older bundle. The `e2e-live/drills/` family is driven by
+  `infra/devnet/drills.sh` via `E2E_DRILL_PHASE` (unset, the specs skip clean;
+  inside an active phase they FAIL rather than skip — a drill that skips is
+  silence).
+- `fetch:fonts` — the §11 type stack, self-hosted WITHOUT committing binaries
+  (plan 8.4 §2.8): `scripts/fetch-fonts.mjs` fetches commit-pinned upstream
+  files, verifies a pinned sha256 per file, and writes the gitignored
+  `public/fonts/`. The PRODUCTION (image) build runs it with `--require` and
+  FAILS CLOSED on a fetch failure or checksum mismatch; dev warns and falls
+  back to the system stacks in `app/theme/fonts.css`. A checksum mismatch is
+  never written to disk in any mode, and `test/no-tracked-fonts.test.ts`
+  gates that no font binary is ever committed.
 - `check:palette` — the shared dataviz validation method
   (`scripts/validate_palette.js`) over both theme token sets.
 - `check:bundle` — builds with sentinel values in every server-only env var
@@ -317,18 +341,16 @@ All fail CI on violation.
   params have no effect); anonymous requests prompt-and-explain (page) or 401
   (resource route); cookie flags, nonce single-use/replay, and expiry bounds are
   pinned. **Every new personal or public-by-design route joins this suite.**
-- **`test:db` runs `prisma generate` FIRST, and that is load-bearing.**
-  `apps/web/prisma` and `services/indexer/prisma` both declare a generator with
-  **no `output`**, so both write the SAME hoisted `node_modules/@prisma/client`
-  — the last `prisma generate` in a process tree wins, globally. `pnpm -r`
-  ordering hides this (apps/web generates last), but the `db-grants` CI job
-  generates `@nvhash/db-indexed` after it, leaving the shared client holding
-  `indexed` models: `prisma.incidentAck` is then `undefined` and every case in
-  this suite fails on the first line. Generating inside the script makes the
-  suite independent of step order — the same `prisma generate && …` idiom
-  `typecheck` already uses. **Do not remove it as redundant.** The durable fix
-  is an explicit `output` for one of the two schemas (the `@nvhash/db-indexed`
-  precedent); it is a follow-on, not done here.
+- **`test:db` runs `prisma generate` FIRST, and that is load-bearing.** The
+  generated client is not committed, so it must exist before the suite runs —
+  the same `prisma generate && …` idiom `typecheck` already uses, and it keeps
+  the suite independent of job step order. **Do not remove it as redundant.**
+  This schema is the repo's **sole default-output generator**: every generator
+  in `services/indexer/prisma` declares an explicit `output` (gated by its
+  `prisma-generator-output` test), so nothing else writes the hoisted
+  `node_modules/@prisma/client`. A future schema anywhere in the repo must
+  declare an explicit `output` too — two default-output generators race, and
+  the last `prisma generate` in a process tree wins globally.
 - **`app`-schema store gate** (`test:db`, `test/integration/app-stores.test.ts`)
   — the REAL Prisma stores as `app_writer` against a migrated Postgres. It is
   separate from the unit suites on purpose and it is **not** redundant with
@@ -394,8 +416,30 @@ All fail CI on violation.
   `test/brand-tokens.test.ts`): both theme token sets pass the shared dataviz
   method; the mint-green CTA/focus ring clear their WCAG floors and the fixed
   status family stays on its values in both themes.
-- **axe** (`e2e/axe.spec.ts`): WCAG A/AA on both themes. **New routes join its
-  route list.**
+- **axe** (`e2e/axe.spec.ts`): WCAG A/AA. Since PR 8.3 the matrix is **derived
+  from the route registry** (`e2e/support/routes.ts` enumerates the `:lang?`
+  pages — a new page route is scanned by existing; a new `:param` route needs
+  a `DYNAMIC_BINDINGS` entry or `test/a11y-routes.test.ts` fails) × both
+  themes × three auth states (anonymous / holder / roles, fabricated through
+  the app's own login path — `e2e/support/login.ts`, no seam in `app/`).
+  Weakening the tag set or tolerating a violation requires the app-spec §11
+  exception-ledger entry in the same change. Role-bearing offline renders come
+  from **`NVHASH_MOCK_GRANT_ROLES`** (toolingOnly, beside
+  `NVHASH_MOCK_LIVE_DOWN`): a fixture-derived grant — one appended group
+  member, one appended validator row, the admin answering as a governed
+  policy — provably inert when unset (`test/mock-role-grant.test.ts` asserts
+  knob-off responses byte-identical to the fixtures). Populated authenticated
+  surfaces ride the live lane (`e2e-live/axe.spec.ts`).
+- **Motion / keyboard / labeled states** (`e2e/motion.spec.ts`,
+  `e2e/keyboard.spec.ts`, `e2e/states.spec.ts`, PR 8.3): the reduced-motion
+  kill switch with its non-vacuity case; the enumerated keyboard flows
+  (popovers close on Escape AND return focus to their trigger); every §14.4
+  shell, cold-start, below-threshold and LIVE_DOWN state visible in the
+  accessibility tree — an inaccessible caveat is a caveat that does not exist
+  for AT users. The confirm step's semantics are pinned at the component
+  level (`test/tx-confirm-a11y.test.ts` — tier by text, never color alone);
+  the manual screen-reader walk is an 8.5 pre-launch obligation, and a green
+  axe suite is not a completed accessibility review.
 - **No client-side analytics** (`e2e/admin.spec.ts`): the counted pages issue no
   request that looks like analytics and none that leaves the app's origin, and
   set no cookie beyond the theme preference. §14.10's "no beacon, no pixel, no

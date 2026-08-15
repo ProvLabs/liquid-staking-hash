@@ -65,7 +65,11 @@ export default function Portfolio({ loaderData }: Route.ComponentProps) {
             yieldTruncated={data.yieldTruncated}
           />
           <AccrualChart locale={locale} accrual={data.accrual} />
-          <ActiveRedemptions locale={locale} redemptions={data.activeRedemptions} />
+          <ActiveRedemptions
+            locale={locale}
+            redemptions={data.activeRedemptions}
+            completeness={data.activeRedemptionsCompleteness}
+          />
           {data.history !== null ? <HistoryTable locale={locale} history={data.history} /> : null}
         </>
       ) : (

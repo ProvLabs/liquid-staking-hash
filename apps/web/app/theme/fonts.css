@@ -1,0 +1,57 @@
+/*
+ * Self-hosted §11 type stack (plan 8.4 §2.8, CO-27): Funnel Sans (body),
+ * Space Grotesk (display), Geist Mono (addresses/amounts). The files are
+ * FETCHED AT BUILD TIME by scripts/fetch-fonts.mjs (commit-pinned URLs,
+ * sha256-verified, gitignored public/fonts/ — no binary is ever committed).
+ * `font-display: swap` + the system stacks below keep a dev build without
+ * the fetch fully usable; the production build fails closed instead.
+ * All three are variable-weight single files (OFL-1.1; provenance in the
+ * fetch script header).
+ */
+
+@font-face {
+  font-family: "Funnel Sans";
+  src: url("/fonts/FunnelSans[wght].ttf") format("truetype-variations");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/fonts/SpaceGrotesk[wght].ttf") format("truetype-variations");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono[wght].ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Family tokens: webfont first, the standing system stack as fallback. */
+  --font-body: "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+code,
+pre,
+.font-mono {
+  font-family: var(--font-mono);
+}

@@ -8,6 +8,8 @@ import { Panel, Pill, GuardButton, ProportionBar, Cell, AddressChip } from "@/co
 import { hash, shares, humanDuration, ratio, toBig } from "@/lib/format";
 import { computeReserve } from "@/lib/derived";
 import { guardServiceRedemptions } from "@/lib/guards";
+import { anchorMissNotice } from "@/lib/anchors";
+import { useAnchor } from "@/lib/use-anchor";
 
 export function Redemptions() {
   const swap = useSwapOuts();
@@ -15,6 +17,11 @@ export function Redemptions() {
   const wallet = useWallet();
   const { nowSecs, stale, role, refresh } = useStore();
   const tx = useTx();
+  const { anchor, state: anchorState } = useAnchor(
+    "request",
+    swap.data !== null && swap.error === null,
+    (a) => (swap.data ?? []).some((r) => r.id === a.id),
+  );
 
   return (
     <div className="stack">
@@ -24,6 +31,12 @@ export function Redemptions() {
           The pending swap-out queue, funded state, and reserve math, provable against chain.
         </p>
       </div>
+
+      {anchorState === "missing" && anchor && (
+        <div className="callout callout--info" role="status">
+          {anchorMissNotice(anchor)}
+        </div>
+      )}
 
       <Cell cell={swap}>
         {(queue) => {
@@ -85,7 +98,7 @@ export function Redemptions() {
                           const mature = r.matures_at_seconds;
                           const own = r.owner === wallet.address;
                           return (
-                            <tr key={r.id} className={own ? "own" : undefined}>
+                            <tr key={r.id} id={`req-${r.id}`} className={own ? "own" : undefined}>
                               <td className="num tnum">{r.id}</td>
                               <td>
                                 {own ? (

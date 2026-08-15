@@ -230,6 +230,30 @@ const GOV_MIRROR_POLICIES = [
 // exercises the "program status unavailable" footer honestly.
 const liveReadsDown = () => process.env.NVHASH_MOCK_LIVE_DOWN === "1";
 
+// Test-harness-only role grant (8.3 §2.3, classified toolingOnly beside the
+// failure injection): NVHASH_MOCK_GRANT_ROLES=<bech32> makes the mocked chain
+// report that ONE address as a registered validator operator AND a group
+// member behind a governed admin — the D25 production topology — so the
+// offline a11y matrix can reach the role-bearing surfaces through the app's
+// REAL role reads (`detectRoles`, `verifyAdminUncached`), never a stored role.
+//
+// This deliberately bends the "mocks must not invent state" rule, and says
+// so: every injected response is DERIVED from a captured fixture with exactly
+// one appended/re-pointed entry, the knob is provably inert when unset
+// (test/mock-role-grant.test.ts asserts knob-off responses byte-identical to
+// the fixtures), and the durable fix is recorded in the 8.3 plan §6 — the
+// 8.0 re-capture (CO-30) enrolls the harness address on the devnet so the
+// corpus truthfully contains it and this knob retires.
+const grantedRoleAddress = (): string | undefined => {
+  const value = process.env.NVHASH_MOCK_GRANT_ROLES;
+  if (value === undefined || value === "") return undefined;
+  // Bounded at the boundary, reject not clamp (SECURITY.md).
+  if (!/^[a-z]{1,10}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,83}$/.test(value)) {
+    throw new Error(`NVHASH_MOCK_GRANT_ROLES is not a bech32 account address: ${value}`);
+  }
+  return value;
+};
+
 export const handlers = [
   // services/api scaffold responses (shape): enveloped, honest null
   // heights until the reconciler and API wire real ones. Built with the same
@@ -243,6 +267,10 @@ export const handlers = [
           api_version: "v1",
           environment: "development",
           data_source: "unwired",
+          // Cold start (no reconciler run): null pairs with the null heights
+          // above — never a fabricated data age. Tests exercising staleness
+          // override with real heights AND a real reconciled_at together.
+          reconciled_at: null,
         },
         { source: "indexed" },
       ),
@@ -294,6 +322,7 @@ export const handlers = [
           transaction_count: 0,
           escrowed_shares: "0",
           active_redemptions: [],
+          active_redemptions_truncated: false,
         },
         { source: "indexed" },
       ),
@@ -305,7 +334,17 @@ export const handlers = [
   // The /market shape (MarketSummary), honest-empty exactly as the real
   // route serves with the sampler parked: no sample, no bridged supply.
   http.get("*/api/v1/market", () =>
-    HttpResponse.json(envelope({ sample: null, bridged_supply: [] }, { source: "indexed" })),
+    HttpResponse.json(
+      envelope(
+        {
+          sample: null,
+          bridged_supply: [],
+          depth_bands_truncated: false,
+          bridged_supply_truncated: false,
+        },
+        { source: "indexed" },
+      ),
+    ),
   ),
   // Personal surfaces (/portfolio, /portfolio/metrics, /transactions):
   // honest-empty defaults mirroring the services/api empty payloads (reader
@@ -322,6 +361,7 @@ export const handlers = [
           transaction_count: 0,
           escrowed_shares: "0",
           active_redemptions: [],
+          active_redemptions_truncated: false,
         },
         { source: "indexed" },
       ),
@@ -378,7 +418,11 @@ export const handlers = [
   http.get("*/api/v1/validators", () =>
     HttpResponse.json(
       envelope(
-        { validators: [], set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 } },
+        {
+          validators: [],
+          set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 },
+          validators_truncated: false,
+        },
         { source: "indexed" },
       ),
     ),
@@ -508,6 +552,30 @@ export const handlers = [
     if (key === "epoch_status" && liveReadsDown()) {
       return lcdError(503, "injected failure: NVHASH_MOCK_LIVE_DOWN");
     }
+    // Role-grant knob: the captured validator set PLUS one row cloned from a
+    // captured validator, with `operator` set to the granted address (and a
+    // derived valoper so no captured key is duplicated) — the operator half
+    // of the grant, read by the app's real `detectRoles`.
+    const granted = grantedRoleAddress();
+    if (key === "validators" && granted !== undefined) {
+      const set = fixture as { data: { validators: Array<Record<string, unknown>> } };
+      const template = set.data.validators[0];
+      if (template !== undefined) {
+        return HttpResponse.json({
+          data: {
+            ...set.data,
+            validators: [
+              ...set.data.validators,
+              {
+                ...template,
+                operator: granted,
+                valoper: `tpvaloper1${granted.slice(granted.indexOf("1") + 1)}`,
+              },
+            ],
+          },
+        });
+      }
+    }
     return HttpResponse.json(fixture);
   }),
 
@@ -551,6 +619,14 @@ export const handlers = [
   // the governed plane override this handler, the roles-test pattern.
   http.get("*/cosmos/group/v1/group_policy_info/:address", ({ params }) => {
     const address = String(params["address"]);
+    // Role-grant knob (8.3 §2.3, governed plane per Q3): with the knob set,
+    // the corpus's plain-account admin answers as a GROUP POLICY — the
+    // captured policy fixture re-pointed at the admin account — so the
+    // membership path production takes after D25 is the one exercised.
+    const contractAdmin = (contractConfig as { data: { admin: string } }).data.admin;
+    if (grantedRoleAddress() !== undefined && address === contractAdmin) {
+      return HttpResponse.json({ info: { ...GROUP_POLICIES[0], address: contractAdmin } });
+    }
     const policy = GROUP_POLICIES.find((p) => p.address === address);
     return policy === undefined
       ? lcdError(404, `group policy: not found: ${address}`)
@@ -561,11 +637,31 @@ export const handlers = [
       ? HttpResponse.json(groupInfo)
       : lcdError(404, `group: not found: ${String(params["groupId"])}`),
   ),
-  http.get("*/cosmos/group/v1/group_members/:groupId", ({ params }) =>
-    String(params["groupId"]) === GROUP_ID
-      ? HttpResponse.json(groupMembers)
-      : lcdError(404, `group: not found: ${String(params["groupId"])}`),
-  ),
+  http.get("*/cosmos/group/v1/group_members/:groupId", ({ params }) => {
+    if (String(params["groupId"]) !== GROUP_ID) {
+      return lcdError(404, `group: not found: ${String(params["groupId"])}`);
+    }
+    // Role-grant knob: the captured member list PLUS one appended row (shape
+    // cloned from a captured row) for the granted address.
+    const granted = grantedRoleAddress();
+    if (granted !== undefined) {
+      const fixture = groupMembers as { members: Array<{ group_id: string; member: object }> };
+      const template = fixture.members[0];
+      if (template !== undefined) {
+        return HttpResponse.json({
+          ...fixture,
+          members: [
+            ...fixture.members,
+            {
+              ...template,
+              member: { ...template.member, address: granted, metadata: "harness-grant" },
+            },
+          ],
+        });
+      }
+    }
+    return HttpResponse.json(groupMembers);
+  }),
   http.get("*/cosmos/group/v1/group_policies_by_group/:groupId", ({ params }) =>
     String(params["groupId"]) === GROUP_ID
       ? HttpResponse.json(groupPoliciesByGroup)

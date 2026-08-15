@@ -29,6 +29,7 @@ export interface UpdateConfigFields {
   concentration_safety_offset_bps?: number | null;
   commission_bps?: number | null;
   jail_unbond_delay_secs?: number | null;
+  redemption_margin_bps?: number | null;
 }
 
 export const msg = {

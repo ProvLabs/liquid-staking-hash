@@ -28,7 +28,7 @@ export const CLIENT_SAFE_CONFIG_KEYS = [
 export type ClientSafeConfigKey = (typeof CLIENT_SAFE_CONFIG_KEYS)[number];
 
 export interface ClientConfig {
-  appEnv: "development" | "staging" | "production";
+  appEnv: "development" | "testnet" | "production";
   chainId: string;
   contractAddress: string;
   vaultAddress: string;

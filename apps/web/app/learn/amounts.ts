@@ -3,11 +3,16 @@
 // here divides scaled integers and places the decimal point in the string.
 // Pure and client-safe; gated by golden-value tests against the fixture
 // corpus (test/amounts.test.ts).
+//
+// The NAV formula and the two exponents have ONE implementation, in
+// `@nvhash/api-types` (app-spec §9.4 revision (d)): the API produces the
+// historical NAV series with the same helper this module re-exports for the
+// live figure, so the two cannot drift by a floor step. Re-exported here so
+// call sites keep their `~/learn/amounts` import. The helpers below are
+// display-only and web-local — they have no API-side twin.
 
-/** Base-unit exponent of HASH (nhash). */
-export const HASH_EXPONENT = 9;
-/** Base-unit exponent of nvHASH shares. */
-export const SHARE_EXPONENT = 15;
+export { HASH_EXPONENT, navHashPerShare, SHARE_EXPONENT } from "@nvhash/api-types";
+import { HASH_EXPONENT } from "@nvhash/api-types";
 
 function pow10(exponent: number): bigint {
   return 10n ** BigInt(exponent);
@@ -28,26 +33,6 @@ export function formatBaseAmount(base: bigint, exponent: number, fractionDigits 
   const digits =
     fractionDigits === 0 ? "" : `.${fraction.toString().padStart(fractionDigits, "0")}`;
   return `${negative ? "-" : ""}${whole}${digits}`;
-}
-
-/**
- * NAV in HASH per nvHASH from live vault state:
- * (tvv/10^9) / (shares/10^15) = tvv * 10^6 / shares, truncated to
- * `fractionDigits`. Returns null for zero shares (an empty vault has no NAV,
- * and the UI must say so rather than fabricate one).
- */
-export function navHashPerShare(
-  tvvBase: bigint,
-  sharesBase: bigint,
-  fractionDigits = 4,
-): string | null {
-  // Negative TVV is impossible on chain (Uint128) but must not format as a
-  // mangled string if a corrupted value ever reaches here.
-  if (sharesBase <= 0n || tvvBase < 0n) return null;
-  const scaled = (tvvBase * pow10(SHARE_EXPONENT - HASH_EXPONENT + fractionDigits)) / sharesBase;
-  const whole = scaled / pow10(fractionDigits);
-  const fraction = scaled % pow10(fractionDigits);
-  return `${whole}.${fraction.toString().padStart(fractionDigits, "0")}`;
 }
 
 /**

@@ -157,6 +157,62 @@ export const MAX_YIELD_POINTS_WIRE = 20_000;
 export const MARKER_CAP = 200;
 export const MARKER_CAP_WIRE = 2_000;
 
+// --- core v1 read surface (adopted at PR 8.0b, overview CO-11) -------------
+//
+// The five collections that previously lived only in the web Zod schema with
+// no declared producer cap — the PR #19 defect shape this file exists to
+// close. Each constant names ITS quantity (the 7.5–7.6 round-2 lesson: an
+// epoch cap borrowed for a holder denominator silently overstated every
+// concentration band); none is reused across quantities. The `_WIRE` values
+// are the web literals as they shipped; moving one is a wire event.
+
+/**
+ * `/validators.validators[]` — registry rows ever enrolled, live + churned.
+ * The live validator set is contract-capped at 100, but enrollment is
+ * set-once and unregistration is a MARK, so registry rows accumulate with
+ * churn forever. 400 absorbs 4× the live ceiling; the producer trims in
+ * registry order (moniker asc) and flags `validators_truncated` — the flag
+ * says the SET VIEW is partial, aggregates included.
+ */
+export const MAX_VALIDATOR_REGISTRY_ROWS = 400;
+export const MAX_VALIDATOR_REGISTRY_ROWS_WIRE = 500;
+
+/**
+ * `/portfolio.active_redemptions[]` per address. Enqueueing is
+ * PERMISSIONLESS and the contract does not cap per-owner open requests, so
+ * this is a griefing bound, not a product expectation. Newest-first
+ * (`enqueuedAt desc`, the read order), so a trim drops the oldest; flagged
+ * `active_redemptions_truncated`.
+ */
+export const MAX_ACTIVE_REDEMPTIONS = 400;
+export const MAX_ACTIVE_REDEMPTIONS_WIRE = 500;
+
+/**
+ * `/market.sample.depth_bands[]`. No v1 producer exists (the market sampler
+ * is the deferred §14.3 cluster, overview CO-45): this bounds FUTURE sampler
+ * output and is exercised only by fixtures until then — dormant-path
+ * hardening, stated rather than hidden. Flagged `depth_bands_truncated`.
+ */
+export const MAX_MARKET_DEPTH_BANDS = 16;
+export const MAX_MARKET_DEPTH_BANDS_WIRE = 32;
+
+/**
+ * `/market.bridged_supply[]` — one row per remote chain (`distinct` on
+ * chain); chain count is externally governed. Same dormant-path status as
+ * `depth_bands` until the bridge samplers exist. Flagged
+ * `bridged_supply_truncated`.
+ */
+export const MAX_BRIDGED_SUPPLY_ROWS = 32;
+export const MAX_BRIDGED_SUPPLY_ROWS_WIRE = 64;
+
+/**
+ * `ValidatorRow.failing_reasons[]` per row — contract eligibility reasons, a
+ * closed enumeration in the contract's validator checks. Per-row flag
+ * `failing_reasons_truncated` (the `messages_truncated` per-row precedent).
+ */
+export const MAX_FAILING_REASONS = 16;
+export const MAX_FAILING_REASONS_WIRE = 32;
+
 /** Every governance collection field that must appear in `WIRE_BOUNDS`. The test
  * cross-checks this list, so adding a bounded governance array without declaring
  * its pair fails CI rather than shipping a half-coupled bound. */
@@ -338,14 +394,38 @@ export const MAX_FUNNEL_ROWS_TOTAL = FUNNEL_STAGE_KEYS.length * FUNNEL_RETENTION
  * The test also cross-checks the per-family field lists (`*_BOUNDED_FIELDS`)
  * against it, so "add an array, forget the pair" fails CI.
  *
- * NOT YET COVERED, and recorded rather than implied: the collection bounds on
- * `/validators` (500), `/portfolio.active_redemptions` (500),
- * `/market.depth_bands` (32) and `.bridged_supply` (64), plus
- * `ValidatorRow.failing_reasons` (32), still live only in the web Zod schema with
- * no declared producer cap. Adopting them means giving each a producer-side
- * constant, which is a change to those endpoints rather than to this one.
+ * This registry is COMPLETE for the v1 wire surface: every collection that
+ * crosses the API↔web boundary has its pair here (the last five — the core
+ * read surface — were adopted at PR 8.0b). A NEW crossing collection must
+ * register its pair AND join a `*_BOUNDED_FIELDS` family list in the same
+ * change — a bound outside both is invisible to the gate.
  */
 export const WIRE_BOUNDS: readonly WireBound[] = [
+  {
+    field: "validators.validators",
+    producer: MAX_VALIDATOR_REGISTRY_ROWS,
+    consumer: MAX_VALIDATOR_REGISTRY_ROWS_WIRE,
+  },
+  {
+    field: "portfolio.active_redemptions",
+    producer: MAX_ACTIVE_REDEMPTIONS,
+    consumer: MAX_ACTIVE_REDEMPTIONS_WIRE,
+  },
+  {
+    field: "market.sample.depth_bands",
+    producer: MAX_MARKET_DEPTH_BANDS,
+    consumer: MAX_MARKET_DEPTH_BANDS_WIRE,
+  },
+  {
+    field: "market.bridged_supply",
+    producer: MAX_BRIDGED_SUPPLY_ROWS,
+    consumer: MAX_BRIDGED_SUPPLY_ROWS_WIRE,
+  },
+  {
+    field: "ValidatorRow.failing_reasons",
+    producer: MAX_FAILING_REASONS,
+    consumer: MAX_FAILING_REASONS_WIRE,
+  },
   {
     field: "governance/proposals.proposals",
     producer: MAX_GOV_PROPOSALS_PAGE,
@@ -412,6 +492,17 @@ export const WIRE_BOUNDS: readonly WireBound[] = [
     producer: MAX_ADMIN_INCIDENTS_PAGE,
     consumer: MAX_ADMIN_INCIDENTS_PAGE_WIRE,
   },
+];
+
+/** Every core v1 read-surface collection field that must appear in
+ * `WIRE_BOUNDS` — the governance cross-check, applied to this family for the
+ * same reason (add-an-array-forget-the-pair stays a CI failure). */
+export const CORE_BOUNDED_FIELDS: readonly string[] = [
+  "validators.validators",
+  "portfolio.active_redemptions",
+  "market.sample.depth_bands",
+  "market.bridged_supply",
+  "ValidatorRow.failing_reasons",
 ];
 
 /** Every §8.8 collection field that must appear in `WIRE_BOUNDS` — the

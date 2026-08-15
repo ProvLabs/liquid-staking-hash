@@ -15,7 +15,7 @@ import { z } from "zod";
 /** Bounded serving configuration. */
 export const configSchema = z.object({
   /** App environment, drives the environment badge (app-spec §7). */
-  appEnv: z.enum(["development", "staging", "production"]).default("development"),
+  appEnv: z.enum(["development", "testnet", "production"]).default("development"),
   /**
    * `api_reader` connection string (postgres scheme only — bounded at the
    * boundary). Optional: absent means no data plane is wired and every route

@@ -197,6 +197,11 @@ const statusRoute = defineEnveloped<unknown>({
         api_version: "v1",
         environment: ctx.appEnv,
         data_source: ctx.dataSource,
+        // The DATA'S age (the reconciler run's ranAt), never the response
+        // clock: with the indexer dead, `generated_at` stays current while
+        // this ages — which is exactly what the chrome's stale-heads
+        // degradation consumes. Null only on cold start (no run row).
+        reconciled_at: heads.reconciledAt === null ? null : heads.reconciledAt.toISOString(),
       },
       source: "indexed",
       chainHeight: heads.chainHeight,

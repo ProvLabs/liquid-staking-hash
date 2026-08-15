@@ -79,7 +79,7 @@ Economic vocabulary is shared with the console (console §2) and the contract sp
 
 The following are settled, subject only to the §14 open items:
 
-1. **Stack = the `nuva-app` reference architecture.** React Router 7 (framework mode, SSR, `remix-flat-routes` file routing), TypeScript strict, Vite. UI: Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/ui on Radix primitives, `lucide-react` icons, `cn()` (clsx + tailwind-merge), `class-variance-authority`. Forms: `react-hook-form` + `zod`. Tables: `@tanstack/react-table`. Charts: **Recharts**. Toasts: `sonner`. Dates: `date-fns`. Matching: `ts-pattern`. No new framework, CSS system, or chart library is introduced.
+1. **Stack = the `nuva-app` reference architecture.** React Router 7 (framework mode, SSR, `remix-flat-routes` file routing), TypeScript strict, Vite. UI: Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/ui on Radix primitives, `lucide-react` icons, `cn()` (clsx + tailwind-merge), `class-variance-authority`. Forms: `react-hook-form` + `zod`. Tables: `@tanstack/react-table`. Charts: the in-house SVG chart module (`apps/web/app/components/charts/` — hand-rolled step charts; Recharts was named here but never adopted, corrected 2026-08-14 at PR 8.3). Toasts: `sonner`. Dates: `date-fns`. Matching: `ts-pattern`. No new framework, CSS system, or chart library is introduced.
 2. **Backend = the same process, three layers.** Routes (loaders/actions + `api+/v1+` JSON routes) → services (`app/lib/services/*.server.ts`, business logic, logging) → models (`app/lib/models/*.server.ts`, the only Prisma import). Routes never touch the database; models hold no business logic (nuva `ARCHITECTURE.md` is normative here).
 3. **PostgreSQL + Prisma, multi-file schema.** One model per `prisma/*.prisma` file; migrations via `prisma migrate`. Indexer cursors persist in an `indexer_checkpoints` table (the nuva precedent).
 4. **The App both indexes and reads live.** Historical/aggregate data comes from the indexer; the canonical live numbers (NAV, TVV, vault paused state, pending swap-out queue, guard-relevant state) are read server-side from the configured LCD on request (short-TTL cached) so the App can label and reconcile rather than trail (resolves boundary §7.5: **both**).
@@ -87,8 +87,9 @@ The following are settled, subject only to the §14 open items:
 6. **All fund-moving transactions are user-signed in the browser.** The backend never holds keys, never signs, and exposes no endpoint that could move funds. Server writes are limited to the App's own state (sessions, alert rules, notification log, analytics).
 7. **The trust-reconciliation model of boundary §5 is implemented as stated:** chain canonical, freshness labels on indexed data, per-figure verify links into the Console, bounded and labeled divergence, automatic alarm on reconciliation failure (§12).
 8. **Amount discipline is identical to the console.** `Uint128` decimal strings parse to `BigInt` in TypeScript; Postgres stores base-unit amounts as `NUMERIC(39,0)` via Prisma `Decimal`; display conversion (nhash → HASH, bps → %) happens at render only. No floating-point on amounts anywhere, including the indexer.
-9. **Chart honesty rules carry over verbatim** from the shared dataviz method (console §11.6 is the sibling instance): NAV renders **step-after** (stepwise accrual is a fact, interpolation is a lie); APR windows under one day render "n/a" rather than absurd annualizations; diverging palettes only for genuinely signed measures; every chart offers a table view. Recharts is configured to these rules; the rules, not the library defaults, are normative.
+9. **Chart honesty rules carry over verbatim** from the shared dataviz method (console §11.6 is the sibling instance): NAV renders **step-after** (stepwise accrual is a fact, interpolation is a lie); APR windows under one day render "n/a" rather than absurd annualizations; diverging palettes only for genuinely signed measures; every chart offers a table view. The in-house SVG chart module (`components/charts/`) implements these rules directly; the rules are normative (Recharts reference corrected 2026-08-14, PR 8.3 — the dependency never existed in apps/web).
 10. **The App carries the NUVA family brand** (§11): the design tokens, type stack (Funnel Sans / Space Grotesk display / Geist Mono), and accent treatment from `nuva-app`'s design system, adapted to this program. The console stays austere; the App is the branded surface (boundary §6; resolves §7.4 as "shared method, App re-implements tokens in the nuva idiom" — §14.8 resolved: tokens are web-local per ADR-001 Decision 4, the accent/status brand pass landed in PR 1.4).
+11. **The axe gate carries an exception ledger (PR 8.3).** The standing axe suite runs `wcag2a, wcag2aa, wcag21a, wcag21aa` with `violations` asserted empty; any per-rule exclusion requires a RECORDED exception here — rule id + surface + reason — in the same change that adds it, so a weakened gate is a spec-visible event, never a quiet test edit. **Current exceptions: none.** The matrix is derived from the route registry (pages × {light, dark} × {anonymous, holder, roles} + two auto-theme cells); the manual screen-reader walk is an 8.5 pre-launch obligation (8.3 §7.1 Q5), and a green axe suite is NOT a completed accessibility review — automated scanning proves only the machine-checkable subset.
 11. **i18n from day one, English-only at launch.** The nuva route-based localization pattern (`$lang+` segments, translation namespaces, no hardcoded UI strings) is adopted wholesale so later locales are additive; the launch locale set is `en` only (§14.9 decided; future locales TBD, not in v1). Admin-gated routes are English-only (nuva convention).
 12. **Theme: Auto/Light/Dark three-way** via `next-themes`, dark default (the NUVA family register); both palettes are validated token sets per the dataviz method, not inversions.
 13. **Environments mirror the program's:** devnet / testnet / mainnet deployments, each pinned to one chain, one contract, one console origin. No in-app network switcher; the environment badge is prominent on non-mainnet (§7).
@@ -286,7 +287,7 @@ Per-environment server config (env vars via the nuva `config.ts` pattern) plus a
 | denom/share scales | exponent 9 / 15, `HASH`/`nhash`, `nvHASH`/`nvhash` | Identical to console §7. |
 | `REDEMPTION_MARGIN_BPS` | `50` | Display mirror of the contract constant (contract §8). |
 | `RECONCILE_TOLERANCE` / cadence | tolerance per metric; ~1 min cadence | §12 reconciler thresholds. |
-| `APP_ENV` | `development` \| `staging` \| `production` | nuva convention; drives the environment badge. |
+| `APP_ENV` | `development` \| `testnet` \| `production` | drives the environment badge. *Amended 2026-08-14 (PR 8.4 §7.1 Q5): `staging` REPLACED by `testnet` — the program has no separate staging environment, and an unused enum member invites a deployment into a state nothing is designed for. Two code boundaries (web `config.server.ts`/`client.ts`, api `config.ts`) plus this row; every other `appEnv` consumer branches only on `development`, so none changed behavior.* |
 
 > **Revision 2026-07-15 (PR 1.3, `apps/web` scaffold):** the web tier's config
 > boundary now exists and is enforced. The scaffold consumes only what it uses
@@ -725,6 +726,8 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 >
 > **No `governance` verify-link target** (D8, §12.2): the console has no
 > governance panel, and a pruned proposal has nothing on chain left to link to.
+> *(Retired 2026-08-14, PR 8.4b: the target shipped one pair with the
+> console's panel; live-plane rows link per-row — §12.2's revision.)*
 >
 > Standing gates added: `apps/web/test/governance-decode.test.ts` (golden
 > summaries per variant, totality over the shared vocabulary, unknown/malformed
@@ -928,6 +931,7 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 - `gov_proposals` / `gov_votes` (indexed mirror of `x/group` state for history and per-member status).
 - `alert_rules`, `notifications` (rule; address; channel; payload; delivered_at; read_at) — `app` schema, with Web Push subscriptions and the aggregate funnel counters (§14.10).
 - `indexer_checkpoints` (stream name PK; cursor height/page; updated_at) — the nuva precedent, one row per worker stream.
+- `holder_lifecycles` (address PK; first_deposit_height; exit_height nullable) — the materialized holder-lifecycle fold (PR 8.2 commit D, landed on the ratified T3 criterion's breach at 1.2 M transactions). An aggregate over already-indexed public rows: maintained by the chain-events worker per window as a recompute-from-truth (replay-convergent by construction, equality-gated against the original window-function fold), read by `services/api` without ever selecting the address out.
 
 > **Revision 2026-07-24 (PR 6.2 commit B, the `app`-schema alert domain):**
 > three tables land in the `app` schema (allowlist gate extended in the same
@@ -1240,7 +1244,8 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > shares has no NAV and null is the honest state; (d) the NAV formula is the
 > shared scale-then-floor helper `navHashPerShare` lifted into
 > `@nvhash/api-types` and golden-pinned to the web implementation's fixture
-> values (the web's switch to the shared copy is a recorded follow-on); (e)
+> values (the web consumes the shared copy through its `app/learn/amounts.ts`
+> re-export since PR 8.0b — one implementation, pinned from both suites); (e)
 > `/status.data_source` now reports what is wired (`api_reader` |
 > `unwired`) with real heights — the §8.0 chrome's freshness source.
 > `DATABASE_URL` (the `api_reader` role) is consumed as an OPTIONAL bounded
@@ -1542,6 +1547,28 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > → 401; `admin:` on an admin path → 200. Being registry-derived, a future admin
 > route joins it automatically.
 
+> **Revision 2026-08-14 (PR 8.0b, the core read surface joins the wire-bounds
+> registry):** the five collection bounds the 7.1 revision named as
+> not-yet-covered — `/validators.validators` (producer 400), `/portfolio.
+> active_redemptions` (400, newest-first so a trim drops the oldest),
+> `/market.sample.depth_bands` (16), `/market.bridged_supply` (32) and the
+> per-row `ValidatorRow.failing_reasons` (16) — are now declared producer-side
+> in `@nvhash/api-types/bounds.ts` and registered pairs; the registry is
+> complete for the v1 wire surface, and `CORE_BOUNDED_FIELDS` joins the
+> cross-checks.
+>
+> Each trim is FLAGGED, never silent (the `votes_truncated` posture):
+> `ValidatorsPayload.validators_truncated` (marks the whole set view — rows
+> and `set_health` aggregates — as partial),
+> `PortfolioSummary.active_redemptions_truncated` (the escrow sum covers the
+> served rows), `MarketSummary.depth_bands_truncated`/`.bridged_supply_truncated`,
+> and the per-row `ValidatorRow.failing_reasons_truncated`. The producer always
+> emits the flags; the web schemas accept them as **optional** for deploy skew
+> (the two components ship separately at 8.4), and an ABSENT flag renders as
+> **unknown — no completeness claim — never as "complete"**. The previously
+> unbounded registry and active-redemption SELECTs gain `take: MAX + 1`
+> (detect-then-trim).
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.
@@ -1598,7 +1625,9 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 
 Incidents are **computed from indexed facts, never hand-entered**: contract halted/resumed; vault paused/unpaused (with reason); slash write-down > 0 in an epoch; redemption refund observed (unfunded maturity — contract §8's "failure mode is a refund"); jail report opened/purged; epoch overdue (now − last_run > interval + slack); reconciler divergence; indexer lag beyond threshold. Each maps to a severity aligned with the console's status semantics (console §11.2) and feeds banners, the Learn-page history (C2), holder/admin alerts (D1), and the admin feed (A4). Closure is likewise computed (the condition clearing), with optional admin acknowledgment for the record.
 
-> **PR 2.5 status (2026-07-21):** the reconciler is the **sole writer** of `incidents` (`services/indexer/src/reconciler/`). Delivered kinds: `reconciler_divergence` and `contract_halted` (closeable, live-derived), `indexer_lag` (closeable, from per-stream checkpoint lag), `slash_write_down` and `redemption_refund` (point-in-time, from indexed facts). The alarm is proven end-to-end by a Postgres-backed acceptance test (corrupt an indexed row → the incident opens; fix it → it closes). **Deferred to a fast-follow** (each needs an additional live decoder not yet built): `vault_paused` (vault query), `jail_report` (jail open/close lifecycle), `epoch_overdue` (keyed off the calendar-month rollover now that it has landed, `liquid-staking-spec.md` §9 — the `min_run_interval_secs` config interval it would have used is retired). Point-in-time kinds are opened once and not auto-closed; admin acknowledgment remains an `app`-schema concern.
+> **PR 2.5 status (2026-07-21):** the reconciler is the **sole writer** of `incidents` (`services/indexer/src/reconciler/`). Delivered kinds: `reconciler_divergence` and `contract_halted` (closeable, live-derived), `indexer_lag` (closeable, from per-stream checkpoint lag), `slash_write_down` and `redemption_refund` (point-in-time, from indexed facts). The alarm is proven end-to-end by a Postgres-backed acceptance test (corrupt an indexed row → the incident opens; fix it → it closes). Point-in-time kinds are opened once and not auto-closed; admin acknowledgment remains an `app`-schema concern.
+>
+> **PR 8.1 status (2026-08-14):** two of the deferred kinds are DELIVERED, live-derived and closeable. `vault_paused` — a pinned vault read each pass (locally parsed, the mirror discipline); dedupeKey `paused`, severity `warning` (pause seats below halt's `critical`, 8.1 §7.1 Q2), payload `{reason}`; closes only on an OBSERVED unpause — a failed vault read skips the whole pass (all-or-nothing), never closes, because an unknown pause state is not "unpaused". `jail_report` — the contract's `jail_reports {}` per pass; dedupeKey carries the EPISODE (`valoper:{addr}:{reportedAtSeconds}`, so a re-jail is a new record, never a reopen of the first episode); severity `warning`; closes when the report leaves the chain (purged or cleared). The reconciler also gained per-pass transient tolerance: a failed pass logs and skips to the next cadence — the alarm outlives what it watches — and `/status` exposes `reconciled_at` (the run's `ranAt`, the data's age) which the web chrome consumes for its stale-heads degradation. **Still deferred:** `epoch_overdue` and the queue-length delta. `epoch_overdue`'s constraint is that no falsifiable drill exists until a calendar-month boundary passes with the crank withheld (the E-CAL constraint); its first exercise is Phase B's T1 calendar-month observation window (M8 overview §5 T1.6).
 
 ---
 
@@ -1797,7 +1826,7 @@ Alert rules (§8.2) evaluate on indexer ticks; deliveries record to `notificatio
 The App is the **branded, consumer-register member of the family**; the boundary doc assigned the calm consumer surface here so the console could stay austere (console §1, boundary §6). Two normative sources compose:
 
 1. **The nuva design system** (`Labs/nuva-app` `app.css` tokens, `app/lib/design-system/tokens.ts`, shadcn/ui `new-york` components) supplies the idiom: Tailwind 4 token definitions, component primitives, radii/spacing/type scales, and the brand register — **Funnel Sans** body, **Space Grotesk** display, **Geist Mono** for addresses/hashes/JSON, the NUVA mint-green accent treatment for primary CTAs, dark default with a first-class light theme. Program-specific token values (this product's accent tuning and semantic status set) are **established (PR 1.4, §14.8, web-local in `apps/web/app/theme/tokens.css`):** the NUVA mint-green accent drives the primary CTA and focus ring (`--primary`/`--ring`), with a dark green-black CTA label clearing WCAG AA in both themes, and a fixed four-role status set (`--status-good`/`-warning`/`-serious`/`-critical`) reserved for state and always shipped with icon + label. Both theme token sets are re-validated by the shared dataviz method on every change — the categorical chart palette via `check-palette.mjs`, and the accent/status contrast via `test/brand-tokens.test.ts` (both reuse `validate_palette.js`).
-2. **The shared dataviz method** (the same references the console §11.6 instantiates) governs every chart regardless of register: NAV and position-value series are **step-after** (interpolation of stepwise accrual is a lie); signed measures (net deposits, premium/discount) use the diverging pair, unsigned use sequential; status colors are reserved for state and always ship icon + label; single series are titled not legended; every chart offers a table view; sub-3:1 contrast slots carry direct labels. Recharts renders; the method decides.
+2. **The shared dataviz method** (the same references the console §11.6 instantiates) governs every chart regardless of register: NAV and position-value series are **step-after** (interpolation of stepwise accrual is a lie); signed measures (net deposits, premium/discount) use the diverging pair, unsigned use sequential; status colors are reserved for state and always ship icon + label; single series are titled not legended; every chart offers a table view; sub-3:1 contrast slots carry direct labels. The in-house SVG chart module renders; the method decides (Recharts reference corrected 2026-08-14, PR 8.3).
 
 **Register rules (the consumer deltas from the console):**
 
@@ -1849,6 +1878,21 @@ This section encodes boundary §5 as build requirements.
 > rows `pruned` precisely so the UI can say the chain no longer holds it rather
 > than offer a path that resolves to nothing. The panel and the target remain
 > one pair, scheduled with the §14.13 console follow-on before 8.4.
+>
+> **Revision 2026-08-14 (PR 8.4b): the `governance` target SHIPPED, one pair
+> with the console's `/governance` panel — D8 retired.** The map's absence
+> assertion was inverted (not deleted) in `test/verify-link.test.ts`. Entity
+> anchors delivered with it: `verifyHref` gains an optional TYPED anchor
+> keyed by target (`redemptions` accepts only a request id, `validators` only
+> a valoper, `overview` only an epoch index, `governance` only a proposal
+> id — an impossible link is unrepresentable), formatted as URL fragments so
+> the environment lock is untouched, with the grammar authority in
+> console-spec §14 item 9 and golden strings cross-pinned in both suites.
+> The pruning problem resolves PER ROW: a proposal links only when the LIVE
+> plane held it — a `pruned` or unconfirmed row renders no verify link, and
+> the App's other anchored call sites apply the same rule (a matured or
+> refunded redemption, an unregistered validator: no anchor the App can
+> predict resolves to nothing). §14.13 is DELIVERED.
 
 ### 12.3 Application security
 
@@ -2108,7 +2152,7 @@ Protocol and platform facts this design must respect (chain constraints identica
     - **Typical time-to-payout (§9.5.3):** show the median/p90 only once the cohort has **≥ 10 terminal (matured/expedited) redemption requests**; below that, the flow shows the **60-day guarantee alone** as the default/fallback. The statistic is physically bounded — a request cannot resolve faster than the ~21-day unbonding period nor slower than the 60-day ceiling — so the displayed "typical" settles into a **21–60-day band**; copy never implies precision or a range outside what the mechanism can deliver.
     - **Epoch-metric cold-start:** metrics that require an epoch step — NAV appreciation, net APR, effective yield, and time-to-payout — display only after **≥ 1 completed epoch**, rendering an explicit "first epoch not yet settled" state before that, never a zero. **Point-in-time facts are not gated** and render from block one: TVL, participant count, program age, and eligible-validator count (the Learn live-proof strip §8.1.2).
     - **Epoch cadence = calendar month, computed from block time (contract behavior, cross-referenced):** epochs align to **calendar-month boundaries derived from block time** (`env.block.time`, the consensus-agreed BFT timestamp — the only valid deterministic clock in the contract; Unix/UTC-based but authoritative by consensus, never a node's wall clock or an external UTC source). This is a *contract* fact, not an App display choice — it retires the `min_run_interval_secs` interval gate in favor of block-time month-rollover eligibility in `liquid-staking-spec.md`. The gate is an eligibility floor, not a trigger: the permissionless crank still ends the epoch, so durations remain variable as they always were; the change makes the earliest-valid boundary calendar-deterministic and caller-independent. **Implemented (E-CAL, 2026-07-22):** the contract-side change shipped — `min_run_interval_secs` is retired and `RunEpoch` is gated on `civil_month(env.block.time) > civil_month(last_run)` (`liquid-staking-spec.md` §9 and §14 item 12; implementation record [`docs/plans/2026-07-22-e-cal-calendar-month-implementation.md`](../plans/2026-07-22-e-cal-calendar-month-implementation.md), delivery ledger `IMPLEMENTATION-STATUS.md` §2). The App's "calendar month" copy now matches the contract.**
-13. **[FOLLOW-ON, console] Entity-level deep-link anchors** (request id, valoper, epoch index) so App verify links can land on the exact row, not just the page — a small console addition to schedule with console §14.
+13. **[DELIVERED 2026-08-14, PR 8.4b] Entity-level deep-link anchors** (request id, valoper, epoch index, proposal id) so App verify links land on the exact row, not just the page. The grammar authority is **console-spec §14 item 9** (the console-side record); both suites pin the same golden strings (`apps/web/test/verify-link.test.ts`, `apps/console/test/anchors.test.ts`). The App's href form is the typed anchor argument in §12.2's 2026-08-14 revision, with the pruned-row no-link rule.
 14. **[DECIDED 2026-07-15, Ira] Product name & environment exposure; domain still open** (boundary §7.1).
     - **Name:** the product is **nvHASH** (the display brand everywhere), with the formal name **"Liquid Staking HASH Vault"** for titles/meta/first-reference. The prior working title "nvHASH App" is retired.
     - **Domain: still `[DECIDE]`.** Undetermined; the working concept is `nvhash.nuva.finance`. A **separate NUVA integration** will reflect the vault inside `app.nuva.finance` at a **post-launch date (TBD)** — a NUVA-team deliverable that imposes no v1 obligation on this App beyond not precluding it.

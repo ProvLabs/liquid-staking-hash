@@ -46,4 +46,9 @@ test("market figures carry no verify link; the chain-derived history section doe
     .getByRole("link", { name: "Verify on the console" })
     .getAttribute("href");
   expect(href).toMatch(/^https:\/\/console\.invalid\//);
+  // This offline harness has no indexed plane, so the epoch series is empty
+  // and the section link is the PLAIN page href — an anchor to an epoch the
+  // App cannot name would be invented. The anchored form (`#epoch-{index}`
+  // on the latest settled epoch) is pinned by test/verify-link.test.ts.
+  expect(href).not.toContain("#");
 });

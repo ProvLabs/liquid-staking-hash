@@ -307,3 +307,15 @@ CREATE INDEX "validator_epochs_epochIndex_idx" ON "indexed"."validator_epochs"("
 -- column nullability is not expressible in the Prisma datamodel, so the
 -- constraint is asserted here.
 ALTER TABLE "indexed"."gov_proposals" ALTER COLUMN "proposers" SET NOT NULL;
+
+-- CreateTable
+CREATE TABLE "indexed"."holder_lifecycles" (
+    "address" TEXT NOT NULL,
+    "firstDepositHeight" BIGINT NOT NULL,
+    "exitHeight" BIGINT,
+
+    CONSTRAINT "holder_lifecycles_pkey" PRIMARY KEY ("address")
+);
+
+-- CreateIndex
+CREATE INDEX "holder_lifecycles_firstDepositHeight_idx" ON "indexed"."holder_lifecycles"("firstDepositHeight");

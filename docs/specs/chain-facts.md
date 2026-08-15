@@ -151,3 +151,31 @@ plane the app tiers use.
 
 **3. A height-pinned read below a pruning node's retention horizon fails.** That
 failure recovers nothing and is **not** a prune signal.
+
+## §testnet — Public-testnet facts (pilot provenance)
+
+Every entry here is MEASURED on `pio-testnet-1` and carries its provenance
+(date, height, endpoint). This section exists from PR 8.4 with its recording
+obligations OPEN — the scripts that produce each fact are authored and the
+first pilot run fills the values in; an unfilled row is a pilot-blocking
+[VERIFY], never an assumed value:
+
+**1. [VERIFY — `probe-accept-asset.sh`, the D27 go/no-go] Vault module
+version.** Whether the public testnet build carries `provlabs/vault` at
+v1.2.4+ and serves `/vault/v1` on the LCD. Fail ⇒ the pilot WAITS on
+upstream (D27; no program-operated fallback exists). The probe prints the
+exact block to append here.
+
+**2. [VERIFY — `testnet-deploy.sh` step 4] Testnet `unbonding_time`** and the
+derived vault `withdrawal_delay_seconds` (3/2 × unbonding).
+
+**3. [VERIFY — `testnet-deploy.sh` step 6, CO-29] `MsgStoreCode` gas** for the
+~639 KB artifact, plus the testnet per-tx gas cap — the mainnet-cap
+comparison that must land before the S1 audit freezes the contract
+(recorded in `contracts/IMPLEMENTATION-STATUS.md` §3 with
+date/chain/height/txhash/size/sha256).
+
+**4. [VERIFY — commit C preflight] The public LCD host** for the pilot
+(`lcd.test.provenance.io` vs `api.test.provenance.io` — the console's
+committed `.env.testnet` note says the former does not resolve; measure,
+don't assume) **and its CORS posture** for the console's browser-side reads.

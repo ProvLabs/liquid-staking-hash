@@ -4,7 +4,7 @@
 // histories. Postgres-free via a fake checkpoint store.
 
 import { describe, expect, it } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../../src/prisma.ts";
 import {
   assertChainIsolation,
   ChainIsolationError,

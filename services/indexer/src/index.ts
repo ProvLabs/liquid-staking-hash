@@ -90,17 +90,31 @@ export async function run(): Promise<void> {
   // `registerWorker` seam is available for self-registration; kept explicit
   // here so startup is testable and obvious). Reconciler + more workers append
   // in later M2 PRs.
+  // The chain workers' first ingested height (plan 8.4 §2.9): default 1;
+  // per-environment, the bootstrap's recorded contract store height — the
+  // spread override is the composition root's job so no worker re-implements
+  // start-height policy.
+  const indexStart = BigInt(config.indexStartHeight);
   const workers: Worker[] = [
-    createChainEventsWorker({
-      rpc,
-      scope: {
-        vaultAddress: config.vaultAddress,
-        receiptDenom: config.receiptDenom,
-        contractAddress: config.contractAddress,
-      },
-    }),
-    createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
-    createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),
+    {
+      ...createChainEventsWorker({
+        rpc,
+        scope: {
+          vaultAddress: config.vaultAddress,
+          receiptDenom: config.receiptDenom,
+          contractAddress: config.contractAddress,
+        },
+      }),
+      startHeight: indexStart,
+    },
+    {
+      ...createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
+      startHeight: indexStart,
+    },
+    {
+      ...createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),
+      startHeight: indexStart,
+    },
     // Governance. Starts on every chain, including one with no x/group
     // substrate at all: policy discovery then resolves to the empty set and the
     // worker commits empty windows, which is the honest no-governance state
@@ -150,6 +164,7 @@ export async function run(): Promise<void> {
       rpc,
       pinned,
       contractAddress: config.contractAddress,
+      vaultAddress: config.vaultAddress,
       cadenceMs: config.reconcileIntervalMs,
       sleep: (ms) => sleep(ms, controller.signal),
       signal: controller.signal,

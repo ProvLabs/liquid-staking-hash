@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { CORPUS_CERTIFIED } from "~/chrome/certification";
 import { describeFreshness, formatAge } from "~/chrome/freshness";
 import type { ChromeState } from "~/chrome/types";
 import { t, type Locale } from "~/i18n";
@@ -27,7 +28,9 @@ export function FreshnessFooter({
     return () => clearInterval(id);
   }, []);
 
-  const display = describeFreshness(chrome.freshness, nowMs);
+  // The age is the DATA'S age when the API reports one (reconciled_at),
+  // falling back to the response clock only when none exists (8.1 §2.2).
+  const display = describeFreshness(chrome.freshness, nowMs, chrome.reconciledAt);
 
   return (
     <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-6 py-3 text-sm text-muted-foreground">
@@ -43,6 +46,12 @@ export function FreshnessFooter({
           : t(locale, "chrome.freshness-na")}
       </span>
       {chrome.liveStatusOk ? null : <span>{t(locale, "chrome.status-unavailable")}</span>}
+      {/* The pre-certification caveat (D22): keyed to the fixture manifest
+          status, not a config flag — it retires only when 8.0's re-capture
+          flips the manifest, in the same commit (plan 8.4 §2.7.2). */}
+      {CORPUS_CERTIFIED ? null : (
+        <span data-certification-caveat>{t(locale, "chrome.certification-caveat")}</span>
+      )}
       <a
         className="underline underline-offset-4 hover:text-foreground"
         href={consoleUrl}

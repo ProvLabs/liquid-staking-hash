@@ -55,6 +55,23 @@ test("a pruned proposal says the chain no longer holds it", async ({ page }) => 
   await expect(
     page.getByText("The chain no longer holds this proposal", { exact: false }).first(),
   ).toBeVisible();
+  // The per-row D8 rule (PR 8.4b): the console is the LIVE plane, so a pruned
+  // proposal — which the App knows has nothing left on chain — gets no
+  // GOVERNANCE verify link (no href to the console's /governance panel, with
+  // or without a #prop anchor). The global footer's plain console link is a
+  // page-level affordance and stays.
+  const governanceLinks = page.locator('a[href*="/governance"][target="_blank"]');
+  await expect(governanceLinks).toHaveCount(0);
+});
+
+test("the governance list carries the console's governance-panel verify link", async ({ page }) => {
+  // One pair with the console's /governance panel (D8, retired in 8.4b): the
+  // list links the live-plane counterpart at the page level.
+  await page.goto("/governance");
+  const verify = page.getByRole("link", { name: "Verify on the console" }).first();
+  await expect(verify).toBeVisible();
+  const href = await verify.getAttribute("href");
+  expect(href?.endsWith("/governance")).toBe(true);
 });
 
 test("the detail page shows the summary above the exact JSON, for every message", async ({

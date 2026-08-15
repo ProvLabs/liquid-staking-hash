@@ -50,6 +50,15 @@ fi
 WASM_IN="${WASM_IN:-/tmp/nvhash_staking.wasm}"
 CONTRACT_LABEL="${CONTRACT_LABEL:-nvhash-staking}"
 CONTRACT_ADMIN="${CONTRACT_ADMIN:-}"
+# The wasmd contract admin (MsgMigrateContract authority) — a DIFFERENT
+# authority from InstantiateMsg.admin above, fixed at instantiate and
+# irreversible per deployment. Defaults to CONTRACT_ADMIN so the governed
+# bootstrap (group policy as CONTRACT_ADMIN) puts BOTH authorities on the
+# admin policy (8.4a D21); a plain bootstrap keeps the deployer key, today's
+# devnet behavior. There is deliberately NO no-admin path: renouncing
+# upgradability is MsgClearAdmin through the group ceremony, reversible right
+# up until executed.
+WASM_ADMIN="${WASM_ADMIN:-}"
 MAX_DELEGATIONS_PER_RUN="${MAX_DELEGATIONS_PER_RUN:-0}"
 AUM_FEE_BPS="${AUM_FEE_BPS:-0}"
 
@@ -139,7 +148,8 @@ VAL_ADDR="$(addr_of "$VALIDATOR")"
 [ -n "$ADMIN_ADDR" ] || { echo "admin key '$ADMIN' not in keyring" >&2; exit 1; }
 [ -n "$VAL_ADDR" ] || { echo "validator key '$VALIDATOR' not in keyring" >&2; exit 1; }
 [ -n "$CONTRACT_ADMIN" ] || CONTRACT_ADMIN="$ADMIN_ADDR"
-echo "  admin=$ADMIN_ADDR  validator=$VAL_ADDR  contract-admin=$CONTRACT_ADMIN"
+[ -n "$WASM_ADMIN" ] || WASM_ADMIN="$CONTRACT_ADMIN"
+echo "  admin=$ADMIN_ADDR  validator=$VAL_ADDR  contract-admin=$CONTRACT_ADMIN  wasm-admin=$WASM_ADMIN"
 
 # ============================================================================
 # 1) RESTRICTED receipt marker (held asset; NOT the vault underlying)
@@ -237,7 +247,7 @@ else
 JSON
 )"
   INST_RES="$(tx wasm instantiate "$CODE_ID" "$INIT_MSG" \
-      --label "$CONTRACT_LABEL" --admin "$ADMIN_ADDR" --from "$ADMIN")"
+      --label "$CONTRACT_LABEL" --admin "$WASM_ADMIN" --from "$ADMIN")"
   CONTRACT="$(ev_attr "$INST_RES" "instantiate" "_contract_address")"
   [ -n "$CONTRACT" ] || { echo "could not parse contract address" >&2; exit 1; }
   echo "  CONTRACT=$CONTRACT"

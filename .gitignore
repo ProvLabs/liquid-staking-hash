@@ -20,6 +20,9 @@ build/
 test-results/
 playwright-report/
 
+# Generated Prisma client (explicit output — see services/indexer/src/prisma.ts)
+services/indexer/generated/
+
 # Devnet runtime state
 infra/devnet/state/
 
@@ -48,3 +51,7 @@ CLAUDE.local.md
 
 # Logs
 *.log
+
+# Build-time-fetched webfonts (plan 8.4 §2.8): checksum-pinned by
+# apps/web/scripts/fetch-fonts.mjs, never committed (no binaries in git).
+apps/web/public/fonts/

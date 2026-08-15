@@ -1,0 +1,44 @@
+# Mainnet overlay — SHAPE ONLY (plan 8.4 §2.3): the same structure as
+# testnet with every value a placeholder. Completing it is 8.5's work, behind
+# the §14 launch checklist (incl. the receipt-marker required-attribute
+# restoration that §7.1 Q4 promoted to a hard 8.5 gate) — NOT this PR's.
+# Nothing here is deployable: kustomize builds it, but every SET-AT-8.5
+# value fails the workloads' boot checks by design.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: nvhash-mainnet
+
+resources:
+  - ../../base/indexer
+  - ../../base/api
+  - ../../base/web
+  - ../../base/notifier
+  - ../../base/console
+  - ../../base/jobs
+
+configMapGenerator:
+  - name: indexer-config
+    literals:
+      - CHAIN_ID=pio-mainnet-1
+      - LCD_URL=SET-AT-8.5
+      - RPC_URL=SET-AT-8.5
+      - RECEIPT_DENOM=nvhash
+      - CONTRACT_ADDRESS=
+      - VAULT_ADDRESS=
+      - INDEX_START_HEIGHT=
+  - name: api-config
+    literals:
+      - PORT=8080
+      - TRUST_PROXY=SET-AT-8.5
+  - name: web-config
+    literals:
+      - APP_ENV=production
+      - CHAIN_ID=pio-mainnet-1
+      - CONSOLE_CHAIN_ID=pio-mainnet-1
+      - LCD_URL=SET-AT-8.5
+      - CONTRACT_ADDRESS=
+      - VAULT_ADDRESS=
+      - CONSOLE_URL=SET-AT-8.5
+      - API_URL=SET-AT-8.5
+      - EXPLORER_URL=SET-AT-8.5
+      - WALLETCONNECT_PROJECT_ID=SET-AT-8.5

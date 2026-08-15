@@ -1,0 +1,49 @@
+# ArgoCD app-of-apps (plan 8.4 §2.3): one parent Application per environment
+# pointing at its overlay. The overlay's sync-wave annotations order the sync
+# (db-provision → migrations → grant-verify → workloads); a failed wave halts
+# it — fail-closed at the profile level. repoURL/targetRevision and the
+# destination cluster are §7 Q6 ops parameters (SET-AT-DEPLOY).
+#
+# Application names are {env}-{component} by the C1 rule; the parent per env
+# below is the generator — child Applications per workload are an optional
+# refinement once the cluster exists (one Application per overlay is
+# sufficient for the pilot and keeps the wave ordering in ONE sync).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: testnet-nvhash
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: SET-AT-DEPLOY
+    targetRevision: main
+    path: infra/deploy/k8s/overlays/testnet
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nvhash-testnet
+  syncPolicy:
+    # Manual sync for the pilot: the bootstrap's overlay values land by
+    # commit (C3 row 4), and a human triggers the sync that consumes them.
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mainnet-nvhash
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: SET-AT-DEPLOY
+    targetRevision: main
+    path: infra/deploy/k8s/overlays/mainnet
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nvhash-mainnet
+  syncPolicy:
+    # SHAPE ONLY until 8.5: never auto-synced; the overlay's placeholder
+    # values fail every boot check by design.
+    syncOptions:
+      - CreateNamespace=true

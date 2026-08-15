@@ -6,6 +6,7 @@
 // is allowed by app-spec §9.5) and confine that conversion to that mapping.
 
 import type { FreshnessMeta } from "@nvhash/api-types";
+import type { Completeness } from "~/api/completeness";
 
 /** Which plane the position value was composed from, or null when neither read. */
 export type PortfolioPlane = "live" | "indexed" | null;
@@ -97,6 +98,10 @@ export interface PortfolioData {
   yieldTruncated: boolean;
   accrual: AccrualVM | null;
   activeRedemptions: RedemptionVM[];
+  /** Tri-state of the wire flag: "partial" = the producer trimmed the set
+   * (oldest dropped) and the escrow figures cover the served rows only;
+   * "unknown" = older API, no completeness claim to render. */
+  activeRedemptionsCompleteness: Completeness;
   firstActivityAt: string | null;
   history: HistoryPageVM | null;
   /** False when the assertion key is unset or the API is unreachable. */

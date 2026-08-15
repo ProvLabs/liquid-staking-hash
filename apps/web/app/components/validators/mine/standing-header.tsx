@@ -38,7 +38,13 @@ export function StandingHeader({
         <h2 className="text-xl font-semibold">
           {standing.moniker ?? t(locale, "operator.unnamed-validator")}
         </h2>
-        <VerifyLink locale={locale} target="validators" />
+        {/* Anchored to this validator's row only while enrolled — the App
+            must not offer an anchor it knows resolves to nothing (§12.2). */}
+        <VerifyLink
+          locale={locale}
+          target="validators"
+          anchor={standing.active ? { valoper: standing.valoper } : undefined}
+        />
       </div>
       <p className="break-all font-mono text-xs text-muted-foreground">{standing.valoper}</p>
 

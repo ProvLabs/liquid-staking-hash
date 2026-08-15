@@ -37,6 +37,10 @@ cw2 = "2.0"
 cw-utils = "2.0"
 provwasm-std = { version = "2.8.0", default-features = false, features = ["provlabs-all", "provenance-marker", "provenance-exchange", "cosmos-staking", "cosmos-slashing", "cosmos-auth", "cosmos-crypto"] }
 schemars = "0.8"
+# Reviewed dependency (8.4a §7.1 Q4, SECURITY.md): the cw ecosystem's standard
+# semver comparator, zero transitive dependencies. Ordering — not mere
+# equality — is what gates a downgrade migration (F1–F9 resurrection class).
+semver = { version = "1.0", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 sha2 = { version = "0.10", default-features = false }
 thiserror = "1.0"

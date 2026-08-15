@@ -15,6 +15,7 @@
 import { LcdClient, VaultClient, type FetchLike } from "@nvhash/chain-client";
 
 import { epochsEnvelopeSchema, fetchApiJson, marketEnvelopeSchema } from "~/api/api.server";
+import { completenessOf } from "~/api/completeness";
 import { CHROME_READ_TIMEOUT_MS } from "~/chrome/chrome.server";
 import type { WebConfig } from "~/config/config.server";
 import { bpsToPercent, formatBaseAmount, HASH_EXPONENT, SHARE_EXPONENT } from "~/learn/amounts";
@@ -78,6 +79,11 @@ export async function loadMarketData(
               supplyNvhash: formatBaseAmount(BigInt(row.supply), SHARE_EXPONENT, 2),
               sampledAt: row.sampled_at,
             })),
+            // Tri-state, never a defaulted boolean: an absent wire flag
+            // (older API) is "unknown", and the panel then withholds the
+            // completeness claim rather than asserting totality.
+            depthCompleteness: completenessOf(summary.data.depth_bands_truncated),
+            bridgedCompleteness: completenessOf(summary.data.bridged_supply_truncated),
             meta: summary.meta,
           },
     localSupply:

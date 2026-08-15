@@ -13,9 +13,10 @@
  * themes, via validate_palette.js's `contrast`).
  *
  * The type stack (Funnel Sans body / Space Grotesk display / Geist Mono for
- * addresses, app-spec §11) is NOT set here: self-hosting the webfonts without
- * committing binaries (no-binary-artifacts rule) is its own change and is not
- * part of the §14.8 accent/status brand pass — tracked separately.
+ * addresses, app-spec §11) lives in theme/fonts.css: self-hosted via the
+ * build-time fetch (scripts/fetch-fonts.mjs, commit-pinned + sha256-verified,
+ * gitignored public/fonts/) so no binary is committed. System stacks remain
+ * the fallback; a dev build without the fetch stays fully usable.
  *
  * Theming: chrome/accent tokens are a single `light-dark()` pair. `color-scheme`
  * on :root makes "auto" follow the OS; an explicit `data-theme` pins it. The

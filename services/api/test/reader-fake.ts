@@ -13,6 +13,7 @@ import type {
 import type { IndexedReader } from "../src/reader.ts";
 import type { EpochStepFact } from "../src/portfolio-metrics.ts";
 import {
+  deriveMarketSummary,
   derivePayoutStats,
   derivePortfolio,
   deriveHeads,
@@ -25,10 +26,8 @@ import {
   toAlertArrearsFact,
   toAlertIncidentFact,
   toAlertRedemptionFact,
-  toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
-  toMarketSample,
   toTransactionRow,
   type AdminIncidentFacts,
   type AlertIncidentFacts,
@@ -52,7 +51,7 @@ import {
 import type { Pagination } from "../src/query.ts";
 
 export interface FakeFacts {
-  readonly reconcilerRun?: { chainHeight: bigint; indexedHeight: bigint } | undefined;
+  readonly reconcilerRun?: { chainHeight: bigint; indexedHeight: bigint; ranAt?: Date } | undefined;
   readonly maxCheckpointHeight?: bigint | undefined;
   readonly metrics?: MetricsFacts | undefined;
   readonly epochs?: readonly EpochSnapshotFacts[] | undefined;
@@ -134,7 +133,20 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
 
   return {
     heads: () =>
-      Promise.resolve(deriveHeads(facts.reconcilerRun ?? null, facts.maxCheckpointHeight ?? null)),
+      Promise.resolve(
+        deriveHeads(
+          facts.reconcilerRun === undefined
+            ? null
+            : {
+                chainHeight: facts.reconcilerRun.chainHeight,
+                indexedHeight: facts.reconcilerRun.indexedHeight,
+                // Fixed default so unrelated fixtures stay deterministic; a
+                // case exercising the data-age contract seeds its own ranAt.
+                ranAt: facts.reconcilerRun.ranAt ?? new Date("2026-07-22T00:00:00Z"),
+              },
+          facts.maxCheckpointHeight ?? null,
+        ),
+      ),
     programMetrics: () =>
       Promise.resolve(
         deriveMetrics(
@@ -173,18 +185,17 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
       const samples = [...(facts.marketSamples ?? [])].sort(
         (a, b) => b.sampledAt.getTime() - a.sampledAt.getTime(),
       );
-      const raw = samples[0];
-      let sample = null;
-      if (raw !== undefined) {
+      const raw = samples[0] ?? null;
+      let nav: bigint | null = null;
+      if (raw !== null) {
         // Mirror the Prisma reader's [R6] lookup: the last epoch settled at
         // or before the sample's time supplies the premium denominator.
         const sampledAtSeconds = BigInt(Math.floor(raw.sampledAt.getTime() / 1000));
         const navEpoch = [...(facts.epochs ?? [])]
           .filter((e) => e.endedAtSeconds <= sampledAtSeconds)
           .sort((a, b) => (a.epochIndex < b.epochIndex ? 1 : -1))[0];
-        const nav =
+        nav =
           navEpoch === undefined ? null : navPriceNhash(navEpoch.tvvAfter, navEpoch.totalShares);
-        sample = toMarketSample(raw, nav);
       }
       const latestByChain = new Map<string, BridgedSupplyFacts>();
       for (const row of [...(facts.bridgedSupply ?? [])].sort(
@@ -192,16 +203,18 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
       )) {
         latestByChain.set(row.chain, row); // ascending walk: last write = latest
       }
-      return Promise.resolve({
-        sample,
-        // Sort by chain ascending to MATCH the Prisma reader's ordering
-        //: Map insertion order is first temporal appearance,
-        // which only coincidentally agrees with the real reader's
-        // `chain: "asc"` — the fake must not diverge from production order.
-        bridged_supply: [...latestByChain.values()]
-          .sort((a, b) => (a.chain < b.chain ? -1 : 1))
-          .map(toBridgedSupplyRow),
-      });
+      // Through the REAL deriveMarketSummary, trims and flags included — a
+      // fake deriving the flags from a pre-sliced list could mask a defect.
+      // Sort by chain ascending to MATCH the Prisma reader's ordering:
+      // Map insertion order is first temporal appearance, which only
+      // coincidentally agrees with the real reader's `chain: "asc"`.
+      return Promise.resolve(
+        deriveMarketSummary(
+          raw,
+          nav,
+          [...latestByChain.values()].sort((a, b) => (a.chain < b.chain ? -1 : 1)),
+        ),
+      );
     },
     payoutStats: () => {
       // Mirror the Prisma reader: recent terminal cohort → durations →

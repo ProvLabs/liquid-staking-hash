@@ -4,9 +4,16 @@
 # One command to bring up Postgres + indexer + api + web against the dev node:
 #
 #   infra/devnet/stack.sh up        dev node (+ resolve contract) -> postgres ->
-#                                   roles/schemas -> migrate -> indexer/api/web,
-#                                   waiting until every component is healthy
+#                                   roles/schemas -> migrate (indexed AND app) ->
+#                                   indexer/api/web/notifier, waiting until
+#                                   every component is healthy
 #   infra/devnet/stack.sh verify    run the grant-boundary gate + show health
+#   infra/devnet/stack.sh e2e       restart web (fresh bundle), export
+#                                   E2E_LIVE_STACK_PREPARED_AT, run the given
+#                                   command (default: the e2e-live suite). The
+#                                   ONLY sanctioned entry for live runs — it is
+#                                   what makes a green run certify the bundle
+#                                   it ran against (the stale-bundle gate).
 #   infra/devnet/stack.sh status    compose status + health of each component
 #   infra/devnet/stack.sh logs      follow the app services' logs
 #   infra/devnet/stack.sh down      stop the app services (dev node + postgres
@@ -34,6 +41,7 @@ CONTAINER="${CONTAINER:-dev-node}"
 DEVNET_HOME="${HOME_DIR:-/provenance/nodedev}"
 SHARE="${SHARE:-nvhash}"
 INDEXER_WRITER_URL="postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed"
+APP_WRITER_URL="postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app"
 
 ensure_network() {
   docker network inspect "$NETWORK" >/dev/null 2>&1 \
@@ -101,9 +109,16 @@ up() {
   # Belt-and-braces: grant SELECT on anything already present (e.g. the Prisma
   # migrations table) — new tables inherit SELECT via roles.sql default privs.
   psql_admin -c "GRANT SELECT ON ALL TABLES IN SCHEMA indexed TO api_reader;" >/dev/null
+  # The `app` schema too, as app_writer (the way the db-grants CI job does):
+  # web sessions/notifications/acks are durable on this stack, which is what
+  # lets the notifier's writes reach the bell (8.1 §2.9). Idempotent against a
+  # database that already has it.
+  echo "== migrating the app schema (as app_writer) =="
+  "${COMPOSE[@]}" run --rm -e DATABASE_URL="$APP_WRITER_URL" tools \
+    corepack pnpm --filter @nvhash/web run migrate:deploy
 
   # 4. App services, waiting until each reports healthy.
-  echo "== starting indexer + api + web (waiting for health) =="
+  echo "== starting indexer + api + web + notifier (waiting for health) =="
   "${COMPOSE[@]}" --profile db --profile app up -d --wait --wait-timeout 300
 
   echo
@@ -129,7 +144,29 @@ status() {
 }
 
 logs() {
-  "${COMPOSE[@]}" --profile app logs -f indexer api web
+  "${COMPOSE[@]}" --profile app logs -f indexer api web notifier
+}
+
+# The stale-bundle mechanism (8.1 §2.8; web-design-notes "Live e2e re-run
+# trap"): the compose `web` service builds at container START, so a
+# long-running stack serves a stale bundle and a green live run can certify
+# code that is not there. This entry restarts `web` (fresh build), waits for
+# health, exports E2E_LIVE_STACK_PREPARED_AT, and only then runs the requested
+# command — the stale-bundle spec FAILS any run whose served `started_at`
+# predates it, so a bypassed entry point fails rather than passing silently.
+e2e() {
+  resolve_addresses
+  echo "== restarting web (fresh bundle) =="
+  "${COMPOSE[@]}" --profile db --profile app restart web
+  "${COMPOSE[@]}" --profile db --profile app up -d --wait --wait-timeout 300 web
+  E2E_LIVE_STACK_PREPARED_AT="$(date +%s)"
+  export E2E_LIVE_STACK_PREPARED_AT
+  echo "== stack prepared at $E2E_LIVE_STACK_PREPARED_AT; running: ${*:-e2e-live suite} =="
+  if [ "$#" -gt 0 ]; then
+    "$@"
+  else
+    (cd "$REPO" && ./dev pw --filter @nvhash/web run test:e2e:live)
+  fi
 }
 
 down() {
@@ -139,9 +176,9 @@ down() {
   else
     echo "== stopping app services (postgres + dev node left running) =="
     # Both profiles are enabled so the indexer's depends_on: postgres reference
-    # resolves; `rm` still targets only the three app services, leaving the
+    # resolves; `rm` still targets only the app services, leaving the
     # postgres container (and its volume) up.
-    "${COMPOSE[@]}" --profile db --profile app rm -sf indexer api web
+    "${COMPOSE[@]}" --profile db --profile app rm -sf indexer api web notifier
   fi
 }
 
@@ -149,11 +186,12 @@ CMD="${1:-up}"; shift || true
 case "$CMD" in
   up) up ;;
   verify) verify ;;
+  e2e) e2e "$@" ;;
   status) status ;;
   logs) logs ;;
   down) down "$@" ;;
   *)
-    echo "usage: $0 [up|verify|status|logs|down [--all]]" >&2
+    echo "usage: $0 [up|verify|e2e [cmd…]|status|logs|down [--all]]" >&2
     exit 1
     ;;
 esac

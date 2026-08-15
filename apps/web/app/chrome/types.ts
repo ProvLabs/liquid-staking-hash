@@ -26,4 +26,11 @@ export interface ChromeState {
   liveStatusOk: boolean;
   /** `/api/v1/status` freshness meta; null when the API was unreachable. */
   freshness: FreshnessMeta | null;
+  /**
+   * `/status.reconciled_at` — the DATA'S age (the reconciler run's ranAt),
+   * never the response clock. Null when the API was unreachable, on cold
+   * start (no run row), or against an older API that ships no field; the
+   * footer age then falls back to `generated_at` and no staleness is claimed.
+   */
+  reconciledAt: string | null;
 }

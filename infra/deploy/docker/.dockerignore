@@ -1,0 +1,31 @@
+# Build-context exclusions for every image (plan 8.4 §2.1). ENFORCED, not
+# aspirational: the images job builds with sentinel values planted in .env
+# files and scan-image-secrets.sh fails CI if any sentinel reaches a layer —
+# removing an exclusion here turns that gate red.
+.git
+.github
+
+# Env files never enter a build context; .env.example is the documented
+# placeholder set and is allowed.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+# The console's Vite profiles are all client-public by design (VITE_* only)
+# and the console image build needs them.
+!apps/console/.env.*
+
+# Devnet state (keys, chain data) and local stores.
+infra/devnet/state/
+.pnpm-store/
+**/node_modules
+**/dist
+**/build
+**/generated
+**/test-results
+**/playwright-report
+
+# Contracts: the wasm toolchain never enters app images; the artifact is
+# built on demand by the bootstrap, not baked (no binaries in git either).
+contracts/

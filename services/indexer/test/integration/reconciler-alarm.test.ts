@@ -11,7 +11,7 @@
 // depend on the singleton's environment.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../src/prisma.ts";
 import { reconcileOnce, type ReconcilerDeps } from "../../src/reconciler/index.ts";
 import type { PinnedLcdClient, RpcClient } from "../../src/transport/rpc.ts";
 
@@ -55,13 +55,23 @@ function snapshotJson(epochIndex: bigint, totalShares: bigint): Record<string, u
   };
 }
 
-/** Fake chain: reports LIVE_TOTAL_SHARES for TEST_EPOCH, not halted. */
+/** Fake chain: reports LIVE_TOTAL_SHARES for TEST_EPOCH, not halted. The
+ * vault's pause state is mutable so the pause open/close pair can be driven
+ * through the same end-to-end pass the divergence pair uses. */
+let livePaused = false;
 const fakeRpc = { latestHeight: async () => 1000n } as unknown as RpcClient;
 const fakePinned = {
   smartAtHeight: async (_c: string, query: Record<string, unknown>) => {
     if ("epoch_snapshot" in query) return { snapshot: snapshotJson(TEST_EPOCH, LIVE_TOTAL_SHARES) };
     if ("epoch_status" in query) return { phase: "idle", halted: false, last_run_seconds: 0 };
+    if ("jail_reports" in query) return { reports: [] };
     throw new Error("unexpected query");
+  },
+  getAtHeight: async (path: string) => {
+    if (path.startsWith("vault/v1/vaults/")) {
+      return { vault: { paused: livePaused, paused_reason: livePaused ? "drill" : "" } };
+    }
+    throw new Error(`unexpected path ${path}`);
   },
 } as unknown as PinnedLcdClient;
 
@@ -70,6 +80,7 @@ const deps: ReconcilerDeps = {
   rpc: fakeRpc,
   pinned: fakePinned,
   contractAddress: "tp1contract",
+  vaultAddress: "tp1vault",
   cadenceMs: 1000,
   sleep: async () => {},
   signal: new AbortController().signal,
@@ -79,7 +90,12 @@ const deps: ReconcilerDeps = {
 async function cleanup(): Promise<void> {
   await prisma.reconcilerRun.deleteMany({ where: { chainHeight: 1000n } });
   await prisma.incident.deleteMany({
-    where: { kind: "reconciler_divergence", dedupeKey: "latest" },
+    where: {
+      OR: [
+        { kind: "reconciler_divergence", dedupeKey: "latest" },
+        { kind: "vault_paused", dedupeKey: "paused" },
+      ],
+    },
   });
   await prisma.epochSnapshot.deleteMany({ where: { epochIndex: TEST_EPOCH } });
 }
@@ -161,6 +177,29 @@ describe("reconciler alarm (M2.5 acceptance gate)", () => {
 
     const incident = await prisma.incident.findUnique({
       where: { kind_dedupeKey: { kind: "reconciler_divergence", dedupeKey: "latest" } },
+    });
+    expect(incident?.closedAt).not.toBeNull(); // closed now
+  });
+
+  it("opens vault_paused (with reason) while the vault reports paused", async () => {
+    livePaused = true;
+    await reconcileOnce(deps);
+
+    const incident = await prisma.incident.findUnique({
+      where: { kind_dedupeKey: { kind: "vault_paused", dedupeKey: "paused" } },
+    });
+    expect(incident).not.toBeNull();
+    expect(incident?.closedAt).toBeNull(); // open
+    expect(incident?.severity).toBe("warning");
+    expect(incident?.payload).toMatchObject({ reason: "drill" });
+  });
+
+  it("closes vault_paused once the vault reports unpaused", async () => {
+    livePaused = false;
+    await reconcileOnce(deps);
+
+    const incident = await prisma.incident.findUnique({
+      where: { kind_dedupeKey: { kind: "vault_paused", dedupeKey: "paused" } },
     });
     expect(incident?.closedAt).not.toBeNull(); // closed now
   });

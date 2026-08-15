@@ -38,7 +38,7 @@ const bech32Address = z
 export const configSchema = z
   .object({
     /** App environment, drives the environment badge (app-spec §7). */
-    appEnv: z.enum(["development", "staging", "production"]).default("development"),
+    appEnv: z.enum(["development", "testnet", "production"]).default("development"),
     /** Chain id this deployment serves; rendered in the footer and env badge. */
     chainId: z.string().min(1).max(64),
     /** LCD endpoint for server-side live reads (browser never needs LCD CORS). */

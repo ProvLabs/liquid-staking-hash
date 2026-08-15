@@ -49,6 +49,30 @@ test("the live plane resolves to exactly one of its three states, and says which
   }
 });
 
+test("CO-17: group_policy_info on a plain account answers 404, as the offline mock encodes", async ({
+  request,
+}) => {
+  // The admin gate's 404-only rule (apps/web/CLAUDE.md membership-read
+  // section) rests on this: ONLY a 404 on the policy lookup is the fact "a
+  // plain account, so address equality answers it" — every other failure is
+  // `degraded`. The offline mock encodes 404; this pins it against a real
+  // chain. A 500 here is the R2 FINDING (m7.2 plan §3.4), whose remedy is a
+  // recorded mock + design-note correction — never a widened assertion.
+  const lcd = process.env.E2E_LIVE_LCD_URL;
+  const plain = process.env.E2E_LIVE_VAULT_ADDRESS; // a real, non-policy account
+  test.skip(
+    lcd === undefined || plain === undefined,
+    "E2E_LIVE_LCD_URL / E2E_LIVE_VAULT_ADDRESS not set (needs the devnet stack)",
+  );
+  const res = await request.get(`${lcd}/cosmos/group/v1/group_policy_info/${plain}`);
+  expect(
+    res.status(),
+    `group_policy_info on plain account ${plain} answered ${res.status()}, not 404 — ` +
+      "a FINDING: the offline mock and the admin gate's 404-only rule assume 404; " +
+      "record the mock + web-design-notes correction rather than widening this assertion",
+  ).toBe(404);
+});
+
 test("a governed stack renders the member set rather than a not-checked note", async ({ page }) => {
   await page.goto("/governance");
   const governed = await page.getByText(/^Group \d+, version/).count();

@@ -72,6 +72,10 @@ drill pacing (short unbonding, tx indexing on).
     CONTRACT_ADMIN="$POLICY" \
       infra/devnet/bootstrap/nvhash-deploy-p2p.sh   # vault/contract bootstrap,
                                         # governed: Config.admin IS the policy
+                                        # (WASM_ADMIN sets the wasmd migrate
+                                        # admin separately; it defaults to
+                                        # CONTRACT_ADMIN, so this form also
+                                        # makes migration group-governed)
     contracts/drills/p2p-drill.sh       # full money path with per-phase assertions
     contracts/drills/gov-drill.sh       # x/group lifecycle + multiplicity cases
     infra/devnet/dev-node.sh down       # stop
@@ -90,3 +94,30 @@ refund scenario), then `packages/fixtures/scripts/capture-fixtures.sh`.
 
 Environment notes (fees, genesis tweaks, image build details) are recorded in
 [`contracts/IMPLEMENTATION-STATUS.md`](../../contracts/IMPLEMENTATION-STATUS.md) §5.
+
+## Degradation drills and the live lanes (PR 8.1)
+
+`drills.sh` is the degradation-drill driver: it sequences the failures on the
+host (Playwright has no Docker socket) while `apps/web/e2e-live/drills/`
+observes over HTTP. `drills.sh run` walks baseline → corrupt-row → repair →
+indexer-kill → indexer-recover → lcd-kill → lcd-recover → bell; each phase is
+also runnable alone for iteration. Every wait is bounded and fails the phase
+on expiry, the specs FAIL rather than skip inside an active phase, and the
+driver refuses any chain outside the chain-dev family. A red drill is a
+finding — never widen a tolerance or wait to make one pass.
+
+`.github/workflows/live-lane.yaml` carries two dispatch-only jobs (crons land
+commented until PR 8.0 pins a released vault): `live-stack` (weekly once
+enabled — full e2e-live suite including the governance write leg, the drill
+sequence, and the indexer's live-transport governance suite) and `jail-lane`
+(monthly once enabled — `contracts/drills/jail-drill.sh` with the
+`JAIL_OBSERVE_CMD` hook on a **dedicated chain**: real downtime jailing needs
+the default slash window, which only a purpose-reset chain has, and the reset
+destroys the state every other live spec depends on — so the jail chain is
+created and destroyed inside its own job and the two jobs never run
+concurrently). `actions/e2e-keys.sh` provisions the throwaway signer and the
+group-member key (`eval "$(infra/devnet/actions/e2e-keys.sh)"`).
+
+Run live suites only through `stack.sh e2e` — it restarts `web` first and
+exports `E2E_LIVE_STACK_PREPARED_AT`, which the stale-bundle gate checks
+against `/healthz`'s `started_at`.

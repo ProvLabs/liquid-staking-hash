@@ -98,7 +98,11 @@ export default {
   "chrome.console-link": "Verify on the console",
   "chrome.chain-label": "Chain",
   "chrome.env-development": "development",
-  "chrome.env-staging": "staging",
+  "chrome.certification-caveat":
+    "Pre-certification build: verified against a pre-release vault by feature probe, not a formal release.",
+  "learn.trust-certification-caveat":
+    "This deployment is pre-certification: the program's test evidence was captured against a pre-release vault module identified by feature probe, and no App release is certified until it is re-verified against the formal vault release. Figures shown are real chain state; the caveat is about the verification provenance, not the data.",
+  "chrome.env-testnet": "testnet",
   "chrome.env-production": "production",
 
   "chrome.nav-label": "Primary",
@@ -336,7 +340,15 @@ export default {
   "portfolio.marker-label": "{event}: {shares} nvHASH",
 
   "portfolio.redemptions-title": "Active redemptions",
+  "tx.confirm-tier-warning": "Caution: this action moves funds. Review before signing.",
+  "tx.confirm-tier-danger":
+    "Danger: this is a program-level operation. Review every detail before signing.",
+
   "portfolio.redemptions-empty": "No active redemptions.",
+  "portfolio.redemptions-partial":
+    "Showing the newest {count} active redemptions — older ones exist but are not shown, and the escrow total covers only what is shown.",
+  "portfolio.redemptions-completeness-unknown":
+    "Whether this list includes every active redemption could not be determined.",
   "portfolio.redemption-shares": "{shares} nvHASH",
   "portfolio.redemption-enqueued-at": "Requested {time}",
   "portfolio.redemption-expedited-at": "Expedited {time}",
@@ -479,12 +491,18 @@ export default {
   "market.depth-col-size": "Size (nvHASH)",
   "market.depth-side-buy": "Buy",
   "market.depth-side-sell": "Sell",
+  "market.depth-partial": "Partial — the venue reported more depth bands than shown.",
+  "market.depth-completeness-unknown":
+    "Whether every reported depth band is shown could not be determined.",
 
   "market.supply-title": "Where nvHASH lives",
   "market.supply-local": "On Provenance",
   "market.supply-local-caption": "Live chain read",
   "market.supply-bridged-empty":
     "All nvHASH lives on Provenance today. Bridged supply appears here when the bridge opens.",
+  "market.supply-bridged-partial": "Partial — more bridged chains exist than shown.",
+  "market.supply-completeness-unknown":
+    "Whether every bridged chain is shown could not be determined.",
   "market.supply-col-chain": "Chain",
   "market.supply-col-supply": "Supply (nvHASH)",
   "market.supply-col-sampled": "Sampled",
@@ -515,6 +533,10 @@ export default {
   "validators.health-active": "Active in set",
   "validators.health-total": "Enrollments all-time",
   "validators.health-indexed-caption": "From indexed history",
+  "validators.health-partial":
+    "From indexed history — partial view: the registry holds more enrollments than this set reflects.",
+  "validators.health-completeness-unknown":
+    "From indexed history — whether this covers the whole registry could not be determined.",
 
   "validators.table-unavailable": "The validator set is unavailable right now.",
   "validators.table-empty": "No validators are enrolled in the program yet.",
@@ -950,6 +972,7 @@ export default {
   "governance.param-concentration-safety-offset-bps": "Concentration safety offset (bps)",
   "governance.param-commission-bps": "Program commission rate (bps)",
   "governance.param-jail-unbond-delay-secs": "Jail report cooldown (seconds)",
+  "governance.param-redemption-margin-bps": "Redemption reserve margin (bps)",
   "governance.param-halted": "Halt the fund-moving cranks",
   "governance.param-pause-reason": "Reason",
   "governance.param-include": "Change this",

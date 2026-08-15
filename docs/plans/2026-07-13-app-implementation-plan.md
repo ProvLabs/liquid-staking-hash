@@ -208,14 +208,14 @@ The rows keep their numbers for attribution and for §5's cross-references; see
 | PR | Scope | Depends on |
 | --- | --- | --- |
 | 8.0a | **M8 planning + M0–M7 carryover triage** (docs-only): the [milestone overview](2026-08-05-app-m8-hardening-and-pilot.md) with the milestone's three-phase structure (testnet readiness → certification pause → mainnet rollout), the carryover register of every unresolved M0–M7 item with proposed dispositions, the Phase B certification checklist, and the §4b v2 format. The register's dispositions are ratified at this PR's review. | — |
-| 8.0b [P] | **Carryover small-fix tranche** (overview §3): explicit Prisma generator `output` (ends the dual-generate race), web switch to the shared `navHashPerShare` helper, web-only collection bounds adopted into `bounds.ts`, `cargo audit`/`pnpm audit` CI gates (closes `SECURITY.md`'s "CI enforcement to follow" tail). | 8.0a dispositions |
+| 8.0b [P] | **Carryover small-fix tranche** (overview §3) — **BUILT 2026-08-14** ([plan](2026-08-14-app-m8.0b-carryover-fixes.md) §10 delivery notes; pending review): explicit Prisma generator `output` (ends the dual-generate race), web switch to the shared `navHashPerShare` helper, web-only collection bounds adopted into `bounds.ts`, `cargo audit`/`pnpm audit` CI gates (closes `SECURITY.md`'s "CI enforcement to follow" tail for the Rust and pnpm workspaces; console coverage deferred to 8.4b per plan §7.1 Q5). | 8.0a dispositions |
 | 8.0 | **Upstream vault release vetting (hard gate).** When the vault module cuts its formal release: pin the released version, re-capture the 0.2 fixture corpus against the released build, diff against the dev-build corpus, resolve any decoder/flow divergence, and re-run the full test suite (unit, property, fixture-decode, live-devnet drills) against it. Until this passes, everything vault-facing is compatible-by-feature-probe only (§1 upstream status) and **no App release can be certified**. | formal vault module release (external, timing not ours) |
-| 8.1 [P] | **Degradation drills as e2e:** corrupt an indexed row → reconciler incident → surfaces flip to live-read + "history temporarily degraded"; kill the indexer → canonical values survive, history dims; kill the LCD → indexed values carry stale labels. | 2.5, M4 |
-| 8.2 [P] | **Load test + rate-limit tuning** on the public API. | M3 |
-| 8.3 [P] | **Accessibility walk** on both themes, keyboard-only pass, reduced-motion audit; fixes. | M4–M7 |
-| 8.4a | **Migration-mode entry point (decision).** The row after which the program is no longer in complete reset-and-rebuild mode. Three parts land together. **(i) Contract upgradability** — decide whether `nvhash-staking` gains a `migrate` entry point (`contracts/src/contract.rs` exposes `instantiate`/`execute`/`query` only; the cw2 marker it already writes at instantiate is the version prerequisite such a path checks) and who holds the **wasmd contract admin** that authorizes `MsgMigrateContract` — a different authority from `InstantiateMsg.admin`, set by `--admin` at instantiate (`infra/devnet/bootstrap/nvhash-deploy-p2p.sh`, today the deployer key). A contract instantiated with **no** admin can never be given one, so the choice is irreversible per deployment and must be settled before anything is deployed that we intend to keep. A migrate path is a new **admin capability**: `liquid-staking-spec.md` §12 trust surface and `contracts/IMPLEMENTATION-STATUS.md` are amended in the same change, and the authorization is established by a devnet drill under `contracts/drills/` (an unauthorized migrate is rejected; post-migrate state and cw2 version asserted) rather than by reading wasmd's semantics — the `chain-facts` rule. **(ii) Database schemas leave baseline mode** — `services/indexer` and `apps/web` stop regenerating their single baseline migration and begin appending incremental ones. The trigger is the first environment whose contents cannot be recreated: `app` (sessions, notification log, push subscriptions) crosses it before `indexed`, which is rebuildable from chain by definition. **(iii)** The reset-and-rebuild rule in `services/indexer/CLAUDE.md`, `apps/web/CLAUDE.md` and `indexer-design-notes.md` is replaced by the migration rule in the same change, so no environment is left following stale instructions. | a decision, not code-blocked; **blocks 8.4** — nothing non-devnet deploys until it is made |
-| 8.4b | **Console testnet-readiness tranche**: the §14.13 entity anchors (recorded in console-spec §14 in the same change — the item exists today only in app-spec), the console governance panel + the App's `governance` verify-link target (one pair, M7 D8), the extension-wallet adapter (re-adding only the needed `@cosmjs/*` at current audited versions per the recorded `elliptic`-advisory constraint), the stale 1905nhash gas price, the CSP `connect-src` per-environment mechanism, and console §14 items 5–7. | 8.0a |
-| 8.4 | **Deployment configs** (`infra/`: Docker images per component, ArgoCD, per-environment profiles) + **testnet pilot** alongside the Console — the verify-link contract is only testable with both deployed (entity anchors delivered by 8.4b). Also: per-environment secrets/config posture (overview D24), webfont self-hosting via build-time fetch, bootstrap scripts encoding the per-environment ledger requirements (receipt-marker Transfer grant, NAV-authority rotation, group-before-deploy), and an early testnet measurement of the ~639 KB artifact's ≈4.26 M-gas store against the per-tx cap. | all; **8.0 (release certification blocked until upstream vetting passes)**; **8.4a (the contract admin it deploys with is irreversible)**; 8.4b |
+| 8.1 [P] | **Degradation drills as e2e** — **BUILT 2026-08-14** ([plan](2026-08-14-app-m8.1-degradation-drills.md) §10 delivery notes; pending review): corrupt an indexed row → reconciler incident → surfaces flip to live-read + "history temporarily degraded"; kill the indexer → canonical values survive, history dims (via the new `/status.reconciled_at` data-age exposure — the plan-time finding that a dead indexer rendered as healthy); kill the LCD → honest unavailability, and the alarm now survives the outage (per-pass tolerance + compose restart policy). `vault_paused` AND `jail_report` reconciler kinds delivered (D30 + Q1); the notifier/bell chain runs end-to-end on the completed stack; two scheduled lanes land dispatch-only until 8.0. | 2.5, M4 |
+| 8.2 [P] | **Load test + rate-limit tuning** on the public API — **BUILT 2026-08-14** ([plan](2026-08-14-app-m8.2-load-test.md) §10 delivery notes; pending review): deterministic seeder at the two recorded depths, containerized k6 suite over all 25 registry routes with ratified thresholds as exit codes, the measurement pass (T5 limiter correctness PASSES in full at production defaults; T1/T2-heavy breach at depth2 and are recorded with diagnoses; **T3 breached → the contingent commit D landed** — `holder_lifecycles` materialization, equality-gated), CO-21 EXPLAIN re-captures (every recorded decision stands), T7 deferred to the first live-lane run. | M3 |
+| 8.3 [P] | **Accessibility — automated coverage** on both themes, keyboard-only pass, reduced-motion audit; fixes — **BUILT 2026-08-14** ([plan](2026-08-14-app-m8.3-accessibility-walk.md) §10 delivery notes; pending review; full offline suite 144/144 green). Closes the authenticated-surface gap M6.2 left (the offline axe suite never covered alerts settings, portfolio, operator or admin) via the app's own login path + the fixture-derived role grant. The gates found and fixed four real defects on first run: the reduced-motion kill switch lost every specificity contest (it had never worked for class-level motion), both popovers stranded keyboard focus on Escape, the confirm tier was color-only, and the composer's validation alert failed dark-theme contrast. **The manual screen-reader walk moved to 8.5 on 2026-08-14** so it runs together with the NVDA/Windows leg — 8.3 ships automated coverage only, which is not a completed accessibility review (overview CO-38a). | M4–M7 |
+| 8.4a | **Migration-mode entry point (decision)** — **BUILT 2026-08-14** ([plan](2026-08-14-app-m8.4a-migration-mode.md) §10 delivery notes; pending review). All three parts landed: (i) the migrate entry point ships with the cw2 name + semver-downgrade gate and the wasmd admin goes to the **admin group policy** (D21; bootstrap `WASM_ADMIN` hook); `redemption_margin_bps` (D29, `0..=1_000` default 50) and `ReceiptAccounting {}` landed in the same contracts tranche; (ii) both Prisma schemas left baseline mode — frozen migration 0, SHA-256 freeze gates in both workspaces, fold direction already CI-gated; (iii) all three doc sites now state the migration rule. `migrate-drill.sh` is authored but NOT yet run (needs a fresh group-first chain); its [VERIFY] closures stay open in `contracts/IMPLEMENTATION-STATUS.md`. Original row: the row after which the program is no longer in complete reset-and-rebuild mode. Three parts land together. **(i) Contract upgradability** — decide whether `nvhash-staking` gains a `migrate` entry point (`contracts/src/contract.rs` exposes `instantiate`/`execute`/`query` only; the cw2 marker it already writes at instantiate is the version prerequisite such a path checks) and who holds the **wasmd contract admin** that authorizes `MsgMigrateContract` — a different authority from `InstantiateMsg.admin`, set by `--admin` at instantiate (`infra/devnet/bootstrap/nvhash-deploy-p2p.sh`, today the deployer key). A contract instantiated with **no** admin can never be given one, so the choice is irreversible per deployment and must be settled before anything is deployed that we intend to keep. A migrate path is a new **admin capability**: `liquid-staking-spec.md` §12 trust surface and `contracts/IMPLEMENTATION-STATUS.md` are amended in the same change, and the authorization is established by a devnet drill under `contracts/drills/` (an unauthorized migrate is rejected; post-migrate state and cw2 version asserted) rather than by reading wasmd's semantics — the `chain-facts` rule. **(ii) Database schemas leave baseline mode** — `services/indexer` and `apps/web` stop regenerating their single baseline migration and begin appending incremental ones. The trigger is the first environment whose contents cannot be recreated: `app` (sessions, notification log, push subscriptions) crosses it before `indexed`, which is rebuildable from chain by definition. **(iii)** The reset-and-rebuild rule in `services/indexer/CLAUDE.md`, `apps/web/CLAUDE.md` and `indexer-design-notes.md` is replaced by the migration rule in the same change, so no environment is left following stale instructions. | a decision, not code-blocked; **blocks 8.4** — nothing non-devnet deploys until it is made |
+| 8.4b | **Console testnet-readiness tranche** — **BUILT 2026-08-14** ([plan](2026-08-14-app-m8.4b-console-testnet-readiness.md) §10 delivery notes; pending review; console 46/46 + web 145/145 offline e2e green). Delivered: the vitest harness + `npm audit` CI coverage (the 8.0b Q5 gap closed); the §14.13 entity anchors with per-entity miss-state honesty (grammar cross-pinned in both suites, recorded as console-spec §14 item 9); the console `/governance` panel + the App's `governance` verify-link target as one pair (D8 retired), with per-row live-plane-only linking; the first-party extension-wallet tx stack (**no `@cosmjs/*`** — the reviewed-dependency event resolved to the empty set, byte-golden against a captured devnet tx) with simulate-verbatim fees; the generated per-profile CSP `connect-src` (fails closed); §10.1's devnet-mode compile-time exclusion enforced by a CI bundle scan; console §14 items 5–7 decided. Deferred to the live drill: the acceptance click-through of all five anchor kinds and one extension-signed crank (§9). The "stale 1905nhash gas price" this row once carried was already fixed in PR #22 (2026-07-27) and is struck. | 8.0a |
+| 8.4 | **Deployment configs + testnet pilot** — **CODE BUILT 2026-08-14; PILOT NOT EXECUTED** ([plan](2026-08-14-app-m8.4-deployment-testnet-pilot.md) §10 delivery notes; pending review). Commits A–D delivered: four Dockerfiles (all build; the four images validated locally incl. the console's per-env CSP bake and the web image's font-verified bundle), the image+repo secret scans (both disproven red/green), kustomize bases + testnet-concrete/mainnet-shape overlays + app-of-apps (both overlays `kustomize build` clean), ESO manifests (D24 as recommended), fail-closed provisioning/VAPID/bootstrap scripts (every refusal case CI-gated), the probe-first bootstrap with per-step chain-read assertions and the loud Q4 attribute skip, `INDEX_START_HEIGHT`, the manifest-keyed certification caveat on both surfaces, `APP_ENV` staging→testnet, and the live verify-link acceptance spec (deep-path + CSP-header cases). **Deferred to the pilot (needs a cluster, a secret store, and the public testnet): the probe run and every chain-facts §testnet [VERIFY], the CO-29 store-gas measurement, the bootstrap outputs into the overlay, and the acceptance e2e.** Original row: deployment configs + testnet pilot alongside the Console — the verify-link contract is only testable with both deployed (entity anchors delivered by 8.4b). Also: per-environment secrets/config posture (overview D24), webfont self-hosting via build-time fetch, bootstrap scripts encoding the per-environment ledger requirements (receipt-marker Transfer grant, NAV-authority rotation, group-before-deploy), and an early testnet measurement of the ~639 KB artifact's ≈4.26 M-gas store against the per-tx cap. | all; **8.0 (release certification blocked until upstream vetting passes)**; **8.4a (the contract admin it deploys with is irreversible)**; 8.4b |
 | 8.5 | **Mainnet launch checklist:** remaining §14 closures (naming/domain §14.14, locale set §14.9 confirmation), security review against `SECURITY.md`, runbook in `docs/user/`. | 8.0–8.4 |
 
 > **Row 8.4a added 2026-07-30 (Ira's direction).** Every row before it assumes a
@@ -245,10 +245,15 @@ The rows keep their numbers for attribution and for §5's cross-references; see
 > the governing sequencing fact that the third-party audit freezes the
 > contract — every open contract-side decision (migrate entry point,
 > redemption-margin configurability, `ReceiptAccounting`, dual-policy
-> topology) must be decided and landed in Phase A. Per-PR plans are written at
-> branch open rather than all at once (overview D28): 8.0's and 8.5's content
-> depends on external events, so plans written now would be stale by Phase B —
-> the M5 Tranche-B precedent applied to the milestone.
+> topology) must be decided and landed in Phase A. The overview's D21–D31 were
+> ratified 2026-08-14 (Ira): migrate entry point with the admin group policy
+> as wasmd admin; dual-policy split at bootstrap; both pre-audit contract tidy
+> items adopted; the pilot targets the **public Provenance testnet only** with
+> **publicly reachable builds** (the pilot therefore shares 8.0's external
+> clock, and the honesty/caveat surfaces gate the 8.4 plan); and all seven
+> Phase A plans are authored in the 8.0a pass (D28, the M7 precedent) — only
+> 8.0's and 8.5's plans remain event-gated on the release diff and audit
+> findings.
 
 ## 3. Parallelization map
 
@@ -324,10 +329,10 @@ Each layer is introduced in the milestone that creates its subject and then
 | e2e (offline) | Playwright + MSW | M4 | Every page renders from mocks: content, banners, freshness labels, verify-link hrefs, **cold-start/below-threshold states**, chart honesty (step-after NAV present, no interpolation, "n/a" under minimum window) |
 | e2e (live) | Playwright against the 1.5 stack + `contracts/drills/` | M5 | Fund-moving flows signed on devnet through full drill cycles; every redemption terminal state (expedite, matured, refund) rendered from real chain history |
 | Security-executable | Vitest/CI checks | M1, M6, M7 | No secrets in client bundle beyond the §7 client-safe subset; analytics tables/counters never keyed by wallet/session/device (**gating `apps/web` CI from 7.5–7.6 on**: `test/app-schema-allowlist.test.ts` pins `FunnelCounter`'s columns at exactly `{stage, day, count}` and applies a per-model identifier denylist that `address` trips on this model though it is legitimate on `Session`; `test/funnel-counters.test.ts` reads every `recordFunnelEvent` call site from source and asserts it identifier-free); personal endpoints reject cross-address access (the `PERSONAL_PATHS` matrix is registry-derived since 6.4, so a new address-scoped route joins automatically); push-token deletion on opt-out; **the broadcast relay stays closed** — the 6.4 two-level allowlist's rejection matrix proves no `MsgExecuteContract` outside the six operator variants, on the configured contract, in canonical form, can be relayed; **operator ownership** — an unowned valoper answers honest-empty, indistinguishable from a nonexistent one, never a 403 that would reveal who operates what; **M7 governance additions** — the relay stays closed across the governance amendment (7.3's two-level matrix admits only `MsgVote`/`MsgExec` in canonical form with `MsgVote.exec` pinned, and 7.4's three-level matrix admits `MsgSubmitProposal` only when **every** inner message is an exact template instance, while the 6.4 direct-admin variants stay rejected throughout); **the mirror never claims chain state it no longer holds** — `x/group` prunes, so a 404 preserves the indexed row and stamps `prunedAtHeight` rather than deleting, and no verify affordance is offered for it (7.1); **admin capability is never served from a cached role** — minting an `admin:` assertion performs a fresh on-chain membership read and bypasses the 60 s role cache, so a revoked member's next request fails (7.5) |
-| Accessibility | axe in Playwright + manual walk | M4, M8 | WCAG AA both themes, keyboard operability, reduced-motion |
+| Accessibility | axe in Playwright (M4, M8.3 — extended to authenticated surfaces and both themes as a standing gate) + **manual screen-reader walk (M8.5)** | M4, M8 | WCAG AA both themes, keyboard operability, reduced-motion. The split is deliberate and recorded (overview CO-38a): scanning proves the machine-checkable subset; reading-order coherence, label ambiguity, dialog focus management, and whether live regions announce degradation/caveat states are only provable by the walk |
 | Visual/design | palette validator in CI | M1 | Both theme token sets pass the dataviz validation on every change |
-| Degradation drills | Playwright scenarios (8.1) | M8 | The honesty machinery works under failure: reconciler alarm, indexer outage, LCD outage each produce the specified labeled degradation, never silence |
-| Load | k6 (or team standard) | M8 | Public API under load with rate limits; indexer keeps lag under the DATA DEGRADED threshold during backfill |
+| Degradation drills | Playwright scenarios (8.1) — **delivered and gating 2026-08-14**: `infra/devnet/drills.sh` + `e2e-live/drills/`, run by the `live-lane` workflow (dispatch-until-8.0; the 8.0 release-pin PR flips the crons on, 8.1 plan §7.1) | M8 | The honesty machinery works under failure: reconciler alarm, indexer outage, LCD outage each produce the specified labeled degradation, never silence — and a drill FAILS on silence rather than skipping |
+| Load | k6 (pinned image, `./dev load`, delivered 2026-08-14) | M8 | Public API under load with rate limits. The indexer criterion is restated per the 8.2 plan §2.6 (the original "keeps lag under the DATA DEGRADED threshold during backfill" is unsatisfiable — any from-zero backfill deeper than 120 heights correctly opens `indexer_lag`, which is the honesty machinery working): **steady-state lag < 120 heights under full-suite load; backfill catch-up ≥ 10× head-advance with the `indexer_lag` incident opening during deep catch-up and closing on convergence** |
 
 A workspace-level gate runs **from M0** (PR 0.5, `.github/workflows/app-ci.yaml`,
 in the ADR-002 image): frozen-lockfile install, `pnpm -r` typecheck/test,
@@ -376,7 +381,7 @@ and recorded in `app-spec.md` §14.
 | §14.10 analytics taxonomy | **IMPLEMENTED 2026-07-31 (PRs 7.5–7.6)**; DECIDED 2026-07-28, Ira (one `app`-schema `funnel_counters` table keyed `(stage, day)` with an integer count and no other columns; closed stage + page-class enums; incremented **server-side in the loader**; no cookie, no client script, no consent surface because nothing personal is collected; stated retention; totals labeled as events, not unique people). Shipped with four recorded deltas, all forced by the decision's own constraints: the page class folds into the stage enum rather than adding a column; the class set is three, not five (`learn_deep`/`spec_link` are not server-observable without the client script §14.10 forbids); `due_diligence_depth` is a load of `/validators` or `/market`, since scroll depth is not measurable at all; retention is 400 days. See app-spec §14.10. | 7.6 |
 | §14.11 cost-basis method + CSV columns | DECIDE — needed before 6.1 | 6.1 |
 | §14.12 typical-payout sample threshold | DECIDED 2026-07-15 (≥ 10 terminal requests, else the 60-day guarantee alone; epoch-metric cold-start rules; calendar-month cadence — E-CAL delivered 2026-07-22) | 5.4, 6.2 |
-| §14.13 console entity anchors | FOLLOW-ON — **scheduled as PR 8.4b (2026-08-05)**, which also records the item in console-spec §14 in the same change (it exists today only in app-spec) | 4.x verify links, 8.4b, 8.4 |
+| §14.13 console entity anchors | **DELIVERED by PR 8.4b (2026-08-14, pending review)** — four anchor kinds as URL fragments with per-entity miss-state honesty, recorded as console-spec §14 item 9, grammar cross-pinned by golden strings in both suites; the pilot click-through of the anchor contract on real hosting is 8.4's | 4.x verify links, 8.4b, 8.4 |
 | §14.14 name & domain | DECIDE — launch decision | 8.5 |
 
 Decisions are recorded where the repo already records them: architecture-shaping
@@ -399,7 +404,7 @@ topology assumption:
 | Never lie about state (freshness, labeled estimates) | Envelope contract tests (source/heights on every response), chart-honesty e2e assertions, M8 degradation drills |
 | Spec/code parity: spec amended in the same change | Certification recorded in `app-spec.md`'s 2026-07-13 revision note (this change); every PR carries its own spec/CLAUDE.md updates — no "docs later" PRs (§2 preamble) |
 | Devnet keys are throwaway; drills point only at disposable chains | PR 1.5 wires the full stack to `infra/devnet/` only; deployment profiles (PR 8.4) are the first non-devnet targets, gated on the 8.4a admin decision |
-| Enumerated trust surfaces: every admin capability is listed in the spec, and adding one is a spec-level event | The contract exposes `instantiate`/`execute`/`query` and no upgrade path today. If PR 8.4a adds one, it lands as a spec amendment (`liquid-staking-spec.md` §12 + `contracts/IMPLEMENTATION-STATUS.md`, same change) plus a `contracts/drills/` drill asserting that a migrate from a non-admin is rejected and that the post-migrate cw2 version and state are what was intended — never "only the admin key can reach it" as a deployment assumption |
+| Enumerated trust surfaces: every admin capability is listed in the spec, and adding one is a spec-level event | **Delivered by PR 8.4a (2026-08-14):** the migrate entry point landed as the spec-level event this row required — `liquid-staking-spec.md` §11.2/§12.1 amended and `contracts/IMPLEMENTATION-STATUS.md` updated in the same change; authorization is the wasmd admin set at instantiate to the admin group policy, gated in-contract by the cw2 name + semver-downgrade check (unit quadrants passing). The `contracts/drills/migrate-drill.sh` drill (unauthorized migrate rejected under the keyless policy admin; post-migrate cw2 version and byte-for-byte state asserted) is authored but not yet run — its [VERIFY] closures stay open in `IMPLEMENTATION-STATUS.md` until the first fresh group-first devnet run, and no release is certified on the drill's hypotheses before then |
 
 ---
 
@@ -999,7 +1004,174 @@ configurability, `ReceiptAccounting`, dual-policy topology) must be decided
 and landed in Phase A; and the certification pause spans calendar-month
 boundaries by construction, which is what lets the E-CAL live-boundary
 observations run on testnet without the deferred accelerated-clock harness.
-Per-PR plans are written at branch open (overview D28) — the M5 Tranche-B
-precedent — rather than all at 8.0a, because 8.0's and 8.5's content depends
-on external events. §4b v2 (C7 gate-property check, generated C4,
-attacker-gain line) is adopted for M8 plans pending overview D26.*
+The overview's D21–D31 were ratified 2026-08-14 (Ira) — resolutions recorded
+in its §6, with three overrides of the written proposals (public-testnet-only
+pilot, publicly reachable builds, all seven Phase A plans authored in the
+8.0a pass per D28). §4b v2 (C7 gate-property check, generated C4,
+attacker-gain line) is adopted for M8 plans (overview D26).*
+
+*2026-08-14: **PR 8.0b built (pending review).** Commits A–D delivered per its
+[plan](2026-08-14-app-m8.0b-carryover-fixes.md); delivery notes in that file's
+§10, including two implementation-time corrections (the indexer's generated
+client lives at `services/indexer/generated/client` — a sibling of `prisma/`,
+since anything inside a multi-file schema directory is re-read as schema
+source — and the pnpm audit-exception lists live in `pnpm-workspace.yaml`
+`auditConfig`, since pnpm 11 no longer reads `package.json#pnpm`) and one
+remediation the new audit gates forced immediately: three live pnpm advisories
+fixed by in-range lockfile updates, two cargo advisories fixed the same way,
+and three dev-harness-only `rustls-webpki` advisories granted owned register
+exceptions pending ratification.*
+
+*2026-08-14: **PR 8.1 built (pending review).** Commits A–D delivered per its
+[plan](2026-08-14-app-m8.1-degradation-drills.md); delivery notes in that
+file's §10. The two plan-time defects are fixed: `/status.reconciled_at`
+exposes the data's age (a dead indexer no longer renders as healthy — the
+chrome gains the in-code `DEGRADED_STALE_SECONDS = 300` clause and the footer
+age describes the data), and the reconciler survives a transient chain outage
+(per-pass tolerance) while compose's `restart: unless-stopped` makes the
+worker-crash contract true. `vault_paused` and `jail_report` (episode-keyed)
+reconciler kinds delivered per D30/Q1, both `warning`. The 1.5 stack is now
+whole: notifier service, durable web store, shared dev assertion key
+(committed throwaway, loudly marked), app-schema migration in `stack.sh up`,
+and the `stack.sh e2e` stale-bundle mechanism. The drill driver, five drill
+specs, the CO-17 404 probe, and the two dispatch-only lanes land with the
+forward obligations on 8.0 (cron flip) and 8.4 (secret-scan placeholder
+classification) recorded in the 8.1 plan §7.1.*
+
+*2026-08-14: **PR 8.2 built and MEASURED (pending review).** Commits A–D
+delivered per its [plan](2026-08-14-app-m8.2-load-test.md) — including the
+CONTINGENT commit D, landed because T3's pre-ratified criterion breached
+(21.6 s p95 at depth2 against 2.5 s). Full measurement tables in
+`api-design-notes.md`'s 2026-08-14 section. Highlights: T5 limiter
+correctness passes in full at production defaults; T1 breaches at depth2
+(diagnosed: `/metrics`' per-request COUNT(DISTINCT) saturates Postgres —
+recorded, remedy is follow-on design per the ratified lane); T2's heavy case
+breaches and is recorded; commit D cuts holder-cohorts from 21.6 s to 9.41 s
+loaded / 1.63 s unloaded, with the residual attributed to the OTHER
+whole-history admin reads (named follow-on candidates, no speculative fix
+landed); every CO-21 recorded decision stands on re-measurement; T7 (the
+chain-coupled indexer measurement) runs at the first live-lane dispatch. The
+§4 Load row is restated per the plan's §2.6 (the original backfill phrasing
+was unsatisfiable by construction).*
+
+*2026-08-14: **PR 8.3 built (pending review), automated programme only per
+its §7.1 Q5.** The registry-derived axe matrix (11 pages × 2 themes × 3 auth
+states + 2 auto-theme cells), the authenticated-offline closure of CO-22
+(sessions through the app's own login path; role renders via the
+fixture-derived `NVHASH_MOCK_GRANT_ROLES` on a THIRD webServer instance so
+the primary's chain state stays byte-identical to the corpus), the keyboard
+and reduced-motion gates with their non-vacuity cases, and CO-23's
+labeled-state assertions — all standing CI gates; full offline suite 144/144
+green. Four real defects found by the new gates and fixed in the same pass:
+the reduced-motion kill switch's universal selector lost to any class-level
+animation (`!important` is now load-bearing and commented as such); the
+wallet and alerts popovers stranded keyboard focus on Escape (both now return
+it to the trigger); the confirm dialog's tier was color-only (a text line now
+carries it, pinned by the new component gate); and the governance composer's
+validation alerts failed dark-theme contrast (the critical color moved to the
+border). The stale §11 Recharts references were corrected (the dependency
+never existed), and §11 gains the axe exception-ledger rule (current
+exceptions: none). The manual walk is 8.5's obligation and a green axe suite
+is NOT a completed accessibility review.*
+
+*2026-08-14: **PR 8.4a built (pending review) — the migration-mode entry
+point.** All three row parts landed per its
+[plan](2026-08-14-app-m8.4a-migration-mode.md). Contracts: the migrate entry
+point gained the cw2 semver-downgrade gate on top of PR #30's name check
+(five unit quadrants incl. a no-other-key storage snapshot);
+`redemption_margin_bps` became bounded config (D29: `0..=1_000` rejected
+outside, default 50, serde FUNCTION default regression-pinned so pre-change
+state loads as 50 — never a silent zero); `ReceiptAccounting {}` serves the
+§5.1 legs from one consistent read; the sim's margin domain is randomized
+`0..=1_000` with margin-zero (must refund) and margin-max (must still pay)
+boundary scenarios — tuning margin-zero honestly required starving the
+deploy leg's own 50 bps floor (high yield, no fee reserve, thin deposits)
+before the refund edge actually fired. Contract suite 91/91 over a fresh
+artifact; clippy/fmt clean; schema regenerated (adds only). Bootstrap gained
+the `WASM_ADMIN` hook (defaults to `CONTRACT_ADMIN`, so the governed two-step
+makes migration group-governed by default); `migrate-drill.sh` authored
+(6 steps closing the 6 [VERIFY] hypotheses) but NOT yet run — needs a fresh
+group-first chain; closures stay open in `IMPLEMENTATION-STATUS.md`. App
+ride-along: `update_config` template + preflight + diff + chain-client carry
+the eleventh field with deploy-skew honesty (absent from a pre-8.4a build →
+null/omitted, never 0). Schemas: both baselines frozen at migration 0 with
+SHA-256 freeze gates asserting the hand-written constraint blocks
+(indexer 169, web 827 unit tests green); the fold direction was already the
+CI check (`--from-migrations --exit-code`); the three doc sites now state
+the migration rule. Spec §5.1/§11.1/§11.2/§11.3/§12.1 amended; §14 gains
+rows 14 (D21) and 15 (D29); D25 recorded as a bootstrap-level resolution
+with the contract-side split deliberately not performed.*
+
+*2026-08-14: **PR 8.4b built (pending review) — console testnet readiness.**
+All six commits per its
+[plan](2026-08-14-app-m8.4b-console-testnet-readiness.md). The console gained
+its FIRST test harness (vitest, node-env pure suites only — invariant 9 held
+literally: zero packages added to `dependencies`, vitest the only new
+devDependency) plus CI `npm test`, a test-profile build + bundle-scan step,
+and its own `npm audit` in the audit job — closing the 8.0b Q5 coverage gap
+(SECURITY.md's "audited by nothing" tail resolved). Remediation ride-along:
+`npm audit` surfaced 9 advisories; nanoid/postcss fixed in-range,
+react-router-dom bumped 6→7.18.2 (the 6.x line sits inside the advisory
+range; the App already runs 7.18.2), vite 5→7 / vitest→4 / typescript→5.9
+retired the esbuild dev-server chain — 0 vulnerabilities after. Entity
+anchors: grammar module + apply-once hook with the found/missing/pending
+state machine (miss decided only on a SUCCESSFUL read), per-entity miss
+notices, row ids on Redemptions/Validators/Overview, cross-pinned goldens.
+Governance panel: live-plane-only over the indexer's exact routes, 404 =
+no-group vs everything-else = could-not-check held structurally (the fetch
+returns the fact, throws the failure), capped sweeps labeled truncated,
+zeros-tally rule gated. App pair: `governance` target + typed per-target
+anchors (impossible links unrepresentable; out-of-grammar values yield the
+PLAIN href), five call sites with the per-row live-plane rule (pruned
+proposals, settled redemptions and unregistered validators get no anchor).
+Tx layer: proto/build/simulate/broadcast mirrored first-party from apps/web
+(mirror-tracking headers), byte-golden — the console's own encoder
+reproduces the captured devnet pay_tip tx hash exactly; simulate-verbatim
+fee in the confirm sheet with simulate-failure blocking confirm; Figure
+extension adapter on the App's certified surface, signDirect only. §10.1's
+compile-time exclusion is now real: devnet/mock code behind a folded static
+condition (fixtures via dynamic import inside the folded branch), proven by
+check-bundle.mjs — the disproof run showed the scanner red on a devnet
+build and green on test. CSP: generated from VITE_LCD_URL per profile,
+throws on any widening (found the .env.testnet profile's api.test host was
+already outside the old hand-pinned list — the exact defect §2.5 predicted).
+Console 46/46; web 827 unit + 145/145 offline e2e; repo typecheck green.
+Deferred to the live drill (8.4-adjacent): the §9 acceptance click-through
+(five anchor kinds + one extension-signed crank) and the two [VERIFY] items
+(auth-account wrappers; execution-window fields).*
+
+*2026-08-14: **PR 8.4 code built (pending review); the pilot itself is NOT
+executed** — it needs a cluster, a provisioned secret store, and the public
+testnet, none reachable from this working session, and running it is
+operational work the plan's commit E exists to record. What is real and
+verified locally: all four images BUILD from the repo-root context (console
+per-environment with the 8.4b CSP generated into the HTML and the bundle
+guard run in-build; web with the checksum-verified fonts baked and the
+production bundle extracted for the scan-only check:bundle; indexer with the
+transform-types flag and the explicit-output client; api dataless-honest);
+`image-secret-scan` goes red on a planted string and green clean;
+`repo-secret-scan` passes the tracked tree (the 8.1-inherited placeholder
+classification holds: the dev assertion key and every test constant pass by
+vocabulary, and the limit of a vocabulary classifier is stated in the
+script), red on a planted key and a PEM block in a scratch repo; both
+kustomize overlays build (one deviation: the provisioning script lives in
+k8s/base/jobs/ because kustomize's load restriction forbids out-of-tree file
+sources — the plan's infra/deploy/db/ path was unbuildable); every
+fail-closed refusal case passes locally AND is a CI step; the bootstrap
+scripts are shellcheck-clean with per-step chain-read assertions, the D27
+probe marker gating, store-only key access, and Q4's loud attribute skip.
+Commit D: `INDEX_START_HEIGHT` bounded + wired to the three chain workers
+(composition-root spread; config cases green), the certification caveat
+keyed to the fixtures manifest on the App footer + Learn trust panel
+(component render + one-derivation source gates) and BAKED into the console
+by vite define with a build assertion that a PROVISIONAL corpus must carry
+the caveat, `APP_ENV` `staging`→`testnet` across the two code boundaries +
+spec row + badge catalog (i18n coverage keeps it whole), the badge
+component gate, and `e2e-live/verify-links.spec.ts` (origin lock, DEEP-PATH
+SPA-rewrite detector, chain-id match, badge, CSP response header incl.
+frame-ancestors). Full workspace green: indexer 172, api 258, web 841,
+chain-client 48, api-types 104; console 46; repo typecheck clean.
+chain-facts gained a §testnet stanza whose rows are OPEN [VERIFY]
+obligations the authored scripts fill at the first pilot run — no value was
+assumed. Base-image digest pins and the images job's push wiring land with
+the registry (Q6, an ops overlay parameter).*

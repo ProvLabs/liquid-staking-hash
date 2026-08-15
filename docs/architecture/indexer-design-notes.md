@@ -161,8 +161,43 @@ Point-in-time incidents (`slash_write_down`, `redemption_refund`) are opened
 once and only for facts not already recorded, so per-pass work stays bounded as
 history grows.
 
-Deferred, pending more live decoders: `vault_paused`, `jail_report`,
-`epoch_overdue`, and the queue-length delta.
+`vault_paused` and `jail_report` are live-derived closeables (PR 8.1):
+the pause pair comes from a pinned vault read parsed by a local mirror
+(`reconciler/decode.ts`), and jail episodes reuse the validator-sampler's
+`parseJailReports` in-package. The jail dedupe key carries the EPISODE
+(`valoper:{addr}:{reportedAtSeconds}`) — a bare valoper key would
+reopen-in-place and merge a re-jail into the first episode's record.
+
+Still deferred: `epoch_overdue` and the queue-length delta. `epoch_overdue`'s
+constraint is not the decoder — **no falsifiable drill exists until a
+calendar-month boundary can pass with the crank withheld** (the E-CAL
+constraint), so its slack tolerance has no measured basis; its first exercise
+is Phase B's T1 calendar-month observation window (M8 overview §5 T1.6).
+
+A failed reconciler pass is LOGGED AND SKIPPED, never fatal (PR 8.1): the
+reconciler advances no cursor, so the workers' crash-fatal rule does not apply
+to it — a skipped pass is honest (the previous run's `ranAt` ages, and the
+chrome's stale-heads clause surfaces exactly that), while a killed process is
+a silenced alarm. The alarm must outlive what it watches; compose's
+`restart: unless-stopped` covers the workers' fatal-crash contract.
+
+## Holder-lifecycle materialization (PR 8.2 commit D)
+
+`holder_lifecycles` exists because a measurement met a pre-stated criterion,
+not because the fold looked slow: the 8.2 load pass measured
+`/admin/holder-cohorts` at **21.6 s p95 under three concurrent dashboard
+loads at 1.2 M transactions** against the ratified 2.5 s threshold (T3), the
+API-side window-function fold being superlinear and uncached on every
+`/admin` load. The maintenance is a **recompute-from-truth** in the
+chain-events worker's write phase — after each window's upserts, the store
+re-runs the fold's SQL scoped to exactly the addresses that window touched,
+inside the window transaction. Recompute (not incremental update) is the
+design point: the derived rows are a pure function of `transactions`, so
+replay from 0 equals resume with no conditional-arm subtleties, and the
+equality gate (`test/integration/holder-lifecycle-materialization.test.ts`)
+holds the table to the original fold computed both ways against real
+Postgres. The row carries the two heights only; the address column exists as
+the PK and is never selected across the API boundary.
 
 ## Local mirrors over cross-package imports
 
@@ -234,14 +269,20 @@ The `indexed` schema stays indexer-owned; only DDL runs as `indexer_writer`.
 
 ## Schema history
 
-The schema is one baseline migration, regenerated from the models, not an
-append-only chain — see `services/indexer/CLAUDE.md`. Indexed data is
-rebuildable from chain by definition, so until a database exists whose contents
-cannot be recreated, a schema change is an edit to the models plus a rebuild.
-One constraint the Prisma datamodel cannot express is therefore hand-written at
-the end of the baseline and must survive a regeneration: `gov_proposals.proposers`
-is `NOT NULL` — a list column's nullability is not a datamodel property, and
-x/group requires at least one proposer.
+Baseline mode — one regenerated migration, every environment rebuilt — ran
+2026-07-15 → 2026-08-14 and ended with PR 8.4a: `20260715013707_init` is now
+frozen migration 0 and history is append-only (`prisma migrate diff
+--from-migrations --to-schema-datamodel prisma --script` per change), gated by
+the freeze test (SHA-256 pin, `test/migration-freeze.test.ts`) and the CI fold
+check (chain of migrations must equal the models). The flip happened before
+the first deployed environment on purpose: `indexed` is rebuildable from chain
+by definition, but from 8.4 a full re-index is hours-to-days of LCD sweeps
+against a public testnet, and the T1 verification ledger reads from this
+database — a casual wipe destroys measurement continuity. The standing
+constraint carried into migration form: any migration touching
+`gov_proposals.proposers` must preserve `NOT NULL` — a list column's
+nullability is not a datamodel property, and x/group requires at least one
+proposer.
 
 ## Deliberate nulls
 

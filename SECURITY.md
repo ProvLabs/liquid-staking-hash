@@ -105,8 +105,21 @@ in [`contracts/IMPLEMENTATION-STATUS.md`](contracts/IMPLEMENTATION-STATUS.md).
   crate keeps its dependency surface minimal.
 - Adding a dependency is a reviewed decision: prefer std/first-party, check
   maintenance and provenance, and avoid install-script-heavy packages.
-- Run `cargo audit` / `npm audit` before releases (CI enforcement to follow
-  with the toolchains).
+- Dependency advisories are CI gates, not a release step: the `audit` job in
+  `contracts-ci` runs `cargo audit` over `contracts/Cargo.lock`, and the
+  `audit` job in `app-ci` runs `pnpm audit` over the workspace lockfile
+  (production and dev — the build chain decides what reaches the served
+  bundle). Both run on every PR and push, unguarded by change filters, since
+  the input that moves is the advisory database. Exceptions are per-advisory
+  and owned — `contracts/.cargo/audit.toml` / `pnpm-workspace.yaml`
+  `auditConfig`, each id backed by an owner+reason+review-by row in
+  [`docs/security/dependency-audit-exceptions.md`](docs/security/dependency-audit-exceptions.md),
+  cross-checked both directions by `scripts/check-audit-exceptions.mjs`.
+  Blanket allowances (`--audit-level` floors, `continue-on-error`,
+  workflow-side ignore flags) are prohibited. `apps/console` sits outside the
+  pnpm workspace, so its standalone `package-lock.json` gets its own
+  `npm audit` step in the same CI job, under the same posture (dev
+  dependencies in scope, no floors, no ignore flags).
 
 ### Development environment (`infra/devnet/`)
 

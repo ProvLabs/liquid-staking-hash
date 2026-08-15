@@ -1,0 +1,69 @@
+# Testnet overlay — the CONCRETE profile (plan 8.4 §2.3/§2.5). Every value
+# here is PUBLIC BY CONSTRUCTION (the client-safe discipline: anything secret
+# is an ExternalSecret reference, never a value). CONTRACT_ADDRESS,
+# VAULT_ADDRESS and INDEX_START_HEIGHT are EMPTY until commit E folds in the
+# bootstrap outputs — the workloads fail boot closed on empty addresses until
+# then, by design (C3 row 4).
+#
+# Image tags and the three public hostnames are OVERLAY PARAMETERS (§7 Q6, an
+# ops decision at deploy): the {SET-AT-DEPLOY} markers below are replaced when
+# the registry/cluster/hostnames exist; kustomize `images:` pins the tags.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: nvhash-testnet
+
+resources:
+  - ../../base/indexer
+  - ../../base/api
+  - ../../base/web
+  - ../../base/notifier
+  - ../../base/console
+  - ../../base/jobs
+  - external-secrets.yaml
+  - ingress.yaml
+
+images:
+  - name: nvhash/indexer
+    newName: SET-AT-DEPLOY.registry/nvhash/indexer
+    newTag: SET-AT-DEPLOY
+  - name: nvhash/api
+    newName: SET-AT-DEPLOY.registry/nvhash/api
+    newTag: SET-AT-DEPLOY
+  - name: nvhash/web
+    newName: SET-AT-DEPLOY.registry/nvhash/web
+    newTag: SET-AT-DEPLOY
+  - name: nvhash/console
+    newName: SET-AT-DEPLOY.registry/nvhash/console
+    # The console image is PER-ENVIRONMENT (VITE_* + CSP baked): testnet-<sha>.
+    newTag: SET-AT-DEPLOY
+
+configMapGenerator:
+  - name: indexer-config
+    literals:
+      - CHAIN_ID=pio-testnet-1
+      - LCD_URL=https://lcd.test.provenance.io # [VERIFY] §7 Q7 at pilot preflight
+      - RPC_URL=SET-AT-DEPLOY # testnet RPC endpoint, §7 Q7's pair
+      - RECEIPT_DENOM=nvhash
+      - CONTRACT_ADDRESS= # bootstrap output (commit E); empty fails closed
+      - VAULT_ADDRESS= # bootstrap output (commit E); empty fails closed
+      - INDEX_START_HEIGHT= # the bootstrap's recorded store height (commit E)
+  - name: api-config
+    literals:
+      - PORT=8080
+      # Rate-limit posture: the 8.2-measured production defaults stand (the
+      # aggregate channel measured ~3500 req/min); TRUST_PROXY=true is legal
+      # ONLY because ingress.yaml asserts X-Forwarded-For overwrite (§4
+      # invariant 12) — the two move together.
+      - TRUST_PROXY=true
+  - name: web-config
+    literals:
+      - APP_ENV=testnet # §7.1 Q5: the closed set is development|testnet|production
+      - CHAIN_ID=pio-testnet-1
+      - CONSOLE_CHAIN_ID=pio-testnet-1
+      - LCD_URL=https://lcd.test.provenance.io # [VERIFY] §7 Q7
+      - CONTRACT_ADDRESS= # bootstrap output (commit E)
+      - VAULT_ADDRESS= # bootstrap output (commit E)
+      - CONSOLE_URL=https://SET-AT-DEPLOY-console # §7 Q6 hostname
+      - API_URL=http://api.nvhash-testnet.svc.cluster.local # in-cluster; public origin is the api ingress
+      - EXPLORER_URL=https://explorer.test.provenance.io # [VERIFY] §7 Q2
+      - WALLETCONNECT_PROJECT_ID=SET-AT-DEPLOY # per-env WC Cloud project (public by design)

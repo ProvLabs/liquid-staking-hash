@@ -173,6 +173,9 @@ describe("invariant 7 — the template set matches the contract, in both directi
     expect(uintBound("max_concentration_multiple_bps").min).toBe(1n);
     // `concentration_safety_offset_bps must be < 10000` — strictly below.
     expect(uintBound("concentration_safety_offset_bps").max).toBe(9_999n);
+    // `redemption_margin_bps must be <= 1000` — a tenth of the bps scale, the
+    // contract's own ceiling on redemption over-reservation.
+    expect(uintBound("redemption_margin_bps").max).toBe(1_000n);
     // The two with no contract check are bounded by JSON-number safety, and
     // that is a stated narrowing rather than an invented ceiling.
     expect(uintBound("min_capture_interval_secs").max).toBe(MAX_JSON_SAFE_UINT);
@@ -463,11 +466,12 @@ describe("configDiffRows — current → proposed, with untouched visibly untouc
     concentration_safety_offset_bps: 500n,
     commission_bps: 1_000n,
     jail_unbond_delay_secs: 28_800n,
+    redemption_margin_bps: 50n,
   };
 
-  it("covers all ten fields on every render", () => {
+  it("covers all eleven fields on every render", () => {
     const rows = configDiffRows({ aum_fee_bps: 50n }, current);
-    expect(rows).toHaveLength(10);
+    expect(rows).toHaveLength(11);
   });
 
   it("marks a changed field changed and every other field untouched", () => {

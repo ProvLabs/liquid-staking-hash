@@ -25,18 +25,32 @@ const sentinels = new Map(
   classification.serverOnly.map((key) => [key, `NVHASH_SERVER_ONLY_${key}_SENTINEL_MUST_NOT_SHIP`]),
 );
 
-console.log(
-  `[check-bundle-secrets] building with sentinels in: ${[...sentinels.keys()].join(", ")}`,
-);
+// --scan-only (PR 8.4, §4 invariant 11): skip the instrumented rebuild and
+// scan an EXISTING build/client — the images job extracts the bundle the
+// production image actually ships and runs this over it. The sentinel-env
+// leak check is only meaningful on the instrumented build; scan-only covers
+// the forbidden literals plus any extra markers passed in EXTRA_BUNDLE_SCAN
+// (the images job passes its layer-scan sentinel, so a decoy .env inlined at
+// image build time is caught here as well as in the layer scan).
+const scanOnly = process.argv.includes("--scan-only");
 
-const build = spawnSync("corepack", ["pnpm", "exec", "react-router", "build"], {
-  cwd: appDir,
-  stdio: ["ignore", "inherit", "inherit"],
-  env: { ...process.env, ...Object.fromEntries([...sentinels.entries()].map(([k, v]) => [k, v])) },
-});
-if (build.status !== 0) {
-  console.error(`[check-bundle-secrets] FAIL — build exited ${build.status}`);
-  process.exit(build.status ?? 1);
+if (!scanOnly) {
+  console.log(
+    `[check-bundle-secrets] building with sentinels in: ${[...sentinels.keys()].join(", ")}`,
+  );
+
+  const build = spawnSync("corepack", ["pnpm", "exec", "react-router", "build"], {
+    cwd: appDir,
+    stdio: ["ignore", "inherit", "inherit"],
+    env: {
+      ...process.env,
+      ...Object.fromEntries([...sentinels.entries()].map(([k, v]) => [k, v])),
+    },
+  });
+  if (build.status !== 0) {
+    console.error(`[check-bundle-secrets] FAIL — build exited ${build.status}`);
+    process.exit(build.status ?? 1);
+  }
 }
 
 const clientDir = join(appDir, "build/client");
@@ -58,6 +72,7 @@ if (files.length === 0) {
 // client bundle. It is never imported by app code; this literal scan makes
 // that an enforced mechanism rather than a review assumption.
 const FORBIDDEN_LITERALS = ["NVHASH_TEST_SIGNER_MUST_NOT_SHIP"];
+if (process.env.EXTRA_BUNDLE_SCAN) FORBIDDEN_LITERALS.push(process.env.EXTRA_BUNDLE_SCAN);
 
 const hits = [];
 for (const file of files) {

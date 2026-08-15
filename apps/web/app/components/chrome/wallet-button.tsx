@@ -6,10 +6,12 @@
 //
 // Accessibility: the picker/pairing panel is a native <dialog>-free inline
 // popover with aria-expanded on the trigger and focus-visible styling from
-// the shared Button; the axe e2e scan covers the closed state on every
-// route, and the connect flow is exercised by the §14.1 checklist runbook.
+// the shared Button; Escape closes it and RETURNS FOCUS TO THE TRIGGER (a
+// closed popover that strands focus on <body> is invisible to a keyboard
+// user — 8.3 keyboard gate, e2e/keyboard.spec.ts). The axe e2e scan covers
+// every route, and the connect flow is exercised by the §14.1 runbook.
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { renderSVG } from "uqr";
 
 import { Button } from "~/components/ui/button";
@@ -25,6 +27,21 @@ export function WalletButton({ locale }: { locale: Locale }) {
   const { state, connect, disconnect } = useWallet();
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes and returns focus to the trigger (keyboard parity with the
+  // alerts bell; focus must never strand on <body>).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   if (state.phase === "connected") {
     return (
@@ -47,6 +64,7 @@ export function WalletButton({ locale }: { locale: Locale }) {
   return (
     <div className="relative">
       <Button
+        ref={triggerRef}
         size="sm"
         aria-expanded={open}
         aria-controls={panelId}

@@ -114,6 +114,43 @@ describe("the v1 shell vs an active market (§13 decision 4)", () => {
       { chain: "base", supplyNvhash: "1.50", sampledAt: "2026-07-22T11:00:00Z" },
     ]);
   });
+
+  it("carries the two truncation flags as tri-states: true → partial, false → complete, absent → unknown", async () => {
+    // 8.0b invariant 7: a trimmed collection says so, and an absent flag
+    // (older API, deploy skew) never renders as "complete".
+    server.use(
+      http.get("*/api/v1/market", () =>
+        HttpResponse.json(
+          envelope(
+            {
+              sample: POPULATED_SAMPLE,
+              bridged_supply: [],
+              depth_bands_truncated: true,
+              bridged_supply_truncated: false,
+            },
+            { source: "indexed" },
+          ),
+        ),
+      ),
+    );
+    const flagged = await loadMarketData(config());
+    expect(flagged.market?.depthCompleteness).toBe("partial");
+    expect(flagged.market?.bridgedCompleteness).toBe("complete");
+
+    // Flags STRIPPED: the payload still parses (never rejected wholesale) and
+    // both tri-states land on unknown.
+    server.use(
+      http.get("*/api/v1/market", () =>
+        HttpResponse.json(
+          envelope({ sample: POPULATED_SAMPLE, bridged_supply: [] }, { source: "indexed" }),
+        ),
+      ),
+    );
+    const absent = await loadMarketData(config());
+    expect(absent.market).not.toBeNull();
+    expect(absent.market?.depthCompleteness).toBe("unknown");
+    expect(absent.market?.bridgedCompleteness).toBe("unknown");
+  });
 });
 
 describe("honest degradation (§12.1: each read degrades its own surface)", () => {

@@ -41,6 +41,16 @@ export interface IndexerConfig {
   govGroupPolicies: string[];
   /** first height the governance stream ingests (D13: 1, like the other streams). */
   govStartHeight: number;
+  /**
+   * First height the CHAIN workers (chain-events, epoch-history,
+   * validator-sampler) ingest; default 1 (devnet-compatible). Set per
+   * environment to the contract STORE height recorded by the bootstrap
+   * (plan 8.4 §2.9): history before the contract exists is empty by
+   * construction, so starting there loses nothing and is honest — while
+   * starting a public-testnet backfill at 1 walks millions of pre-contract
+   * blocks with the lag banner up for weeks.
+   */
+  indexStartHeight: number;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -79,6 +89,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig 
     reconcileIntervalMs: boundedInt(env, "RECONCILE_INTERVAL_MS", 30000, 1000),
     govGroupPolicies: bech32List(env, "GOV_GROUP_POLICIES"),
     govStartHeight: boundedInt(env, "GOV_START_HEIGHT", 1, 1),
+    indexStartHeight: boundedInt(env, "INDEX_START_HEIGHT", 1, 1),
   };
 }
 

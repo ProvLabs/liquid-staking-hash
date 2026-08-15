@@ -297,12 +297,11 @@ jobs:
         run: corepack pnpm --filter @nvhash/web run migrate:deploy
         env:
           DATABASE_URL: postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app
-      # NOTE: this script runs `prisma generate` itself, and must. `apps/web`
-      # and `services/indexer` both generate to the hoisted, shared
-      # `@prisma/client` (neither declares an `output`), so the db-indexed
-      # generate two steps above leaves it holding `indexed` models — the app
-      # models this suite needs would be missing. Generating inside the script
-      # keeps it correct regardless of where it sits in this job.
+      # NOTE: this script runs `prisma generate` itself, and must — a suite
+      # must not depend on job step order. `apps/web` is the repo's ONLY
+      # default-output generator (the indexer's clients generate into explicit
+      # paths, gated by its prisma-generator-output test), so nothing else may
+      # write the hoisted `@prisma/client` this suite binds to.
       - name: App-schema store gate (test:db — real Prisma stores as app_writer)
         if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/web run test:db
@@ -332,6 +331,78 @@ jobs:
       - name: Typecheck (tsc -b)
         if: needs.changes.outputs.app == 'true'
         run: npm run typecheck
+      # §10.1's "compile-time excluded" as a gate: the TEST build must carry
+      # no devnet-key/mock-identity material, and its generated CSP must pin
+      # the test profile's LCD origin. Built BEFORE the vitest step so the
+      # csp suite's built-HTML case reads the real dist/, never a stand-in.
+      - name: Build (test profile) and scan the bundle
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          npm run build:test
+          node scripts/check-bundle.mjs
+          # PR 8.4 §2.7.2: a PROVISIONAL corpus must produce a bundle that
+          # CARRIES the pre-certification caveat (and a certified one must not).
+          node scripts/check-certification-caveat.mjs
+      - name: Test (vitest — grammar, honesty matrices, tx encodings, CSP)
+        if: needs.changes.outputs.app == 'true'
+        run: npm test
+
+  # Deployment images (PR 8.4 commit A). Builds all four images from the repo
+  # root context and runs the two supply-chain gates:
+  #   * image-secret-scan — sentinel values are PLANTED in decoy .env files
+  #     and build args before the build; any sentinel found in any layer of
+  #     any image fails (proves .dockerignore's exclusions are enforced, §4
+  #     invariant 1);
+  #   * check:bundle against the IMAGE-built web bundle (the production
+  #     build), not only the working-tree build (§4 invariant 11).
+  # Pushing is gated on the registry (plan §7 Q6, an ops overlay parameter):
+  # until it exists the job builds and scans without pushing, which is the
+  # whole gate value. Digest-pinning of base images happens at first push.
+  images:
+    name: deploy · images build + secret scans
+    runs-on: ubuntu-latest
+    needs: changes
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.app == 'true'
+      - name: Repo secret scan (non-placeholder credentials fail)
+        if: needs.changes.outputs.app == 'true'
+        run: bash infra/deploy/scripts/scan-repo-secrets.sh
+      - name: Plant sentinels in the build context
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          # Decoy .env files that .dockerignore MUST exclude — if a build
+          # context picks one up, the layer scan below goes red.
+          SENTINEL="NVHASH_IMG_SENTINEL_$(date +%s)"
+          echo "SENTINEL=$SENTINEL" >> "$GITHUB_ENV"
+          for var in $(node -e "console.log(require('./apps/web/scripts/server-only-env.json').serverOnly.join(' '))"); do
+            echo "${var}=${SENTINEL}-${var}" >> .env
+            echo "${var}=${SENTINEL}-${var}" >> apps/web/.env
+          done
+          mkdir -p infra/devnet/state && echo "${SENTINEL}-devnet-state" > infra/devnet/state/decoy-key
+      - name: Build images
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          docker build -f infra/deploy/docker/indexer.Dockerfile -t nvhash/indexer:ci .
+          docker build -f infra/deploy/docker/api.Dockerfile     -t nvhash/api:ci .
+          docker build -f infra/deploy/docker/web.Dockerfile     -t nvhash/web:ci .
+          docker build -f infra/deploy/docker/console.Dockerfile --build-arg CONSOLE_MODE=test -t nvhash/console:ci .
+      - name: Image secret scan (every layer, every image)
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          bash infra/deploy/scripts/scan-image-secrets.sh "$SENTINEL" \
+            nvhash/indexer:ci nvhash/api:ci nvhash/web:ci nvhash/console:ci
+      - name: check:bundle against the image-built web bundle
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          # The client-safe boundary must survive the PRODUCTION build: run
+          # the standing scanner over the bundle the image actually ships.
+          id=$(docker create nvhash/web:ci)
+          rm -rf apps/web/build
+          docker cp "$id:/repo/apps/web/build" apps/web/build
+          docker rm "$id"
+          EXTRA_BUNDLE_SCAN="$SENTINEL" node apps/web/scripts/check-bundle-secrets.mjs --scan-only
 
   shell-lint:
     name: shellcheck (devnet + tooling scripts)
@@ -346,3 +417,76 @@ jobs:
         run: |
           # gate every tracked shell script plus the ./dev wrapper
           git ls-files '*.sh' | xargs shellcheck --severity=warning dev
+      # Deploy scripts FAIL CLOSED (plan 8.4 §4 invariant 3): a missing or
+      # placeholder credential must exit non-zero BEFORE any side effect.
+      # Each case runs the script in a state that must refuse; a script whose
+      # placeholder refusal is deleted exits 0 here and fails the assertion.
+      - name: Deploy scripts fail closed on placeholder credentials
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          set -u
+          expect_refusal() {
+            if "$@" >/dev/null 2>&1; then
+              echo "FAIL-CLOSED VIOLATION: $* exited 0 with placeholder/missing credentials" >&2
+              exit 1
+            fi
+            echo "ok (refused): $*"
+          }
+          expect_refusal env INDEXER_WRITER_PASSWORD=placeholder-value \
+            API_READER_PASSWORD=some-realistic-password-1 APP_WRITER_PASSWORD=some-realistic-password-2 \
+            PROVISION_DATABASE_URL=postgresql://admin@db/x \
+            bash infra/deploy/k8s/base/jobs/provision-roles.sh
+          expect_refusal env -u PROVISION_DATABASE_URL \
+            bash infra/deploy/k8s/base/jobs/provision-roles.sh
+          expect_refusal bash infra/deploy/bootstrap/probe-accept-asset.sh
+          expect_refusal env TESTNET_LCD=SET-AT-DEPLOY CHAIN_ID=pio-testnet-1 \
+            bash infra/deploy/bootstrap/probe-accept-asset.sh
+          # Post-probe scripts refuse without the probe marker (D27).
+          expect_refusal env TESTNET_NODE=https://rpc.example TESTNET_LCD=https://lcd.example \
+            GROUP_MEMBERS=tp1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq VOTING_PERIOD=12h \
+            bash infra/deploy/bootstrap/testnet-group-bootstrap.sh
+          expect_refusal env TESTNET_NODE=https://rpc.example TESTNET_LCD=https://lcd.example \
+            ADMIN_POLICY_ADDRESS=tp1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq \
+            bash infra/deploy/bootstrap/testnet-deploy.sh
+          expect_refusal bash infra/deploy/scripts/generate-vapid.sh testnet not-a-mailto
+
+  # SECURITY.md "run npm audit before releases", enforced as a standing CI
+  # gate for the pnpm workspace (PR 8.0b, CO-12). DELIBERATELY unguarded by
+  # `changes`: the input that moves is the ADVISORY DATABASE, which is never
+  # in the diff. Dev dependencies are IN scope — the build chain decides what
+  # reaches the served bundle. Exceptions live ONLY in pnpm-workspace.yaml's
+  # `auditConfig` (the pnpm-11 settings home) with an owned row in
+  # docs/security/dependency-audit-exceptions.md — no --audit-level floor, no
+  # --ignore flags, no continue-on-error.
+  #
+  # apps/console is outside the pnpm workspace (pnpm-workspace.yaml), so the
+  # workspace audit cannot see it — its lockfile gets its own `npm audit` step
+  # below (PR 8.4b, closing the gap 8.0b §7.1 Q5 recorded). Same posture: dev
+  # dependencies in scope, no --audit-level floor, no ignore flags.
+  audit:
+    name: workspace · pnpm audit (advisory database, unguarded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: ${{ github.workspace }}/.corepack
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore corepack cache
+        uses: actions/cache@v5
+        with:
+          path: .corepack
+          key: corepack-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: corepack-${{ runner.os }}-
+      # Audits the committed lockfile against the registry advisory DB; no
+      # install is needed, so a compromised postinstall can never run here.
+      - name: Audit pnpm-lock.yaml (production + dev)
+        run: corepack pnpm audit
+      # The console's standalone lockfile, same lockfile-only posture (no
+      # install, so a compromised postinstall can never run here).
+      - name: Audit apps/console package-lock.json (production + dev)
+        working-directory: apps/console
+        run: npm audit
+      - name: Every exception has an owner (register ↔ machine lists, both directions)
+        run: node scripts/check-audit-exceptions.mjs

@@ -1,0 +1,112 @@
+# Deploy-time Jobs, ordered by ArgoCD sync waves mirroring stack.sh (plan 8.4
+# §2.3): wave 0 db-provision → wave 1 the two migration Jobs (each schema
+# migrated AS ITS OWNING ROLE, ADR-001 Decision 1) → wave 2 grant-verify →
+# wave 3 the workloads. A failed wave halts the sync — fail-closed at the
+# profile level. Migrations run `prisma migrate deploy`, NEVER reset: both
+# schemas left baseline mode in 8.4a and history is append-only.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-provision
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: provision
+          # postgres image for psql; tag pinned with the bases (§2.2).
+          image: postgres:17-alpine
+          command: ["bash", "/scripts/provision-roles.sh"]
+          envFrom:
+            - secretRef: { name: db-provision-secrets }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+      volumes:
+        - name: scripts
+          configMap: { name: db-provision-script, defaultMode: 0555 }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-indexed
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: nvhash/indexer:overlay-sets-tag
+          command: ["corepack", "pnpm", "--filter", "@nvhash/indexer", "run", "migrate:deploy"]
+          workingDir: /repo
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: indexer-secrets, key: DATABASE_URL }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: nvhash/web:overlay-sets-tag
+          command: ["corepack", "pnpm", "--filter", "@nvhash/web", "run", "migrate:deploy"]
+          workingDir: /repo
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: web-secrets, key: DATABASE_URL }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: grant-verify
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: verify
+          # The standing grant-boundary gate re-pointed at the environment
+          # database (stack.sh verify precedent): asserts api_reader cannot
+          # write indexed, app_writer cannot read it, indexer_writer has
+          # nothing on app — the ADR-001 Decision 1 split as deployed.
+          image: nvhash/indexer:overlay-sets-tag
+          command:
+            - corepack
+            - pnpm
+            - --filter
+            - "@nvhash/indexer"
+            - exec
+            - vitest
+            - run
+            - --config
+            - vitest.integration.config.ts
+            - test/integration/grant-boundary.test.ts
+          workingDir: /repo
+          envFrom:
+            - secretRef: { name: grant-verify-secrets }

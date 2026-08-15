@@ -26,6 +26,7 @@ import {
   type IncidentSeverity,
   type MarketDepthBand,
   type MarketSample,
+  type MarketSummary,
   type OperatorEpochRow,
   type OperatorPaymentRow,
   type OperatorPaymentType,
@@ -41,12 +42,17 @@ import {
   type ValidatorRow,
   type ValidatorSetHealth,
   type ValidatorsPayload,
+  MAX_ACTIVE_REDEMPTIONS,
+  MAX_BRIDGED_SUPPLY_ROWS,
+  MAX_FAILING_REASONS,
   MAX_GOV_METADATA_LENGTH,
   MAX_GOV_PROPOSAL_MESSAGES,
   MAX_GOV_PROPOSERS,
   MAX_GOV_SUMMARY_LENGTH,
   MAX_GOV_TITLE_LENGTH,
   MAX_GOV_VOTES_PER_PROPOSAL,
+  MAX_MARKET_DEPTH_BANDS,
+  MAX_VALIDATOR_REGISTRY_ROWS,
   type GovDecisionPolicy,
   type GovExecutorResult,
   type GovPolicyRow,
@@ -62,6 +68,14 @@ import { z } from "zod";
 export interface Heads {
   readonly chainHeight: number | null;
   readonly indexedHeight: number | null;
+  /**
+   * The reconciler run's `ranAt` — the DATA'S age, never the response clock
+   * (`generated_at` is the response's). Null exactly when no run exists (cold
+   * start, the checkpoint-fallback and all-null branches): it cannot be null
+   * while the run-derived heights are present, since all three come from the
+   * same row.
+   */
+  readonly reconciledAt: Date | null;
 }
 
 // --- guards -----------------------------------------------------------------
@@ -140,21 +154,30 @@ export interface MetricsFacts {
 // --- derivations ------------------------------------------------------------
 
 export function deriveHeads(
-  reconcilerRun: { readonly chainHeight: bigint; readonly indexedHeight: bigint } | null,
+  reconcilerRun: {
+    readonly chainHeight: bigint;
+    readonly indexedHeight: bigint;
+    readonly ranAt: Date;
+  } | null,
   maxCheckpointHeight: bigint | null,
 ): Heads {
   if (reconcilerRun !== null) {
     return {
       chainHeight: toSafeInt(reconcilerRun.chainHeight, "chain_height"),
       indexedHeight: toSafeInt(reconcilerRun.indexedHeight, "indexed_height"),
+      reconciledAt: reconcilerRun.ranAt,
     };
   }
   // The reconciler has never run: the checkpoints certify indexed progress,
   // but nothing in the store knows the chain head — report null, never guess.
   if (maxCheckpointHeight !== null) {
-    return { chainHeight: null, indexedHeight: toSafeInt(maxCheckpointHeight, "indexed_height") };
+    return {
+      chainHeight: null,
+      indexedHeight: toSafeInt(maxCheckpointHeight, "indexed_height"),
+      reconciledAt: null,
+    };
   }
-  return { chainHeight: null, indexedHeight: null };
+  return { chainHeight: null, indexedHeight: null, reconciledAt: null };
 }
 
 /**
@@ -205,6 +228,12 @@ export function toValidatorRow(
   reg: ValidatorRegistryFacts,
   latest: ValidatorEpochFacts | null,
 ): ValidatorRow {
+  // Per-row trim with an explicit flag (the `messages_truncated` precedent):
+  // the reasons are a closed contract enumeration, so the cap should never
+  // bind — but a silent trim would hide WHY a validator fails from the one
+  // view that exists to say so.
+  const reasons = latest === null ? [] : [...latest.failingReasons];
+  const reasonsTruncated = reasons.length > MAX_FAILING_REASONS;
   return {
     valoper: reg.valoper,
     moniker: reg.moniker,
@@ -212,7 +241,8 @@ export function toValidatorRow(
     epoch_index: latest === null ? null : toSafeInt(latest.epochIndex, "epoch_index"),
     uptime_bps: latest === null ? null : latest.uptimeBps,
     eligible: latest === null ? null : latest.eligible,
-    failing_reasons: latest === null ? [] : [...latest.failingReasons],
+    failing_reasons: reasonsTruncated ? reasons.slice(0, MAX_FAILING_REASONS) : reasons,
+    failing_reasons_truncated: reasonsTruncated,
     program_delegation: latest === null ? null : latest.programDelegation.toString(),
     commission_due: latest === null ? null : latest.commissionDue.toString(),
   };
@@ -234,10 +264,20 @@ export function deriveValidatorsPayload(
   registry: readonly ValidatorRegistryFacts[],
   latestEpochByValoper: ReadonlyMap<string, ValidatorEpochFacts>,
 ): ValidatorsPayload {
-  const validators = registry.map((reg) =>
+  // Trim in registry order (moniker asc) and FLAG: `validators_truncated`
+  // marks the whole SET VIEW — rows and the aggregates computed over them —
+  // as partial. The reader reads `MAX + 1` (detect-then-trim), so an over-cap
+  // registry is observable here without an unbounded transfer.
+  const truncated = registry.length > MAX_VALIDATOR_REGISTRY_ROWS;
+  const served = truncated ? registry.slice(0, MAX_VALIDATOR_REGISTRY_ROWS) : registry;
+  const validators = served.map((reg) =>
     toValidatorRow(reg, latestEpochByValoper.get(reg.valoper) ?? null),
   );
-  return { validators, set_health: deriveSetHealth(validators) };
+  return {
+    validators,
+    set_health: deriveSetHealth(validators),
+    validators_truncated: truncated,
+  };
 }
 
 // --- market --------------------------------------------------------
@@ -303,25 +343,48 @@ export function premiumDiscountBps(priceNhash: bigint, navNhash: bigint | null):
   return toSafeSignedInt(((priceNhash - navNhash) * 10_000n) / navNhash, "premium_discount_bps");
 }
 
-export function toMarketSample(
-  facts: MarketSampleFacts,
-  navAtSampleTime: bigint | null,
-): MarketSample {
-  return {
-    venue: facts.venue,
-    pool: facts.pool,
-    price: facts.priceNhash.toString(),
-    premium_discount_bps: premiumDiscountBps(facts.priceNhash, navAtSampleTime),
-    depth_bands: parseDepthBands(facts.depthBands),
-    sampled_at: facts.sampledAt.toISOString(),
-  };
-}
-
 export function toBridgedSupplyRow(facts: BridgedSupplyFacts): BridgedSupplyRow {
   return {
     chain: facts.chain,
     supply: facts.remoteSupply.toString(),
     sampled_at: facts.sampledAt.toISOString(),
+  };
+}
+
+/**
+ * The whole `/market` payload from the reader's facts: the latest sample (or
+ * null while no market data exists), the per-chain bridged readings, and the
+ * two truncation flags — both ALWAYS emitted, false when nothing was trimmed
+ * (and `depth_bands_truncated: false` when `sample` is null: nothing existed
+ * to trim). No v1 producer writes market samples yet (§14.3, overview CO-45),
+ * so the caps here bound future sampler output and are exercised by fixtures.
+ */
+export function deriveMarketSummary(
+  sampleFacts: MarketSampleFacts | null,
+  navAtSampleTime: bigint | null,
+  bridged: readonly BridgedSupplyFacts[],
+): MarketSummary {
+  let sample: MarketSample | null = null;
+  let depthTruncated = false;
+  if (sampleFacts !== null) {
+    const bands = parseDepthBands(sampleFacts.depthBands);
+    depthTruncated = bands.length > MAX_MARKET_DEPTH_BANDS;
+    sample = {
+      venue: sampleFacts.venue,
+      pool: sampleFacts.pool,
+      price: sampleFacts.priceNhash.toString(),
+      premium_discount_bps: premiumDiscountBps(sampleFacts.priceNhash, navAtSampleTime),
+      depth_bands: depthTruncated ? bands.slice(0, MAX_MARKET_DEPTH_BANDS) : bands,
+      sampled_at: sampleFacts.sampledAt.toISOString(),
+    };
+  }
+  const bridgedTruncated = bridged.length > MAX_BRIDGED_SUPPLY_ROWS;
+  const bridgedServed = bridgedTruncated ? bridged.slice(0, MAX_BRIDGED_SUPPLY_ROWS) : bridged;
+  return {
+    sample,
+    bridged_supply: bridgedServed.map(toBridgedSupplyRow),
+    depth_bands_truncated: depthTruncated,
+    bridged_supply_truncated: bridgedTruncated,
   };
 }
 
@@ -739,8 +802,14 @@ export function derivePortfolio(
   transactionCount: number,
   activeRedemptions: readonly RedemptionFacts[],
 ): PortfolioSummary {
+  // Newest-first trim (the read order is `enqueuedAt desc`, so a trim drops
+  // the OLDEST), flagged rather than silent. `escrowed_shares` sums the
+  // SERVED rows so the payload stays internally consistent; the flag marks
+  // the whole view — sum included — as partial.
+  const truncated = activeRedemptions.length > MAX_ACTIVE_REDEMPTIONS;
+  const served = truncated ? activeRedemptions.slice(0, MAX_ACTIVE_REDEMPTIONS) : activeRedemptions;
   let escrowed = 0n;
-  for (const redemption of activeRedemptions) {
+  for (const redemption of served) {
     if (!isActiveRedemption(redemption.status)) {
       throw new RangeError(
         `redemption ${redemption.requestId} is ${redemption.status}, not active`,
@@ -753,7 +822,8 @@ export function derivePortfolio(
     first_activity_at: firstActivityAt === null ? null : firstActivityAt.toISOString(),
     transaction_count: transactionCount,
     escrowed_shares: escrowed.toString(),
-    active_redemptions: activeRedemptions.map(toRedemptionRow),
+    active_redemptions: served.map(toRedemptionRow),
+    active_redemptions_truncated: truncated,
   };
 }
 

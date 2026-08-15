@@ -19,6 +19,37 @@ each is written to be dispatched as its own follow-up.
 make two documents agree; `SPEC` = design work to add once scoped. Priority: **P1** shapes product
 scope, **P2** reconciles models/data, **P3** is consistency/messaging.
 
+> **Statuses below are historical (as written 2026-07-10, migrated
+> 2026-07-13).** The register was authored before the App epic; the App
+> delivered most of what it asks of the console. The disposition table is the
+> current authority, recorded at the M8 8.0a carryover review
+> ([M8 overview](2026-08-05-app-m8-hardening-and-pilot.md) §4 CO-52, D31,
+> ratified 2026-08-14 by Ira). The item bodies are kept unedited as the
+> record of the original collisions.
+
+## Disposition (2026-08-14, M8 PR 8.0a)
+
+| Item | Disposition |
+| --- | --- |
+| A1 | **RESOLVED** by the boundary decision, the register's own "if no" branch made explicit: app-spec §14.6 (2026-07-15) makes the App the home for every non-engineering persona and the console engineering-only. The Evaluator surface is the App Learn page (M4.2, delivered 2026-07-22) — mechanism explainer, yield decomposition, exit explainer, trust posture. The console handoff question dissolves; no console Evaluator surface is owed |
+| A2 | **RESOLVED** the same way: depositor create/redeem/unbond ship as App wallet flows (M5, §10.2 lifecycle), not console writes. Console v1 stays read-only for depositors, and that is a decision, not an omission |
+| A3 | **RESOLVED as a recorded deferral**: app-spec §14.4 (2026-07-15) — no bridged nvHASH in v1, DEX/market surfaces are labeled "coming soon" shells, v1 exit is native-redemption-only. §14.3 (the data source) stays an external VERIFY tracked as M8 overview CO-45; the persona expectation is bounded by the shells' honest labeling |
+| A4 | **RESOLVED**: admin cohort analytics live in the App (`/admin`, M7.5 delivered 2026-07-31) over the indexer — the "deferred indexer" option, delivered. The console is not promised the dashboard |
+| B1 | **OPEN — scheduled**: the reconciled actor map is a docs-alignment task in the 8.5 documentation pass (M8 overview CO-52 residue). The App's delivered role model (session roles + operator + admin scopes, ADR-001 Decision 2) is the de-facto map to ratify against |
+| B2 | **PARTIALLY RESOLVED — residue scheduled**: the App delivers `x/group` voting/execution surfaces for group members (M7.2–7.4). Whether validators are members is a launch-operations parameter (M8 D25/8.5 membership set), not a contract change. The persona-doc correction rides the 8.5 documentation pass |
+| B3 | **OPEN — scheduled**: keeper framing aligns in the 8.5 documentation pass (depends on B1). `docs/user/keeper-runbook.md` already treats the keeper as an operations role |
+| C1 | **RESOLVED in substance**: the App Learn trust module (M4.2, typed §5.4 content plane, honest pre-audit posture). The audit report publishes there at 8.5 (M8 overview CO-36) |
+| C2 | **RESOLVED**: incident history is indexed (M2.5 reconciler + `incidents`) and surfaced (Learn incident feed M4.2; admin incident feed with acknowledgment M7.5). Source decided: the indexer |
+| C3 | **RESOLVED**: `/metrics` serves `participant_count` (M3.1; semantics ratified as distinct addresses across all kinds, M8 CO-39) plus epoch history for maturity signals |
+| D1 | **RESOLVED**: alert rules + in-app notifications + Web Push ship in the App (M6.2/6.3, default-on rules per spec R2). The console keeps computed banners only — the App is the alerting home. DEX-depeg alert kind stays deferred with A3/§14.4 (M8 CO-45) |
+| D2 | **RESOLVED**: per-address history + CSV export ship in the App (M3.3 `/transactions?format=csv`, M6.1 portfolio export, §14.11 cost-basis decision 2026-07-15) |
+| E1 | **OPEN — scheduled**: exit-time language standardization rides the 8.5 documentation pass. The App already renders the honest pair (60-day guarantee vs typical, §14.12) |
+| E2 | **RESOLVED as decision**: §14.1 (2026-07-14) — App: Figure + Arculus over WC v2; console: Figure extension + devnet key mode. Certification execution is M8 Phase B W1 |
+| E3 | **OPEN — scheduled**: glossary ratification rides the 8.5 documentation pass (specs standardized on APR/NAV; the personas doc still mixes vocabularies) |
+| E4 | **RESOLVED in substance**: the Learn explainer teaches stepwise accrual and every chart is step-after, non-interpolated (M4.2/M4.4). Persona-doc fold-in rides the 8.5 pass |
+| E5 | **OPEN — scheduled**: the fee-base definition mismatch (commission-share vs %-of-rewards) is a genuine spec/persona conflict; reconcile in the 8.5 documentation pass against root §10.1 as canonical |
+| F1 | **RESOLVED in substance**: the App composes — portfolio renders for any connected address regardless of operator/admin role (M6.1), operator and admin surfaces are additive views (M6.4, M7.5). The console composition question dissolves with §14.6 |
+
 ---
 
 ## P1 — Product-scope conflicts (decide before the console is certified)

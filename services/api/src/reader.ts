@@ -270,7 +270,7 @@ export interface IndexedReader {
  * state; nothing here fabricates a height, a count, or a row.
  */
 export const emptyReader: IndexedReader = {
-  heads: () => Promise.resolve({ chainHeight: null, indexedHeight: null }),
+  heads: () => Promise.resolve({ chainHeight: null, indexedHeight: null, reconciledAt: null }),
   programMetrics: () =>
     Promise.resolve({ participant_count: null, program_started_at: null, epoch_count: null }),
   listEpochs: () => Promise.resolve([]),
@@ -279,8 +279,17 @@ export const emptyReader: IndexedReader = {
     Promise.resolve({
       validators: [],
       set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 },
+      // Explicit false, never derived from the (empty) list: an empty view is
+      // complete, and the producer contract is that the flag always ships.
+      validators_truncated: false,
     }),
-  latestMarket: () => Promise.resolve({ sample: null, bridged_supply: [] }),
+  latestMarket: () =>
+    Promise.resolve({
+      sample: null,
+      bridged_supply: [],
+      depth_bands_truncated: false,
+      bridged_supply_truncated: false,
+    }),
   payoutStats: () =>
     Promise.resolve({
       sample_count: 0,
@@ -297,6 +306,7 @@ export const emptyReader: IndexedReader = {
       transaction_count: 0,
       escrowed_shares: "0",
       active_redemptions: [],
+      active_redemptions_truncated: false,
     }),
   transactionsFor: () => Promise.resolve([]),
   transactionsAscFor: () => Promise.resolve([]),

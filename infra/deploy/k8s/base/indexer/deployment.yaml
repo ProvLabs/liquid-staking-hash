@@ -1,0 +1,38 @@
+# services/indexer — SOLE writer of `indexed` (ADR-001 Decision 1).
+# replicas: 1 + strategy: Recreate are LOAD-BEARING (plan 8.4 C1/C3): two
+# indexer pods racing the checkpoint is the failure the sole-writer invariant
+# forbids, and Recreate guarantees the old pod is gone before the new one
+# starts. No unit test can see this — it is the §9 review-checklist item.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indexer
+  labels: { app.kubernetes.io/name: indexer }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app.kubernetes.io/name: indexer }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: indexer }
+    spec:
+      containers:
+        - name: indexer
+          image: nvhash/indexer:overlay-sets-tag
+          envFrom:
+            - configMapRef: { name: indexer-config }
+            - secretRef: { name: indexer-secrets } # ExternalSecret-materialized
+          # Liveness is the heartbeat FILE — the indexer serves no HTTP by
+          # design (SECURITY.md: no server, no listener, no signer).
+          livenessProbe:
+            exec:
+              command: ["node", "scripts/healthcheck.mjs"]
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }

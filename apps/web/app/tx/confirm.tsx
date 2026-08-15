@@ -53,6 +53,13 @@ export function TxConfirm({
       <h2 id={headingId} className="text-lg font-semibold">
         {t(locale, "tx.confirm-title")}
       </h2>
+      {tier !== "info" ? (
+        // The tier in TEXT, not color alone (WCAG 1.4.1; 8.3 confirm gate):
+        // the border tint above is reinforcement, never the sole carrier.
+        <p className="text-sm font-medium">
+          {t(locale, tier === "danger" ? "tx.confirm-tier-danger" : "tx.confirm-tier-warning")}
+        </p>
+      ) : null}
       <ul className="flex flex-col gap-1 text-sm">
         {summaryLines.map((line) => (
           <li key={line}>{line}</li>

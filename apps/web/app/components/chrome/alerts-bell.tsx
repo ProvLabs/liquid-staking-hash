@@ -106,6 +106,7 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
   const listFetcher = useFetcher();
   const markFetcher = useFetcher();
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const listData = listFetcher.data as
     | { notifications?: NotificationView[]; unread?: number }
@@ -137,11 +138,16 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
     }
   }, [markFetcher.state, markData, listFetcher]);
 
-  // Close on Escape / outside click (keyboard + pointer parity).
+  // Close on Escape / outside click (keyboard + pointer parity). Escape also
+  // RETURNS FOCUS TO THE TRIGGER: closing while focus sits inside the popover
+  // would strand it on <body> — invisible to a keyboard user (8.3 gate).
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     const onClick = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
@@ -170,6 +176,7 @@ function AlertsBellPopover({ locale, initialUnread }: { locale: Locale; initialU
   return (
     <div ref={containerRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         className="relative inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
         aria-label={label}

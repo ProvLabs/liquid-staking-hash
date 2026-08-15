@@ -24,16 +24,21 @@ Read both before changing a worker, a cursor, or an idempotency guard.
   its Prisma schema and migrations live here and run as the `indexer_writer`
   role, the only role with write access. This service never touches the `app`
   schema. Migrations must run cleanly on an empty database.
-- **The schema is ONE baseline migration, not a history.** Nothing runs this
-  schema outside dev and CI, so there is no deployed database whose state a
-  migration has to reach: a schema change edits the models and is regenerated
-  into `prisma/migrations/20260715013707_init`, and every environment is rebuilt
-  (`./dev pg reset`, `migrate:deploy`) — indexed data is rebuildable from chain
-  by definition. Add an incremental migration only once a database exists whose
-  contents cannot be recreated. Regenerate with `prisma migrate diff
-  --from-empty --to-schema-datamodel prisma --script`, keeping the file's
-  hand-written header and its trailing constraints (which the datamodel cannot
-  express).
+- **Migration history is append-only from a frozen baseline** (PR 8.4a).
+  `prisma/migrations/20260715013707_init` is frozen migration 0 — never
+  regenerated or edited (`test/migration-freeze.test.ts` pins its SHA-256). A
+  schema change edits the models, then appends a new timestamped migration
+  produced with `prisma migrate diff --from-migrations --to-schema-datamodel
+  prisma --script`, hand-written SQL included where the datamodel cannot
+  express the constraint. The fold gate (app-ci "Migrations match the models",
+  `--from-migrations … --exit-code`) fails a model edit without its appended
+  migration and vice versa; migrations must still apply cleanly to an empty
+  database. `./dev pg reset` remains a dev convenience (it replays the chain),
+  not the schema-change procedure. Standing constraint in migration form: any
+  migration touching `gov_proposals.proposers` must preserve NOT NULL —
+  x/group requires at least one proposer and the generated client types the
+  list as required; the constraint lives as hand-written SQL because a list
+  column's nullability is not a Prisma datamodel property.
 - **Adding a column is a design-review event**, not a migration — edit the
   allowlist and record the rationale in the design notes.
 - Amount columns are `Decimal(39,0)`, never `Float`. Weight sums are also
@@ -80,7 +85,12 @@ transport.
 ## Workers
 
 - **`workers/chain-events/`** → `transactions`, `redemption_requests`,
-  `operator_payments`. Dual source: `tx_search` plus `block_results` per height
+  `operator_payments`, and the materialized `holder_lifecycles` (PR 8.2
+  commit D: after each window's upserts, the store recomputes lifecycle rows
+  from `transactions` for exactly the addresses the window touched — a
+  recompute-from-truth inside the window transaction, so replay from 0 equals
+  resume by construction; equality-gated in `test:grants`). Dual source:
+  `tx_search` plus `block_results` per height
   (EndBlocker payout/refund + NAV marker). `decode.ts` maps raw events to typed
   `DomainEvent`s scoped to the program's vault/receipt denom and, for contract
   payments, to `_contract_address` (chain-facts §events 2). `reduce.ts` is a
@@ -105,7 +115,13 @@ transport.
   design notes. Policy discovery is **set-valued** (`policies.ts`); a
   plain-account admin yields the empty set and empty committed windows, the
   honest no-governance state. `GOV_GROUP_POLICIES` *adds* to discovery, never
-  replaces it; `GOV_START_HEIGHT` defaults to 1.
+  replaces it; `GOV_START_HEIGHT` defaults to 1. The CHAIN workers
+  (chain-events, epoch-history, validator-sampler) start at
+  `INDEX_START_HEIGHT` (default 1; per environment the bootstrap's recorded
+  contract STORE height — plan 8.4 §2.9): pre-contract history is empty by
+  construction, so starting there loses nothing, while a public-testnet
+  backfill from 1 walks millions of empty blocks. Never tune the DATA
+  DEGRADED threshold to hide a backfill — the catch-up window must show it.
 
 ## Reconciler
 
@@ -116,14 +132,22 @@ divergence even if ingestion stalls.
 
 Each pass reads the live plane and the indexed plane, then `deriveActions` — a
 **pure** function of both — yields the `reconciler_runs` row plus incidents to
-open and close, applied in one transaction.
+open and close, applied in one transaction. Its deps include `vaultAddress`
+(the pause read). **A pass is all-or-nothing**: any failed live read derives
+nothing and closes nothing (an unknown pause state must never read as
+"unpaused"), and a failed pass is **logged and skipped, never fatal** — the
+reconciler advances no cursor, so the workers' crash-fatal rule does not
+apply; the alarm must outlive what it watches.
 
 - **`tolerances.ts`** — per-metric, in-code, **not env-tunable**: widening one
   would silence the alarm. Copied snapshot values use exact equality.
-- **Incidents:** `reconciler_divergence`, `indexer_lag`, `contract_halted`
-  (closeable); `slash_write_down`, `redemption_refund` (point-in-time, opened
-  once). Cold start reports `indexedHeight = 0`, never the head, and fires no
-  data-degraded incident.
+- **Incidents:** `reconciler_divergence`, `indexer_lag`, `contract_halted`,
+  `vault_paused` (dedupeKey `paused`), `jail_report` (dedupeKey carries the
+  EPISODE — `valoper:{addr}:{reportedAtSeconds}`, so a re-jail never merges
+  into the first episode's record) — all closeable; `slash_write_down`,
+  `redemption_refund` (point-in-time, opened once). Cold start reports
+  `indexedHeight = 0`, never the head, and fires no data-degraded incident.
+  Still deferred (spec §9.6): `epoch_overdue`, queue-length delta.
 
 ## Commands
 
@@ -141,7 +165,12 @@ reachable in-network as `http://dev-node:1317`.
   `gov_proposals`/`gov_votes` round-trip. **The governance monotonicity guard is
   gated only here** — the unit replay suite mirrors the conditional-update arm
   in TypeScript and would still pass if the SQL lost it.
-- `generate` — regenerate the Prisma client from `prisma/`.
+- `generate` — regenerate the Prisma client from `prisma/` into the explicit,
+  gitignored `generated/client` path (a sibling of `prisma/`, since anything
+  inside it is read as multi-file schema source; imported only via
+  `src/prisma.ts`). Every generator in this schema declares an explicit
+  `output` — `apps/web` is the repo's sole writer of the hoisted
+  `@prisma/client`, and the `prisma-generator-output` test gates the rule.
 - `start` — `prisma generate` then run the supervisor (`src/index.ts`): connects
   as `indexer_writer`, runs the chain-isolation boot check, starts the workers,
   and proves liveness via a DB ping written to a heartbeat file

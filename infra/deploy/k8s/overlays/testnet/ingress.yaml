@@ -1,0 +1,63 @@
+# Testnet ingresses. Hostnames are §7 Q6 overlay parameters (SET-AT-DEPLOY).
+#
+# TWO LOAD-BEARING BLOCKS:
+#   * api: TRUST_PROXY=true in api-config is legal ONLY with this ingress
+#     asserting X-Forwarded-For overwrite (§4 invariant 12) — nginx-ingress's
+#     default `use-forwarded-headers: false` on the controller means the
+#     controller SETS XFF from the real peer; verify the cluster controller's
+#     setting at deploy (review checklist).
+#   * console: the CSP RESPONSE HEADER (8.4b handoff (b), §4 invariant 14) —
+#     generated from the SAME LCD-host fact the console build baked into its
+#     meta tag, plus frame-ancestors, which meta CSP cannot express. The live
+#     lane's response-header case asserts what is actually served.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  rules:
+    - host: SET-AT-DEPLOY-app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: web, port: { name: http } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  rules:
+    - host: SET-AT-DEPLOY-api
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: api, port: { name: http } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: console
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # The CSP header: same directives as the built meta tag (build/csp.ts is
+    # the connect-src authority — lcd.test.provenance.io must equal the
+    # overlay's LCD host) + frame-ancestors 'none' (headers-only directive;
+    # without it the public pilot is framable — clickjacking on a
+    # wallet-connecting page).
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https://lcd.test.provenance.io; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" always;
+spec:
+  rules:
+    - host: SET-AT-DEPLOY-console
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: console, port: { name: http } } }

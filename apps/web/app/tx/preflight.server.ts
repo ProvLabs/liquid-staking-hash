@@ -762,6 +762,11 @@ export async function runGovernancePreflight(
             concentration_safety_offset_bps: BigInt(currentConfig.concentrationSafetyOffsetBps),
             commission_bps: BigInt(currentConfig.commissionBps),
             jail_unbond_delay_secs: BigInt(currentConfig.jailUnbondDelaySecs),
+            // Omitted when the deployed build predates the field — no rule
+            // consumes it yet, and an invented 0n would misstate live state.
+            ...(currentConfig.redemptionMarginBps === null
+              ? {}
+              : { redemption_margin_bps: BigInt(currentConfig.redemptionMarginBps) }),
           },
     spendableNhash:
       spendable === null

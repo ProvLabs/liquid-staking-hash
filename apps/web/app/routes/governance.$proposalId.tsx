@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 
+import { VerifyLink } from "~/components/verify-link";
 import { DecodedMessages } from "~/components/governance/decoded-message";
 import { MemberStatusTable } from "~/components/governance/member-status-table";
 import { OutcomeHistory } from "~/components/governance/outcome-history";
@@ -27,8 +28,10 @@ export function meta(_: Route.MetaArgs) {
  * because "no record of this proposal" and "this proposal is empty" are
  * different answers.
  *
- * NO verify link is rendered anywhere on this page (D8): the console has no
- * governance panel, and a pruned proposal has nothing left on chain to link to.
+ * The verify link is LIVE-PLANE-ONLY (the per-row D8 rule, §12.2): it renders
+ * only when the live read held this proposal — a pruned or unconfirmed row
+ * gets no link, because the console is the live plane and a link the App can
+ * predict resolves to nothing is a dead link with extra steps.
  */
 export async function loader({ params, request }: Route.LoaderArgs) {
   const config = await getBootedConfig();
@@ -74,9 +77,21 @@ export default function GovernanceProposal({ loaderData }: Route.ComponentProps)
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-12">
-      <Link className="text-sm underline underline-offset-4" to="/governance">
-        ← {t(locale, "governance.back-to-list")}
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link className="text-sm underline underline-offset-4" to="/governance">
+          ← {t(locale, "governance.back-to-list")}
+        </Link>
+        {/* Live-plane-only (per-row D8): the console shows what the chain
+            holds NOW, so the anchor renders only when the live read held
+            this proposal — never for a pruned or unconfirmed row. */}
+        {!proposal.pruned && proposal.liveState !== null ? (
+          <VerifyLink
+            locale={locale}
+            target="governance"
+            anchor={{ proposalId: proposal.proposalId }}
+          />
+        ) : null}
+      </div>
 
       <ProposalHeader locale={locale} proposal={proposal} />
 

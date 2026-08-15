@@ -1,0 +1,32 @@
+// holder_lifecycles (PR 8.2 commit D, landed on T3's breaching measurement):
+// the materialized output of the holder-lifecycle fold — one row per
+// depositor, exactly the two heights `HolderLifecycleFacts` carries. The
+// window-function fold this replaces ran superlinearly on EVERY /admin load
+// (measured 21.6 s p95 at 1.2 M transactions under the 8.2 admin scenario,
+// breaching the pre-ratified 2.5 s criterion); the read becomes an indexed
+// ORDER BY + LIMIT here, and the fold runs once per ingestion window over
+// only the addresses that window touched.
+//
+// `address` is already-indexed public chain data (it keys `transactions`);
+// NO new information class enters the schema — the row is an aggregate over
+// already-indexed public rows, and the address column is never selected out
+// by the API read. Maintained by the chain-events worker's write phase as a
+// recompute-from-truth over the touched addresses, so replay from 0 equals
+// resume by construction; the equality gate
+// (test/integration/holder-lifecycle-materialization.test.ts) computes the
+// truth both ways against real Postgres.
+
+model HolderLifecycle {
+  address            String  @id
+  /// Height of the address's first `swap_in` — set once by chain history.
+  firstDepositHeight BigInt
+  /// First height at/after the first deposit where the running position
+  /// reached zero, or NULL while still holding ("no exit observed as of
+  /// indexedHeight" — a known no-so-far, never "unknown"; a row's ABSENCE is
+  /// the unknown state, covered by the envelope heights).
+  exitHeight         BigInt?
+
+  @@index([firstDepositHeight])
+  @@map("holder_lifecycles")
+  @@schema("indexed")
+}

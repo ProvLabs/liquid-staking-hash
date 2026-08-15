@@ -25,6 +25,12 @@ export function createChainEventsWorker(deps: ChainEventsDeps): Worker<DomainEve
     stream: STREAMS.chainEvents,
     startHeight: deps.startHeight ?? 0n,
     collect: (window) => collectWindow(deps.rpc, deps.scope, window),
-    write: (tx, _window, batch) => applyEvents(new PrismaStore(tx), batch),
+    write: async (tx, _window, batch) => {
+      const store = new PrismaStore(tx);
+      await applyEvents(store, batch);
+      // The materialized lifecycle fold (PR 8.2 commit D): recompute for the
+      // addresses this window touched, inside the same transaction.
+      await store.refreshHolderLifecycles();
+    },
   };
 }

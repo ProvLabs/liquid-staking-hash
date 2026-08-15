@@ -166,6 +166,16 @@ tx "$ADMIN" --gas auto --gas-adjustment 2.0 --gas-prices 1nhash -- \
   wasm execute "$CONTRACT" "{\"report_jailed_validator\":{\"valoper\":\"$VAL3\"}}" >/dev/null
 assert_eq "two reports on file" "$(smart '{"jail_reports":{}}' '.data.reports | length')" "2"
 
+# Observation hook (app M8.1 jail lane): with reports on file and the first
+# purge not yet run, an optional caller-supplied command observes the app's
+# surfaces against this live jail state (the only point where a real jailed
+# validator with an open report exists). Script-side and additive only — the
+# contract drill itself stays canonical, and an unset hook changes nothing.
+if [ -n "${JAIL_OBSERVE_CMD:-}" ]; then
+  echo; echo "== OBSERVE: running JAIL_OBSERVE_CMD against the live jail state =="
+  E2E_JAIL_VALOPER="$VAL2" $JAIL_OBSERVE_CMD
+fi
+
 echo; echo "== NEGATIVE: purge inside the cooldown is rejected =="
 tx_expect_fail "cooldown" "$ADMIN" -- \
   wasm execute "$CONTRACT" "{\"purge_jailed_validator\":{\"valoper\":\"$VAL2\"}}"
@@ -262,5 +272,12 @@ SNAP="$(qj wasm contract-state smart "$CONTRACT" '{"epoch_snapshot":{}}' | jq '.
 assert_eq "snapshot write_down == recognized loss" "$(echo "$SNAP" | jq -r '.write_down')" "$WRITE_DOWN"
 assert_eq "snapshot validators_purged" "$(echo "$SNAP" | jq -r '.validators_purged')" "2"
 assert_eq "snapshot settled == liquid consumed" "$(echo "$SNAP" | jq -r '.settled')" "$LIQ"
+
+# Observation hook, teardown leg (app M8.1 jail lane): with every report
+# purged or cleared, the app-side jail_report incidents must have CLOSED.
+if [ -n "${JAIL_OBSERVE_CMD:-}" ]; then
+  echo; echo "== OBSERVE: teardown — jail incidents closed after the purges =="
+  E2E_JAIL_VALOPER="$VAL2" E2E_JAIL_EXPECT=closed $JAIL_OBSERVE_CMD
+fi
 
 echo; echo "== JAIL DRILL PASSED (incl. slash write-down) =="

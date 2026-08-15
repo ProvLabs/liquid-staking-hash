@@ -28,6 +28,9 @@ pub struct InstantiateMsg {
     pub commission_bps: Option<u64>,
     /// Cooldown between jail report and purge (RC1 §9.8). None = 8h default.
     pub jail_unbond_delay_secs: Option<u64>,
+    /// Safety margin over the pending-redemption need, in bps (spec §9.5.6;
+    /// bounded 0..=1000). None = the 50 bps default.
+    pub redemption_margin_bps: Option<u64>,
 }
 
 #[cw_serde]
@@ -48,6 +51,7 @@ pub enum ExecuteMsg {
         concentration_safety_offset_bps: Option<u64>,
         commission_bps: Option<u64>,
         jail_unbond_delay_secs: Option<u64>,
+        redemption_margin_bps: Option<u64>,
     },
     /// Admin-gated: emergency stop / resume for the fund-moving permissionless
     /// cranks (RunEpoch including continuations, ServiceRedemptions). Does not
@@ -147,6 +151,13 @@ pub enum QueryMsg {
     /// RC1 §9.10 / R2 transparency. None before the first epoch crank.
     #[returns(AprResponse)]
     Apr {},
+    /// The spec §5.1 receipt-conservation invariant's legs, in ONE consistent
+    /// state read (8.4a D29): minted counter, bank supply of the receipt
+    /// denom, program delegations, in-flight unbonding, earmarked pending
+    /// deployment, and the saturating residual. Read-only, permissionless,
+    /// bounded by the validator ceiling (paginated reads to exhaustion).
+    #[returns(ReceiptAccountingResponse)]
+    ReceiptAccounting {},
 }
 
 #[cw_serde]
@@ -165,6 +176,26 @@ pub struct ConfigResponse {
     pub concentration_safety_offset_bps: u64,
     pub commission_bps: u64,
     pub jail_unbond_delay_secs: u64,
+    pub redemption_margin_bps: u64,
+}
+
+/// The §5.1 invariant's legs from one consistent state read (all base-unit
+/// amounts of the receipt/underlying denoms as noted per field).
+#[cw_serde]
+pub struct ReceiptAccountingResponse {
+    /// The contract's own §5.1 counter (receipt base units).
+    pub receipt_minted: cosmwasm_std::Uint128,
+    /// Bank total supply of the receipt denom.
+    pub receipt_bank_supply: cosmwasm_std::Uint128,
+    /// Sum of live program delegations (nhash base units).
+    pub staked: cosmwasm_std::Uint128,
+    /// In-flight unbonding across program validators (nhash base units).
+    pub unbonding: cosmwasm_std::Uint128,
+    /// Earmarked PENDING_DELEGATIONS total (nhash base units).
+    pub pending_deployment: cosmwasm_std::Uint128,
+    /// minted − staked − unbonding − pending, saturating at zero: the
+    /// residual a verifier reconciles against matured-but-unsettled value.
+    pub matured_unsettled: cosmwasm_std::Uint128,
 }
 
 #[cw_serde]

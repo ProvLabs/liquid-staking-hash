@@ -1,0 +1,22 @@
+# cargo-audit configuration for the contracts workspace (SECURITY.md
+# "Dependencies and supply chain"; CI: the contracts-ci `audit` job).
+#
+# EVERY ignored advisory id listed here MUST have a row in
+# docs/security/dependency-audit-exceptions.md carrying owner, reason and a
+# review-by date — scripts/check-audit-exceptions.mjs fails CI in both
+# directions (an ignore with no register row, or a register row with no
+# ignore). No severity floor and no workflow-side --ignore flags exist: the
+# contract custodies staked funds, so an advisory that is genuinely
+# inapplicable earns a NAMED entry, never a threshold.
+#
+# Entry format (one line per id, comment carries the pointer):
+#   ignore = [
+#     "RUSTSEC-YYYY-NNNN", # see the register row for owner/reason/review-by
+#   ]
+
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0098", # rustls-webpki 0.101 — see the register row (dev-only test-harness TLS)
+  "RUSTSEC-2026-0099", # rustls-webpki 0.101 — see the register row (dev-only test-harness TLS)
+  "RUSTSEC-2026-0104", # rustls-webpki 0.101 — see the register row (dev-only test-harness TLS)
+]

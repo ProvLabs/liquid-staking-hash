@@ -111,6 +111,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       concentration_safety_offset_bps: c.concentrationSafetyOffsetBps.toString(),
       commission_bps: c.commissionBps.toString(),
       jail_unbond_delay_secs: c.jailUnbondDelaySecs.toString(),
+      // Omitted (not zeroed) when the deployed build predates the field: the
+      // diff's current column then renders the honest "could not be read" gap.
+      ...(c.redemptionMarginBps === null
+        ? {}
+        : { redemption_margin_bps: c.redemptionMarginBps.toString() }),
     }))
     .catch(() => null);
 
@@ -296,7 +301,13 @@ function Composer({
       />
 
       {formError === null ? null : (
-        <p className="text-xs" style={{ color: "var(--status-critical)" }} role="alert">
+        // Border carries the critical color; the text keeps the theme
+        // foreground (small critical-on-card text fails contrast in dark —
+        // axe color-contrast, 8.3).
+        <p
+          className="rounded border border-[var(--status-critical)] px-2 py-1 text-xs"
+          role="alert"
+        >
           {formError}
         </p>
       )}

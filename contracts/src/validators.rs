@@ -1108,6 +1108,7 @@ mod jail_episode_tests {
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: None, // 8h default
+                redemption_margin_bps: None,
             },
         )
         .unwrap();

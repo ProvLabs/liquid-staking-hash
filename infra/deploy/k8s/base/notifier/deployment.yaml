@@ -1,0 +1,31 @@
+# The notifier — a SEPARATE deployed workload on the WEB image (ADR-001
+# Decision 3; apps/web/.env.example "A SEPARATE process"), never a sidecar
+# thread. Needs DATABASE_URL (app_writer), API_SERVICE_ASSERTION_KEY, and the
+# three WEB_PUSH_VAPID_* values to deliver push; without VAPID it runs the
+# honest no-push mode. Single replica: the notification log's dedupe is
+# per-tick, and one ticker is the designed shape.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  labels: { app.kubernetes.io/name: notifier }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app.kubernetes.io/name: notifier }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: notifier }
+    spec:
+      containers:
+        - name: notifier
+          image: nvhash/web:overlay-sets-tag
+          command: ["node", "notifier/index.ts"]
+          envFrom:
+            - configMapRef: { name: web-config }
+            - secretRef: { name: web-secrets }
+          resources:
+            requests: { cpu: 50m, memory: 192Mi }
+            limits: { memory: 512Mi }

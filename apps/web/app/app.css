@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./theme/tokens.css";
+@import "./theme/fonts.css";
 
 @theme inline {
   --color-background: var(--background);
@@ -61,14 +62,18 @@
     color: var(--foreground);
   }
   /* Motion discipline (app-spec §11): transitions are 150–200 ms ease-out and
-     reduced motion disables all. */
+     reduced motion disables all. `!important` is load-bearing, not styling
+     debt: the universal selector has zero specificity, so without it ANY
+     class-level animation (`.flow-pulse`) or transition utility silently wins
+     and the kill switch is a no-op — found by e2e/motion.spec.ts (8.3), which
+     gates exactly this. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
-      animation-duration: 0.01ms;
-      animation-iteration-count: 1;
-      transition-duration: 0.01ms;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
     }
   }
 }

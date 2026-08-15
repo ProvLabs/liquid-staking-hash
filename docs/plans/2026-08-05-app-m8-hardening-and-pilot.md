@@ -1,12 +1,13 @@
 # App M8 — Hardening & pilot (milestone overview)
 
-**Status:** PLANNED 2026-08-05 (PR 8.0a, docs-only). The §4 carryover
-dispositions and the §6 decision register are **proposals until ratified at
-this PR's review** — ratification is the re-review of unresolved M0–M7 tasking
-that opens the milestone.
+**Status:** PLANNED 2026-08-05 (PR 8.0a, docs-only); **D21–D31 ratified
+2026-08-14 (Ira)** — every §6 row carries its resolution, and the §4 carryover
+dispositions stand as proposed (D31). Three resolutions override the
+2026-08-05 proposals (D22, D27, D28); their consequences are folded into §2
+and §3 rather than left as marginal notes.
 This document is **not a build plan** — it is the milestone-level index, the
-M7-overview pattern. Each Phase A PR gets its own plan at branch open (§3);
-this file carries only what is cross-cutting: the phase structure (§2), the
+M7-overview pattern. Each Phase A PR has its own plan, authored in the 8.0a
+pass per D28 (§3); this file carries only what is cross-cutting: the phase structure (§2), the
 carryover register (§4), the certification checklist (§5), the decision
 register (§6), the `SECURITY.md` conformance map (§7), and the §4b format
 revision M7's closure recommended (§8).
@@ -71,6 +72,14 @@ Three sequencing facts govern the shape:
    8.0 runs early; certification cannot complete without it either way, and
    the launch chain must ship that release
    (`contracts/IMPLEMENTATION-STATUS.md` §3).
+4. **The pilot itself is on the same external clock** (D27, ratified
+   2026-08-14): the target is the **public Provenance testnet only**, so if
+   the settlement-era vault module is absent there, 8.4's deploy waits on
+   upstream availability. The `AcceptAsset` feature probe against the public
+   testnet is the first 8.4 task and the go/no-go signal. And because the
+   pilot builds are **publicly reachable** (D22), the environment badge,
+   feature-probe caveat, and honesty labeling are gating requirements of the
+   8.4 plan — the public sees pre-certification state.
 
 The pause is not idle time: it is when W1/T1/S1 run, and it naturally spans
 calendar-month boundaries, which is what makes the E-CAL live-boundary
@@ -79,25 +88,27 @@ harness the E-CAL plan deferred.
 
 ## 3. PR split and sizing (Phase A)
 
-Per the plan-first rule, **each Phase A PR's detailed plan is written at
-branch open**, not in this commit. This deviates from M7's write-all-at-7.0
-precedent deliberately: 8.0's and 8.5's content depends on external events
-(the release's actual diff; the audit's findings; the 8.4a decision), so plans
-written now are guaranteed stale by Phase B — the M5 Tranche-B precedent
-(coarse now, refined in a same-file revision before build) applies to the
-whole milestone. This overview carries each row's scope at the grain needed to
-write those plans. (Ratify as §6 D28.)
+Per D28 (ratified 2026-08-14, overriding this section's original branch-open
+proposal), **all seven Phase A plans — 8.0b, 8.1, 8.2, 8.3, 8.4a, 8.4b,
+8.4 — are written now, in the 8.0a docs pass**, the M7 write-all-at-7.0
+precedent. The staleness risk the original proposal cited is accepted for
+earlier reviewability; where a plan's input is a Phase A decision that has now
+resolved (D21/D25/D29/D30), the plan is written against the resolution.
+**8.0's and 8.5's plans remain event-gated** — the release's actual diff and
+the audit's findings do not exist to plan against — and are written when
+their inputs land (the M5 Tranche-B precedent survives for those two rows
+only). Links join the table below as each plan file lands.
 
 | PR | Scope | Depends on | Est. files |
 | --- | --- | --- | --- |
 | 8.0a | **This docs change** + the §4 carryover triage review. Creates this overview; amends the master plan (rows 8.0a/8.0b/8.4b inserted, §3 map, two stale §5 rows), and updates `persona-review-action-register.md` with resolved-by annotations (§4.3 CO-52). | — | ≈4 |
-| 8.0b [P] | **Carryover small-fix tranche** (app-side code hygiene with existing recorded remedies): explicit Prisma generator `output` so the two schemas stop racing over the hoisted client (M7.5–7.6 §10.4); `apps/web` switch to the shared `navHashPerShare` helper (M3 follow-on); adopt the three web-only collection bounds into the `bounds.ts` registry (M7.1 §3.5); `cargo audit`/`pnpm audit` release gates in CI (`SECURITY.md`'s "CI enforcement to follow" tail). | 8.0a dispositions | ≈15 |
-| 8.1 [P] | **Degradation drills as e2e** (master plan row): corrupt-row → reconciler incident → surfaces flip; indexer kill → canonical survives, history dims; LCD kill → stale labels. Plus the carryover live-coverage gaps that belong to the same harness: the drill → notifier tick → bell chain end-to-end (M6.2 deviation 2), the env-gated governance live-transport suite joining a scheduled lane, `E2E_LIVE_GOV_MEMBER_KEY` provisioning, the `group_policy_info` 404-vs-500 live assertion, and the stale-bundle process fix (restart `web` before trusting a green live run — `web-design-notes.md`). Open question for its plan: whether the three deferred reconciler kinds (`vault_paused`, `jail_report`, `epoch_overdue`) land here or stay recorded (§6 D30). | 8.0a | ≈25 |
-| 8.2 [P] | **Load test + rate-limit tuning** on the public API. Named inputs from the carryover review: the holder-lifecycle fold (measured 1 407 ms @ 1.2 M tx, superlinear, uncached, per `/admin` load — its recorded remedy is indexer-side materialization, contingent on this PR's thresholds), the two accepted seq scans and the `operatorPaymentTotalsFor` planner flip (re-measure; `services/api/CLAUDE.md` says do **not** index-fix without a measured need), deep-`OFFSET` behavior, and indexer lag under backfill vs the DATA DEGRADED threshold (§4 test table). | 8.0a | ≈15 |
-| 8.3 [P] | **Accessibility walk** on both themes, keyboard-only pass, reduced-motion audit, fixes — **including the authenticated surfaces the offline axe suite never covered** (alerts settings, portfolio, operator, admin: M6.2 deviation 1), and the §14.4 "coming soon" shells, which must survive this pass as labeled states. | 8.0a | ≈20 |
-| 8.4a | **Migration-mode entry point (decision + change)** — as specified in the master plan row: (i) contract upgradability + wasmd admin holder (irreversible; §6 D21), (ii) both Prisma schemas leave baseline mode, (iii) the reset-and-rebuild rule replaced by the migration rule in `services/indexer/CLAUDE.md`, `apps/web/CLAUDE.md`, `indexer-design-notes.md` in the same change. If D21/D25/D29 decide contract changes, they land here as one pre-audit contracts PR with the required drill + spec §12 amendment. | decision; blocks 8.4 | ≈12 (+contracts) |
-| 8.4b | **Console testnet-readiness tranche** — the console follow-on pair the App has depended on since M4.1: entity-level verify anchors (**recording §14.13 in console-spec §14 in the same change** — the item exists today only in app-spec), the governance panel + the App's `governance` verify-link target (one pair, M7 D8), the **extension-wallet adapter** (`wallet.tsx` throws today; re-add only the needed `@cosmjs/*` packages at current audited versions per the recorded `elliptic`-advisory constraint), the stale 1905nhash gas price (flat-fee chain fact: 1 nhash), CSP `connect-src` mechanism for per-environment LCD hosts, and console §14 items 5–7 (epoch backfill, admin exec path, moniker/identicon policy) resolved in its plan. | 8.0a | ≈45 |
-| 8.4 | **Deployment configs + testnet pilot**: Docker images per component, ArgoCD, per-environment profiles; per-environment secrets/config posture (§6 D24: VAPID key pairs, `WALLETCONNECT_PROJECT_ID`, `EXPLORER_URL`, `CONSOLE_URL`, LCD hosts); webfont self-hosting via build-time fetch (no binaries in git); bootstrap scripts encoding the ledger's per-environment requirements (receipt-marker **Transfer** grant, NAV-authority rotation, **group + policy created before instantiate** — there is no admin-rotation message); and an early store-gas measurement of the ~639 KB artifact on testnet (the ≈4.26 M-gas upload vs a possible 4 M cap is a candidate mainnet blocker — measure it in Phase A, not at 8.5). | all Phase A; 8.0 for release certification (pilot may run pre-release with the feature-probe caveat displayed); 8.4a; 8.4b | ≈40 |
+| 8.0b [P] | **Carryover small-fix tranche** — plan: [m8.0b carryover fixes](2026-08-14-app-m8.0b-carryover-fixes.md) (**verified 2026-08-14**: citations exact; gate discharged, §7.1. Two corrections to this row: the **≈15-file estimate is wrong — realistic is ≈45–55**, mostly mechanical import-site swaps in `services/indexer`, still well under the ~70 ceiling; and CO-11 is **five** bounds, not three. Console audit coverage is deferred, leaving CO-12 partially closed). Scope (app-side code hygiene with existing recorded remedies): explicit Prisma generator `output` so the two schemas stop racing over the hoisted client (M7.5–7.6 §10.4); `apps/web` switch to the shared `navHashPerShare` helper (M3 follow-on); adopt the three web-only collection bounds into the `bounds.ts` registry (M7.1 §3.5); `cargo audit`/`pnpm audit` release gates in CI (`SECURITY.md`'s "CI enforcement to follow" tail). | 8.0a dispositions | ≈15 |
+| 8.1 [P] | **Degradation drills as e2e** — plan: [m8.1 degradation drills](2026-08-14-app-m8.1-degradation-drills.md) (**verified 2026-08-14**: citations exact; Q1–Q6 resolved as recommended, §7.1. **D30's conditional is answered with evidence — `jail_report` IS cheap and lands with `vault_paused`, leaving `epoch_overdue` the sole §9.6 deferral.** The plan also found **two live defects in `main`**, both confirmed: a dead indexer currently renders as *healthy* (chain and indexed heights come from the same `reconciler_runs` row, so they freeze together and the lag never grows, while the footer age derives from the response clock), and `services/indexer/src/index.ts:20-22`'s "compose restarts the process" contract is asserted but no `restart:` policy exists. **Two forward obligations:** 8.0's release-pin PR flips both drill crons on; 8.4's `repo-secret-scan` must classify the committed dev assertion key as placeholder-pattern.) Master plan row: corrupt-row → reconciler incident → surfaces flip; indexer kill → canonical survives, history dims; LCD kill → stale labels. Plus the carryover live-coverage gaps that belong to the same harness: the drill → notifier tick → bell chain end-to-end (M6.2 deviation 2), the env-gated governance live-transport suite joining a scheduled lane, `E2E_LIVE_GOV_MEMBER_KEY` provisioning, the `group_policy_info` 404-vs-500 live assertion, and the stale-bundle process fix (restart `web` before trusting a green live run — `web-design-notes.md`). Open question for its plan: whether the three deferred reconciler kinds (`vault_paused`, `jail_report`, `epoch_overdue`) land here or stay recorded (§6 D30). | 8.0a | ≈25 |
+| 8.2 [P] | **Load test + rate-limit tuning** on the public API — plan: [m8.2 load test](2026-08-14-app-m8.2-load-test.md) (**verified 2026-08-14**: citations exact; **gate discharged** — T1–T7 ratified as proposed, T3 breach auto-lands the materialization, rate-limit work scoped to the aggregate channel. **Q1 departs from the plan's recommendation: load runs stay manual / release-branch only, with no scheduled lane** — so §4b C7's between-runs cell is unfilled by decision, and T5 (rate-limit correctness, the one security-posture threshold) stays in that manual suite, meaning a limiter regression can sit undetected between releases. Accepted and recorded, not mitigated). It also corrects two of this row's premises (the backfill-lag criterion is restated as steady-state margin + catch-up rate, since any deep backfill correctly opens `indexer_lag`; and rate-limit tuning is aggregate-channel sizing — all end users share one limiter key behind the SSR tier, identity forwarding being 8.4 territory). Named inputs from the carryover review: the holder-lifecycle fold (measured 1 407 ms @ 1.2 M tx, superlinear, uncached, per `/admin` load — its recorded remedy is indexer-side materialization, contingent on this PR's thresholds), the two accepted seq scans and the `operatorPaymentTotalsFor` planner flip (re-measure; `services/api/CLAUDE.md` says do **not** index-fix without a measured need), deep-`OFFSET` behavior, and indexer lag under backfill vs the DATA DEGRADED threshold (§4 test table). | 8.0a | ≈15 |
+| 8.3 [P] | **Accessibility — automated coverage** (row retitled 2026-08-14; the manual walk moved to 8.5, see below) — plan: [m8.3 accessibility](2026-08-14-app-m8.3-accessibility-walk.md) (**verified 2026-08-14**: citations exact; gate discharged, §7.1. **CO-22 closes offline** — `login()` is chain-free, so an authenticated session is fabricated through the app's own public login path with no injection seam, no session backdoor and no role column; role-bearing renders come from a `toolingOnly` MSW knob reachable only under `NVHASH_MOCK=1`. Three corrections to the row's assumptions: the app uses **no `next-themes`** (hand-rolled cookie theme) and **no `recharts`** — so **app-spec §11's "Recharts renders" is a stale spec/code parity defect** this PR fixes — and M6.2 deviation 1's "no session because no wallet" premise was never structural). Scope: both themes, keyboard-only pass, reduced-motion audit, fixes — **including the authenticated surfaces the offline axe suite never covered** (alerts settings, portfolio, operator, admin: M6.2 deviation 1), and the §14.4 "coming soon" shells, which must survive this pass as labeled states. | 8.0a | ≈20 |
+| 8.4a | **Migration-mode entry point (decision + change)** — plan: [m8.4a migration mode](2026-08-14-app-m8.4a-migration-mode.md) (**verified 2026-08-14**: every source citation exact; **pre-build refinement gate discharged the same day** — Q1–Q7 all resolved as recommended, §7.1. Ready to build). As specified in the master plan row: (i) contract upgradability + wasmd admin holder (irreversible; §6 D21), (ii) both Prisma schemas leave baseline mode, (iii) the reset-and-rebuild rule replaced by the migration rule in `services/indexer/CLAUDE.md`, `apps/web/CLAUDE.md`, `indexer-design-notes.md` in the same change. If D21/D25/D29 decide contract changes, they land here as one pre-audit contracts PR with the required drill + spec §12 amendment. | decision; blocks 8.4 | ≈12 (+contracts) |
+| 8.4b | **Console testnet-readiness tranche** — plan: [m8.4b console testnet readiness](2026-08-14-app-m8.4b-console-testnet-readiness.md) (**verified 2026-08-14**: every source citation exact; **pre-build refinement gate discharged the same day** — Q1–Q7 all resolved as recommended, §7.1, with two `[VERIFY]` chain-behavior items left open by design for devnet. Two of this row's premises were corrected — see CO-25. Ready to build). The console follow-on pair the App has depended on since M4.1: entity-level verify anchors (**recording §14.13 in console-spec §14 in the same change** — the item exists today only in app-spec), the governance panel + the App's `governance` verify-link target (one pair, M7 D8), the **extension-wallet adapter** (`wallet.tsx` throws today; re-add only the needed `@cosmjs/*` packages at current audited versions per the recorded `elliptic`-advisory constraint), the stale 1905nhash gas price (flat-fee chain fact: 1 nhash), CSP `connect-src` mechanism for per-environment LCD hosts, and console §14 items 5–7 (epoch backfill, admin exec path, moniker/identicon policy) resolved in its plan. | 8.0a | ≈45 |
+| 8.4 | **Deployment configs + testnet pilot** — plan: [m8.4 deployment + testnet pilot](2026-08-14-app-m8.4-deployment-testnet-pilot.md) (**verified 2026-08-14**: citations exact; gate discharged for Q1/Q4/Q5/Q6 — **D24 resolves to external-secrets-operator**, the pilot deploys without receipt-marker required attributes (CO-37a), and `APP_ENV`'s closed set becomes `development | testnet | production`, replacing `staging`. Q2/Q3/Q7 stay `[VERIFY]` for commit C's preflight). **Two inputs handed over by 8.4b (2026-08-14), both hosting facts the console cannot enforce from inside its own bundle:** (i) the CSP **response header**, generated from the same profile values as 8.4b's meta tag, since headers cover `frame-ancestors` which meta CSP cannot express; and (ii) the **SPA-fallback rewrite** — anchor *fragments* cannot 404 at the host but the console's *page paths* can, so a verify link landing on a deep path needs the rewrite configured or the entity-anchor contract fails in exactly the environment it was built for. Both must appear in the deploy profiles **and** in the pilot click-through. **A third input arrives from 8.1 (§7.1 Q6):** this PR's `repo-secret-scan` (§4 invariant 2) must classify the dev stack's committed throwaway assertion key as **placeholder-pattern** — otherwise CI fails on a deliberately fake value, or the team relaxes the scan to make it pass and blunts the gate that exists to catch real keys. Scope: Docker images per component, ArgoCD, per-environment profiles; per-environment secrets/config posture (§6 D24: VAPID key pairs, `WALLETCONNECT_PROJECT_ID`, `EXPLORER_URL`, `CONSOLE_URL`, LCD hosts); webfont self-hosting via build-time fetch (no binaries in git); bootstrap scripts encoding the ledger's per-environment requirements (receipt-marker **Transfer** grant, NAV-authority rotation, **group + policy created before instantiate** — there is no admin-rotation message); and an early store-gas measurement of the ~639 KB artifact on testnet (the ≈4.26 M-gas upload vs a possible 4 M cap is a candidate mainnet blocker — measure it in Phase A, not at 8.5). | all Phase A; 8.0 for release certification (pilot may run pre-release with the feature-probe caveat displayed); 8.4a; 8.4b | ≈40 |
 
 Phase B (W1/T1/S1) and Phase C (8.5) are checklist-driven rather than
 PR-shaped; their ledgers are §5 and the liquid-staking-spec §14 launch
@@ -139,8 +150,8 @@ overrides each one**. IDs are stable for that review's minutes.
 | --- | --- | --- | --- |
 | CO-9 | Prisma dual-generate race — explicit generator `output` (M7.5–7.6; also the durable fix behind M6.3's two-step deletion note) | 7.5–7.6 plan §10.4; `apps/web/CLAUDE.md` | 8.0b |
 | CO-10 | Web switch to shared `navHashPerShare` helper (M3) | m3 §3.1; app-spec §9.5 note | 8.0b |
-| CO-11 | Web-only collection bounds (`/validators`, `/portfolio.active_redemptions`, `/market`) join `bounds.ts` (M7.1) | 7.1 plan §3.5 | 8.0b |
-| CO-12 | `cargo audit`/`pnpm audit` release gates in CI (M0-era tail) | `SECURITY.md` §Dependencies | 8.0b |
+| CO-11 | Web-only collection bounds join `bounds.ts` (M7.1). **Corrected 2026-08-14:** this is **five** constants, not three — `bounds.ts:341-347`'s own not-yet-covered record enumerates `/validators` (500), `/portfolio.active_redemptions` (500), `/market.depth_bands` (32), `/market.bridged_supply` (64) and `ValidatorRow.failing_reasons` (32). Producer caps ratified at 400/400/16/32/16, each strictly below its `_WIRE` consumer bound | 7.1 plan §3.5 | 8.0b |
+| CO-12 | `cargo audit`/`pnpm audit` release gates in CI (M0-era tail). **PARTIAL CLOSURE (2026-08-14, 8.0b Q5):** closes for the **Rust workspace** and the **pnpm workspace** only. `apps/console` is deliberately outside the pnpm workspace (`pnpm-workspace.yaml`), so the root `pnpm audit` cannot see it and its dependencies remain audited by nothing in CI. **`SECURITY.md`'s "(CI enforcement to follow)" tail must not be marked closed while that workspace is uncovered** — residue carried to 8.4b (which already opens the console's CI job and `package.json`), backstopped by 8.5's pre-release security review | `SECURITY.md` §Dependencies | 8.0b + 8.4b/8.5 |
 | CO-13 | Reconciler alarm drill was unit-level precursor only (M2.5) | m2.5 §3 gate 1 | 8.1 (core scope) |
 | CO-14 | Drill → notifier tick → bell chain never driven end-to-end live (M6.2) | m6.2 §3 deviation 2 | 8.1 |
 | CO-15 | Governance live-transport suite env-gated, outside default CI (M7.1) | `indexer-design-notes.md` | 8.1 (scheduled live lane) |
@@ -153,7 +164,8 @@ overrides each one**. IDs are stable for that review's minutes.
 | CO-22 | Authenticated surfaces missing from offline axe route list (M6.2) | m6.2 §3 deviation 1 | 8.3 |
 | CO-23 | "Coming soon" shells must survive a11y/degradation passes as labeled states (M4/M5) | app-spec §14.4 | 8.3 + 8.1 |
 | CO-24 | Incident severity mapping vs console §11.2 confirmation (M2.5) | m2.5 §6 | 8.4b (console side) / 8.0a ratify |
-| CO-25 | Console: §14.13 entity anchors not recorded in console-spec §14; governance panel + `governance` verify target; extension-wallet adapter absent (cosmjs `elliptic` constraint); stale 1905nhash gas price; CSP `connect-src` list (M4→M7 accumulation) | console-spec; `apps/console/CLAUDE.md`; m7 D8 | 8.4b (core scope) |
+| CO-25 | Console: §14.13 entity anchors not recorded in console-spec §14; governance panel + `governance` verify target; extension-wallet adapter absent; CSP `connect-src` list (M4→M7 accumulation) | console-spec; `apps/console/CLAUDE.md`; m7 D8 | 8.4b (core scope) |
+| | **Two corrections from 8.4b's verification (2026-08-14).** The *"stale 1905nhash gas price"* item this row used to carry is **already fixed** — removed 2026-07-27 in PR #22; `1905` survives in `apps/console/src/config.ts:25` and `src/tx/execute.tsx:95` only as comments documenting the removal, and there is no `gasPrice` knob to restore. And the *"cosmjs `elliptic` constraint"* framing is obsolete: `apps/web` ships the same vendor with **zero** `@cosmjs/*` packages (a 177-line dependency-free `app/tx/proto.ts` whose header cites "the console precedent"), so 8.4b mirrors that stack and the `SECURITY.md` reviewed-dependency event **resolves to the empty set** rather than to an audited re-add. | | |
 | CO-26 | Per-environment provisioning: VAPID pairs (M6.3), `EXPLORER_URL` (M6.1), `WALLETCONNECT_PROJECT_ID` (M5.1), LCD/CSP hosts | m6.3 §7 Q1; m6.1 §7 Q4; runbook §Setup | 8.4 (§6 D24) |
 | CO-27 | Webfont self-hosting (type stack), no binaries committed (M4-era) | app-spec §11; `web-design-notes.md` | 8.4 (build-time fetch) |
 | CO-28 | Bootstrap requirements per environment: receipt-marker Transfer grant, NAV-authority rotation, group-before-deploy (M7 F2) | `IMPLEMENTATION-STATUS.md` §1; m7 §2 F2 | 8.4 (deploy scripts encode them) |
@@ -165,7 +177,9 @@ overrides each one**. IDs are stable for that review's minutes.
 | CO-34 | Wallet certification runbook never executed — results table all `—`, both vendors (M5.1) | runbook §Results | Phase B W1 (any FAIL reopens §14.1) |
 | CO-35 | Live-chain verify items: LCD/CORS posture, gas envelopes (`RunEpoch` continuations near the cap), valoper derivation incl. operator-key ≠ account-key and consensus-key rotation, flat-fee re-confirmation, chain-facts re-measurement (devnet-provenance sections), governance execution-window observation, calendar-month boundary observations, manual push check (M2–M7 accumulation) | console-spec §14 items 2–4; `chain-facts.md`; `apps/web/CLAUDE.md`; e-cal plan | Phase B T1 (§5) |
 | CO-36 | Third-party audit (contract + bridge-adapter authorization; NAV-authority grant in scope); MDX/§5.4 trust panel gains the audit report when it exists (M4.2 follow-on) | `SECURITY.md`; liquid-staking-spec §12; m4.2 §6 Q2 | Phase B S1 → 8.5 (publish) |
+| CO-37a | **`nvhash.pb` receipt-marker attribute grants are a HARD 8.5 GATE** (promoted 2026-08-14 by the 8.4 plan's Q4). The testnet pilot deploys **without** required attributes — devnet's binding goes through its own validator and the public testnet's `pb` root is not ours. The receipt's non-acceptance as a vault denom is the structural control and is unaffected (`liquid-staking-spec.md:108` names the attribute as defense-in-depth), but two things follow: the pilot produces **no evidence** about the attribute-gated path, which is recorded in `IMPLEMENTATION-STATUS.md` so the auditor is told rather than left to infer it; and mainnet must **restore** the grants rather than inherit the testnet shape by omission. Already a `liquid-staking-spec.md` §14 checklist line (584) — this makes it gating. | 8.4 Q4 → 8.5 |
 | CO-37 | Launch checklist: live mainnet params (unbonding_time, MaxEntries, concentration options, slashing window, exchange fees, gas cap), `withdrawal_delay_seconds` pinning ≤ 60 d, commission/threshold/margin sizing, `min_capture_interval_secs` re-derivation + keeper standup per runbook, marker metadata + attribute grants, uniform-commission enforcement confirmation (spec §17.2 R3 tail — note its "§14.14" cross-reference is dangling and needs a spec fix) | liquid-staking-spec §14 checklist, §17.2; `IMPLEMENTATION-STATUS.md` §2–3 | 8.5 |
+| CO-38a | **The manual screen-reader accessibility walk** — deferred out of 8.3 on 2026-08-14 (that plan's §7.1 Q5) and rehomed here, so 8.5 runs it with the NVDA/Windows leg it already scheduled rather than splitting the two screen readers. **8.3 delivers automated coverage only**, and a green axe suite is not a completed accessibility review: scanning cannot judge reading-order coherence, label ambiguity, focus management through the transaction confirm dialog, or whether live regions actually announce the degradation and caveat states. That last is load-bearing under D22 — on a publicly reachable pilot, an AT user reading pre-certification or degraded state as certified or current is the never-lie-about-state rule failing for a class of users who cannot tell it is failing. | 8.3 §7.1 Q5 → 8.5 |
 | CO-38 | §14.14 domain decision; §14.9 confirmation line; footer docs link (needs a hosted docs URL — with the `docs/user/` runbook); hosting/team-only-vs-public posture with console §14 item 8 | app-spec §14.14; m4.1 §6 | 8.5 (+ 8.4 for testnet exposure posture) |
 
 ### 4.3 Ratifications — shipped-as-proposed; confirm in bulk at the 8.0a review
@@ -226,6 +240,12 @@ a month rollover.*
       "NOT covered" headline rewritten truthfully (CO-32).
 - [ ] Reorg/confirmation-depth posture re-affirmed (CO-31).
 - [ ] Launch chain confirmed to ship this release.
+- [ ] **Both 8.1 drill crons flipped on in this same change** (weekly stack
+      lane, monthly jail lane). They land dispatch-only because
+      `app-ci.yaml:8-12` keeps devnet-dependent work out of automated runs
+      while the dev-node image carries the pre-release vault — this PR is
+      what retires that rationale. Drills that exist but never run are the
+      failure mode 8.1 was built to prevent, one level up. (8.1 §7.1 Q5.)
 
 **W1 — wallet certification (§14.1 runbook):**
 - [ ] Results table filled for all five items × Figure (mobile + extension)
@@ -259,21 +279,23 @@ a month rollover.*
 ## 6. Decision register
 
 Numbering continues from M7 (D1–D20). Blocking relationships are stated per
-row; a consuming PR must not land before its row resolves.
+row. **All eleven rows were ratified 2026-08-14 (Ira, 8.0a review)**; each row
+carries its resolution. Three resolutions differ from the proposal as written
+on 2026-08-05 and are marked **(overrides proposal)** — D22, D27, D28.
 
-| # | Decision | Blocks | Resolve by/at |
+| # | Decision | Resolution (2026-08-14, Ira) | Blocks |
 | --- | --- | --- | --- |
-| **D21** | **Contract upgradability + wasmd admin holder** (master plan 8.4a(i)). Migrate entry point yes/no; who holds the admin that authorizes `MsgMigrateContract` (distinct from `InstantiateMsg.admin`). Irreversible per deployment. If yes: spec §12 trust-surface amendment + `IMPLEMENTATION-STATUS.md` + unauthorized-migrate drill in the same change. | 8.4, S1 (contract freeze) | early Phase A |
-| **D22** | **Hosting, domain, environment exposure**: §14.14 domain; console §14 item 8; testnet builds team-only vs public. Testnet half needed at 8.4; mainnet half at 8.5. | 8.4 (testnet posture), 8.5 | 8.4 / 8.5 |
-| **D23** | §14.9 confirmation line only — the decision is recorded (`en` only, 2026-07-15); 8.5 confirms no late reversal. | 8.5 | 8.5 |
-| **D24** | **Per-environment secrets/config posture** (CO-26): where VAPID pairs, `WALLETCONNECT_PROJECT_ID`, `EXPLORER_URL`, LCD/CSP hosts live per environment, and the secret-store mechanism in the ArgoCD profiles. Constraint: `SECURITY.md` secrets-via-environment; nothing non-public client-side. | 8.4 | 8.4 plan |
-| **D25** | **Dual-policy (`admin`/`ops`) split**: with no admin-rotation message, the split is fixed per deployment at bootstrap. Decide the testnet and mainnet group/policy topology before each deploy; the App is already set-valued and needs zero change. Membership + thresholds are launch-operations parameters (8.5). | 8.4 bootstrap, 8.5 | with D21 |
-| **D26** | **§4b format v2 adoption** (§8): C7 gate-property check; C4 generated from loader inputs; attacker-gain line on §4 invariants. Proposed at M7 closure; ratified here as the design-review event. | all Phase A plans | 8.0a review |
-| **D27** | **Testnet chain target**: which testnet, whether it ships (or will ship) the formal vault release, and the pilot's caveat labeling if it deploys pre-release (feature-probe status displayed, no certification claimed). | 8.4 | before 8.4 |
-| **D28** | **Plan cadence**: per-PR plans at branch open (this §3) vs M7's all-at-7.0. | Phase A process | 8.0a review |
-| **D29** | **Pre-audit contract tidy set** (CO-51): `REDEMPTION_MARGIN_BPS` admin-configurable (simulation recommends sizing ≥ expected epoch yield × unbonding fraction); `ReceiptAccounting` query (trivial); anything else the audit scoping surfaces. Whatever is adopted lands with 8.4a's contracts PR; whatever is declined is recorded as an accepted exception in the ledger. | S1 | with D21 |
-| **D30** | **8.1 scope edges**: do the three deferred reconciler kinds (`vault_paused`, `jail_report`, `epoch_overdue` — each needs a live decoder) land inside 8.1; does jail e2e-live get a dedicated-chain scheduled lane or stay a recorded gap (CO-19). | 8.1 | 8.1 plan |
-| **D31** | **Carryover dispositions**: the §4 register wholesale — each CLOSE (§4.1), ratification (§4.3), and post-v1 recording (§4.4) confirmed or overridden. | milestone | 8.0a review |
+| **D21** | **Contract upgradability + wasmd admin holder** (master plan 8.4a(i)). Migrate entry point yes/no; who holds the admin that authorizes `MsgMigrateContract` (distinct from `InstantiateMsg.admin`). Irreversible per deployment. | **DECIDED: migrate entry point added; wasmd admin = the admin group policy address**, so a code swap requires the same group threshold as any admin action — never a single deployer key. Lands in 8.4a's contracts PR with the unauthorized-migrate drill (rejection + post-migrate cw2/state assertions) and the `liquid-staking-spec.md` §12 + `IMPLEMENTATION-STATUS.md` amendments in the same change. | 8.4, S1 (contract freeze) |
+| **D22** | **Hosting, domain, environment exposure**: §14.14 domain; console §14 item 8; testnet builds team-only vs public. | **DECIDED (overrides proposal): testnet builds are publicly reachable.** Consequence: the environment badge, feature-probe caveat, and honesty labeling graduate to **gating requirements of the 8.4 plan** — the public sees pre-certification state, so the caveat surfaces are load-bearing, not polish. The §14.14 mainnet domain stays a Phase C (8.5) decision. | 8.4 (posture set), 8.5 (domain) |
+| **D23** | §14.9 confirmation line — the decision is recorded (`en` only, 2026-07-15). | **CONFIRMED.** `en`-only stands for v1; the 8.5 checklist line is a formality. | — |
+| **D24** | **Per-environment secrets/config posture** (CO-26): where VAPID pairs, `WALLETCONNECT_PROJECT_ID`, `EXPLORER_URL`, LCD/CSP hosts live, and the secret-store mechanism in the ArgoCD profiles. | **DECIDED: constraints ratified now** (secret store only; nothing non-public in repo, images, or bundles; fail-closed deploy scripts; repo-scan CI gate); **the concrete mechanism is chosen in the 8.4 plan** next to the ArgoCD profile design. | 8.4 plan |
+| **D25** | **Dual-policy (`admin`/`ops`) split**: with no admin-rotation message, topology is fixed per deployment at bootstrap. | **DECIDED: split at bootstrap on every non-devnet deployment** — both policies created on the group before instantiate, testnet and mainnet. The App needs zero change (set-valued discovery). Membership + thresholds remain 8.5 launch-ops parameters. Closes the ledger's "one remaining v1.x hardening item" at the bootstrap level. | 8.4 bootstrap, 8.5 |
+| **D26** | **§4b format v2 adoption** (§8): C7 gate-property check; C4 generated from loader inputs; attacker-gain line on §4 invariants; nullable-gates-affordance question. | **ADOPTED** for all Phase A plans, as specified in §8. | all Phase A plans |
+| **D27** | **Testnet chain target** and the pilot's caveat labeling. | **DECIDED (overrides proposal): public Provenance testnet only** — no program-operated fallback. Consequence: if the settlement-era vault module is absent from the public testnet, **8.4's deploy waits on upstream availability** (the pilot inherits 8.0's external-clock coupling); the `AcceptAsset` feature probe against the public testnet is the first 8.4 task and the go/no-go signal. Pre-release deploys display feature-probe status and claim no certification. | 8.4 |
+| **D28** | **Plan cadence**: per-PR plans at branch open (§3's proposal) vs M7's all-at-7.0. | **DECIDED (overrides proposal): all Phase A plans (8.0b, 8.1, 8.2, 8.3, 8.4a, 8.4b, 8.4) are written now**, in the 8.0a docs pass, per the M7 precedent — accepting staleness risk for earlier reviewability. 8.0's and 8.5's plans remain event-gated (the release's actual diff; the audit's findings). §3's preamble is amended accordingly. | Phase A process |
+| **D29** | **Pre-audit contract tidy set** (CO-51). | **DECIDED: both items land** in 8.4a's contracts PR — `REDEMPTION_MARGIN_BPS` becomes an admin-configurable bounded parameter (sized ≥ expected epoch yield × unbonding fraction; sim domain + invariants extend in the same change) and the `ReceiptAccounting` query lands **with** the §11.3 amendment that specifies it. Two corrections from the 8.4a plan's verification (2026-08-14): `ReceiptAccounting` appears nowhere in the contract *or* the spec today — `IMPLEMENTATION-STATUS.md` cites §11.3 as though it already specified the query, so query and spec text must move together; and this decision is **not** App-neutral — `apps/web/test/governance-templates.test.ts:120-127` asserts each template's field set `toEqual` the contract's, so the `update_config` governance template gains the new field and its pinned bound in the same commit or App CI fails. (D25's "App needs zero change" covers the dual-policy half only.) | S1 |
+| **D30** | **8.1 scope edges**: deferred reconciler kinds; jail e2e-live posture. | **DECIDED: `vault_paused` lands in 8.1** (pause-banner honesty is a drilled — and now public, per D22 — surface; its decoder is small); `jail_report`/`epoch_overdue` stay recorded unless 8.1's plan finds them cheap; **jail e2e-live gets a scheduled dedicated-chain lane**, not per-PR CI. | 8.1 |
+| **D31** | **Carryover dispositions**: the §4 register wholesale. | **RATIFIED wholesale** — all §4.1 closes, §4.2 schedulings, §4.3 ratifications, and §4.4 post-v1 recordings stand as proposed; the persona register receives its resolved-by annotations (CO-52). | milestone |
 
 ## 7. `SECURITY.md` conformance across the milestone
 
@@ -295,7 +317,7 @@ for what M8 newly touches.
 ## 8. Completeness obligations for M8 (§4b v2)
 
 M7's closure record (overview §7.5) is the input; this section is the format
-Phase A plans use, pending D26.
+Phase A plans use — **adopted 2026-08-14 (D26)**.
 
 - **C1 (natural keys & cardinality), C2 (wire bounds), C3 (concurrency),
   C6 (temporal spans)** — unchanged. Each changed implementations in M7 (C6
@@ -337,10 +359,10 @@ Phase A plans use, pending D26.
   phase note under the table; §3 map updated; §5's stale §14.9 row corrected
   and §14.13 row pointed at 8.4b; revision-log entry.
 
-**Deferred to the 8.0a review itself:**
+**At ratification (2026-08-14, D31):**
 [persona-review-action-register.md](persona-review-action-register.md) gains
-its resolved-by annotations (CO-52) once the §4 dispositions are ratified —
-annotating it before ratification would record proposals as resolutions.
+its resolved-by annotations (CO-52), and the seven Phase A plan files are
+authored (D28) — links join the §3 table as each lands.
 No spec is amended in this change: spec amendments belong to the PRs that
 change behavior (8.4a's rule replacement, 8.4b's console §14.13 recording,
 8.5's closures), per the same-change rule.
@@ -353,3 +375,13 @@ area `CLAUDE.md`s and design notes for unresolved M0–M7 tasking (§4);
 M7 overview §7.5 closure recommendations adopted as §8 pending D26. Phase
 structure per Ira's direction: testnet deploy first, a certification pause on
 external clocks, then the mainnet rollout.*
+
+*2026-08-14: **D21–D31 ratified (Ira, the 8.0a review).** Eight resolutions as
+proposed; three overrides, each with a consequence recorded in place: D22
+(testnet builds publicly reachable — the caveat/badge surfaces become gating
+requirements of the 8.4 plan), D27 (public Provenance testnet only, no
+program-operated fallback — the pilot inherits the upstream external clock;
+§2 gains sequencing fact 4), D28 (all seven Phase A plans authored now in the
+8.0a pass rather than at branch open — §3's preamble amended). §8's format is
+adopted (D26); the §4 register is ratified wholesale (D31) and the persona
+register receives its resolved-by annotations (CO-52).*

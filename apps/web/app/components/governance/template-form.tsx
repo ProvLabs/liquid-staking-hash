@@ -131,7 +131,14 @@ function ParamField({
                 : ""}
           </span>
           {error === undefined ? null : (
-            <span className="text-xs" style={{ color: "var(--status-critical)" }} role="alert">
+            // The critical color rides the BORDER, not the small text: the
+            // fixed status family fails 4.5:1 as text-xs on the dark card
+            // (axe color-contrast, 8.3), and the state must never be
+            // color-only anyway.
+            <span
+              className="rounded border border-[var(--status-critical)] px-2 py-1 text-xs"
+              role="alert"
+            >
               {error}
             </span>
           )}

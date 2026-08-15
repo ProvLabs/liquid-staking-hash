@@ -5,11 +5,14 @@ import {
   useDeployment,
   useEpoch,
   useLedger,
+  useLedgerLoaded,
   useNow,
   useSnapshot,
   useVault,
   useValidators,
 } from "@/data/store";
+import { anchorMissNotice } from "@/lib/anchors";
+import { useAnchor } from "@/lib/use-anchor";
 import { StatTile, Pill, Panel, Cell } from "@/components/ui";
 import { StepLine, SignedBars, StackedBar } from "@/charts/charts";
 import { hash, shares, pct, humanDuration, relTime, toBig } from "@/lib/format";
@@ -33,7 +36,11 @@ export function Overview() {
   const epoch = useEpoch();
   const deploy = useDeployment();
   const ledger = useLedger();
+  const ledgerLoaded = useLedgerLoaded();
   const now = useNow();
+  const { anchor, state: anchorState } = useAnchor("epoch", ledgerLoaded, (a) =>
+    ledger.some((r) => r.epoch_index === a.index),
+  );
 
   const nav = navFromSources(vault.data, snap.data);
   const tvv = tvvFromSources(vault.data, snap.data);
@@ -51,6 +58,17 @@ export function Overview() {
           chain.
         </p>
       </div>
+
+      {anchorState === "missing" && anchor && (
+        <div className="callout callout--info" role="status">
+          {anchorMissNotice(anchor, {
+            ledgerCoverage:
+              ledger.length > 0
+                ? `epochs #${Math.min(...ledger.map((r) => r.epoch_index))}–#${Math.max(...ledger.map((r) => r.epoch_index))}`
+                : undefined,
+          })}
+        </div>
+      )}
 
       {/* Rank 1: headline numbers */}
       <div className="grid-tiles">
@@ -188,7 +206,7 @@ export function Overview() {
               </thead>
               <tbody>
                 {[...ledger].reverse().map((r) => (
-                  <tr key={r.epoch_index}>
+                  <tr key={r.epoch_index} id={`epoch-${r.epoch_index}`}>
                     <td className="tnum">#{r.epoch_index}</td>
                     <td>{humanDuration(r.ended_at_seconds - r.started_at_seconds)}</td>
                     <td className="num tnum">{hash(r.rewards_claimed)} HASH</td>
