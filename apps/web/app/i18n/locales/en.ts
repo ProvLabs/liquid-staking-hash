@@ -336,6 +336,10 @@ export default {
   "portfolio.marker-label": "{event}: {shares} nvHASH",
 
   "portfolio.redemptions-title": "Active redemptions",
+  "tx.confirm-tier-warning": "Caution: this action moves funds. Review before signing.",
+  "tx.confirm-tier-danger":
+    "Danger: this is a program-level operation. Review every detail before signing.",
+
   "portfolio.redemptions-empty": "No active redemptions.",
   "portfolio.redemptions-partial":
     "Showing the newest {count} active redemptions — older ones exist but are not shown, and the escrow total covers only what is shown.",
