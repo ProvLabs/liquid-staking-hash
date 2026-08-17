@@ -69,22 +69,13 @@ test("/stake offline renders the honest connect prompt, keyboard-perceivable", a
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
 });
 
-test("chart table view: the disclosure is keyboard-operable on /validators", async ({ page }) => {
-  // The public validators page renders the set; the chart-table disclosure
-  // pattern is exercised where a chart renders offline — the market history
-  // section has the cold state, so use the Learn accrual pattern's toggle if
-  // present; the structural assertion is that EVERY aria-pressed toggle is
-  // reachable and flips by keyboard.
+test("chart-table disclosure: no toggle renders offline; semantics are pinned at the component level", async ({
+  page,
+}) => {
+  // Offline epochs are empty, so no toggle renders (pinned in
+  // test/step-chart-a11y.test.ts); a nonzero count means the exercise belongs here.
   await page.goto("/market");
-  const toggles = page.locator("button[aria-pressed]");
-  const count = await toggles.count();
-  for (let i = 0; i < count; i += 1) {
-    const toggle = toggles.nth(i);
-    await toggle.focus();
-    const before = await toggle.getAttribute("aria-pressed");
-    await page.keyboard.press("Enter");
-    await expect(toggle).toHaveAttribute("aria-pressed", before === "true" ? "false" : "true");
-  }
+  await expect(page.locator("button[aria-pressed]")).toHaveCount(0);
 });
 
 test("governance: list → detail → affordances are reachable by keyboard", async ({ page }) => {

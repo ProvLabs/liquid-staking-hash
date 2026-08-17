@@ -1,24 +1,34 @@
 // Enumeration pin for the registry-derived axe matrix: every page route
-// appears once, every dynamic segment has a binding, the cell count follows
-// the registry.
+// appears once (nested children included), every dynamic segment has a
+// binding, the cell count follows the registry.
 
 import { describe, expect, it } from "vitest";
 import routes from "~/routes";
-import { DYNAMIC_BINDINGS, pageRoutePaths } from "../e2e/support/routes";
-
-interface RouteEntry {
-  readonly path?: string;
-  readonly index?: boolean;
-  readonly children?: readonly RouteEntry[];
-}
+import { DYNAMIC_BINDINGS, pageRoutePaths, type RouteEntry } from "../e2e/support/routes";
 
 const registry = routes as unknown as readonly RouteEntry[];
 const langChildren = registry.find((entry) => entry.path === ":lang?")?.children ?? [];
 
+function leafCount(entries: readonly RouteEntry[]): number {
+  return entries.reduce(
+    (sum, entry) => sum + (entry.children === undefined ? 1 : leafCount(entry.children)),
+    0,
+  );
+}
+
+function dynamicLeafPaths(entries: readonly RouteEntry[], prefix: string): string[] {
+  return entries.flatMap((entry) => {
+    const segment = entry.index === true ? "" : (entry.path ?? "");
+    const joined = [prefix, segment].filter((part) => part !== "").join("/");
+    if (entry.children !== undefined) return dynamicLeafPaths(entry.children, joined);
+    return joined.includes(":") ? [joined] : [];
+  });
+}
+
 describe("axe-matrix route enumeration", () => {
-  it("enumerates every :lang? page exactly once", () => {
+  it("enumerates every :lang? page exactly once, nested pages included", () => {
     const paths = pageRoutePaths();
-    expect(paths.length).toBe(langChildren.length);
+    expect(paths.length).toBe(leafCount(langChildren));
     expect(new Set(paths).size).toBe(paths.length);
     // Spot anchors: the index and the deepest known routes are present.
     expect(paths).toContain("/");
@@ -27,10 +37,46 @@ describe("axe-matrix route enumeration", () => {
     expect(paths).toContain("/governance/4"); // the bound dynamic segment
   });
 
+  it("flattens nested children into full joined paths", () => {
+    const synthetic: RouteEntry[] = [
+      {
+        path: ":lang?",
+        file: "routes/locale.tsx",
+        children: [
+          { index: true, file: "routes/home.tsx" },
+          {
+            path: "governance",
+            file: "routes/governance-layout.tsx",
+            children: [
+              { index: true, file: "routes/governance.tsx" },
+              { path: ":proposalId", file: "routes/governance.$proposalId.tsx" },
+            ],
+          },
+        ],
+      },
+    ];
+    expect(pageRoutePaths(synthetic)).toEqual(["/", "/governance", "/governance/4"]);
+  });
+
+  it("a nested dynamic segment without a binding fails loudly", () => {
+    const synthetic: RouteEntry[] = [
+      {
+        path: ":lang?",
+        file: "routes/locale.tsx",
+        children: [
+          {
+            path: "docs",
+            file: "routes/docs-layout.tsx",
+            children: [{ path: ":slug", file: "routes/docs.$slug.tsx" }],
+          },
+        ],
+      },
+    ];
+    expect(() => pageRoutePaths(synthetic)).toThrow(/docs\/:slug/);
+  });
+
   it("every dynamic page segment has a binding", () => {
-    const dynamic = langChildren
-      .filter((child) => child.index !== true && (child.path ?? "").includes(":"))
-      .map((child) => child.path ?? "");
+    const dynamic = dynamicLeafPaths(langChildren, "");
     for (const path of dynamic) {
       expect(
         DYNAMIC_BINDINGS[path],
