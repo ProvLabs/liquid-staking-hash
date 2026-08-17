@@ -114,9 +114,21 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       devnet `calendar-drill.sh` (eligible crank runs a full epoch; a same-month
       re-crank is rejected with the next-eligible instant one month later).
       Spec §14 item 12 records the resolution.
-- [ ] **Dual x/group policies (spec §12.1)** [SMALL]
-      Split single `admin` into `admin_group_policy` (fund administration,
-      pause/halt/clear) and `ops_group_policy` (`UpdateConfig`).
+- [x] **Dual x/group policies (spec §12.1)** — **RESOLVED 2026-08-14 (D25,
+      PR 8.4a): the split is a bootstrap-level property, not a contract
+      change.** Every non-devnet deployment creates both policies (admin +
+      ops) before instantiate and its deployment record names which policy
+      holds `Config.admin` and which holds the wasmd migrate admin
+      (`WASM_ADMIN`, defaulting to `CONTRACT_ADMIN` in
+      `nvhash-deploy-p2p.sh`). The contract-side split (two in-contract
+      authorities) is deliberately NOT performed — `ExecuteMsg` has no
+      admin-rotation variant, and a second in-contract authority would widen
+      the audit surface without adding any threshold the two-policy bootstrap
+      does not already provide (plan 2026-08-14-app-m8.4a §7 Q7). The 8.4
+      deployment configs are the delivery site for the non-devnet bootstrap.
+      Original item, kept for the record: split single `admin` into
+      `admin_group_policy` (fund administration, pause/halt/clear) and
+      `ops_group_policy` (`UpdateConfig`).
       **Two facts recorded 2026-07-28 during M7 planning.** (a) **The App does
       not assume the split.** Its governance indexer discovers the policy set
       (`Config.admin` → policy → group → all policies on that group) and
@@ -197,8 +209,11 @@ NAV authority; full list in [`CLAUDE.md`](CLAUDE.md).
       2026-07-30.)* This item's dual-policy split still needs no App change:
       policy discovery stays set-valued and is used for display and composer
       convenience.
-- [ ] **ReceiptAccounting query (spec §11.3)** [TRIVIAL] (partially served by
-      `EpochStatus.receipt_minted` today)
+- [x] **ReceiptAccounting query (spec §11.3)** — delivered 2026-08-14
+      (PR 8.4a, D29): the §5.1 invariant's legs from one consistent state
+      read (`receipt_minted`, bank supply, staked, unbonding,
+      pending_deployment, saturating `matured_unsettled`); permissionless,
+      bounded by the validator ceiling; response arithmetic unit-tested.
 - [ ] **Capture-signal incentive (spec §10.4 [DECIDE])** [OPTIONAL, post-v1
       unless voluntary participation proves insufficient]
 - [ ] **Bridge integration (spec §11.5)** [EXTERNAL] vault-side
@@ -221,13 +236,22 @@ attribution, slash write-down); the full record is in spec §14. Still open:
       optimized artifact (639KB) needs ~4.26M gas to store; if the mainnet
       per-tx cap really is 4M, the upload needs a size diet or a confirmed
       higher limit
-- [ ] SIMULATION FINDING (2026-07-09): the fixed 50 bps redemption margin
+- [x] SIMULATION FINDING (2026-07-09): the fixed 50 bps redemption margin
       under-covers NAV drift over a redemption's final unbonding tail when
       realized yield is high (observed past ~8% annualized with
       harsher-than-mainnet timing; benign at typical parameters).
-      Recommendation: make REDEMPTION_MARGIN_BPS admin-configurable and size
-      it at or above expected epoch yield x the unbonding/delay fraction; the
-      soak's refund counter quantifies any chosen setting
+      **Recommendation DELIVERED 2026-08-14 (PR 8.4a, D29):**
+      `redemption_margin_bps` is admin-configurable (`Config::validate`
+      rejects `> 1_000`, never clamps; default 50; absent pre-8.4a stored
+      state deserializes to 50 by serde function default, regression-pinned),
+      the sim's `Scenario` carries it (`from_seed` draws `0..=1_000`), and
+      two boundary scenarios pin the edges — `margin-zero` must produce
+      refunds (the modeled safe outcome the finding quantifies) and
+      `margin-max` must still pay redemptions with every invariant intact.
+      The launch-time SIZING of the value stays open as the spec §14
+      launch-checklist row (8.5 / CO-37): size at or above expected epoch
+      yield × the unbonding/delay fraction; the soak's refund counter
+      quantifies any chosen setting
 - [ ] Vault module version gating — **pinned 2026-08-13 to v1.2.4**,
       superseding the feature-probe rule of 2026-07-13. The 1.2.x line is the
       first to ship `AcceptAsset` (v1.2.0, 2026-07-21) and the contract's
@@ -276,6 +300,22 @@ attribution, slash write-down); the full record is in spec §14. Still open:
       `migrate_restamps_cw2_version_and_rejects_foreign_code` (missing cw2
       record errors; foreign contract name rejected; same-version re-migrate
       allowed)
+- [ ] **`migrate-drill.sh` authored, NOT YET RUN** (2026-08-14, PR 8.4a).
+      The entry point has since gained the cw2 **semver downgrade gate**
+      (`MigrationDowngrade` / `InvalidMigrationVersion`, unit quadrants
+      passing), which the 2026-08-14 drill record above predates. The new
+      drill closes six [VERIFY] hypotheses that need a FRESH group-first
+      chain (`nvhash-group-bootstrap.sh`, then deploy with `WASM_ADMIN` at
+      the policy): (1) an unauthorized `MsgMigrateContract` is rejected
+      while the wasmd admin is a keyless policy account; (2) a group
+      proposal executes the same migrate successfully; (3) a same-code-id
+      migrate exercises the store probe; (4) a version-bumped build (temp
+      crate 0.1.1) migrates cleanly; (5) the full state dump is
+      byte-for-byte identical across the migration except the
+      `contract_info` key (`Y29udHJhY3RfaW5mbw==`); (6) a downgrade
+      proposal is ACCEPTED by the group but its executor_result is FAILURE
+      (the in-contract gate, observed through x/group). Each closure gets
+      its date and node image here when the drill first runs
 - [ ] Runtime [VERIFY] items still open after the 2026-08-13 drill. Each needs
       a SECOND epoch crank in a later calendar month, or a real slash, so none
       could run in this session (see the drill-coverage note in §4):

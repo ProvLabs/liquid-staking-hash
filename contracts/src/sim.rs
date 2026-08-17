@@ -96,6 +96,10 @@ pub struct Scenario {
     pub keeper_jitter_max_secs: u64,
     /// How crank timing after a rollover is chosen (see `Timing`).
     pub timing: Timing,
+    /// Redemption safety margin in bps (the 8.4a config parameter; contract
+    /// bound 0..=1000). Randomized across the FULL allowed range, with the
+    /// two edges pinned by the margin-zero / margin-max boundary scenarios.
+    pub redemption_margin_bps: u64,
 }
 
 /// Keeper-promptness model after a calendar-month rollover. The eligibility
@@ -142,6 +146,7 @@ impl Scenario {
             genesis_secs: GENESIS_SECS,
             keeper_jitter_max_secs: (5 + r.below(20)) * DAY_SECS,
             timing: Timing::Jitter,
+            redemption_margin_bps: r.below(1_001),
         }
     }
 }
@@ -208,6 +213,39 @@ pub fn boundary_scenarios(epochs: u32) -> Vec<(&'static str, Scenario)> {
                 aum_fee_bps: 10_000,
                 performance_threshold_bps: 10_000,
                 ..base(0xFEE5)
+            },
+        ),
+        (
+            // Zero redemption margin (the 8.4a bound's lower edge): no drift
+            // cover at all, under high yield and heavy redemption traffic.
+            // REFUNDS are the modeled, safe outcome the finding quantifies —
+            // the smoke test asserts the counter moved; invariant violations
+            // are not tolerated.
+            "margin-zero",
+            Scenario {
+                redemption_margin_bps: 0,
+                // Refunds need NAV drift to outrun the deploy leg's own
+                // floor (max(fee_reserve, 50 bps of vault liquidity)): high
+                // per-epoch yield, no fee reserve, thin deposits so fresh
+                // liquidity cannot mask the missing margin.
+                reward_bps_per_epoch: 300,
+                aum_fee_bps: 0,
+                p_deposit: 10,
+                p_redeem: 60,
+                ..base(0x0A11)
+            },
+        ),
+        (
+            // The margin bound's upper edge (1000 bps): the reserve
+            // over-covers, deploys shrink, and every §4.2-family invariant
+            // must hold unchanged — a liquidity brake, never a correctness
+            // hole.
+            "margin-max",
+            Scenario {
+                redemption_margin_bps: 1_000,
+                p_deposit: 40,
+                p_redeem: 35,
+                ..base(0x0AFF)
             },
         ),
         (
@@ -299,7 +337,6 @@ const LEAP_GENESIS_SECS: u64 = 1_704_067_200;
 // Distinct RNG stream for crank timing, so adding the clock does not perturb the
 // economic event stream (deposits/jails/churn) drawn from the main `rng`.
 const TIMING_SALT: u64 = 0x7157_3A17_C0DE_F00D;
-const REDEMPTION_MARGIN_BPS: u64 = 50;
 const DEPLOY_BUFFER_BPS: u128 = 50;
 const SHARE_SCALAR: u128 = 1_000_000;
 // Concentration cap params (Provenance defaults) and the contract's offset.
@@ -772,7 +809,7 @@ impl Sim {
             Uint128::new(self.unbonding_total()),
             &dels,
             &at_capacity,
-            REDEMPTION_MARGIN_BPS,
+            self.sc.redemption_margin_bps,
         );
         for (v, a) in plan.undelegations {
             self.apply_unbond(&v, a.u128());
@@ -834,7 +871,7 @@ impl Sim {
             .filter(|a| a.eligible)
             .map(|a| (a.valoper.clone(), a.headroom.u128()))
             .collect();
-        let need = redemption_need(&self.pending_estimates(), REDEMPTION_MARGIN_BPS).u128();
+        let need = redemption_need(&self.pending_estimates(), self.sc.redemption_margin_bps).u128();
         let budget = if eligible.is_empty() {
             0
         } else {
@@ -857,7 +894,7 @@ impl Sim {
             Uint128::new(self.unbonding_total()),
             &dels,
             &at_capacity,
-            REDEMPTION_MARGIN_BPS,
+            self.sc.redemption_margin_bps,
         );
         let expedite_ids = plan.expedite_ids.clone();
         for (v, a) in plan.undelegations {
@@ -1435,6 +1472,27 @@ mod tests {
                         s.max_tvv
                     );
                 }
+                "margin-zero" => {
+                    // The edge is exercised when the no-cover path produces
+                    // the modeled outcome: refunds under high-yield drift.
+                    assert!(
+                        s.redemption_requests > 0,
+                        "margin-zero raised no redemptions"
+                    );
+                    assert!(
+                        s.redemption_refunds > 0,
+                        "margin-zero never refunded — the zero-margin edge was not exercised"
+                    );
+                }
+                "margin-max" => {
+                    // The edge is exercised when redemption traffic actually
+                    // flowed through the over-covering reserve.
+                    assert!(
+                        s.redemption_requests > 0,
+                        "margin-max raised no redemptions"
+                    );
+                    assert!(s.redemptions_paid > 0, "margin-max paid no redemptions");
+                }
                 _ => {}
             }
         }
@@ -1502,6 +1560,8 @@ mod tests {
             genesis_secs: GENESIS_SECS,
             keeper_jitter_max_secs: 0,
             timing: Timing::Jitter,
+            // The pre-8.4a constant: keeps the golden trace byte-identical.
+            redemption_margin_bps: 50,
         };
         let (result, trace) = run_scenario_traced(sc);
         assert!(

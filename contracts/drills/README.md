@@ -34,6 +34,20 @@ against is stood up from [`infra/devnet/`](../../infra/devnet/).
   corpus manifest's pinned facts. One state it CANNOT produce on the drilled
   build: `PROPOSAL_STATUS_ABORTED`, recorded as such rather than skipped
   silently.
+- `migrate-drill.sh` — the migration entry point under the group-policy wasm
+  admin: unauthorized `MsgMigrateContract` rejected while the policy is
+  keyless; a group proposal executes the same migrate; a same-code-id migrate
+  exercises the store probe; a version-bumped build migrates with a
+  byte-for-byte state-dump diff clean except `contract_info`; a downgrade is
+  accepted by the group but fails in its executor result (cw2 semver gate).
+  Needs a fresh chain bootstrapped group-first.
+- `migrate-drill.sh` — the migration entry point under the group-policy wasm
+  admin: unauthorized `MsgMigrateContract` rejected while the policy is
+  keyless; a group proposal executes the same migrate; a same-code-id migrate
+  exercises the store probe; a version-bumped build migrates with a
+  byte-for-byte state-dump diff clean except `contract_info`; a downgrade is
+  accepted by the group but fails in its executor result (cw2 semver gate).
+  Needs a fresh chain bootstrapped group-first.
 - `calendar-drill.sh` — calendar-month cadence gate (E-CAL): an eligible
   `RunEpoch` runs a full epoch end-to-end, then a second crank in the same
   calendar month is rejected with `too soon`, with the reported next-eligible

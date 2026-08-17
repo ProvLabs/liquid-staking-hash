@@ -15,6 +15,14 @@ pub enum ContractError {
     #[error("cannot migrate: stored contract is {stored}, this code is {expected}")]
     InvalidMigration { stored: String, expected: String },
 
+    #[error(
+        "cannot migrate: stored version {stored} is newer than this code's {current} — a downgrade would resurrect fixed flaws"
+    )]
+    MigrationDowngrade { stored: String, current: String },
+
+    #[error("cannot migrate: stored cw2 version {version} is not valid semver")]
+    InvalidMigrationVersion { version: String },
+
     #[error("halted: cranks are disabled by the admin")]
     Halted {},
 

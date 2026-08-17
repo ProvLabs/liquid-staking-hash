@@ -32,16 +32,24 @@ allowlist, or a live/indexed composition.
   only through `services/api`. `DATABASE_URL` is optional — absent, sessions run
   on a non-durable in-memory store. `test/app-schema-allowlist.test.ts` gates
   additions and forbids any role/identity/device column.
-- **The schema is ONE baseline migration, not a history.** Nothing runs this
-  schema outside dev and CI, so a schema change edits the models and is
-  regenerated into `prisma/migrations/20260723000000_init_sessions` rather than
-  appended to. Regenerate with `prisma migrate diff --from-empty
-  --to-schema-datamodel prisma --script`, keeping the file's hand-written
-  header, and rebuild the database (`./dev pg reset`, `migrate:deploy`).
-  Unlike `indexed`, this schema is NOT rebuildable from chain — a rebuild drops
-  sessions, notifications and push subscriptions — so the first environment
-  whose contents must survive is the point at which incremental migrations
-  start.
+- **Migration history is append-only from a frozen baseline** (PR 8.4a — the
+  point at which incremental migrations start is behind us).
+  `prisma/migrations/20260723000000_init_sessions` is frozen migration 0 —
+  never regenerated or edited (`test/migration-freeze.test.ts` pins its
+  SHA-256). A schema change edits the models, then appends a new timestamped
+  migration produced with `prisma migrate diff --from-migrations
+  --to-schema-datamodel prisma --script`, hand-written SQL included where the
+  datamodel cannot express the constraint. The fold gate (app-ci "Migrations
+  match the models", `--from-migrations … --exit-code`) fails a model edit
+  without its appended migration and vice versa. This schema is NOT
+  rebuildable from chain — sessions, notifications and push subscriptions
+  exist only here — which is why history froze before the first deployed
+  environment, not after. The frozen file's two hand-written blocks are
+  frozen-baseline facts guarded by the freeze gate: the existence-checked
+  schema-creation DO block (`CREATE SCHEMA IF NOT EXISTS` needs CREATE on the
+  DATABASE, which `app_writer` must not hold) and the PARTIAL unique index on
+  live incident acknowledgments (Prisma cannot express it; a plain unique
+  would forbid re-acknowledging after a reversal).
 - Accessibility and responsive layout are requirements, not nice-to-haves.
 - Security ([`SECURITY.md`](../../SECURITY.md)): never touch private keys or
   mnemonics — wallet adapters own signing; everything in the client bundle and

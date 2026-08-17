@@ -269,14 +269,20 @@ The `indexed` schema stays indexer-owned; only DDL runs as `indexer_writer`.
 
 ## Schema history
 
-The schema is one baseline migration, regenerated from the models, not an
-append-only chain — see `services/indexer/CLAUDE.md`. Indexed data is
-rebuildable from chain by definition, so until a database exists whose contents
-cannot be recreated, a schema change is an edit to the models plus a rebuild.
-One constraint the Prisma datamodel cannot express is therefore hand-written at
-the end of the baseline and must survive a regeneration: `gov_proposals.proposers`
-is `NOT NULL` — a list column's nullability is not a datamodel property, and
-x/group requires at least one proposer.
+Baseline mode — one regenerated migration, every environment rebuilt — ran
+2026-07-15 → 2026-08-14 and ended with PR 8.4a: `20260715013707_init` is now
+frozen migration 0 and history is append-only (`prisma migrate diff
+--from-migrations --to-schema-datamodel prisma --script` per change), gated by
+the freeze test (SHA-256 pin, `test/migration-freeze.test.ts`) and the CI fold
+check (chain of migrations must equal the models). The flip happened before
+the first deployed environment on purpose: `indexed` is rebuildable from chain
+by definition, but from 8.4 a full re-index is hours-to-days of LCD sweeps
+against a public testnet, and the T1 verification ledger reads from this
+database — a casual wipe destroys measurement continuity. The standing
+constraint carried into migration form: any migration touching
+`gov_proposals.proposers` must preserve `NOT NULL` — a list column's
+nullability is not a datamodel property, and x/group requires at least one
+proposer.
 
 ## Deliberate nulls
 

@@ -31,6 +31,12 @@ export interface ContractConfig {
   concentrationSafetyOffsetBps: number;
   commissionBps: number;
   jailUnbondDelaySecs: number;
+  /**
+   * null when the deployed contract predates the field (pre-8.4a builds omit
+   * the key entirely); the contract itself defaults absent stored state to 50,
+   * so null here means "this build cannot report it", never "zero".
+   */
+  redemptionMarginBps: number | null;
 }
 
 export interface PendingDelegation {
@@ -151,6 +157,10 @@ export function parseContractConfig(value: unknown, path = "$"): ContractConfig 
       o["jail_unbond_delay_secs"],
       `${path}.jail_unbond_delay_secs`,
     ),
+    redemptionMarginBps:
+      o["redemption_margin_bps"] === undefined
+        ? null
+        : parseU64Number(o["redemption_margin_bps"], `${path}.redemption_margin_bps`),
   };
 }
 

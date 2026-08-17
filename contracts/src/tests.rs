@@ -206,6 +206,7 @@ fn setup_wasm_with_underlying(
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
             Some(&admin.address()),
             Some("nvhash-staking"),

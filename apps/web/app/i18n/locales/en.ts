@@ -968,6 +968,7 @@ export default {
   "governance.param-concentration-safety-offset-bps": "Concentration safety offset (bps)",
   "governance.param-commission-bps": "Program commission rate (bps)",
   "governance.param-jail-unbond-delay-secs": "Jail report cooldown (seconds)",
+  "governance.param-redemption-margin-bps": "Redemption reserve margin (bps)",
   "governance.param-halted": "Halt the fund-moving cranks",
   "governance.param-pause-reason": "Reason",
   "governance.param-include": "Change this",

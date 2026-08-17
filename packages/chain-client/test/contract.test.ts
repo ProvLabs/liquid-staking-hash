@@ -17,6 +17,15 @@ describe("contract smart-query decoders against the devnet corpus", () => {
     expect(c.receiptDenom).toBe("nvhash.staked");
     expect(c.maxBondedCapBps).toBeLessThanOrEqual(10000);
     expect(c.vaultAddress).toMatch(/^tp1/);
+    // The corpus is captured from a pre-8.4a build, so the margin key is
+    // absent — the decoder reports null (this build cannot say), never 0.
+    expect(c.redemptionMarginBps).toBeNull();
+  });
+
+  it("decodes redemption_margin_bps when a post-8.4a build reports it", () => {
+    const base = expectObject(smartData("queries/contract/config.json"));
+    const c = parseContractConfig({ ...base, redemption_margin_bps: 50 });
+    expect(c.redemptionMarginBps).toBe(50);
   });
 
   it("decodes epoch status (phase, receipt_minted as bigint, pending arrays)", () => {

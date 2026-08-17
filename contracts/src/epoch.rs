@@ -32,10 +32,6 @@ use crate::validators::{
 use crate::vault_ext::{accept_asset_msg, update_vault_nav_msg};
 use crate::ContractError;
 
-/// Over-cover margin (bps) on the redemption reserve. Payouts re-price at maturity
-/// NAV; with no interest rate the only drift is the deposited-reward step.
-pub const REDEMPTION_MARGIN_BPS: u64 = 50;
-
 /// Floor for the deploy-leg liquid buffer, in bps of vault liquid. The primary
 /// buffer is the AUM fee reserve (plan::fee_reserve).
 pub const DEPLOY_BUFFER_BPS: u128 = 50;
@@ -351,7 +347,7 @@ pub fn service_redemptions(deps: DepsMut, env: &Env) -> Result<Response, Contrac
             unbonding,
             &dels,
             &at_capacity,
-            REDEMPTION_MARGIN_BPS,
+            cfg.redemption_margin_bps,
         );
         (plan, rewards)
     };
@@ -583,7 +579,7 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         let (vault_liquid, tvv, total_shares) = vault_snapshot(d, &cfg)?;
 
         // Redemption reserve: payout estimates + margin.
-        let need = redemption_need(&pending, REDEMPTION_MARGIN_BPS);
+        let need = redemption_need(&pending, cfg.redemption_margin_bps);
 
         // Fresh-deploy budget: surplus beyond the redemption reserve and the
         // fee buffer. Reserving the same `need` the service leg targets means
@@ -617,7 +613,7 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             unbonding,
             &dels_for_service,
             &at_capacity,
-            REDEMPTION_MARGIN_BPS,
+            cfg.redemption_margin_bps,
         );
         let service_unbonded: Uint128 = plan.undelegations.iter().map(|(_, a)| *a).sum();
         let expedited = plan.expedite_ids.len() as u32;
@@ -1146,6 +1142,7 @@ mod sequence_tests {
                 concentration_safety_offset_bps: None,
                 commission_bps: Some(0),
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
         )
         .unwrap();
