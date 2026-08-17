@@ -296,7 +296,12 @@ function Composer({
       />
 
       {formError === null ? null : (
-        <p className="text-xs" style={{ color: "var(--status-critical)" }} role="alert">
+        // Critical color rides the border: as text-xs it fails 4.5:1 on the
+        // dark card.
+        <p
+          className="rounded border border-[var(--status-critical)] px-2 py-1 text-xs"
+          role="alert"
+        >
           {formError}
         </p>
       )}
