@@ -1240,7 +1240,8 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > shares has no NAV and null is the honest state; (d) the NAV formula is the
 > shared scale-then-floor helper `navHashPerShare` lifted into
 > `@nvhash/api-types` and golden-pinned to the web implementation's fixture
-> values (the web's switch to the shared copy is a recorded follow-on); (e)
+> values (the web consumes the shared copy through its `app/learn/amounts.ts`
+> re-export since PR 8.0b — one implementation, pinned from both suites); (e)
 > `/status.data_source` now reports what is wired (`api_reader` |
 > `unwired`) with real heights — the §8.0 chrome's freshness source.
 > `DATABASE_URL` (the `api_reader` role) is consumed as an OPTIONAL bounded
@@ -1542,6 +1543,28 @@ Every response from either process carries the freshness envelope `{ data, meta:
 > → 401; `admin:` on an admin path → 200. Being registry-derived, a future admin
 > route joins it automatically.
 
+> **Revision 2026-08-14 (PR 8.0b, the core read surface joins the wire-bounds
+> registry):** the five collection bounds the 7.1 revision named as
+> not-yet-covered — `/validators.validators` (producer 400), `/portfolio.
+> active_redemptions` (400, newest-first so a trim drops the oldest),
+> `/market.sample.depth_bands` (16), `/market.bridged_supply` (32) and the
+> per-row `ValidatorRow.failing_reasons` (16) — are now declared producer-side
+> in `@nvhash/api-types/bounds.ts` and registered pairs; the registry is
+> complete for the v1 wire surface, and `CORE_BOUNDED_FIELDS` joins the
+> cross-checks.
+>
+> Each trim is FLAGGED, never silent (the `votes_truncated` posture):
+> `ValidatorsPayload.validators_truncated` (marks the whole set view — rows
+> and `set_health` aggregates — as partial),
+> `PortfolioSummary.active_redemptions_truncated` (the escrow sum covers the
+> served rows), `MarketSummary.depth_bands_truncated`/`.bridged_supply_truncated`,
+> and the per-row `ValidatorRow.failing_reasons_truncated`. The producer always
+> emits the flags; the web schemas accept them as **optional** for deploy skew
+> (the two components ship separately at 8.4), and an ABSENT flag renders as
+> **unknown — no completeness claim — never as "complete"**. The previously
+> unbounded registry and active-redemption SELECTs gain `take: MAX + 1`
+> (detect-then-trim).
+
 ### 9.5 Derived metrics (formulas)
 
 All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH conversion at render only.
@@ -1598,7 +1621,9 @@ All in integer/`BigInt` arithmetic with explicit scale-then-floor; percent/HASH 
 
 Incidents are **computed from indexed facts, never hand-entered**: contract halted/resumed; vault paused/unpaused (with reason); slash write-down > 0 in an epoch; redemption refund observed (unfunded maturity — contract §8's "failure mode is a refund"); jail report opened/purged; epoch overdue (now − last_run > interval + slack); reconciler divergence; indexer lag beyond threshold. Each maps to a severity aligned with the console's status semantics (console §11.2) and feeds banners, the Learn-page history (C2), holder/admin alerts (D1), and the admin feed (A4). Closure is likewise computed (the condition clearing), with optional admin acknowledgment for the record.
 
-> **PR 2.5 status (2026-07-21):** the reconciler is the **sole writer** of `incidents` (`services/indexer/src/reconciler/`). Delivered kinds: `reconciler_divergence` and `contract_halted` (closeable, live-derived), `indexer_lag` (closeable, from per-stream checkpoint lag), `slash_write_down` and `redemption_refund` (point-in-time, from indexed facts). The alarm is proven end-to-end by a Postgres-backed acceptance test (corrupt an indexed row → the incident opens; fix it → it closes). **Deferred to a fast-follow** (each needs an additional live decoder not yet built): `vault_paused` (vault query), `jail_report` (jail open/close lifecycle), `epoch_overdue` (keyed off the calendar-month rollover now that it has landed, `liquid-staking-spec.md` §9 — the `min_run_interval_secs` config interval it would have used is retired). Point-in-time kinds are opened once and not auto-closed; admin acknowledgment remains an `app`-schema concern.
+> **PR 2.5 status (2026-07-21):** the reconciler is the **sole writer** of `incidents` (`services/indexer/src/reconciler/`). Delivered kinds: `reconciler_divergence` and `contract_halted` (closeable, live-derived), `indexer_lag` (closeable, from per-stream checkpoint lag), `slash_write_down` and `redemption_refund` (point-in-time, from indexed facts). The alarm is proven end-to-end by a Postgres-backed acceptance test (corrupt an indexed row → the incident opens; fix it → it closes). Point-in-time kinds are opened once and not auto-closed; admin acknowledgment remains an `app`-schema concern.
+>
+> **PR 8.1 status (2026-08-14):** two of the deferred kinds are DELIVERED, live-derived and closeable. `vault_paused` — a pinned vault read each pass (locally parsed, the mirror discipline); dedupeKey `paused`, severity `warning` (pause seats below halt's `critical`, 8.1 §7.1 Q2), payload `{reason}`; closes only on an OBSERVED unpause — a failed vault read skips the whole pass (all-or-nothing), never closes, because an unknown pause state is not "unpaused". `jail_report` — the contract's `jail_reports {}` per pass; dedupeKey carries the EPISODE (`valoper:{addr}:{reportedAtSeconds}`, so a re-jail is a new record, never a reopen of the first episode); severity `warning`; closes when the report leaves the chain (purged or cleared). The reconciler also gained per-pass transient tolerance: a failed pass logs and skips to the next cadence — the alarm outlives what it watches — and `/status` exposes `reconciled_at` (the run's `ranAt`, the data's age) which the web chrome consumes for its stale-heads degradation. **Still deferred:** `epoch_overdue` and the queue-length delta. `epoch_overdue`'s constraint is that no falsifiable drill exists until a calendar-month boundary passes with the crank withheld (the E-CAL constraint); its first exercise is Phase B's T1 calendar-month observation window (M8 overview §5 T1.6).
 
 ---
 

@@ -243,6 +243,8 @@ export const handlers = [
           api_version: "v1",
           environment: "development",
           data_source: "unwired",
+          // Cold start: null, paired with the null heights above.
+          reconciled_at: null,
         },
         { source: "indexed" },
       ),

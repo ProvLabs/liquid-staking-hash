@@ -61,20 +61,50 @@ describe("toSafeInt ([R7a] corrupt heights fail loudly)", () => {
   });
 });
 
-describe("deriveHeads", () => {
-  it("uses the latest reconciler run when present", () => {
-    expect(deriveHeads({ chainHeight: 4242n, indexedHeight: 4200n }, 9999n)).toEqual({
+describe("deriveHeads (reconciled_at is the DATA'S age, never the response clock)", () => {
+  it("carries the run's ranAt as reconciledAt", () => {
+    const ranAt = new Date("2026-07-22T00:00:00Z");
+    expect(deriveHeads({ chainHeight: 4242n, indexedHeight: 4200n, ranAt }, 9999n)).toEqual({
       chainHeight: 4242,
       indexedHeight: 4200,
+      reconciledAt: ranAt,
     });
   });
 
+  it("reports null reconciledAt on the checkpoint fallback and cold start", () => {
+    // Null exactly when no run exists.
+    expect(deriveHeads(null, 4100n).reconciledAt).toBeNull();
+    expect(deriveHeads(null, null).reconciledAt).toBeNull();
+  });
+});
+
+describe("deriveHeads", () => {
+  const RAN_AT = new Date("2026-07-22T00:00:00Z");
+
+  it("uses the latest reconciler run when present", () => {
+    expect(deriveHeads({ chainHeight: 4242n, indexedHeight: 4200n, ranAt: RAN_AT }, 9999n)).toEqual(
+      {
+        chainHeight: 4242,
+        indexedHeight: 4200,
+        reconciledAt: RAN_AT,
+      },
+    );
+  });
+
   it("falls back to the worker checkpoint with a null chain head", () => {
-    expect(deriveHeads(null, 4100n)).toEqual({ chainHeight: null, indexedHeight: 4100 });
+    expect(deriveHeads(null, 4100n)).toEqual({
+      chainHeight: null,
+      indexedHeight: 4100,
+      reconciledAt: null,
+    });
   });
 
   it("reports honest nulls on a cold store", () => {
-    expect(deriveHeads(null, null)).toEqual({ chainHeight: null, indexedHeight: null });
+    expect(deriveHeads(null, null)).toEqual({
+      chainHeight: null,
+      indexedHeight: null,
+      reconciledAt: null,
+    });
   });
 });
 

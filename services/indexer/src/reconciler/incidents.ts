@@ -11,12 +11,11 @@
 //   - point-in-time (a historical fact; opened once, never auto-closed):
 //     slash_write_down, redemption_refund.
 //
-// Deferred to a documented fast-follow (each needs a live decoder this PR does
-// not add — noted in app-spec §9.6): vault_paused (vault query), jail_report
-// (jail lifecycle), epoch_overdue (config interval + calendar-month), and the
-// queue-length delta (vault pending_swap_outs).
+// Still deferred (app-spec §9.6): epoch_overdue and the queue-length delta.
 
+import type { JailReport } from "../workers/validator-sampler/decode.ts";
 import { computeDeltas, type LiveSnapshot } from "./deltas.ts";
+import type { VaultPause } from "./decode.ts";
 import { computeLag } from "./lag.ts";
 import type { Tolerances } from "./tolerances.ts";
 
@@ -24,6 +23,8 @@ export type IncidentKind =
   | "reconciler_divergence"
   | "indexer_lag"
   | "contract_halted"
+  | "vault_paused"
+  | "jail_report"
   | "slash_write_down"
   | "redemption_refund";
 
@@ -33,6 +34,11 @@ export interface LivePlane {
   head: bigint;
   snapshot: LiveSnapshot | null;
   halted: boolean;
+  /** Never null: a failed vault read skips the pass — unknown is not
+   * "unpaused". */
+  pause: VaultPause;
+  /** The contract's live jail reports; bounded by its validator bound. */
+  jailReports: JailReport[];
 }
 
 export interface IndexedPlane {
@@ -49,6 +55,9 @@ export interface IndexedPlane {
    * open ONLY genuinely-new ones each pass instead of re-upserting the entire
    * lifetime history every 30 s (bounded per-pass work). */
   existingPointInTimeKeys: Set<string>;
+  /** Open jail_report dedupeKeys, diffed against live reports to close ended
+   * episodes. */
+  openJailReportKeys: string[];
 }
 
 /** Composite membership key for a point-in-time incident. */
@@ -156,6 +165,43 @@ export function deriveActions(
     });
   } else {
     close.push({ kind: "contract_halted", dedupeKey: "halted" });
+  }
+
+  // --- vault paused: warning severity (halt stays critical) ---
+  if (live.pause.paused) {
+    open.push({
+      kind: "vault_paused",
+      dedupeKey: "paused",
+      severity: "warning",
+      openedHeight: live.head,
+      payload: { reason: live.pause.reason },
+    });
+  } else {
+    close.push({ kind: "vault_paused", dedupeKey: "paused" });
+  }
+
+  // --- jail reports: keyed per EPISODE (valoper + reportedAt) — a bare
+  // valoper key would merge a re-jail into the first episode's record.
+  const liveJailKeys = new Set<string>();
+  for (const report of live.jailReports) {
+    const dedupeKey = `valoper:${report.valoper}:${report.reportedAtSeconds}`;
+    liveJailKeys.add(dedupeKey);
+    open.push({
+      kind: "jail_report",
+      dedupeKey,
+      severity: "warning",
+      openedHeight: live.head,
+      payload: {
+        valoper: report.valoper,
+        reportedAtSeconds: report.reportedAtSeconds.toString(),
+        purgeReadyAtSeconds: report.purgeReadyAtSeconds.toString(),
+      },
+    });
+  }
+  for (const openKey of indexed.openJailReportKeys) {
+    if (!liveJailKeys.has(openKey)) {
+      close.push({ kind: "jail_report", dedupeKey: openKey });
+    }
   }
 
   // --- point-in-time facts (opened once, never auto-closed) ---

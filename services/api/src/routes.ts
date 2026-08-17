@@ -197,6 +197,8 @@ const statusRoute = defineEnveloped<unknown>({
         api_version: "v1",
         environment: ctx.appEnv,
         data_source: ctx.dataSource,
+        // The data's age, never the response clock; null on cold start.
+        reconciled_at: heads.reconciledAt === null ? null : heads.reconciledAt.toISOString(),
       },
       source: "indexed",
       chainHeight: heads.chainHeight,

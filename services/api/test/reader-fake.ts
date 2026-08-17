@@ -51,7 +51,7 @@ import {
 import type { Pagination } from "../src/query.ts";
 
 export interface FakeFacts {
-  readonly reconcilerRun?: { chainHeight: bigint; indexedHeight: bigint } | undefined;
+  readonly reconcilerRun?: { chainHeight: bigint; indexedHeight: bigint; ranAt?: Date } | undefined;
   readonly maxCheckpointHeight?: bigint | undefined;
   readonly metrics?: MetricsFacts | undefined;
   readonly epochs?: readonly EpochSnapshotFacts[] | undefined;
@@ -133,7 +133,19 @@ export function fakeReader(facts: FakeFacts): IndexedReader {
 
   return {
     heads: () =>
-      Promise.resolve(deriveHeads(facts.reconcilerRun ?? null, facts.maxCheckpointHeight ?? null)),
+      Promise.resolve(
+        deriveHeads(
+          facts.reconcilerRun === undefined
+            ? null
+            : {
+                chainHeight: facts.reconcilerRun.chainHeight,
+                indexedHeight: facts.reconcilerRun.indexedHeight,
+                // Fixed default keeps unrelated fixtures deterministic.
+                ranAt: facts.reconcilerRun.ranAt ?? new Date("2026-07-22T00:00:00Z"),
+              },
+          facts.maxCheckpointHeight ?? null,
+        ),
+      ),
     programMetrics: () =>
       Promise.resolve(
         deriveMetrics(

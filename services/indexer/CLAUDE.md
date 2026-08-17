@@ -116,14 +116,22 @@ divergence even if ingestion stalls.
 
 Each pass reads the live plane and the indexed plane, then `deriveActions` — a
 **pure** function of both — yields the `reconciler_runs` row plus incidents to
-open and close, applied in one transaction.
+open and close, applied in one transaction. Its deps include `vaultAddress`
+(the pause read). **A pass is all-or-nothing**: any failed live read derives
+nothing and closes nothing (an unknown pause state must never read as
+"unpaused"), and a failed pass is **logged and skipped, never fatal** — the
+reconciler advances no cursor, so the workers' crash-fatal rule does not
+apply; the alarm must outlive what it watches.
 
 - **`tolerances.ts`** — per-metric, in-code, **not env-tunable**: widening one
   would silence the alarm. Copied snapshot values use exact equality.
-- **Incidents:** `reconciler_divergence`, `indexer_lag`, `contract_halted`
-  (closeable); `slash_write_down`, `redemption_refund` (point-in-time, opened
-  once). Cold start reports `indexedHeight = 0`, never the head, and fires no
-  data-degraded incident.
+- **Incidents:** `reconciler_divergence`, `indexer_lag`, `contract_halted`,
+  `vault_paused` (dedupeKey `paused`), `jail_report` (dedupeKey carries the
+  EPISODE — `valoper:{addr}:{reportedAtSeconds}`, so a re-jail never merges
+  into the first episode's record) — all closeable; `slash_write_down`,
+  `redemption_refund` (point-in-time, opened once). Cold start reports
+  `indexedHeight = 0`, never the head, and fires no data-degraded incident.
+  Still deferred (spec §9.6): `epoch_overdue`, queue-length delta.
 
 ## Commands
 

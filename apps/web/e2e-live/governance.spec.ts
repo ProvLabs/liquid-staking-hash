@@ -49,6 +49,26 @@ test("the live plane resolves to exactly one of its three states, and says which
   }
 });
 
+test("CO-17: group_policy_info on a plain account answers 404, as the offline mock encodes", async ({
+  request,
+}) => {
+  // Pins the admin gate's 404-only rule against a real chain (the offline
+  // mock encodes 404). A 500 is a finding, never a widened assertion.
+  const lcd = process.env.E2E_LIVE_LCD_URL;
+  const plain = process.env.E2E_LIVE_VAULT_ADDRESS; // a real, non-policy account
+  test.skip(
+    lcd === undefined || plain === undefined,
+    "E2E_LIVE_LCD_URL / E2E_LIVE_VAULT_ADDRESS not set (needs the devnet stack)",
+  );
+  const res = await request.get(`${lcd}/cosmos/group/v1/group_policy_info/${plain}`);
+  expect(
+    res.status(),
+    `group_policy_info on plain account ${plain} answered ${res.status()}, not 404 — ` +
+      "a FINDING: the offline mock and the admin gate's 404-only rule assume 404; " +
+      "record the mock + web-design-notes correction rather than widening this assertion",
+  ).toBe(404);
+});
+
 test("a governed stack renders the member set rather than a not-checked note", async ({ page }) => {
   await page.goto("/governance");
   const governed = await page.getByText(/^Group \d+, version/).count();

@@ -34,6 +34,14 @@ export const CHROME_READ_TIMEOUT_MS = 4_000;
 export const DEGRADED_LAG_BLOCKS = 30;
 
 /**
+ * Max age of `/status.reconciled_at` before the chrome calls the data
+ * degraded (a dead indexer freezes both heights, so lag alone never trips).
+ * 10× the reconciler cadence; in-code, not env-tunable — widening a threshold
+ * from the environment would silence the alarm.
+ */
+export const DEGRADED_STALE_SECONDS = 300;
+
+/**
  * Incident kinds whose open incidents flip the chrome to "data degraded"
  * (§8.0: indexer lagging or reconciler alarm; kinds per the indexer's
  * incident schema).
@@ -45,19 +53,75 @@ export const DEGRADED_INCIDENT_KINDS = ["reconciler_divergence", "indexer_lag"] 
 // `satisfies`, and the bounded-timeout transport. A shape failure still
 // degrades to the null paths above, never a guess.
 
-function isDegraded(freshness: FreshnessMeta | null, incidents: IncidentRow[] | null): boolean {
+/** `/status` inputs. Null as a whole = API unreachable; `reconciledAt: null`
+ * inside = cold start or older API — neither is a stale claim. */
+export interface ChromeStatusFacts {
+  meta: FreshnessMeta;
+  reconciledAt: string | null;
+}
+
+/** The live-plane facts the banner may claim (only from a successful read). */
+export interface ChromeLiveFacts {
+  paused: boolean;
+  pausedReason: string;
+  halted: boolean;
+}
+
+function isDegraded(
+  status: ChromeStatusFacts | null,
+  incidents: IncidentRow[] | null,
+  nowMs: number,
+): boolean {
+  const freshness = status?.meta ?? null;
   const lagging =
     freshness !== null &&
     freshness.chain_height !== null &&
     freshness.indexed_height !== null &&
     freshness.chain_height - freshness.indexed_height > DEGRADED_LAG_BLOCKS;
+  // Heads present but the data's age exceeds the threshold. Cold start
+  // (null heads, null reconciled_at) is deliberately not degraded.
+  const reconciledMs =
+    status?.reconciledAt === null ? null : Date.parse(status?.reconciledAt ?? "");
+  const stale =
+    status !== null &&
+    status.meta.indexed_height !== null &&
+    reconciledMs !== null &&
+    Number.isFinite(reconciledMs) &&
+    nowMs - reconciledMs > DEGRADED_STALE_SECONDS * 1000;
   const openIncident =
     incidents?.some(
       (incident) =>
         (DEGRADED_INCIDENT_KINDS as readonly string[]).includes(incident.kind) &&
         (incident.closed_at ?? null) === null,
     ) ?? false;
-  return lagging || openIncident;
+  return lagging || stale || openIncident;
+}
+
+/**
+ * Pure decision core over the loader's inputs. Precedence: halted > paused >
+ * degraded; paused/halted require a successful live read; degraded is the
+ * indexed plane's own claim.
+ */
+export function deriveChromeState(
+  live: ChromeLiveFacts | null,
+  status: ChromeStatusFacts | null,
+  incidents: IncidentRow[] | null,
+  nowMs: number,
+): ChromeState {
+  let banner: ChromeBanner | null = null;
+  if (live?.halted) {
+    banner = { kind: "halted" };
+  } else if (live?.paused) {
+    banner = { kind: "paused", reason: live.pausedReason };
+  } else if (isDegraded(status, incidents, nowMs)) {
+    banner = { kind: "degraded" };
+  }
+  return {
+    banner,
+    liveStatusOk: live !== null,
+    freshness: status?.meta ?? null,
+    reconciledAt: status?.reconciledAt ?? null,
+  };
 }
 
 export interface ChromeReadOptions {
@@ -81,7 +145,7 @@ export async function loadChromeState(
 
   // All reads run concurrently; each rejection resolves to null (degraded
   // surface) rather than failing the page.
-  const [live, freshness, incidents] = await Promise.all([
+  const [live, status, incidents] = await Promise.all([
     Promise.all([vault.getVault(config.vaultAddress), contract.epochStatus()])
       .then(([vaultState, epochStatus]) => ({
         paused: vaultState.vault.paused,
@@ -96,24 +160,15 @@ export async function loadChromeState(
         return null;
       }),
     fetchApiJson(`${apiBase}/api/v1/status`, fetchImpl, CHROME_READ_TIMEOUT_MS)
-      .then((body) => statusEnvelopeSchema.parse(body).meta)
+      .then((body): ChromeStatusFacts => {
+        const parsed = statusEnvelopeSchema.parse(body);
+        return { meta: parsed.meta, reconciledAt: parsed.data.reconciled_at ?? null };
+      })
       .catch(() => null),
     fetchApiJson(`${apiBase}/api/v1/incidents`, fetchImpl, CHROME_READ_TIMEOUT_MS)
       .then((body) => incidentsEnvelopeSchema.parse(body).data)
       .catch(() => null),
   ]);
 
-  // Precedence: halted > paused > degraded. Paused/halted require a
-  // successful live read; degraded is the indexed plane's own claim and does
-  // not need (or assert) live health.
-  let banner: ChromeBanner | null = null;
-  if (live?.halted) {
-    banner = { kind: "halted" };
-  } else if (live?.paused) {
-    banner = { kind: "paused", reason: live.pausedReason };
-  } else if (isDegraded(freshness, incidents)) {
-    banner = { kind: "degraded" };
-  }
-
-  return { banner, liveStatusOk: live !== null, freshness };
+  return deriveChromeState(live, status, incidents, Date.now());
 }

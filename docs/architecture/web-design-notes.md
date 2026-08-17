@@ -219,15 +219,23 @@ The §11 type stack (Funnel Sans / Space Grotesk / Geist Mono) is not yet
 self-hosted; its webfonts are a separate change, since no binaries are
 committed.
 
-## Live e2e re-run trap
+## Live e2e re-run trap — now a mechanism, not a reminder
 
-The compose `web` service builds at container **start**, so a long-running stack
-serves a stale bundle. A live run against it can pass for the wrong reason:
-guard assertions once "passed" against a build where `MsgExecuteContract` was
-not in the allowlist at all — a first-level rejection indistinguishable from the
-deep guard's.
+The trap: the compose `web` service builds at container **start**, so a
+long-running stack serves a stale bundle. A live run against it can pass for
+the wrong reason: guard assertions once "passed" against a build where
+`MsgExecuteContract` was not in the allowlist at all — a first-level rejection
+indistinguishable from the deep guard's.
 
-Restart the service before trusting a green live run:
+Since PR 8.1 the remedy is machinery: **`infra/devnet/stack.sh e2e` is the
+only sanctioned entry for live runs.** It restarts `web` (fresh build), waits
+for health, exports `E2E_LIVE_STACK_PREPARED_AT`, and runs the requested
+suites; `/healthz` reports `started_at` (the server bundle's load time), and
+`e2e-live/drills/stale-bundle.spec.ts` runs first and FAILS any prepared
+session whose served `started_at` predates it — a green run on a stale bundle
+is unrepresentable through the entry point, and a bypassed entry point fails
+the gate rather than passing silently. Ad-hoc local runs outside the entry
+keep working (the spec skips clean), with the manual restart as before:
 
 ```bash
 docker compose --profile app --profile db restart web

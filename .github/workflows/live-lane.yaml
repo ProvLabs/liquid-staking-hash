@@ -1,0 +1,88 @@
+# Live-stack lanes: the devnet-dependent suites per-PR CI excludes.
+# Dispatch-only until the PR that closes 8.0's release pin uncomments the
+# crons (8.1 §7.1, forward obligation 1). Runbook: docs/user/.
+name: live-lane
+
+on:
+  workflow_dispatch:
+  # UNCOMMENT AT 8.0 (release pin), not before:
+  # schedule:
+  #   - cron: "0 6 * * 1"   # live-stack: weekly, Monday 06:00 UTC
+  #   - cron: "0 6 1 * *"   # jail-lane: monthly, the 1st 06:00 UTC
+
+# The two jobs must never share a chain.
+concurrency:
+  group: live-lane
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Full e2e-live suite (governance write leg included), drill sequence, and
+  # the indexer's live-transport governance suite.
+  live-stack:
+    name: live · full stack + degradation drills
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Boot the dev chain (reset + governance bootstrap + contract)
+        run: |
+          infra/devnet/dev-node.sh reset
+          infra/devnet/bootstrap/nvhash-group-bootstrap.sh
+          infra/devnet/dev-node.sh bootstrap
+      - name: Install workspace dependencies (containerized toolchain)
+        run: ./dev pnpm install --frozen-lockfile
+      - name: Bring the app stack up (postgres + roles + migrations + services)
+        run: infra/devnet/stack.sh up
+      - name: Provision throwaway e2e keys (signer + gov member)
+        run: |
+          eval "$(infra/devnet/actions/e2e-keys.sh)"
+          {
+            echo "E2E_LIVE_SIGNER_KEY=$E2E_LIVE_SIGNER_KEY"
+            echo "E2E_LIVE_GOV_MEMBER_KEY=$E2E_LIVE_GOV_MEMBER_KEY"
+            echo "E2E_LIVE_BASE_URL=$E2E_LIVE_BASE_URL"
+            echo "E2E_LIVE_LCD_URL=$E2E_LIVE_LCD_URL"
+            echo "E2E_LIVE_VAULT_ADDRESS=$E2E_LIVE_VAULT_ADDRESS"
+          } >> "$GITHUB_ENV"
+      - name: e2e-live suite (governance write leg included), fresh bundle
+        run: infra/devnet/stack.sh e2e
+      - name: Degradation drill sequence
+        run: infra/devnet/drills.sh run
+      - name: Indexer live-transport governance suite
+        run: |
+          GOV_LIVE_LCD="http://localhost:1317" \
+          GOV_LIVE_RPC="http://localhost:26657" \
+          GOV_LIVE_CONTRACT="$(docker exec dev-node provenanced query vault list -t --home /provenance/nodedev -o json | jq -r '.vaults[0].base_account.address' | xargs -I{} docker exec dev-node provenanced query vault get {} -t --home /provenance/nodedev -o json | jq -r '.vault.asset_manager')" \
+          ./dev pnpm --filter @nvhash/indexer exec vitest run test/workers/governance-live.test.ts
+
+  # Dedicated-chain jail lane: real jailing needs the default slash window,
+  # so this chain is created and destroyed inside this job, never shared.
+  jail-lane:
+    name: live · jail drill (dedicated chain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [] # ordering comes from the concurrency group, not job deps
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Boot a dedicated chain WITHOUT the shortened slash window
+        run: |
+          infra/devnet/dev-node.sh reset
+          infra/devnet/bootstrap/nvhash-group-bootstrap.sh
+          infra/devnet/dev-node.sh bootstrap
+      - name: Install workspace dependencies (containerized toolchain)
+        run: ./dev pnpm install --frozen-lockfile
+      - name: Bring the app stack up
+        run: infra/devnet/stack.sh up
+      - name: Jail drill with the app-observation hook
+        run: |
+          E2E_LIVE_BASE_URL="http://web:3000" \
+          E2E_LIVE_API_URL="http://api:8080" \
+          JAIL_OBSERVE_CMD="./dev pw --filter @nvhash/web exec playwright test --config playwright.live.config.ts e2e-live/drills/jail.spec.ts" \
+            contracts/drills/jail-drill.sh
+      - name: Tear the dedicated chain down
+        if: always()
+        run: |
+          infra/devnet/stack.sh down --all || true
+          docker rm -f dev-node || true

@@ -262,8 +262,33 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
       expect(vBody.meta.indexed_height).toBeNull();
 
       const status = await fetch(`${server.baseUrl}${API_BASE}/status`);
-      const sBody = (await status.json()) as { data: { data_source: string } };
+      const sBody = (await status.json()) as {
+        data: { data_source: string; reconciled_at: string | null };
+      };
       expect(sBody.data.data_source).toBe("unwired");
+      // Cold start: null, never a fabricated timestamp.
+      expect(sBody.data.reconciled_at).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/status.reconciled_at is the reconciler run's ranAt, not the response clock", async () => {
+    const ranAt = new Date("2026-07-22T00:00:00Z");
+    const server = await startServer(
+      {},
+      undefined,
+      fakeReader({ reconcilerRun: { chainHeight: 4242n, indexedHeight: 4200n, ranAt } }),
+    );
+    try {
+      const res = await fetch(`${server.baseUrl}${API_BASE}/status`);
+      const body = (await res.json()) as {
+        data: { reconciled_at: string | null };
+        meta: { generated_at: string };
+      };
+      // The data's age, distinct from generated_at.
+      expect(body.data.reconciled_at).toBe(ranAt.toISOString());
+      expect(body.data.reconciled_at).not.toBe(body.meta.generated_at);
     } finally {
       await server.close();
     }

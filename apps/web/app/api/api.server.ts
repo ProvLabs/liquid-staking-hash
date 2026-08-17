@@ -588,7 +588,12 @@ export const validatorsEnvelopeSchema = envelopeSchema(validatorsPayloadSchema);
 export const metricsEnvelopeSchema = envelopeSchema(programMetricsSchema);
 export const marketEnvelopeSchema = envelopeSchema(marketSummarySchema);
 export const payoutStatsEnvelopeSchema = envelopeSchema(payoutStatsSchema);
-export const statusEnvelopeSchema = envelopeSchema(z.unknown());
+// `reconciled_at` is the data's age, never the response clock. `.optional()`
+// for deploy skew; `.nullable()` for cold start.
+export const statusDataSchema = z
+  .object({ reconciled_at: isoTimestamp.nullable().optional() })
+  .passthrough();
+export const statusEnvelopeSchema = envelopeSchema(statusDataSchema);
 export const portfolioEnvelopeSchema = envelopeSchema(portfolioSummarySchema);
 export const portfolioMetricsEnvelopeSchema = envelopeSchema(portfolioMetricsSchema);
 export const transactionsEnvelopeSchema = envelopeSchema(z.array(transactionRowSchema).max(200));

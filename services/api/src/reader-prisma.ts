@@ -442,7 +442,7 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     async heads(): Promise<Heads> {
       const run = await prisma.reconcilerRun.findFirst({
         orderBy: { ranAt: "desc" },
-        select: { chainHeight: true, indexedHeight: true },
+        select: { chainHeight: true, indexedHeight: true, ranAt: true },
       });
       if (run !== null) return deriveHeads(run, null);
       return deriveHeads(null, await maxWorkerCheckpoint());

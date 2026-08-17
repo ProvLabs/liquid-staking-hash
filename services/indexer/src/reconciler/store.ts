@@ -44,6 +44,12 @@ export async function readIndexedPlane(
     where: { kind: { in: ["slash_write_down", "redemption_refund"] } },
     select: { kind: true, dedupeKey: true },
   });
+  // Currently-open jail episodes: what the live report set is diffed against
+  // so an ended episode (purged or cleared) closes.
+  const openJail = await prisma.incident.findMany({
+    where: { kind: "jail_report", closedAt: null },
+    select: { dedupeKey: true },
+  });
 
   return {
     maxEpoch: maxRow?.epochIndex ?? null,
@@ -54,6 +60,7 @@ export async function readIndexedPlane(
     writeDownEpochs: writeDownRows.map((r) => r.epochIndex),
     refundedRequestIds: refunded.map((r) => r.requestId),
     existingPointInTimeKeys: new Set(existing.map((i) => `${i.kind} ${i.dedupeKey}`)),
+    openJailReportKeys: openJail.map((i) => i.dedupeKey),
   };
 }
 

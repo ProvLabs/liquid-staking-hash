@@ -26,4 +26,7 @@ export interface ChromeState {
   liveStatusOk: boolean;
   /** `/api/v1/status` freshness meta; null when the API was unreachable. */
   freshness: FreshnessMeta | null;
+  /** `/status.reconciled_at` — the data's age. Null = unreachable, cold
+   * start, or older API; the footer then falls back to `generated_at`. */
+  reconciledAt: string | null;
 }

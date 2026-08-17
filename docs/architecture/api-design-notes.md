@@ -155,8 +155,9 @@ both tiers, with `packages/api-types/test/bounds.test.ts` asserting producer ⊆
 consumer for every registered pair. This closes a defect class where a fix added
 a constant while `rows.ts` went on coupling the two sides in a *comment*, so
 nothing imported or tested the pairing. The pre-governance collection bounds on
-`/validators`, `/portfolio.active_redemptions` and `/market` remain web-only and
-are named as not-yet-covered in that file.
+`/validators`, `/portfolio.active_redemptions` and `/market` were adopted into
+the registry at PR 8.0b (producer caps, flagged trims, `CORE_BOUNDED_FIELDS`
+cross-check) — the registry is complete for the v1 wire surface.
 
 ## Registry-derived test harnesses
 

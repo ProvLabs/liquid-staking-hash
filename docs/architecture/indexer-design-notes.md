@@ -161,8 +161,25 @@ Point-in-time incidents (`slash_write_down`, `redemption_refund`) are opened
 once and only for facts not already recorded, so per-pass work stays bounded as
 history grows.
 
-Deferred, pending more live decoders: `vault_paused`, `jail_report`,
-`epoch_overdue`, and the queue-length delta.
+`vault_paused` and `jail_report` are live-derived closeables (PR 8.1):
+the pause pair comes from a pinned vault read parsed by a local mirror
+(`reconciler/decode.ts`), and jail episodes reuse the validator-sampler's
+`parseJailReports` in-package. The jail dedupe key carries the EPISODE
+(`valoper:{addr}:{reportedAtSeconds}`) — a bare valoper key would
+reopen-in-place and merge a re-jail into the first episode's record.
+
+Still deferred: `epoch_overdue` and the queue-length delta. `epoch_overdue`'s
+constraint is not the decoder — **no falsifiable drill exists until a
+calendar-month boundary can pass with the crank withheld** (the E-CAL
+constraint), so its slack tolerance has no measured basis; its first exercise
+is Phase B's T1 calendar-month observation window (M8 overview §5 T1.6).
+
+A failed reconciler pass is LOGGED AND SKIPPED, never fatal (PR 8.1): the
+reconciler advances no cursor, so the workers' crash-fatal rule does not apply
+to it — a skipped pass is honest (the previous run's `ranAt` ages, and the
+chrome's stale-heads clause surfaces exactly that), while a killed process is
+a silenced alarm. The alarm must outlive what it watches; compose's
+`restart: unless-stopped` covers the workers' fatal-crash contract.
 
 ## Local mirrors over cross-package imports
 

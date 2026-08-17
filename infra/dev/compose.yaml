@@ -51,10 +51,24 @@ services:
     volumes:
       - ../..:/repo
       - playwright-home:/home/pw
+    # List form: the E2E_* passthroughs stay UNSET in the container when unset
+    # on the host — the live specs' skip guards test for undefined.
     environment:
-      HOME: /home/pw
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      CI: "${CI:-}"
+      - HOME=/home/pw
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+      - CI=${CI:-}
+      - E2E_LIVE_BASE_URL
+      - E2E_LIVE_API_URL
+      - E2E_LIVE_LCD_URL
+      - E2E_LIVE_VAULT_ADDRESS
+      - E2E_LIVE_SIGNER_KEY
+      - E2E_LIVE_OPERATOR_KEY
+      - E2E_LIVE_GOV_MEMBER_KEY
+      - E2E_LIVE_STACK_PREPARED_AT
+      - E2E_LIVE_DRILL_HISTORY
+      - E2E_DRILL_PHASE
+      - E2E_JAIL_VALOPER
+      - E2E_JAIL_EXPECT
     networks: [nvhash-dev]
 
   # Disposable dev/test database (M1+: Prisma migrations, the ADR-001
@@ -105,6 +119,8 @@ services:
     profiles: ["app"]
     working_dir: /repo
     command: ["corepack", "pnpm", "--filter", "@nvhash/indexer", "run", "start"]
+    # Makes src/index.ts's "compose restarts the process" contract true.
+    restart: unless-stopped
     volumes:
       - ../..:/repo
       - app-home:/home/app
@@ -145,6 +161,7 @@ services:
     profiles: ["app"]
     working_dir: /repo
     command: ["corepack", "pnpm", "--filter", "@nvhash/api", "run", "start"]
+    restart: unless-stopped
     volumes:
       - ../..:/repo
       - app-home:/home/app
@@ -154,6 +171,9 @@ services:
       APP_ENV: "development"
       PORT: "8080"
       DATABASE_URL: "postgresql://api_reader:api-dev@postgres:5432/nvhash?schema=indexed"
+      # dev-only throwaway, not a secret (the Postgres-credentials
+      # precedent); real environments override per D24.
+      API_SERVICE_ASSERTION_KEY: "${API_SERVICE_ASSERTION_KEY:-nvhash-dev-placeholder-assertion-key-not-a-secret-0000}"
     ports:
       - "8080:8080"
     networks: [nvhash-dev]
@@ -181,6 +201,7 @@ services:
       - "sh"
       - "-c"
       - "corepack pnpm --filter @nvhash/web run build && exec corepack pnpm --filter @nvhash/web run start"
+    restart: unless-stopped
     volumes:
       - ../..:/repo
       - app-home:/home/app
@@ -190,6 +211,11 @@ services:
       PORT: "3000"
       HOST: "0.0.0.0"
       APP_ENV: "development"
+      # Durable app-schema store; without it the bell cannot see the
+      # notifier's writes.
+      DATABASE_URL: "postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app"
+      # dev-only, not a secret (see the api service's note).
+      API_SERVICE_ASSERTION_KEY: "${API_SERVICE_ASSERTION_KEY:-nvhash-dev-placeholder-assertion-key-not-a-secret-0000}"
       CHAIN_ID: "${CHAIN_ID:-chain-dev}"
       LCD_URL: "http://dev-node:1317"
       # Empty unless infra/devnet/stack.sh set them (it resolves the deployed
@@ -217,3 +243,28 @@ services:
       timeout: 5s
       retries: 10
       start_period: 120s
+
+  # The notifier worker — the same entrypoint a real deployment runs, so the
+  # drill → tick → bell chain has no in-memory link. VAPID stays unset; the
+  # 10 s tick keeps drill waits short.
+  notifier:
+    image: node:22-bookworm-slim
+    profiles: ["app"]
+    working_dir: /repo
+    command: ["corepack", "pnpm", "--filter", "@nvhash/web", "run", "notifier"]
+    restart: unless-stopped
+    volumes:
+      - ../..:/repo
+      - app-home:/home/app
+    environment:
+      HOME: /home/app
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      DATABASE_URL: "postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app"
+      API_URL: "http://api:8080"
+      # dev-only, not a secret (see the api service's note).
+      API_SERVICE_ASSERTION_KEY: "${API_SERVICE_ASSERTION_KEY:-nvhash-dev-placeholder-assertion-key-not-a-secret-0000}"
+      NOTIFIER_TICK_SECONDS: "10"
+    networks: [nvhash-dev]
+    depends_on:
+      postgres:
+        condition: service_healthy
