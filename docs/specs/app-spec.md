@@ -928,6 +928,7 @@ Core tables (base-unit amounts as `Decimal @db.Decimal(39,0)`; all rows carry th
 - `gov_proposals` / `gov_votes` (indexed mirror of `x/group` state for history and per-member status).
 - `alert_rules`, `notifications` (rule; address; channel; payload; delivered_at; read_at) — `app` schema, with Web Push subscriptions and the aggregate funnel counters (§14.10).
 - `indexer_checkpoints` (stream name PK; cursor height/page; updated_at) — the nuva precedent, one row per worker stream.
+- `holder_lifecycles` (address PK; first_deposit_height; exit_height nullable) — the materialized holder-lifecycle fold (PR 8.2 commit D, landed on the ratified T3 criterion's breach at 1.2 M transactions). An aggregate over already-indexed public rows: maintained by the chain-events worker per window as a recompute-from-truth (replay-convergent by construction, equality-gated against the original window-function fold), read by `services/api` without ever selecting the address out.
 
 > **Revision 2026-07-24 (PR 6.2 commit B, the `app`-schema alert domain):**
 > three tables land in the `app` schema (allowlist gate extended in the same

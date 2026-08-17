@@ -1008,63 +1008,23 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     },
 
     async holderLifecycles(limit: number): Promise<HolderLifecycleFacts[]> {
-      // One row per depositor, WITHOUT the address. The running position is a
-      // window function so the fold happens in Postgres over an indexed scan
-      // rather than by materializing every transaction in this process — the
-      // `operator_payments` lesson applied to a table with the same
-      // permissionless-growth problem.
+      // One row per depositor, WITHOUT the address — the column exists on the
+      // table and is deliberately never selected (the fact shape carries the
+      // two heights only). The window-function fold this read once ran on
+      // every /admin load is MATERIALIZED into `holder_lifecycles` by the
+      // chain-events worker (PR 8.2 commit D, landed on T3's breaching
+      // measurement: 21.6 s p95 at 1.2 M transactions against the 2.5 s
+      // criterion); this is now an indexed ORDER BY + LIMIT. The equality
+      // gate in the indexer's integration suite holds the table to the fold's
+      // output.
       //
-      // The delta convention matches derivePortfolioMetrics: `swap_out_request`
-      // and `redemption_refund` move value between held and escrow and are net
-      // zero on the TOTAL position, so they contribute nothing here.
-      //
-      // The exit is the first height at or after the first deposit where the
-      // running total reaches zero. "At or after" matters: a transfer-in before
-      // any deposit would otherwise register as an exit at height zero.
-      const rows = await prisma.$queryRaw<
-        Array<{ firstDepositHeight: bigint; exitHeight: bigint | null }>
-      >(Prisma.sql`
-        WITH deltas AS (
-          SELECT "address", "height", "msgIndex",
-                 CASE "kind"
-                   WHEN 'swap_in'           THEN "shares"
-                   WHEN 'transfer_in'       THEN "shares"
-                   WHEN 'redemption_payout' THEN -"shares"
-                   WHEN 'transfer_out'      THEN -"shares"
-                   ELSE 0
-                 END AS delta
-          FROM "indexed"."transactions"
-        ),
-        running AS (
-          SELECT "address", "height",
-                 SUM(delta) OVER (
-                   PARTITION BY "address" ORDER BY "height", "msgIndex"
-                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                 ) AS position
-          FROM deltas
-        ),
-        first_deposit AS (
-          SELECT "address", MIN("height") AS first_height
-          FROM "indexed"."transactions"
-          WHERE "kind" = 'swap_in'
-          GROUP BY "address"
-        ),
-        exited AS (
-          SELECT r."address", MIN(r."height") AS exit_height
-          FROM running r
-          JOIN first_deposit f ON f."address" = r."address"
-          WHERE r."height" >= f.first_height AND r.position <= 0
-          GROUP BY r."address"
-        )
-        SELECT f.first_height AS "firstDepositHeight", e.exit_height AS "exitHeight"
-        FROM first_deposit f
-        LEFT JOIN exited e ON e."address" = f."address"
-        -- ASC + LIMIT: a truncated read drops the NEWEST cohorts, matching the
-        -- adminEpochsAsc convention. The ORDER BY is also what makes the trim
-        -- deterministic -- without it the dropped set would vary per plan.
-        ORDER BY f.first_height ASC
-        LIMIT ${limit}
-      `);
+      // ASC + LIMIT: a truncated read drops the NEWEST cohorts, matching the
+      // adminEpochsAsc convention; the caller flags `holders_truncated`.
+      const rows = await prisma.holderLifecycle.findMany({
+        orderBy: [{ firstDepositHeight: "asc" }, { address: "asc" }],
+        take: limit,
+        select: { firstDepositHeight: true, exitHeight: true },
+      });
       return rows.map((r) => ({
         firstDepositHeight: r.firstDepositHeight,
         exitHeight: r.exitHeight,

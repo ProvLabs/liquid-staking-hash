@@ -80,11 +80,19 @@ one would spend the cap on a row that is then discarded (the `payoutStats`
 line, for the same reason). `redemptionLatencySeconds` returns `truncated`
 **with** the sample rather than letting the caller infer it from
 `seconds.length`: rows are dropped after the read, so that length is not
-authoritative for "did the cap bind" and a caller comparing it under-reports. **The cap bounds the transfer and this process's memory, not the scan:**
-measured on the dev DB, the lifecycle window function ran 349 ms at 400 k
-transactions / 40 k holders and 1 407 ms at 1.2 M / 120 k — superlinear, on every
-`/admin` load, uncached. The remedy for the scan is materializing holder
-lifecycle in the indexer; it is a follow-on, not something these caps did.
+authoritative for "did the cap bind" and a caller comparing it under-reports.
+**The lifecycle scan is MATERIALIZED** (PR 8.2 commit D, landed on the
+ratified T3 criterion's breach — 21.6 s p95 at 1.2 M transactions under the
+admin load scenario, against 2.5 s): `holderLifecycles` reads the
+`indexed.holder_lifecycles` table the chain-events worker maintains
+(recompute-from-truth per window, equality-gated against the original fold in
+the indexer's integration suite), as an indexed `ORDER BY + LIMIT`. Post-D
+the panel reads 1.63 s unloaded at depth2. The REMAINING whole-history reads —
+`holderPositions` (the concentration window fold), `depositorCount`
+(COUNT DISTINCT) and `firstDepositorsSince` — still scan per request and
+saturate Postgres under concurrent dashboards (9.41 s p95 loaded); their
+materialization is a named follow-on needing its own design review, per the
+no-speculative-fix rule (api-design-notes 2026-08-14 measurement section).
 
 **A transfer cap is not a denominator.** `holderPositions(bandDepth)` returns the
 top-`CONCENTRATION_BAND_DEPTH` positions **plus** the holder count and total

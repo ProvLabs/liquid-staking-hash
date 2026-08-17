@@ -25,6 +25,11 @@ export function createChainEventsWorker(deps: ChainEventsDeps): Worker<DomainEve
     stream: STREAMS.chainEvents,
     startHeight: deps.startHeight ?? 0n,
     collect: (window) => collectWindow(deps.rpc, deps.scope, window),
-    write: (tx, _window, batch) => applyEvents(new PrismaStore(tx), batch),
+    write: async (tx, _window, batch) => {
+      const store = new PrismaStore(tx);
+      await applyEvents(store, batch);
+      // Recompute lifecycles for touched addresses, same transaction.
+      await store.refreshHolderLifecycles();
+    },
   };
 }

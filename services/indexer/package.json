@@ -9,6 +9,7 @@
   },
   "scripts": {
     "generate": "prisma generate",
+    "seed:load": "prisma generate && node --experimental-transform-types scripts/seed-load.ts",
     "typecheck": "prisma generate && tsc --noEmit",
     "test": "vitest run",
     "test:grants": "prisma generate && vitest run --config vitest.integration.config.ts",

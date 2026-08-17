@@ -1,0 +1,30 @@
+{
+  "comment": "Registry-route → scenario coverage manifest (8.2 invariant 7). services/api/test/load-coverage.test.ts diffs the API route registry against this map, so a route added without a load scenario fails unit CI. The csv-export, deep-offset and rate-limit scenarios REUSE paths already owned below (they are shapes over the same routes, not extra coverage rows).",
+  "routes": {
+    "/status": "public-mix",
+    "/incidents": "public-mix",
+    "/metrics": "public-mix",
+    "/epochs": "public-mix",
+    "/validators": "public-mix",
+    "/market": "public-mix",
+    "/redemptions/stats": "public-mix",
+    "/governance/proposals": "public-mix",
+    "/governance/proposal": "public-mix",
+    "/governance/policies": "public-mix",
+    "/health": "public-mix",
+    "/portfolio": "personal",
+    "/portfolio/metrics": "personal",
+    "/transactions": "personal",
+    "/operator/summary": "operator",
+    "/operator/epochs": "operator",
+    "/operator/payments": "operator",
+    "/internal/alert-facts/redemptions": "internal",
+    "/internal/alert-facts/incidents": "internal",
+    "/internal/alert-facts/arrears": "internal",
+    "/admin/program-health": "admin",
+    "/admin/holder-cohorts": "admin",
+    "/admin/validator-cohorts": "admin",
+    "/admin/upkeep": "admin",
+    "/admin/incidents": "admin"
+  }
+}

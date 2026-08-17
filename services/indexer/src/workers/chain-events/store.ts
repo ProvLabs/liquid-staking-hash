@@ -20,7 +20,69 @@ function toBigint(value: { toFixed(dp: number): string }): bigint {
 }
 
 export class PrismaStore implements Store {
+  /** Addresses whose transactions this window touched — the bounded input of
+   * the holder-lifecycle refresh (PR 8.2 commit D). */
+  private readonly touchedAddresses = new Set<string>();
+
   constructor(private readonly tx: Prisma.TransactionClient) {}
+
+  /**
+   * Recompute `holder_lifecycles` for the addresses this window touched — a
+   * recompute-from-truth over `transactions`, inside the window transaction,
+   * so replay from 0 equals resume and re-apply is idempotent. Equality-gated
+   * by test/integration/holder-lifecycle-materialization.test.ts.
+   *
+   * Delta convention matches derivePortfolioMetrics; exit = first height
+   * at/after the first deposit where the running total reaches zero. No
+   * `swap_in` yet = no row; the anti-join delete covers a replayed window
+   * re-deriving an address out of existence.
+   */
+  async refreshHolderLifecycles(): Promise<void> {
+    if (this.touchedAddresses.size === 0) return;
+    const addresses = [...this.touchedAddresses];
+    await this.tx.$executeRaw`
+      WITH deltas AS (
+        SELECT "address", "height", "msgIndex",
+               CASE "kind"
+                 WHEN 'swap_in'           THEN "shares"
+                 WHEN 'transfer_in'       THEN "shares"
+                 WHEN 'redemption_payout' THEN -"shares"
+                 WHEN 'transfer_out'      THEN -"shares"
+                 ELSE 0
+               END AS delta
+        FROM "indexed"."transactions"
+        WHERE "address" = ANY(${addresses})
+      ),
+      running AS (
+        SELECT "address", "height",
+               SUM(delta) OVER (
+                 PARTITION BY "address" ORDER BY "height", "msgIndex"
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+               ) AS position
+        FROM deltas
+      ),
+      first_deposit AS (
+        SELECT "address", MIN("height") AS first_height
+        FROM "indexed"."transactions"
+        WHERE "kind" = 'swap_in' AND "address" = ANY(${addresses})
+        GROUP BY "address"
+      ),
+      exited AS (
+        SELECT r."address", MIN(r."height") AS exit_height
+        FROM running r
+        JOIN first_deposit f ON f."address" = r."address"
+        WHERE r."height" >= f.first_height AND r.position <= 0
+        GROUP BY r."address"
+      )
+      INSERT INTO "indexed"."holder_lifecycles" ("address", "firstDepositHeight", "exitHeight")
+      SELECT f."address", f.first_height, e.exit_height
+      FROM first_deposit f
+      LEFT JOIN exited e ON e."address" = f."address"
+      ON CONFLICT ("address") DO UPDATE
+        SET "firstDepositHeight" = EXCLUDED."firstDepositHeight",
+            "exitHeight" = EXCLUDED."exitHeight"`;
+    this.touchedAddresses.clear();
+  }
 
   async readNav(): Promise<bigint> {
     const row = await this.tx.indexerCheckpoint.findUnique({
@@ -56,6 +118,7 @@ export class PrismaStore implements Store {
   }
 
   async upsertTransaction(row: TransactionRow): Promise<void> {
+    this.touchedAddresses.add(row.address);
     const data = {
       address: row.address,
       kind: row.kind,
