@@ -22,7 +22,7 @@
 //     letting the surviving streams drift ahead of the dead one.
 
 import { writeFileSync } from "node:fs";
-import { loadConfig } from "./config.ts";
+import { type IndexerConfig, loadConfig } from "./config.ts";
 import { db } from "./db.ts";
 import { logger } from "./logger.ts";
 import { assertChainIsolation } from "./runtime/streams.ts";
@@ -62,6 +62,59 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /**
+ * The composition root's worker set. Exported so the start-height wiring is
+ * assertable: a stream left at the `startHeight` default pages from height 1,
+ * which on a chain with millions of blocks never converges. Pinned by
+ * test/workers/build-workers.test.ts.
+ *
+ * @param config validated indexer configuration
+ * @param deps chain transports the workers read through
+ * @returns one worker per ingestion stream, each with an explicit start height
+ */
+export function buildWorkers(
+  config: IndexerConfig,
+  deps: { rpc: RpcClient; pinned: PinnedLcdClient },
+): Worker[] {
+  const { rpc, pinned } = deps;
+  const startHeight = BigInt(config.indexStartHeight);
+  return [
+    createChainEventsWorker({
+      rpc,
+      startHeight,
+      scope: {
+        vaultAddress: config.vaultAddress,
+        receiptDenom: config.receiptDenom,
+        contractAddress: config.contractAddress,
+      },
+    }),
+    createEpochHistoryWorker({
+      rpc,
+      pinned,
+      startHeight,
+      contractAddress: config.contractAddress,
+    }),
+    createValidatorSamplerWorker({
+      rpc,
+      pinned,
+      startHeight,
+      contractAddress: config.contractAddress,
+    }),
+    // Governance starts on every chain, including one with no x/group substrate
+    // at all: policy discovery then resolves to the empty set and the worker
+    // commits empty windows, the honest no-governance state rather than a crash
+    // or a silently disabled stream.
+    createGovernanceWorker({
+      rpc,
+      pinned,
+      contractAddress: config.contractAddress,
+      lcdUrl: config.lcdUrl,
+      overridePolicies: config.govGroupPolicies,
+      startHeight: BigInt(config.govStartHeight),
+    }),
+  ];
+}
+
+/**
  * Boot the supervisor: validate config, prove the database is reachable, assert
  * chain/contract isolation, start the worker loop(s), and hold the process open
  * with a periodic DB ping. Resolves on a clean shutdown signal.
@@ -87,33 +140,9 @@ export async function run(): Promise<void> {
   const pinned = new PinnedLcdClient(config.lcdUrl);
 
   // Composition root: the workers the supervisor runs. Explicit list (the
-  // `registerWorker` seam is available for self-registration; kept explicit
-  // here so startup is testable and obvious). Reconciler + more workers append
-  // in later M2 PRs.
-  const workers: Worker[] = [
-    createChainEventsWorker({
-      rpc,
-      scope: {
-        vaultAddress: config.vaultAddress,
-        receiptDenom: config.receiptDenom,
-        contractAddress: config.contractAddress,
-      },
-    }),
-    createEpochHistoryWorker({ rpc, pinned, contractAddress: config.contractAddress }),
-    createValidatorSamplerWorker({ rpc, pinned, contractAddress: config.contractAddress }),
-    // Governance. Starts on every chain, including one with no x/group
-    // substrate at all: policy discovery then resolves to the empty set and the
-    // worker commits empty windows, which is the honest no-governance state
-    // rather than a crash or a silently disabled stream.
-    createGovernanceWorker({
-      rpc,
-      pinned,
-      contractAddress: config.contractAddress,
-      lcdUrl: config.lcdUrl,
-      overridePolicies: config.govGroupPolicies,
-      startHeight: BigInt(config.govStartHeight),
-    }),
-  ];
+  // `registerWorker` seam is available for self-registration; kept explicit in
+  // `buildWorkers` so startup is testable and obvious).
+  const workers = buildWorkers(config, { rpc, pinned });
 
   const deps: WorkerRuntimeDeps = {
     prisma,
