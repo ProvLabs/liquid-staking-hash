@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Boot the dev chain (reset + governance bootstrap + contract)
         run: |
           infra/devnet/dev-node.sh reset
@@ -65,7 +65,7 @@ jobs:
     timeout-minutes: 90
     needs: [] # ordering comes from the concurrency group, not job deps
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Boot a dedicated chain WITHOUT the shortened slash window
         run: |
           infra/devnet/dev-node.sh reset
