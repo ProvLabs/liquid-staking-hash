@@ -1,5 +1,10 @@
 import { getBootedConfig } from "~/config/config.server";
 
+// Server bundle load time; the stale-bundle gate
+// (e2e-live/drills/stale-bundle.spec.ts) fails a run served by an older
+// bundle.
+const STARTED_AT = new Date().toISOString();
+
 // Operational readiness probe (full-stack wiring; reused by the
 // Deploy configs). Resource route — no UI, so it sits OUTSIDE the `$lang+`
 // i18n tree and takes no locale segment. Its loader awaits the same boot checks
@@ -13,12 +18,12 @@ export async function loader() {
   } catch {
     // getBootedConfig already logged the specific failure at boot; keep the
     // probe body terse and non-leaky (no config values in the response).
-    return new Response(JSON.stringify({ status: "unhealthy" }), {
+    return new Response(JSON.stringify({ status: "unhealthy", started_at: STARTED_AT }), {
       status: 503,
       headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
     });
   }
-  return new Response(JSON.stringify({ status: "ok" }), {
+  return new Response(JSON.stringify({ status: "ok", started_at: STARTED_AT }), {
     status: 200,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });

@@ -11,6 +11,8 @@ import { expectObject } from "../decode/scalars.ts";
 import { logger } from "../logger.ts";
 import type { PinnedLcdClient, RpcClient } from "../transport/rpc.ts";
 import { parseEpochSnapshot } from "../workers/epoch-history/decode.ts";
+import { parseJailReports } from "../workers/validator-sampler/decode.ts";
+import { parseVaultPause } from "./decode.ts";
 import { deriveActions, type LivePlane } from "./incidents.ts";
 import { applyActions, readIndexedPlane } from "./store.ts";
 import { TOLERANCES } from "./tolerances.ts";
@@ -20,6 +22,7 @@ export interface ReconcilerDeps {
   readonly rpc: RpcClient;
   readonly pinned: PinnedLcdClient;
   readonly contractAddress: string;
+  readonly vaultAddress: string;
   readonly cadenceMs: number;
   sleep(ms: number): Promise<void>;
   readonly signal: AbortSignal;
@@ -32,7 +35,8 @@ function parseHalted(data: unknown): boolean {
   return expectObject(data, "$.epoch_status")["halted"] === true;
 }
 
-/** Read the live plane: head, the chain's retained latest snapshot, halted. */
+/** Read the live plane. All-or-nothing: any failed read throws and the pass
+ * derives nothing — a failed vault read must never read as "unpaused". */
 async function readLive(deps: ReconcilerDeps): Promise<LivePlane> {
   const head = await deps.rpc.latestHeight();
 
@@ -53,7 +57,18 @@ async function readLive(deps: ReconcilerDeps): Promise<LivePlane> {
     await deps.pinned.smartAtHeight(deps.contractAddress, { epoch_status: {} }, head),
   );
 
-  return { head, snapshot, halted };
+  const pause = parseVaultPause(
+    await deps.pinned.getAtHeight(`vault/v1/vaults/${deps.vaultAddress}`, {}, head),
+  );
+
+  const jailReports = parseJailReports(
+    expectObject(
+      await deps.pinned.smartAtHeight(deps.contractAddress, { jail_reports: {} }, head),
+      "$.data",
+    ),
+  );
+
+  return { head, snapshot, halted, pause, jailReports };
 }
 
 /** One reconciliation pass: read both planes, derive, apply. */
@@ -69,10 +84,18 @@ export async function reconcileOnce(deps: ReconcilerDeps): Promise<void> {
   });
 }
 
-/** Run the reconciler loop until the signal aborts. */
+/** Run the reconciler loop until the signal aborts. A failed pass is logged
+ * and skipped, never fatal — the reconciler advances no cursor, and the alarm
+ * must outlive what it watches. */
 export async function runReconciler(deps: ReconcilerDeps): Promise<void> {
   while (!deps.signal.aborted) {
-    await reconcileOnce(deps);
+    try {
+      await reconcileOnce(deps);
+    } catch (cause) {
+      logger.error("reconciler pass failed; skipping to next cadence", {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
     if (deps.signal.aborted) break;
     await deps.sleep(deps.cadenceMs);
   }

@@ -6,7 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 import { computeDeltas } from "../../src/reconciler/deltas.ts";
+import { parseVaultPause } from "../../src/reconciler/decode.ts";
 import { computeLag } from "../../src/reconciler/lag.ts";
+import { runReconciler, type ReconcilerDeps } from "../../src/reconciler/index.ts";
 import {
   deriveActions,
   type IndexedPlane,
@@ -19,6 +21,8 @@ const live = (over: Partial<LivePlane> = {}): LivePlane => ({
   head: 1000n,
   snapshot: { epochIndex: 8n, totalShares: 1000n, tvvAfter: 500n },
   halted: false,
+  pause: { paused: false, reason: "" },
+  jailReports: [],
   ...over,
 });
 const indexed = (over: Partial<IndexedPlane> = {}): IndexedPlane => ({
@@ -28,6 +32,7 @@ const indexed = (over: Partial<IndexedPlane> = {}): IndexedPlane => ({
   writeDownEpochs: [],
   refundedRequestIds: [],
   existingPointInTimeKeys: new Set<string>(),
+  openJailReportKeys: [],
   ...over,
 });
 
@@ -166,14 +171,145 @@ describe("deriveActions", () => {
     expect(refund).toEqual(["request:8"]);
   });
 
+  it("opens vault_paused with the reason while paused; closes when unpaused", () => {
+    const paused = deriveActions(
+      live({ pause: { paused: true, reason: "maintenance" } }),
+      indexed(),
+      TOLERANCES,
+      NOW,
+    );
+    expect(open(paused, "vault_paused")).toMatchObject({
+      dedupeKey: "paused",
+      severity: "warning",
+      payload: { reason: "maintenance" },
+    });
+    const unpaused = deriveActions(live(), indexed(), TOLERANCES, NOW);
+    expect(open(unpaused, "vault_paused")).toBeUndefined();
+    expect(closing(unpaused, "vault_paused")).toBe(true);
+  });
+
+  it("keys jail_report by EPISODE, so two jailings of one validator both survive", () => {
+    // The disproof for a bare valoper key (the M6.4 overwrite shape): a
+    // re-jail must be a new record, not a reopen of the first episode.
+    const first = deriveActions(
+      live({
+        jailReports: [
+          { valoper: "pbvaloper1aaa", reportedAtSeconds: 100n, purgeReadyAtSeconds: 500n },
+        ],
+      }),
+      indexed(),
+      TOLERANCES,
+      NOW,
+    );
+    expect(open(first, "jail_report")).toMatchObject({
+      dedupeKey: "valoper:pbvaloper1aaa:100",
+      severity: "warning",
+      payload: { valoper: "pbvaloper1aaa", reportedAtSeconds: "100", purgeReadyAtSeconds: "500" },
+    });
+
+    // Second episode, first one's incident still open in the mirror: the new
+    // episode opens under its OWN key and the ended episode closes.
+    const second = deriveActions(
+      live({
+        jailReports: [
+          { valoper: "pbvaloper1aaa", reportedAtSeconds: 900n, purgeReadyAtSeconds: 1_300n },
+        ],
+      }),
+      indexed({ openJailReportKeys: ["valoper:pbvaloper1aaa:100"] }),
+      TOLERANCES,
+      NOW,
+    );
+    expect(open(second, "jail_report")?.dedupeKey).toBe("valoper:pbvaloper1aaa:900");
+    expect(
+      second.close.some(
+        (c) => c.kind === "jail_report" && c.dedupeKey === "valoper:pbvaloper1aaa:100",
+      ),
+    ).toBe(true);
+    // A still-live episode does not close.
+    expect(
+      second.close.some(
+        (c) => c.kind === "jail_report" && c.dedupeKey === "valoper:pbvaloper1aaa:900",
+      ),
+    ).toBe(false);
+  });
+
+  it("closes an open jail episode once its report is gone (purged or cleared)", () => {
+    const actions = deriveActions(
+      live({ jailReports: [] }),
+      indexed({ openJailReportKeys: ["valoper:pbvaloper1aaa:100"] }),
+      TOLERANCES,
+      NOW,
+    );
+    expect(open(actions, "jail_report")).toBeUndefined();
+    expect(
+      actions.close.some(
+        (c) => c.kind === "jail_report" && c.dedupeKey === "valoper:pbvaloper1aaa:100",
+      ),
+    ).toBe(true);
+  });
+
   it("produces JSON-safe payloads (no bigint) so they can persist to JSONB", () => {
     const actions = deriveActions(
-      live({ halted: true }),
+      live({
+        halted: true,
+        pause: { paused: true, reason: "drill" },
+        jailReports: [
+          { valoper: "pbvaloper1aaa", reportedAtSeconds: 100n, purgeReadyAtSeconds: 500n },
+        ],
+      }),
       indexed({ writeDownEpochs: [3n] }),
       TOLERANCES,
       NOW,
     );
     for (const o of actions.open) expect(() => JSON.stringify(o.payload)).not.toThrow();
     expect(() => JSON.stringify(actions.run.deltas)).not.toThrow();
+  });
+});
+
+describe("parseVaultPause", () => {
+  it("parses the pause pair, absent-tolerant the way proto3 serializes", () => {
+    expect(parseVaultPause({ vault: { paused: true, paused_reason: "maintenance" } })).toEqual({
+      paused: true,
+      reason: "maintenance",
+    });
+    // proto3 omits falsy fields: absent paused is false, absent reason is "".
+    expect(parseVaultPause({ vault: {} })).toEqual({ paused: false, reason: "" });
+  });
+
+  it("fails loudly on a shapeless body rather than guessing", () => {
+    expect(() => parseVaultPause({})).toThrow();
+    expect(() => parseVaultPause("nonsense")).toThrow();
+  });
+});
+
+describe("runReconciler transient tolerance (the alarm outlives what it watches)", () => {
+  it("logs and skips a failed pass, then keeps running to the next cadence", async () => {
+    // A throwing live read must not kill the loop: the reconciler advances no
+    // cursor, so a skipped pass is honest while a dead process is a silenced
+    // alarm. The rpc fake fails twice, and the loop must attempt all passes
+    // until the signal aborts rather than rejecting on the first failure.
+    let attempts = 0;
+    const controller = new AbortController();
+    const deps: ReconcilerDeps = {
+      prisma: {} as never, // never reached: latestHeight throws first
+      rpc: {
+        latestHeight: () => {
+          attempts += 1;
+          return Promise.reject(new Error("lcd down"));
+        },
+      } as never,
+      pinned: {} as never,
+      contractAddress: "pb1contract",
+      vaultAddress: "pb1vault",
+      cadenceMs: 1,
+      sleep: () => {
+        if (attempts >= 3) controller.abort();
+        return Promise.resolve();
+      },
+      signal: controller.signal,
+      now: () => NOW,
+    };
+    await expect(runReconciler(deps)).resolves.toBeUndefined();
+    expect(attempts).toBeGreaterThanOrEqual(3);
   });
 });

@@ -285,10 +285,18 @@ Playwright runs in the official Playwright image on the same compose file:
   unlocks the enroll/unregister leg, and `E2E_LIVE_GOV_MEMBER_KEY` the
   governance write leg — the latter must be a funded throwaway key that is
   **also a group member**, since proposing and voting are membership-gated and
-  the generic signer key cannot reach them. Runs on the stack schedule, not
-  offline CI.
-  **Restart the compose `web` service before trusting a green live run** — it
-  builds at container start, so a long-running stack serves a stale bundle.
+  the generic signer key cannot reach them. Both keys are provisioned by
+  `infra/devnet/actions/e2e-keys.sh` (eval its output; devnet-only by
+  chain-id guard). Runs on the stack schedule (`live-lane.yaml`,
+  dispatch-until-8.0), not offline CI.
+  **Run live suites through `infra/devnet/stack.sh e2e`** — it restarts the
+  compose `web` service (which builds at container start, so a long-running
+  stack serves a stale bundle), exports `E2E_LIVE_STACK_PREPARED_AT`, and the
+  `e2e-live/drills/stale-bundle.spec.ts` gate FAILS any prepared session
+  served by an older bundle. The `e2e-live/drills/` family is driven by
+  `infra/devnet/drills.sh` via `E2E_DRILL_PHASE` (unset, the specs skip clean;
+  inside an active phase they FAIL rather than skip — a drill that skips is
+  silence).
 - `check:palette` — the shared dataviz validation method
   (`scripts/validate_palette.js`) over both theme token sets.
 - `check:bundle` — builds with sentinel values in every server-only env var

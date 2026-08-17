@@ -8,13 +8,19 @@ export type FreshnessDisplay =
   | { kind: "na" }
   | { kind: "indexed"; height: number; ageSeconds: number };
 
-/** Classify freshness meta for the footer. `nowMs` is injectable for tests. */
-export function describeFreshness(meta: FreshnessMeta | null, nowMs: number): FreshnessDisplay {
+/**
+ * Classify freshness meta for the footer. `nowMs` is injectable for tests.
+ * Age = `reconciledAt ?? generated_at`: the data's age when reported, the
+ * response clock only when none exists — "(5m ago)" describes the data.
+ */
+export function describeFreshness(
+  meta: FreshnessMeta | null,
+  nowMs: number,
+  reconciledAt: string | null = null,
+): FreshnessDisplay {
   if (meta === null || meta.indexed_height === null) return { kind: "na" };
-  const generated = Date.parse(meta.generated_at);
-  const ageSeconds = Number.isFinite(generated)
-    ? Math.max(0, Math.round((nowMs - generated) / 1000))
-    : 0;
+  const stamp = Date.parse(reconciledAt ?? meta.generated_at);
+  const ageSeconds = Number.isFinite(stamp) ? Math.max(0, Math.round((nowMs - stamp) / 1000)) : 0;
   return { kind: "indexed", height: meta.indexed_height, ageSeconds };
 }
 

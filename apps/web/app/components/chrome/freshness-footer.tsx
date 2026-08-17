@@ -27,7 +27,7 @@ export function FreshnessFooter({
     return () => clearInterval(id);
   }, []);
 
-  const display = describeFreshness(chrome.freshness, nowMs);
+  const display = describeFreshness(chrome.freshness, nowMs, chrome.reconciledAt);
 
   return (
     <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-6 py-3 text-sm text-muted-foreground">

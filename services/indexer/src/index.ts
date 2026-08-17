@@ -150,6 +150,7 @@ export async function run(): Promise<void> {
       rpc,
       pinned,
       contractAddress: config.contractAddress,
+      vaultAddress: config.vaultAddress,
       cadenceMs: config.reconcileIntervalMs,
       sleep: (ms) => sleep(ms, controller.signal),
       signal: controller.signal,

@@ -270,7 +270,7 @@ export interface IndexedReader {
  * state; nothing here fabricates a height, a count, or a row.
  */
 export const emptyReader: IndexedReader = {
-  heads: () => Promise.resolve({ chainHeight: null, indexedHeight: null }),
+  heads: () => Promise.resolve({ chainHeight: null, indexedHeight: null, reconciledAt: null }),
   programMetrics: () =>
     Promise.resolve({ participant_count: null, program_started_at: null, epoch_count: null }),
   listEpochs: () => Promise.resolve([]),

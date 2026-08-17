@@ -68,6 +68,9 @@ import { z } from "zod";
 export interface Heads {
   readonly chainHeight: number | null;
   readonly indexedHeight: number | null;
+  /** The run's `ranAt` — the data's age, never the response clock. Null
+   * exactly when no run exists. */
+  readonly reconciledAt: Date | null;
 }
 
 // --- guards -----------------------------------------------------------------
@@ -146,13 +149,18 @@ export interface MetricsFacts {
 // --- derivations ------------------------------------------------------------
 
 export function deriveHeads(
-  reconcilerRun: { readonly chainHeight: bigint; readonly indexedHeight: bigint } | null,
+  reconcilerRun: {
+    readonly chainHeight: bigint;
+    readonly indexedHeight: bigint;
+    readonly ranAt: Date;
+  } | null,
   maxCheckpointHeight: bigint | null,
 ): Heads {
   if (reconcilerRun !== null) {
     return {
       chainHeight: toSafeInt(reconcilerRun.chainHeight, "chain_height"),
       indexedHeight: toSafeInt(reconcilerRun.indexedHeight, "indexed_height"),
+      reconciledAt: reconcilerRun.ranAt,
     };
   }
   // The reconciler has never run: the checkpoints certify indexed progress,
@@ -161,9 +169,10 @@ export function deriveHeads(
     return {
       chainHeight: null,
       indexedHeight: toSafeInt(maxCheckpointHeight, "indexed_height"),
+      reconciledAt: null,
     };
   }
-  return { chainHeight: null, indexedHeight: null };
+  return { chainHeight: null, indexedHeight: null, reconciledAt: null };
 }
 
 /**

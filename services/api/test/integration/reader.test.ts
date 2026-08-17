@@ -314,8 +314,12 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
     await writer.$disconnect();
   });
 
-  it("reads heads from the latest reconciler run", async () => {
-    expect(await reader.heads()).toEqual({ chainHeight: 4242, indexedHeight: 4200 });
+  it("reads heads from the latest reconciler run, carrying the run's ranAt", async () => {
+    expect(await reader.heads()).toEqual({
+      chainHeight: 4242,
+      indexedHeight: 4200,
+      reconciledAt: new Date("2026-07-22T00:00:00Z"),
+    });
   });
 
   it("derives metrics with COUNT(DISTINCT address) across all kinds ([R5])", async () => {
@@ -980,6 +984,10 @@ describe("PrismaReader over api_reader (role-split round trip)", () => {
   it("falls back to worker checkpoints for heads, excluding meta: markers", async () => {
     await writer.reconcilerRun.deleteMany();
     // 4200 from chain-events — NOT 999999 from the meta:provenance marker.
-    expect(await reader.heads()).toEqual({ chainHeight: null, indexedHeight: 4200 });
+    expect(await reader.heads()).toEqual({
+      chainHeight: null,
+      indexedHeight: 4200,
+      reconciledAt: null,
+    });
   });
 });
