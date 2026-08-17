@@ -14,6 +14,7 @@
 
 import { Prisma, PrismaClient } from "@nvhash/db-indexed";
 import {
+  deriveMarketSummary,
   derivePayoutStats,
   derivePortfolio,
   deriveHeads,
@@ -25,10 +26,8 @@ import {
   toAlertArrearsFact,
   toAlertIncidentFact,
   toAlertRedemptionFact,
-  toBridgedSupplyRow,
   toEpochRow,
   toIncidentRow,
-  toMarketSample,
   toSafeInt,
   toTransactionRow,
   type ValidatorEpochFacts,
@@ -41,7 +40,13 @@ import type {
 } from "./admin-derive.ts";
 import type { EpochStepFact } from "./portfolio-metrics.ts";
 import type { Heads, IndexedReader, RedemptionLatencies } from "./reader.ts";
-import { MAX_GOV_POLICIES, MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
+import {
+  MAX_ACTIVE_REDEMPTIONS,
+  MAX_BRIDGED_SUPPLY_ROWS,
+  MAX_GOV_POLICIES,
+  MAX_GOV_VOTES_PER_PROPOSAL,
+  MAX_VALIDATOR_REGISTRY_ROWS,
+} from "@nvhash/api-types";
 import type { Pagination } from "./query.ts";
 import type {
   AdminIncidentFacts,
@@ -511,8 +516,12 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
     },
 
     async listValidators(): Promise<ValidatorsPayload> {
+      // Detect-then-trim (the `MAX_GOV_VOTES_PER_PROPOSAL + 1` idiom): the
+      // registry accumulates churn forever, so the read is bounded and the
+      // one extra row is how `deriveValidatorsPayload` knows to flag.
       const registry = await prisma.validatorRegistry.findMany({
         orderBy: [{ moniker: "asc" }, { valoper: "asc" }],
+        take: MAX_VALIDATOR_REGISTRY_ROWS + 1,
         select: { valoper: true, moniker: true, unregisteredAt: true },
       });
       // Latest sampled epoch per validator, via `DISTINCT ON` (2026-07-28
@@ -560,12 +569,15 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
       });
       // Latest reading per remote chain (ordered desc within each chain,
       // `distinct` keeps the first = latest — the validators pattern).
+      // Detect-then-trim: one row per remote chain, chain count externally
+      // governed, so the read is bounded and the extra row drives the flag.
       const bridged = await prisma.bridgeSupplySample.findMany({
         orderBy: [{ chain: "asc" }, { sampledAt: "desc" }, { id: "desc" }],
         distinct: ["chain"],
+        take: MAX_BRIDGED_SUPPLY_ROWS + 1,
         select: { chain: true, remoteSupply: true, sampledAt: true },
       });
-      let sample = null;
+      let nav: bigint | null = null;
       if (raw !== null) {
         // [R6] the premium denominator is the NAV current AT THE SAMPLE'S
         // time: the last epoch settled at or before sampledAt — never a
@@ -576,31 +588,28 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           orderBy: { epochIndex: "desc" },
           select: { tvvAfter: true, totalShares: true },
         });
-        const nav =
+        nav =
           navEpoch === null
             ? null
             : navPriceNhash(toBigint(navEpoch.tvvAfter), toBigint(navEpoch.totalShares));
-        sample = toMarketSample(
-          {
-            venue: raw.venue,
-            pool: raw.pool,
-            priceNhash: toBigint(raw.price),
-            depthBands: raw.depthBands,
-            sampledAt: raw.sampledAt,
-          },
-          nav,
-        );
       }
-      return {
-        sample,
-        bridged_supply: bridged.map((row) =>
-          toBridgedSupplyRow({
-            chain: row.chain,
-            remoteSupply: toBigint(row.remoteSupply),
-            sampledAt: row.sampledAt,
-          }),
-        ),
-      };
+      return deriveMarketSummary(
+        raw === null
+          ? null
+          : {
+              venue: raw.venue,
+              pool: raw.pool,
+              priceNhash: toBigint(raw.price),
+              depthBands: raw.depthBands,
+              sampledAt: raw.sampledAt,
+            },
+        nav,
+        bridged.map((row) => ({
+          chain: row.chain,
+          remoteSupply: toBigint(row.remoteSupply),
+          sampledAt: row.sampledAt,
+        })),
+      );
     },
 
     async payoutStats(): Promise<PayoutStats> {
@@ -645,9 +654,13 @@ export function createPrismaReader(databaseUrl: string): PrismaReader {
           select: { blockTime: true },
         }),
         prisma.transaction.count({ where: { address } }),
+        // Detect-then-trim: enqueueing is permissionless, so the read is
+        // bounded and the one extra row is how `derivePortfolio` knows to
+        // flag (newest-first, so a trim drops the oldest).
         prisma.redemptionRequest.findMany({
           where: { owner: address, status: { in: ["enqueued", "expedited"] } },
           orderBy: { enqueuedAt: "desc" },
+          take: MAX_ACTIVE_REDEMPTIONS + 1,
         }),
       ]);
       return derivePortfolio(

@@ -1,8 +1,9 @@
 // Golden-value gate for the shared NAV helper ([R1],
-// app-spec §9.4): these are the SAME fixture
-// values the web implementation is pinned to (apps/web/test/amounts.test.ts),
-// so the shared helper and the web copy cannot drift apart without one of the
-// two suites failing. Values come from the captured corpus
+// app-spec §9.4): the SAME fixture values are pinned from the consumer side
+// too (apps/web/test/amounts.test.ts, driving the web re-export), so the one
+// implementation is held to one set of values from two sides — and a
+// re-introduced local web copy would fail the web goldens the moment it
+// drifted by a floor step. Values come from the captured corpus
 // (@nvhash/fixtures queries/vault/get.json), never hand-invented.
 
 import { describe, expect, it } from "vitest";

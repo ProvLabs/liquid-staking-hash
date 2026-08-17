@@ -6,6 +6,7 @@
 // where/when.
 
 import type { Envelope, EpochRow, FreshnessMeta } from "@nvhash/api-types";
+import type { Completeness } from "~/api/completeness";
 
 export interface DepthRowView {
   side: "buy" | "sell";
@@ -38,6 +39,10 @@ export interface MarketData {
   market: {
     sample: MarketSampleView | null;
     bridged: BridgedRowView[];
+    /** Tri-state of the wire flags: "partial" = the producer trimmed the
+     * collection; "unknown" = older API, no completeness claim to render. */
+    depthCompleteness: Completeness;
+    bridgedCompleteness: Completeness;
     meta: FreshnessMeta;
   } | null;
   /** Live local nvHASH supply (vault total shares), or null on read failure. */

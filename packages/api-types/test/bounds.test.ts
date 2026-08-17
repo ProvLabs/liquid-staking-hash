@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ADMIN_BOUNDED_FIELDS,
+  CORE_BOUNDED_FIELDS,
   GOVERNANCE_BOUNDED_FIELDS,
   FUNNEL_RETENTION_DAYS,
   MAX_FUNNEL_ROWS_TOTAL,
@@ -61,6 +62,17 @@ describe("wire bounds: producer inside consumer", () => {
     // failure rather than a silent regression.
     const registered = new Set(WIRE_BOUNDS.map((b) => b.field));
     for (const field of GOVERNANCE_BOUNDED_FIELDS) {
+      expect(registered.has(field)).toBe(true);
+    }
+  });
+
+  it("registers every core v1 read-surface bounded field", () => {
+    // The five collections adopted at PR 8.0b — previously web-Zod-only
+    // literals with no declared producer cap, the exact shape that nulled a
+    // whole derived read once. Enumerated independently and cross-checked so
+    // dropping a pair from the registry fails here rather than shipping.
+    const registered = new Set(WIRE_BOUNDS.map((b) => b.field));
+    for (const field of CORE_BOUNDED_FIELDS) {
       expect(registered.has(field)).toBe(true);
     }
   });

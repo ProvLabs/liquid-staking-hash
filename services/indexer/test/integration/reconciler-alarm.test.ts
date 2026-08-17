@@ -11,7 +11,7 @@
 // depend on the singleton's environment.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../src/prisma.ts";
 import { reconcileOnce, type ReconcilerDeps } from "../../src/reconciler/index.ts";
 import type { PinnedLcdClient, RpcClient } from "../../src/transport/rpc.ts";
 

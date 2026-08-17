@@ -3,7 +3,7 @@
 // are Decimal(39,0): base-unit bigints are passed as canonical integer strings;
 // heights/seconds/epoch index are BigInt columns.
 
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../../prisma.ts";
 import type { EpochRow } from "./snapshot.ts";
 import type { EpochStore } from "./write.ts";
 

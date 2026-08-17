@@ -1,14 +1,14 @@
 // Shared BigInt-only NAV math (review resolution [R1] in
 // app-spec §9.4).
 //
-// The API is the producer of the historical NAV series (`EpochRow.nav`) while
-// apps/web computes the live current-NAV figure with the same formula
-// (apps/web/app/learn/amounts.ts). If the two implementations drifted, one
-// chart would carry two inconsistent NAV conventions — so the pure helper
-// lives here, in the shared zero-runtime-dependency contract package, and a
-// golden test (test/amounts.test.ts) pins its output to the web
-// implementation's fixture-corpus values. The web-side switch to this shared
-// copy is a recorded follow-on (stays services-only).
+// The ONE implementation of the NAV formula, consumed by both tiers: the API
+// produces the historical NAV series (`EpochRow.nav`) and apps/web computes
+// the live current-NAV figure through its `app/learn/amounts.ts` re-export.
+// If the formula had two implementations, one chart would carry two
+// inconsistent NAV conventions — so the pure helper lives here, in the shared
+// zero-runtime-dependency contract package, and golden tests in BOTH packages
+// (test/amounts.test.ts here, apps/web/test/amounts.test.ts) pin one
+// function's fixture-corpus values from two sides.
 //
 // Floats NEVER touch an amount (app-spec §5.8): scale with BigInt, floor by
 // integer division, and place the decimal point in the string.

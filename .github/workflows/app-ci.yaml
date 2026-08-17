@@ -297,12 +297,11 @@ jobs:
         run: corepack pnpm --filter @nvhash/web run migrate:deploy
         env:
           DATABASE_URL: postgresql://app_writer:app-dev@postgres:5432/nvhash?schema=app
-      # NOTE: this script runs `prisma generate` itself, and must. `apps/web`
-      # and `services/indexer` both generate to the hoisted, shared
-      # `@prisma/client` (neither declares an `output`), so the db-indexed
-      # generate two steps above leaves it holding `indexed` models — the app
-      # models this suite needs would be missing. Generating inside the script
-      # keeps it correct regardless of where it sits in this job.
+      # NOTE: this script runs `prisma generate` itself, and must — a suite
+      # must not depend on job step order. `apps/web` is the repo's ONLY
+      # default-output generator (the indexer's clients generate into explicit
+      # paths, gated by its prisma-generator-output test), so nothing else may
+      # write the hoisted `@prisma/client` this suite binds to.
       - name: App-schema store gate (test:db — real Prisma stores as app_writer)
         if: needs.changes.outputs.app == 'true'
         run: corepack pnpm --filter @nvhash/web run test:db
@@ -346,3 +345,41 @@ jobs:
         run: |
           # gate every tracked shell script plus the ./dev wrapper
           git ls-files '*.sh' | xargs shellcheck --severity=warning dev
+
+  # SECURITY.md "run npm audit before releases", enforced as a standing CI
+  # gate for the pnpm workspace (PR 8.0b, CO-12). DELIBERATELY unguarded by
+  # `changes`: the input that moves is the ADVISORY DATABASE, which is never
+  # in the diff. Dev dependencies are IN scope — the build chain decides what
+  # reaches the served bundle. Exceptions live ONLY in pnpm-workspace.yaml's
+  # `auditConfig` (the pnpm-11 settings home) with an owned row in
+  # docs/security/dependency-audit-exceptions.md — no --audit-level floor, no
+  # --ignore flags, no continue-on-error.
+  #
+  # KNOWN GAP, recorded rather than implied (8.0b plan §7.1 Q5): apps/console
+  # is outside the pnpm workspace (pnpm-workspace.yaml), so this audit cannot
+  # see it and nothing in CI audits its dependencies yet. Console coverage is
+  # deferred to PR 8.4b (which opens the console's CI job), backstopped by the
+  # 8.5 pre-release security review — SECURITY.md names the gap for the same
+  # reason.
+  audit:
+    name: workspace · pnpm audit (advisory database, unguarded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: node:22-bookworm-slim # keep in lockstep with infra/dev/compose.yaml tools image
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: ${{ github.workspace }}/.corepack
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore corepack cache
+        uses: actions/cache@v5
+        with:
+          path: .corepack
+          key: corepack-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: corepack-${{ runner.os }}-
+      # Audits the committed lockfile against the registry advisory DB; no
+      # install is needed, so a compromised postinstall can never run here.
+      - name: Audit pnpm-lock.yaml (production + dev)
+        run: corepack pnpm audit
+      - name: Every exception has an owner (register ↔ machine lists, both directions)
+        run: node scripts/check-audit-exceptions.mjs

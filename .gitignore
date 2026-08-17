@@ -20,6 +20,9 @@ build/
 test-results/
 playwright-report/
 
+# Generated Prisma client (explicit output — see services/indexer/src/prisma.ts)
+services/indexer/generated/
+
 # Devnet runtime state
 infra/devnet/state/
 

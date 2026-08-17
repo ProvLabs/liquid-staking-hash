@@ -1,20 +1,26 @@
 import { t, type Locale } from "~/i18n";
+import type { Completeness } from "~/api/completeness";
 import { formatAgeSince } from "~/learn/duration";
 import type { BridgedRowView } from "~/market/types";
 
 // §8.5 supply location: LOCAL supply is a live chain
 // read composed here by the web tier; the API serves only the bridged side.
 // Bridged rows carry chain + sample time; the empty state is the honest v1
-// truth, not a placeholder.
+// truth, not a placeholder. `completeness` renders the honesty state of the
+// bridged set: "partial" says the producer trimmed it (never an unlabeled
+// prefix), "unknown" (older API, no flag) withholds the completeness claim.
+// Gated by test/market-data.test.ts.
 export function SupplyLocation({
   locale,
   localSupply,
   bridged,
+  completeness,
   nowMs,
 }: {
   locale: Locale;
   localSupply: string | null;
   bridged: BridgedRowView[];
+  completeness: Completeness;
   nowMs: number;
 }) {
   const na = t(locale, "learn.stat-na");
@@ -29,30 +35,49 @@ export function SupplyLocation({
         </span>
       </div>
       {bridged.length === 0 ? (
+        // An unknown-completeness empty set must not claim all supply is local.
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          {t(locale, "market.supply-bridged-empty")}
+          {t(
+            locale,
+            completeness === "unknown"
+              ? "market.supply-completeness-unknown"
+              : "market.supply-bridged-empty",
+          )}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">{t(locale, "market.supply-col-chain")}</th>
-                <th className="px-3 py-2 font-medium">{t(locale, "market.supply-col-supply")}</th>
-                <th className="px-3 py-2 font-medium">{t(locale, "market.supply-col-sampled")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bridged.map((row) => (
-                <tr key={row.chain} className="border-b last:border-b-0">
-                  <td className="px-3 py-2">{row.chain}</td>
-                  <td className="px-3 py-2 tabular-nums">{row.supplyNvhash}</td>
-                  <td className="px-3 py-2">{formatAgeSince(row.sampledAt, nowMs)} ago</td>
+        <>
+          {completeness === "partial" ? (
+            <p className="text-xs text-muted-foreground">
+              {t(locale, "market.supply-bridged-partial")}
+            </p>
+          ) : completeness === "unknown" ? (
+            <p className="text-xs text-muted-foreground">
+              {t(locale, "market.supply-completeness-unknown")}
+            </p>
+          ) : null}
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">{t(locale, "market.supply-col-chain")}</th>
+                  <th className="px-3 py-2 font-medium">{t(locale, "market.supply-col-supply")}</th>
+                  <th className="px-3 py-2 font-medium">
+                    {t(locale, "market.supply-col-sampled")}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {bridged.map((row) => (
+                  <tr key={row.chain} className="border-b last:border-b-0">
+                    <td className="px-3 py-2">{row.chain}</td>
+                    <td className="px-3 py-2 tabular-nums">{row.supplyNvhash}</td>
+                    <td className="px-3 py-2">{formatAgeSince(row.sampledAt, nowMs)} ago</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );

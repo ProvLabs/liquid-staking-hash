@@ -1,4 +1,5 @@
 import { t, type Locale, type MessageKey } from "~/i18n";
+import type { Completeness } from "~/api/completeness";
 import type { RedemptionVM } from "~/portfolio/types";
 
 // §8.2 active redemptions: self-contained status rows from the
@@ -6,6 +7,11 @@ import type { RedemptionVM } from "~/portfolio/types";
 // console-§11.2 family). No link to /exit until 5.4 ships that tracker; a
 // recorded deferral note stands in. The VM carries no maturity estimate yet,
 // so no countdown is fabricated.
+//
+// `completeness` renders the honesty state of the SET: "partial" says the
+// producer trimmed to the newest N (never an unlabeled prefix), "unknown"
+// (older API, no flag) withholds the completeness claim. Gated by
+// test/portfolio-data.test.ts.
 
 const STATUS: Record<
   RedemptionVM["status"],
@@ -45,16 +51,33 @@ function dateOf(iso: string): string {
 export function ActiveRedemptions({
   locale,
   redemptions,
+  completeness,
 }: {
   locale: Locale;
   redemptions: RedemptionVM[];
+  completeness: Completeness;
 }) {
   return (
     <section aria-label={t(locale, "portfolio.redemptions-title")} className="flex flex-col gap-3">
       <h2 className="text-xl font-semibold">{t(locale, "portfolio.redemptions-title")}</h2>
+      {completeness === "partial" ? (
+        <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+          {t(locale, "portfolio.redemptions-partial", { count: String(redemptions.length) })}
+        </p>
+      ) : completeness === "unknown" && redemptions.length > 0 ? (
+        <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+          {t(locale, "portfolio.redemptions-completeness-unknown")}
+        </p>
+      ) : null}
       {redemptions.length === 0 ? (
+        // An unknown-completeness empty set must not claim "none exist".
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          {t(locale, "portfolio.redemptions-empty")}
+          {t(
+            locale,
+            completeness === "unknown"
+              ? "portfolio.redemptions-completeness-unknown"
+              : "portfolio.redemptions-empty",
+          )}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">

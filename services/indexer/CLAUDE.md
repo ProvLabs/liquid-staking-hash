@@ -141,7 +141,12 @@ reachable in-network as `http://dev-node:1317`.
   `gov_proposals`/`gov_votes` round-trip. **The governance monotonicity guard is
   gated only here** — the unit replay suite mirrors the conditional-update arm
   in TypeScript and would still pass if the SQL lost it.
-- `generate` — regenerate the Prisma client from `prisma/`.
+- `generate` — regenerate the Prisma client from `prisma/` into the explicit,
+  gitignored `generated/client` path (a sibling of `prisma/`, since anything
+  inside it is read as multi-file schema source; imported only via
+  `src/prisma.ts`). Every generator in this schema declares an explicit
+  `output` — `apps/web` is the repo's sole writer of the hoisted
+  `@prisma/client`, and the `prisma-generator-output` test gates the rule.
 - `start` — `prisma generate` then run the supervisor (`src/index.ts`): connects
   as `indexer_writer`, runs the chain-isolation boot check, starts the workers,
   and proves liveness via a DB ping written to a heartbeat file

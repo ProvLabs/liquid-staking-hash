@@ -11,7 +11,7 @@
 // live chain. Full supervisor wiring of the head source lands with the first
 // worker; this PR ships the runtime and its tests.
 
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "../prisma.ts";
 import { logger } from "../logger.ts";
 import { readCheckpoint, runWindow, trailingTarget, type Window } from "./checkpoint.ts";
 

@@ -26,7 +26,7 @@
 // grant-boundary, reconciler-alarm and operator-payments gates.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../src/prisma.ts";
 import { PrismaGovernanceStore } from "../../src/workers/governance/store.ts";
 import type { ProposalUpsert } from "../../src/workers/governance/store.ts";
 import type { Tally } from "../../src/workers/governance/events.ts";
