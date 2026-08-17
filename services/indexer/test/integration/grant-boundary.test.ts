@@ -117,3 +117,39 @@ describe("indexed/app grant boundary (ADR-001 Decision 1)", () => {
     expect(rows[0]?.usage).toBe(false);
   });
 });
+
+// Table OWNERSHIP, not just grants. api_reader's SELECT on tables created later
+// comes from default privileges keyed to indexer_writer, so a table created by
+// any other role is invisible to the API even though every grant assertion
+// above still passes.
+//
+// This matters most where it cannot be observed: in a deployed environment the
+// migration authenticates as an IAM principal, and only
+// `ALTER ROLE … SET role = indexer_writer` (infra/cloudsql/roles.sql) keeps
+// ownership correct. These assertions pin the property that line exists to
+// produce, against the substrate CI can reach.
+describe("indexed schema ownership", () => {
+  it("has at least one table to assert on", async () => {
+    const { rows } = await client.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM pg_tables WHERE schemaname = 'indexed'",
+    );
+    expect(Number(rows[0]?.count ?? "0")).toBeGreaterThan(0);
+  });
+
+  it("is owned entirely by indexer_writer", async () => {
+    const { rows } = await client.query<{ tablename: string; tableowner: string }>(
+      `SELECT tablename, tableowner FROM pg_tables
+        WHERE schemaname = 'indexed' AND tableowner <> 'indexer_writer'
+        ORDER BY tablename`,
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("keeps the schema itself owned by indexer_writer", async () => {
+    const { rows } = await client.query<{ owner: string }>(
+      `SELECT pg_get_userbyid(nspowner) AS owner
+         FROM pg_namespace WHERE nspname = 'indexed'`,
+    );
+    expect(rows[0]?.owner).toBe("indexer_writer");
+  });
+});
