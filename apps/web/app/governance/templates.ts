@@ -235,6 +235,14 @@ export const PROPOSAL_TEMPLATES: readonly ProposalTemplate[] = [
           "msg.rs: Option<u64>; no Config::validate check — bounded here by JSON safety",
         labelKey: "governance.param-jail-unbond-delay-secs",
       },
+      {
+        kind: "uint",
+        key: "redemption_margin_bps",
+        min: 0n,
+        max: 1000n,
+        contractRule: "state.rs Config::validate: redemption_margin_bps must be <= 1000",
+        labelKey: "governance.param-redemption-margin-bps",
+      },
     ],
     labelKey: "governance.template-update-config",
     summaryKeys: ["governance.confirm-update-config-1", "governance.confirm-update-config-2"],
@@ -478,7 +486,7 @@ export function parseTemplateValues(
 /**
  * The form's starting values for a template.
  *
- * REQUIRED parameters are seeded; optional ones (`update_config`'s ten) are
+ * REQUIRED parameters are seeded; optional ones (`update_config`'s eleven) are
  * NOT, because for them "absent" is the meaningful default — a seeded key would
  * silently put a field into a proposal the proposer never chose to change.
  *

@@ -53,6 +53,22 @@ pub struct Config {
     /// stake for the unbonding period.
     #[serde(default)]
     pub jail_unbond_delay_secs: u64,
+    /// Safety margin over the pending-redemption need, in bps (spec §9.5.6;
+    /// the 2026-07-09 simulation finding: a fixed margin under-covers NAV
+    /// drift over a redemption's final unbonding tail at high realized
+    /// yield). Sizing rule: margin >= expected epoch yield x the
+    /// unbonding/delay fraction. Bounded 0..=1000 — beyond that the margin
+    /// stops being a drift cover and becomes a liquidity brake, silently
+    /// over-reserving the deploy budget. The serde default is the FUNCTION
+    /// returning 50, never a bare default: a zero default would silently
+    /// remove the margin on any state stored before this field existed.
+    #[serde(default = "default_redemption_margin_bps")]
+    pub redemption_margin_bps: u64,
+}
+
+/// The pre-8.4a constant, preserved for state stored before the field existed.
+pub fn default_redemption_margin_bps() -> u64 {
+    50
 }
 
 impl Config {
@@ -96,6 +112,12 @@ impl Config {
         // value that looks like a margin.
         if self.concentration_safety_offset_bps >= 10_000 {
             return Err(invalid("concentration_safety_offset_bps must be < 10000"));
+        }
+        // 0 is legal (its failure mode is a refund the vault handles, surfaced
+        // by the sim's refund counter); above 1000 the margin becomes a
+        // liquidity brake rather than a drift cover (8.4a Q1).
+        if self.redemption_margin_bps > 1_000 {
+            return Err(invalid("redemption_margin_bps must be <= 1000"));
         }
         Ok(())
     }

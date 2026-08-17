@@ -34,6 +34,10 @@ pub const DEFAULT_COMMISSION_BPS: u64 = 1_000;
 /// Default jail-purge cooldown (RC1 §9.8): 8 hours of sustained jailing before
 /// stake may be moved off a validator.
 pub const DEFAULT_JAIL_UNBOND_DELAY_SECS: u64 = 28_800;
+/// Default redemption safety margin (spec §9.5.6; the 2026-07-09 finding's
+/// parameter, admin-configurable since 8.4a). Bounded 0..=1000 in
+/// `Config::validate`; the serde default fn in state.rs returns the same 50.
+pub const DEFAULT_REDEMPTION_MARGIN_BPS: u64 = 50;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -64,6 +68,9 @@ pub fn instantiate(
         jail_unbond_delay_secs: msg
             .jail_unbond_delay_secs
             .unwrap_or(DEFAULT_JAIL_UNBOND_DELAY_SECS),
+        redemption_margin_bps: msg
+            .redemption_margin_bps
+            .unwrap_or(DEFAULT_REDEMPTION_MARGIN_BPS),
     };
     config.validate()?;
     CONFIG.save(deps.storage, &config)?;
@@ -75,11 +82,12 @@ pub fn instantiate(
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
 
-/// Handles `MsgMigrateContract` (wasmd already verified the CosmWasm admin).
-/// Errors if the stored cw2 contract name is not [`CONTRACT_NAME`] — wrong
-/// artifact — otherwise re-stamps the cw2 version and touches no other state.
-/// Same-version migration is allowed; a future storage-layout change must add
-/// its transformation here.
+/// Handles `MsgMigrateContract` (wasmd verified the admin — the admin group
+/// policy per spec §12). Errors on a foreign cw2 contract name or a stored
+/// version NEWER than this code's (downgrade guard); equal versions are
+/// idempotent. Re-stamps the cw2 version and touches no other state; a future
+/// layout change writes its transformation here and must handle the
+/// `Releasing` epoch phase explicitly.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     let stored = cw2::get_contract_version(deps.storage)?;
@@ -87,6 +95,22 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
         return Err(ContractError::InvalidMigration {
             stored: stored.contract,
             expected: CONTRACT_NAME.to_string(),
+        });
+    }
+    let stored_version = semver::Version::parse(&stored.version).map_err(|_| {
+        ContractError::InvalidMigrationVersion {
+            version: stored.version.clone(),
+        }
+    })?;
+    let code_version = semver::Version::parse(CONTRACT_VERSION).map_err(|_| {
+        ContractError::InvalidMigrationVersion {
+            version: CONTRACT_VERSION.to_string(),
+        }
+    })?;
+    if stored_version > code_version {
+        return Err(ContractError::MigrationDowngrade {
+            stored: stored.version,
+            current: CONTRACT_VERSION.to_string(),
         });
     }
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -117,6 +141,7 @@ pub fn execute(
             concentration_safety_offset_bps,
             commission_bps,
             jail_unbond_delay_secs,
+            redemption_margin_bps,
         } => exec_update_config(
             deps,
             &info,
@@ -130,6 +155,7 @@ pub fn execute(
             concentration_safety_offset_bps,
             commission_bps,
             jail_unbond_delay_secs,
+            redemption_margin_bps,
         ),
         ExecuteMsg::SetHalted { halted } => exec_set_halted(deps, &info, halted),
         ExecuteMsg::ClearPendingDelegations {} => exec_clear_pending_delegations(deps, &info),
@@ -156,8 +182,39 @@ pub fn execute(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
+        QueryMsg::ReceiptAccounting {} => {
+            // The §5.1 invariant's legs in ONE consistent state read (D29).
+            // Every chain sweep is the crank's own trusted reader shape:
+            // paginated to exhaustion, bounded by the validator ceiling.
+            let cfg = CONFIG.load(deps.storage)?;
+            let receipt_minted = RECEIPT_MINTED.load(deps.storage)?;
+            let receipt_bank_supply = deps.querier.query_supply(&cfg.receipt_denom)?.amount;
+            let staked: Uint128 = deps
+                .querier
+                .query_all_delegations(env.contract.address.clone())?
+                .into_iter()
+                .filter(|d| d.amount.denom == cfg.underlying_denom)
+                .fold(Uint128::zero(), |sum, d| sum + d.amount.amount);
+            let (unbonding, _at_capacity) = crate::epoch::unbonding_state(deps, &env)?;
+            let pending_deployment: Uint128 = PENDING_DELEGATIONS
+                .load(deps.storage)?
+                .iter()
+                .fold(Uint128::zero(), |sum, (_, a)| sum + *a);
+            let matured_unsettled = receipt_minted
+                .saturating_sub(staked)
+                .saturating_sub(unbonding)
+                .saturating_sub(pending_deployment);
+            to_json_binary(&crate::msg::ReceiptAccountingResponse {
+                receipt_minted,
+                receipt_bank_supply,
+                staked,
+                unbonding,
+                pending_deployment,
+                matured_unsettled,
+            })
+        }
         QueryMsg::Config {} => {
             let c = CONFIG.load(deps.storage)?;
             to_json_binary(&ConfigResponse {
@@ -175,6 +232,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 concentration_safety_offset_bps: c.concentration_safety_offset_bps,
                 commission_bps: c.commission_bps,
                 jail_unbond_delay_secs: c.jail_unbond_delay_secs,
+                redemption_margin_bps: c.redemption_margin_bps,
             })
         }
         QueryMsg::EpochStatus {} => {
@@ -337,6 +395,7 @@ fn exec_update_config(
     concentration_safety_offset_bps: Option<u64>,
     commission_bps: Option<u64>,
     jail_unbond_delay_secs: Option<u64>,
+    redemption_margin_bps: Option<u64>,
 ) -> Result<Response, ContractError> {
     assert_admin(deps.as_ref(), info)?;
     CONFIG.update(deps.storage, |mut c| -> Result<_, ContractError> {
@@ -369,6 +428,9 @@ fn exec_update_config(
         }
         if let Some(v) = jail_unbond_delay_secs {
             c.jail_unbond_delay_secs = v;
+        }
+        if let Some(v) = redemption_margin_bps {
+            c.redemption_margin_bps = v;
         }
         c.validate()?;
         Ok(c)
@@ -445,6 +507,7 @@ mod unit {
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
         )
         .unwrap();
@@ -500,6 +563,7 @@ mod unit {
             concentration_safety_offset_bps: None,
             commission_bps: None,
             jail_unbond_delay_secs: None,
+            redemption_margin_bps: None,
         }
     }
 
@@ -539,6 +603,10 @@ mod unit {
             (
                 "safety offset at 100% of max bond",
                 Box::new(|m| m.concentration_safety_offset_bps = Some(10_000)),
+            ),
+            (
+                "redemption margin above the 1000 bps bound",
+                Box::new(|m| m.redemption_margin_bps = Some(1_001)),
             ),
             (
                 "empty underlying denom",
@@ -590,7 +658,66 @@ mod unit {
         msg.min_bonded_cap_bps = Some(3_300);
         msg.max_bonded_cap_bps = Some(3_300);
         msg.concentration_safety_offset_bps = Some(9_999);
+        // Both edges of the margin bound are legal (zero's failure mode is a
+        // refund, surfaced by the sim's margin-zero scenario; 1000 is the cap).
+        msg.redemption_margin_bps = Some(1_000);
         instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg).unwrap();
+    }
+
+    #[test]
+    fn update_config_rejects_out_of_range_redemption_margin() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&admin, &[]),
+            ExecuteMsg::UpdateConfig {
+                max_delegations_per_run: None,
+                aum_fee_bps: None,
+                performance_threshold_bps: None,
+                min_capture_interval_secs: None,
+                max_concentration_multiple_bps: None,
+                min_bonded_cap_bps: None,
+                max_bonded_cap_bps: None,
+                concentration_safety_offset_bps: None,
+                commission_bps: None,
+                jail_unbond_delay_secs: None,
+                redemption_margin_bps: Some(1_001),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InvalidConfig { .. }));
+        // Rejected → stored value unchanged (the instantiate default).
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
+        let resp: ConfigResponse = from_json(&bin).unwrap();
+        assert_eq!(resp.redemption_margin_bps, DEFAULT_REDEMPTION_MARGIN_BPS);
+    }
+
+    #[test]
+    fn config_stored_before_the_margin_field_deserializes_at_50() {
+        // Pre-8.4a Config JSON (no margin key) must load as 50 — the
+        // function default, never a bare zero.
+        let old_json = r#"{
+            "admin": "pb1admin",
+            "vault_address": "pb1vault",
+            "underlying_denom": "nhash",
+            "receipt_denom": "nvhash.staked",
+            "max_delegations_per_run": 0,
+            "aum_fee_bps": 0,
+            "performance_threshold_bps": 0,
+            "min_capture_interval_secs": 0,
+            "max_concentration_multiple_bps": 55000,
+            "min_bonded_cap_bps": 500,
+            "max_bonded_cap_bps": 3300,
+            "concentration_safety_offset_bps": 500
+        }"#;
+        let cfg: Config = from_json(old_json.as_bytes()).unwrap();
+        assert_eq!(cfg.redemption_margin_bps, 50);
+        // And the bare-default fields keep their established zero semantics.
+        assert_eq!(cfg.commission_bps, 0);
     }
 
     #[test]
@@ -615,6 +742,7 @@ mod unit {
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
         )
         .unwrap_err();
@@ -648,6 +776,7 @@ mod unit {
                 concentration_safety_offset_bps: Some(1_000),
                 commission_bps: None,
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
         )
         .unwrap();
@@ -684,6 +813,7 @@ mod unit {
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
             ExecuteMsg::SetHalted { halted: true },
             ExecuteMsg::ClearPendingDelegations {},
@@ -1049,6 +1179,7 @@ mod unit {
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: Some(28_800),
+                redemption_margin_bps: None,
             },
         )
         .unwrap();
@@ -1293,6 +1424,7 @@ mod unit {
                 concentration_safety_offset_bps: None,
                 commission_bps: None,
                 jail_unbond_delay_secs: None,
+                redemption_margin_bps: None,
             },
         )
         .unwrap();
@@ -1423,5 +1555,96 @@ mod unit {
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::Unauthorized {}));
+    }
+
+    // ── migrate: the four cw2 quadrants + the no-other-key property (8.4a) ──
+    // wasmd owns WHO may migrate (the drill's subject); these pin WHAT an
+    // authorized migration may do: name must match, stored version must not
+    // exceed the code's, equal is idempotent, older advances the marker, and
+    // NO storage key beyond contract_info moves.
+
+    /// Every raw storage entry as (key, value) pairs, for byte-level diffs.
+    fn storage_snapshot(storage: &cosmwasm_std::MemoryStorage) -> Vec<(Vec<u8>, Vec<u8>)> {
+        use cosmwasm_std::Storage;
+        storage
+            .range(None, None, cosmwasm_std::Order::Ascending)
+            .collect()
+    }
+
+    #[test]
+    fn migrate_rejects_a_foreign_contract_name() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+        cw2::set_contract_version(&mut deps.storage, "crates.io:other-contract", "0.0.1").unwrap();
+        let before = storage_snapshot(&deps.storage);
+        let err = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap_err();
+        assert!(matches!(err, ContractError::InvalidMigration { .. }));
+        assert_eq!(storage_snapshot(&deps.storage), before); // nothing moved
+    }
+
+    #[test]
+    fn migrate_rejects_a_newer_stored_version_downgrade() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+        cw2::set_contract_version(&mut deps.storage, CONTRACT_NAME, "99.0.0").unwrap();
+        let before = storage_snapshot(&deps.storage);
+        let err = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap_err();
+        assert!(matches!(err, ContractError::MigrationDowngrade { .. }));
+        assert_eq!(storage_snapshot(&deps.storage), before);
+    }
+
+    #[test]
+    fn migrate_accepts_equal_version_idempotently() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+        let before = storage_snapshot(&deps.storage);
+        let res = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap();
+        assert!(res.messages.is_empty());
+        // Equal → idempotent: the marker re-stamps to identical bytes, so the
+        // WHOLE storage is byte-identical — the drill's step-5 property.
+        assert_eq!(storage_snapshot(&deps.storage), before);
+    }
+
+    #[test]
+    fn migrate_accepts_an_older_stored_version_and_advances_only_the_marker() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+        cw2::set_contract_version(&mut deps.storage, CONTRACT_NAME, "0.0.1").unwrap();
+        let before = storage_snapshot(&deps.storage);
+        let res = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap();
+        assert!(res
+            .attributes
+            .iter()
+            .any(|a| a.key == "from_version" && a.value == "0.0.1"));
+        let after = storage_snapshot(&deps.storage);
+        let marker_key = b"contract_info".to_vec();
+        let changed: Vec<_> = before
+            .iter()
+            .filter(|(k, v)| after.iter().find(|(k2, _)| k2 == k).map(|(_, v2)| v2) != Some(v))
+            .map(|(k, _)| k.clone())
+            .collect();
+        assert_eq!(changed, vec![marker_key]); // exactly the cw2 marker moved
+        let stored = cw2::get_contract_version(&deps.storage).unwrap();
+        assert_eq!(stored.version, CONTRACT_VERSION);
+        assert_eq!(stored.contract, CONTRACT_NAME);
+    }
+
+    #[test]
+    fn migrate_rejects_an_unparseable_stored_version() {
+        let mut deps = mock_dependencies();
+        let admin = deps.api.addr_make("admin");
+        let vault = deps.api.addr_make("vault");
+        setup(deps.as_mut(), &admin, &vault);
+        cw2::set_contract_version(&mut deps.storage, CONTRACT_NAME, "not-semver").unwrap();
+        let err = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap_err();
+        assert!(matches!(err, ContractError::InvalidMigrationVersion { .. }));
     }
 }

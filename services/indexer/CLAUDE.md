@@ -24,16 +24,21 @@ Read both before changing a worker, a cursor, or an idempotency guard.
   its Prisma schema and migrations live here and run as the `indexer_writer`
   role, the only role with write access. This service never touches the `app`
   schema. Migrations must run cleanly on an empty database.
-- **The schema is ONE baseline migration, not a history.** Nothing runs this
-  schema outside dev and CI, so there is no deployed database whose state a
-  migration has to reach: a schema change edits the models and is regenerated
-  into `prisma/migrations/20260715013707_init`, and every environment is rebuilt
-  (`./dev pg reset`, `migrate:deploy`) — indexed data is rebuildable from chain
-  by definition. Add an incremental migration only once a database exists whose
-  contents cannot be recreated. Regenerate with `prisma migrate diff
-  --from-empty --to-schema-datamodel prisma --script`, keeping the file's
-  hand-written header and its trailing constraints (which the datamodel cannot
-  express).
+- **Migration history is append-only from a frozen baseline** (PR 8.4a).
+  `prisma/migrations/20260715013707_init` is frozen migration 0 — never
+  regenerated or edited (`test/migration-freeze.test.ts` pins its SHA-256). A
+  schema change edits the models, then appends a new timestamped migration
+  produced with `prisma migrate diff --from-migrations --to-schema-datamodel
+  prisma --script`, hand-written SQL included where the datamodel cannot
+  express the constraint. The fold gate (app-ci "Migrations match the models",
+  `--from-migrations … --exit-code`) fails a model edit without its appended
+  migration and vice versa; migrations must still apply cleanly to an empty
+  database. `./dev pg reset` remains a dev convenience (it replays the chain),
+  not the schema-change procedure. Standing constraint in migration form: any
+  migration touching `gov_proposals.proposers` must preserve NOT NULL —
+  x/group requires at least one proposer and the generated client types the
+  list as required; the constraint lives as hand-written SQL because a list
+  column's nullability is not a Prisma datamodel property.
 - **Adding a column is a design-review event**, not a migration — edit the
   allowlist and record the rationale in the design notes.
 - Amount columns are `Decimal(39,0)`, never `Float`. Weight sums are also

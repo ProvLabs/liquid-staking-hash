@@ -111,6 +111,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       concentration_safety_offset_bps: c.concentrationSafetyOffsetBps.toString(),
       commission_bps: c.commissionBps.toString(),
       jail_unbond_delay_secs: c.jailUnbondDelaySecs.toString(),
+      // Omitted when the deployed build predates the field: the diff's
+      // current column then renders the honest "could not be read" gap.
+      ...(c.redemptionMarginBps === null
+        ? {}
+        : { redemption_margin_bps: c.redemptionMarginBps.toString() }),
     }))
     .catch(() => null);
 
