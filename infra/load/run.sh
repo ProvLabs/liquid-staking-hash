@@ -2,15 +2,11 @@
 # infra/load/run.sh — the k6 load-suite runner (8.2 §3.2). Driven as
 # `./dev load <scenario|all> [k6 args…]`.
 #
-# DEVNET ONLY (8.2 invariant 3): the target is HARDCODED to the in-network
-# `http://api:8080` compose service. Any attempt to point the harness at
-# another host is refused — a load tool aimed at a public endpoint is a DoS
-# tool, so the property is enforced in the runner, not documented.
+# Devnet only (8.2 invariant 3): target hardcoded in-network; a public-endpoint
+# load tool is a DoS tool.
 #
-# The latency scenarios expect the API to run with a RAISED RATE_LIMIT_MAX
-# (a latency figure measured while 429s are served is a number about the
-# limiter); the rate-limit scenario expects PRODUCTION DEFAULTS. Which config
-# produced which number goes in the delivery notes — the two must not blur.
+# Latency scenarios need the raised RATE_LIMIT_MAX, rate-limit the production
+# default (8.2 §2.3); every run preflights the live value.
 set -euo pipefail
 
 SDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,10 +22,49 @@ fi
 
 SCENARIOS=(public-mix personal operator internal admin csv-export deep-offset rate-limit)
 
+# Raised = config.ts upper bound; default = compose/production RATE_LIMIT_MAX.
+LATENCY_LIMIT=100000
+PROD_LIMIT=120
+
 usage() {
   echo "usage: ./dev load <scenario|all> [k6 args…]" >&2
   echo "scenarios: ${SCENARIOS[*]}" >&2
   exit 1
+}
+
+expected_limit() {
+  case "$1" in
+    rate-limit) echo "$PROD_LIMIT" ;;
+    *) echo "$LATENCY_LIMIT" ;;
+  esac
+}
+
+# Every response carries `ratelimit-limit` (stamped before route match), so this reads the live config.
+api_limit() {
+  "${COMPOSE[@]}" --profile app exec -T api node -e \
+    "fetch('http://127.0.0.1:8080/api/v1/health').then((r)=>{console.log(r.headers.get('ratelimit-limit'))}).catch(()=>process.exit(1))"
+}
+
+# Refuse a scenario whose required limiter profile does not match the running API.
+preflight() {
+  local scenario="$1" want got
+  want="$(expected_limit "$scenario")"
+  if ! got="$(api_limit)"; then
+    echo "run.sh: cannot read the api service's rate-limit config (is the app stack up?)" >&2
+    exit 1
+  fi
+  if [ "$got" != "$want" ]; then
+    echo "run.sh: api advertises ratelimit-limit=$got but scenario '$scenario' requires $want; refusing." >&2
+    echo "restart it: RATE_LIMIT_MAX=$want docker compose -f infra/dev/compose.yaml --profile app up -d --wait api" >&2
+    echo "(or use './dev load all', which switches profiles itself)" >&2
+    exit 1
+  fi
+}
+
+# Recreate the api service with the given RATE_LIMIT_MAX and wait for health.
+set_api_limit() {
+  echo "== api: RATE_LIMIT_MAX=$1 =="
+  RATE_LIMIT_MAX="$1" "${COMPOSE[@]}" --profile app up -d --wait api
 }
 
 run_one() {
@@ -37,6 +72,7 @@ run_one() {
   local found=0
   for s in "${SCENARIOS[@]}"; do [ "$s" = "$scenario" ] && found=1; done
   [ "$found" = 1 ] || usage
+  preflight "$scenario"
   echo "== k6: $scenario =="
   "${COMPOSE[@]}" --profile load run --rm \
     -e HEAVY_ADDRESS="${HEAVY_ADDRESS:-}" \
@@ -51,7 +87,13 @@ run_one() {
 CMD="${1:-}"; shift || true
 case "$CMD" in
   all)
-    for s in "${SCENARIOS[@]}"; do run_one "$s" "$@"; done
+    set_api_limit "$LATENCY_LIMIT"
+    for s in "${SCENARIOS[@]}"; do
+      [ "$s" = "rate-limit" ] && continue
+      run_one "$s" "$@"
+    done
+    set_api_limit "$PROD_LIMIT"
+    run_one rate-limit "$@"
     ;;
   "") usage ;;
   *) run_one "$CMD" "$@" ;;
