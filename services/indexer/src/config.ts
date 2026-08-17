@@ -17,6 +17,15 @@ export interface IndexerConfig {
   vaultAddress: string;
   /** vault share (receipt) denom — scopes NAV markers to this program. */
   receiptDenom: string;
+  /**
+   * First height the non-governance streams ingest when they have no
+   * checkpoint yet. Defaults to 1 (CometBFT heights are 1-based). In a
+   * deployed environment this is the contract's instantiate height: earlier
+   * blocks hold no program events by definition, and the epoch-history and
+   * validator-sampler streams anchor to `run_epoch` crank heights that cannot
+   * precede instantiate. Governance keeps its own `GOV_START_HEIGHT`.
+   */
+  indexStartHeight: number;
   /** heights to trail the chain head by; 0 is safe (Provenance instant finality). */
   confirmationDepth: number;
   /** max heights processed per window transaction. */
@@ -73,6 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): IndexerConfig 
     contractAddress: required(env, "CONTRACT_ADDRESS"),
     vaultAddress: required(env, "VAULT_ADDRESS"),
     receiptDenom: required(env, "RECEIPT_DENOM"),
+    indexStartHeight: boundedInt(env, "INDEX_START_HEIGHT", 1, 1),
     confirmationDepth: boundedInt(env, "CONFIRMATION_DEPTH", 0, 0),
     indexWindowSpan: boundedInt(env, "INDEX_WINDOW_SPAN", 500, 1),
     pollIntervalMs: boundedInt(env, "POLL_INTERVAL_MS", 5000, 100),
