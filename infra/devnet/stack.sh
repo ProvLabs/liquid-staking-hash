@@ -148,11 +148,15 @@ logs() {
 # run the requested command — the stale-bundle spec fails any older bundle.
 e2e() {
   resolve_addresses
+  # Stamp BEFORE the restart: the fresh bundle's started_at must postdate it.
+  E2E_LIVE_STACK_PREPARED_AT="${E2E_LIVE_STACK_PREPARED_AT:-$(date +%s)}"
+  export E2E_LIVE_STACK_PREPARED_AT
+  # Playwright runs in-network (./dev pw): compose service names, not localhost.
+  export E2E_LIVE_BASE_URL="${E2E_LIVE_BASE_URL:-http://web:3000}"
+  export E2E_LIVE_API_URL="${E2E_LIVE_API_URL:-http://api:8080}"
   echo "== restarting web (fresh bundle) =="
   "${COMPOSE[@]}" --profile db --profile app restart web
   "${COMPOSE[@]}" --profile db --profile app up -d --wait --wait-timeout 300 web
-  E2E_LIVE_STACK_PREPARED_AT="$(date +%s)"
-  export E2E_LIVE_STACK_PREPARED_AT
   echo "== stack prepared at $E2E_LIVE_STACK_PREPARED_AT; running: ${*:-e2e-live suite} =="
   if [ "$#" -gt 0 ]; then
     "$@"

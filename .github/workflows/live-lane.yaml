@@ -77,6 +77,8 @@ jobs:
         run: infra/devnet/stack.sh up
       - name: Jail drill with the app-observation hook
         run: |
+          E2E_LIVE_BASE_URL="http://web:3000" \
+          E2E_LIVE_API_URL="http://api:8080" \
           JAIL_OBSERVE_CMD="./dev pw --filter @nvhash/web exec playwright test --config playwright.live.config.ts e2e-live/drills/jail.spec.ts" \
             contracts/drills/jail-drill.sh
       - name: Tear the dedicated chain down

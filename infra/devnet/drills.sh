@@ -22,6 +22,11 @@ COMPOSE=(docker compose -f "$REPO/infra/dev/compose.yaml")
 CONTAINER="${CONTAINER:-dev-node}"
 API_URL="${API_URL:-http://localhost:8080}"
 
+# The specs run in the compose playwright container (./dev pw): in-network
+# service names, exported here so every phase spec sees them.
+export E2E_LIVE_BASE_URL="${E2E_LIVE_BASE_URL:-http://web:3000}"
+export E2E_LIVE_API_URL="${E2E_LIVE_API_URL:-http://api:8080}"
+
 # DEGRADED_STALE_SECONDS (apps/web chrome, in-code and not env-tunable) plus
 # one reconciler cadence: how long indexer-kill waits before observing.
 STALE_WAIT_SECONDS="${STALE_WAIT_SECONDS:-360}"
@@ -93,7 +98,11 @@ latest_chain_epoch() {
 
 phase_baseline() {
   echo "== phase: baseline (web restarted through stack.sh e2e conventions) =="
-  "$SDIR/stack.sh" e2e true # restart web + export prepared-at; run no suite
+  # Stamped HERE, before the restart, so it survives the stack.sh child
+  # process and reaches every later phase's Playwright run.
+  E2E_LIVE_STACK_PREPARED_AT="$(date +%s)"
+  export E2E_LIVE_STACK_PREPARED_AT
+  "$SDIR/stack.sh" e2e true # restart web; run no suite
   run_phase_spec baseline
 }
 

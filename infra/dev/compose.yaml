@@ -51,10 +51,24 @@ services:
     volumes:
       - ../..:/repo
       - playwright-home:/home/pw
+    # List form: the E2E_* passthroughs stay UNSET in the container when unset
+    # on the host — the live specs' skip guards test for undefined.
     environment:
-      HOME: /home/pw
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      CI: "${CI:-}"
+      - HOME=/home/pw
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+      - CI=${CI:-}
+      - E2E_LIVE_BASE_URL
+      - E2E_LIVE_API_URL
+      - E2E_LIVE_LCD_URL
+      - E2E_LIVE_VAULT_ADDRESS
+      - E2E_LIVE_SIGNER_KEY
+      - E2E_LIVE_OPERATOR_KEY
+      - E2E_LIVE_GOV_MEMBER_KEY
+      - E2E_LIVE_STACK_PREPARED_AT
+      - E2E_LIVE_DRILL_HISTORY
+      - E2E_DRILL_PHASE
+      - E2E_JAIL_VALOPER
+      - E2E_JAIL_EXPECT
     networks: [nvhash-dev]
 
   # Disposable dev/test database (M1+: Prisma migrations, the ADR-001

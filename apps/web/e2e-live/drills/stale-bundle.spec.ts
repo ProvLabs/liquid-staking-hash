@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 
 const PREPARED_AT = process.env.E2E_LIVE_STACK_PREPARED_AT;
 test.skip(
-  PREPARED_AT === undefined,
+  PREPARED_AT === undefined || PREPARED_AT === "",
   "E2E_LIVE_STACK_PREPARED_AT not set (run through `stack.sh e2e`)",
 );
 

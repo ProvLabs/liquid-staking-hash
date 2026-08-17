@@ -54,8 +54,10 @@ export_hex() {
 }
 
 resolve
-LCD_URL_OUT="${E2E_LIVE_LCD_URL:-http://localhost:1317}"
-BASE_URL_OUT="${E2E_LIVE_BASE_URL:-http://localhost:3000}"
+# In-network defaults: the sanctioned runner is the compose playwright
+# container (./dev pw), where localhost is the container itself.
+LCD_URL_OUT="${E2E_LIVE_LCD_URL:-http://dev-node:1317}"
+BASE_URL_OUT="${E2E_LIVE_BASE_URL:-http://web:3000}"
 
 echo "export E2E_LIVE_SIGNER_KEY=$(export_hex "$SIGNER_NAME")"
 echo "export E2E_LIVE_GOV_MEMBER_KEY=$(export_hex account-2)"
