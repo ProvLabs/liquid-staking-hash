@@ -331,6 +331,18 @@ jobs:
       - name: Typecheck (tsc -b)
         if: needs.changes.outputs.app == 'true'
         run: npm run typecheck
+      # §10.1's compile-time exclusion as a gate: the test build must carry no
+      # devnet-key material, and its generated CSP must pin the test LCD
+      # origin. Built before vitest so the csp suite reads the real dist/.
+      - name: Build (test profile) and scan the bundle
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          npm run build:test
+          node scripts/check-bundle.mjs
+          node scripts/check-certification-caveat.mjs
+      - name: Test (vitest — grammar, honesty matrices, tx encodings, CSP)
+        if: needs.changes.outputs.app == 'true'
+        run: npm test
 
   shell-lint:
     name: shellcheck (devnet + tooling scripts)
@@ -355,12 +367,9 @@ jobs:
   # docs/security/dependency-audit-exceptions.md — no --audit-level floor, no
   # --ignore flags, no continue-on-error.
   #
-  # KNOWN GAP, recorded rather than implied (8.0b plan §7.1 Q5): apps/console
-  # is outside the pnpm workspace (pnpm-workspace.yaml), so this audit cannot
-  # see it and nothing in CI audits its dependencies yet. Console coverage is
-  # deferred to PR 8.4b (which opens the console's CI job), backstopped by the
-  # 8.5 pre-release security review — SECURITY.md names the gap for the same
-  # reason.
+  # apps/console is outside the pnpm workspace, so the workspace audit cannot
+  # see it — its lockfile gets its own npm audit step below (8.4b), same
+  # posture.
   audit:
     name: workspace · pnpm audit (advisory database, unguarded)
     runs-on: ubuntu-latest
@@ -381,5 +390,9 @@ jobs:
       # install is needed, so a compromised postinstall can never run here.
       - name: Audit pnpm-lock.yaml (production + dev)
         run: corepack pnpm audit
+      # Lockfile-only, same posture: no install, no postinstall.
+      - name: Audit apps/console package-lock.json (production + dev)
+        working-directory: apps/console
+        run: npm audit
       - name: Every exception has an owner (register ↔ machine lists, both directions)
         run: node scripts/check-audit-exceptions.mjs

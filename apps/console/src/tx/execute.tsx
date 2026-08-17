@@ -1,9 +1,7 @@
-// Transaction lifecycle (spec §10.2) + tiered confirmation (§10.4) + toasts.
-// The confirm sheet always shows the human action, the exact message JSON behind a
-// disclosure, and the fee: "the console never signs anything it did not render" (§12).
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { config } from "@/config";
 import { useWallet } from "@/tx/wallet";
+import type { Fee } from "@/tx/build";
 import type { ExecuteMsg } from "@/tx/messages";
 
 export type ConfirmTier = "standard" | "warning" | "danger";
@@ -30,13 +28,42 @@ interface TxState {
 }
 const TxCtx = createContext<TxState | null>(null);
 
+type FeeState =
+  | { state: "none" } // mock mode: nothing is simulated and nothing broadcasts
+  | { state: "loading" }
+  | { state: "priced"; fee: Fee }
+  | { state: "failed"; reason: string };
+
 export function TxProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet();
   const [pending, setPending] = useState<SubmitOpts | null>(null);
   const [typed, setTyped] = useState("");
   const [ack, setAck] = useState(false);
+  const [feeState, setFeeState] = useState<FeeState>({ state: "none" });
   const [toasts, setToasts] = useState<Toast[]>([]);
   let toastSeq = 0;
+
+  useEffect(() => {
+    if (pending === null || wallet.devnetKeyMode) {
+      setFeeState({ state: "none" });
+      return;
+    }
+    let cancelled = false;
+    setFeeState({ state: "loading" });
+    wallet
+      .estimateFee(pending.message, pending.funds ?? [])
+      .then((fee) => {
+        if (!cancelled) setFeeState({ state: "priced", fee });
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setFeeState({ state: "failed", reason: e instanceof Error ? e.message : String(e) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pending, wallet]);
 
   const pushToast = (t: Omit<Toast, "id">): number => {
     const id = ++toastSeq + toasts.length + 1;
@@ -74,6 +101,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
   const needsTyped = tier === "danger";
   const typedOk = !needsTyped || typed.trim() === pending?.title;
   const ackOk = !needsAck || ack;
+  const feeOk = feeState.state === "none" || feeState.state === "priced";
 
   return (
     <TxCtx.Provider value={{ submit }}>
@@ -92,16 +120,21 @@ export function TxProvider({ children }: { children: ReactNode }) {
                 {pending.consequence}
               </div>
             )}
-            {/* §17 honesty: this said "simulated at gas × 1905nhash (×1.3)" —
-                a fee that was never computed (no simulate runs here), on a
-                basis the chain rejects. Under Provenance flat fees the cost is
-                a deterministic per-message amount the chain's own Simulate
-                returns; there is no gas × price math to state. Say what is
-                actually true until the §14.1 wallet adapter lands. */}
-            <div className="muted" style={{ fontSize: 13 }}>
-              Fee: not estimated here. Provenance charges a fixed per-message fee, taken from the
-              chain&rsquo;s simulate result when signing is wired (§14.1).
-              {config.mock ? " Mock mode does not broadcast." : ""}
+            <div className="muted" style={{ fontSize: 13 }} data-fee-state={feeState.state}>
+              {feeState.state === "none" ? (
+                <>Fee: none — {config.mock ? "mock mode" : "devnet key mode"} does not broadcast.</>
+              ) : feeState.state === "loading" ? (
+                <>Fee: simulating…</>
+              ) : feeState.state === "priced" ? (
+                <>
+                  Fee: {feeState.fee.amount.toString()}nhash — the chain&rsquo;s flat per-message
+                  fee, from its simulate result, verbatim.
+                </>
+              ) : (
+                <span style={{ color: "var(--status-serious)" }}>
+                  Simulation failed — nothing was signed. Chain said: {feeState.reason}
+                </span>
+              )}
             </div>
             <details className="disclosure">
               <summary className="muted" style={{ cursor: "pointer" }}>
@@ -128,7 +161,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 className={`btn ${tier === "danger" ? "btn--danger" : tier === "warning" ? "btn--warning" : "btn--primary"}`}
-                disabled={!typedOk || !ackOk}
+                disabled={!typedOk || !ackOk || !feeOk}
                 onClick={confirm}
               >
                 Confirm

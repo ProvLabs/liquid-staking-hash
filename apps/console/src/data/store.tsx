@@ -1,6 +1,3 @@
-// Data layer store (spec §9). Owns polling, cache, freshness, the epoch ledger, and role
-// detection. Hooks return { data, fetchedAt, error }. Mock mode loads fixtures once and
-// seeds the ledger; real mode polls the LCD in three tiers (§9.2) and appends snapshots.
 import {
   createContext,
   useCallback,
@@ -12,9 +9,24 @@ import {
   type ReactNode,
 } from "react";
 import { config } from "@/config";
-import { smartQuery, vaultQuery, pendingSwapOuts, stakingTotals, latestBlock } from "@/data/lcd";
+import {
+  smartQuery,
+  vaultQuery,
+  pendingSwapOuts,
+  stakingTotals,
+  latestBlock,
+  groupPolicyInfo,
+  groupInfo,
+  groupPoliciesByGroup,
+  groupMembers,
+  proposalsByPolicy,
+  proposalTally,
+  votesByProposal,
+} from "@/data/lcd";
 import { ledgerAll, ledgerAppend, ledgerSeed } from "@/data/ledger";
-import * as fx from "@/data/fixtures";
+
+const MOCK_AVAILABLE = import.meta.env.MODE === "devnet";
+import type { GovProposalRow, GovProposals, GovTopology } from "@/lib/governance";
 import { useWallet, type Role } from "@/tx/wallet";
 import type {
   AprResponse,
@@ -50,12 +62,17 @@ interface StoreData {
   deployment: Cell<DeploymentSplit>;
   block: Cell<{ height: number; timeSecs: number }>;
   ledger: LedgerRow[];
+  govTopology: Cell<GovTopology>;
+  govProposals: Cell<GovProposals>;
 }
 
 interface StoreState extends StoreData {
   nowSecs: number;
   stale: boolean;
   role: Role;
+  /** True once the persisted epoch ledger has been read (even if empty) —
+   *  "no rows" is a fact only after this; before it, absence is unknown. */
+  ledgerLoaded: boolean;
   refresh: (keys?: (keyof StoreData)[]) => void;
 }
 
@@ -79,10 +96,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deployment: empty(),
     block: empty(),
     ledger: [],
+    govTopology: empty(),
+    govProposals: empty(),
   });
   const [nowSecs, setNowSecs] = useState(Math.floor(Date.now() / 1000));
   const missesRef = useRef(0);
   const [stale, setStale] = useState(false);
+  const [ledgerLoaded, setLedgerLoaded] = useState(false);
 
   // ticking clock for countdowns (§11.5)
   useEffect(() => {
@@ -90,13 +110,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, []);
 
-  // Mutable mirror of the store for the async loaders. The poll intervals are
-  // mount-scoped, so an interval-held closure reading `d` directly would be
-  // frozen at the first (empty) state forever: vault/swapOuts would never see
-  // config, deployment would compute against zero balances, and the ledger
-  // would never append. `set` updates the mirror synchronously (ahead of the
-  // React commit) so loaders always read the latest cells, including ones
-  // written earlier in the same poll pass.
   const dRef = useRef(d);
 
   const set = useCallback(<K extends keyof StoreData>(key: K, value: StoreData[K]) => {
@@ -105,6 +118,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadMock = useCallback(async () => {
+    if (!MOCK_AVAILABLE) return;
+    const fx = await import("@/data/fixtures");
     set("config", { data: fx.mockConfig, fetchedAt: now(), error: null });
     set("epoch", { data: fx.mockEpochStatus, fetchedAt: now(), error: null });
     set("validators", { data: fx.mockValidators, fetchedAt: now(), error: null });
@@ -114,6 +129,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     set("vault", { data: fx.mockVault, fetchedAt: now(), error: null });
     set("swapOuts", { data: fx.mockSwapOuts, fetchedAt: now(), error: null });
     set("deployment", { data: fx.mockDeployment, fetchedAt: now(), error: null });
+    set("govTopology", { data: fx.mockGovTopology, fetchedAt: now(), error: null });
+    set("govProposals", { data: fx.mockGovProposals, fetchedAt: now(), error: null });
     set("block", {
       data: { height: fx.mockSnapshot.end_height, timeSecs: nowSecs },
       error: null,
@@ -143,11 +160,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!want(key)) return;
         await fetchCell(key, fn);
       };
-      // Config gates the vault/swapOut queries (it carries the vault address),
-      // so resolve it before the concurrent pass whenever it is wanted or has
-      // never loaded — the first real-mode poll then completes in one pass.
       if (want("config") || !dRef.current.config.data) {
         await fetchCell("config", () => smartQuery<ConfigResponse>({ config: {} }));
+      }
+      if (want("govTopology") || (want("govProposals") && !dRef.current.govTopology.data)) {
+        await fetchCell("govTopology", async () => {
+          const cfg = dRef.current.config.data;
+          if (!cfg) throw new Error("config not loaded");
+          const lookup = await groupPolicyInfo(cfg.admin);
+          if (!lookup.found) return { state: "no-group" } as GovTopology;
+          const groupId = lookup.info.group_id;
+          const [policies, members, group] = await Promise.all([
+            groupPoliciesByGroup(groupId),
+            groupMembers(groupId),
+            groupInfo(groupId).catch(() => null),
+          ]);
+          return { state: "governed", groupId, group, policies, members } as GovTopology;
+        });
       }
       await Promise.all([
         one("epoch", () => smartQuery<EpochStatusResponse>({ epoch_status: {} })),
@@ -170,9 +199,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!cfg) throw new Error("config not loaded");
           return pendingSwapOuts(cfg.vault_address);
         }),
+        one("govProposals", async () => {
+          const topo = dRef.current.govTopology.data;
+          if (!topo) throw new Error("group topology not loaded");
+          if (topo.state !== "governed") return { rows: [], truncated: false } as GovProposals;
+          let truncated = false;
+          const rows: GovProposalRow[] = [];
+          for (const policy of topo.policies.items) {
+            const page = await proposalsByPolicy(policy.address);
+            truncated = truncated || page.truncated;
+            for (const proposal of page.items) {
+              const row: GovProposalRow = {
+                proposal,
+                policyAddress: policy.address,
+                liveTally: null,
+                liveTallyError: null,
+                votes: null,
+              };
+              if (proposal.status === "PROPOSAL_STATUS_SUBMITTED") {
+                try {
+                  row.liveTally = await proposalTally(proposal.id);
+                } catch (e) {
+                  row.liveTallyError = e instanceof Error ? e.message : String(e);
+                }
+                row.votes = await votesByProposal(proposal.id).catch(() => null);
+              }
+              rows.push(row);
+            }
+          }
+          return { rows, truncated } as GovProposals;
+        }),
         one("deployment", async () => {
-          // delegated + unbonding fetched fresh; liquid/pending use last-known vault/epoch
-          // (they converge within a tick). Falls back to 0 before those first resolve.
           const { delegated, unbonding } = await stakingTotals(config.contractAddress);
           const liquid = dRef.current.vault.data?.principal_liquid_nhash ?? "0";
           const pending = (dRef.current.epoch.data?.pending_delegations ?? []).reduce(
@@ -201,26 +258,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(
     (keys?: (keyof StoreData)[]) => {
-      if (config.mock) void loadMock();
+      if (MOCK_AVAILABLE && config.mock) void loadMock();
       else void loadReal(keys);
     },
     [loadMock, loadReal],
   );
 
+  useEffect(() => {
+    void ledgerAll().then((rows) => {
+      if (rows.length > 0) set("ledger", rows);
+      setLedgerLoaded(true);
+    });
+  }, [set]);
+
   // initial load + real-mode poll tiers (§9.2)
   useEffect(() => {
     refresh();
-    if (config.mock) return;
+    if (MOCK_AVAILABLE && config.mock) return;
     const fast = window.setInterval(
       () => loadReal(["epoch", "block", "vault"]),
       config.pollFastSecs * 1000,
     );
     const med = window.setInterval(
-      () => loadReal(["validators", "jail", "swapOuts", "deployment"]),
+      () => loadReal(["validators", "jail", "swapOuts", "deployment", "govProposals"]),
       config.pollMedSecs * 1000,
     );
     const slow = window.setInterval(
-      () => loadReal(["config", "snapshot", "apr"]),
+      () => loadReal(["config", "snapshot", "apr", "govTopology"]),
       config.pollSlowSecs * 1000,
     );
     return () => {
@@ -240,7 +304,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return "keeper";
   }, [wallet.address, d.config.data, d.validators.data]);
 
-  const value: StoreState = { ...d, nowSecs, stale, role, refresh };
+  const value: StoreState = { ...d, nowSecs, stale, role, ledgerLoaded, refresh };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }
 
@@ -261,5 +325,8 @@ export const useVault = () => useStore().vault;
 export const useSwapOuts = () => useStore().swapOuts;
 export const useDeployment = () => useStore().deployment;
 export const useLedger = () => useStore().ledger;
+export const useLedgerLoaded = () => useStore().ledgerLoaded;
+export const useGovTopology = () => useStore().govTopology;
+export const useGovProposals = () => useStore().govProposals;
 export const useNow = () => useStore().nowSecs;
 export const useRole = () => useStore().role;

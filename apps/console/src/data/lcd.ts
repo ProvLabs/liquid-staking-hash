@@ -1,24 +1,64 @@
-// LCD read transport (spec §5, §13). Smart queries over the CosmWasm route;
-// module/vault reads over their REST paths. The console's sole data transport for reads.
 import { config } from "@/config";
-import type { PendingSwapOut, VaultInfo } from "@/lib/types";
+import type {
+  Bounded,
+  GroupInfo,
+  GroupMember,
+  GroupPolicyInfo,
+  GroupProposal,
+  GroupVote,
+  PendingSwapOut,
+  TallyCounts,
+  VaultInfo,
+} from "@/lib/types";
 
-// Under Vite (dev + `vite preview`) route reads through the same-origin `/lcd` proxy so the
-// browser never makes a cross-origin request to the node (avoids CORS in local dev, see
-// vite.config.ts). A real deployed build talks to the absolute lcd_url, which must itself
-// send CORS for the console origin (spec §14.2).
 const LCD_BASE = import.meta.env.DEV || import.meta.env.MODE === "preview" ? "/lcd" : config.lcdUrl;
 
 function b64(json: unknown): string {
-  // The LCD gateway decodes query_data with Go's StdEncoding (standard base64, padded).
-  // URL-safe base64 is rejected once a payload contains '+' or '/', so use standard here.
   const s = JSON.stringify(json);
   return btoa(unescape(encodeURIComponent(s)));
 }
 
+/** An LCD non-2xx, with the status recoverable by callers that must
+ *  distinguish a 404 fact from every other failure (chain-facts §x/group 8). */
+export class LcdError extends Error {
+  readonly status: number;
+  constructor(status: number, path: string) {
+    super(`LCD ${status} ${path}`);
+    this.status = status;
+  }
+}
+
 async function getJson(path: string): Promise<any> {
   const res = await fetch(`${LCD_BASE}${path}`, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`LCD ${res.status} ${path}`);
+  if (!res.ok) throw new LcdError(res.status, path);
+  return res.json();
+}
+
+/** Status-aware GET for callers that must react to a specific status (the
+ *  broadcast poller's 404-means-not-yet-included); throws LcdError otherwise. */
+export async function lcdGetJson(path: string): Promise<unknown> {
+  return getJson(path);
+}
+
+/** POST with the chain's own error surfaced VERBATIM (spec §17: a simulate or
+ *  broadcast failure shows what the chain said, not a paraphrase). */
+export async function lcdPostJson(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(`${LCD_BASE}${path}`, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown };
+      if (typeof parsed.message === "string") detail = parsed.message;
+    } catch {
+      // non-JSON error body: surface the raw text
+    }
+    throw new Error(`LCD ${res.status} ${path}: ${detail}`);
+  }
   return res.json();
 }
 
@@ -29,10 +69,6 @@ export async function smartQuery<T>(queryMsg: unknown): Promise<T> {
   return body.data as T;
 }
 
-/** Vault REST read (spec §14.2), reconciled against the live devnet shape (2026-07-10):
- *  { vault: { total_shares:{denom,amount}, withdrawal_delay_seconds:"<str>", paused,
- *             paused_reason }, principal: { address, coins:[{denom,amount}] } }.
- *  This build exposes no `total_vault_value`; NAV/TVV fall back to the contract snapshot. */
 export async function vaultQuery(vaultAddress: string): Promise<VaultInfo> {
   const body = await getJson(`/vault/v1/vaults/${vaultAddress}`);
   const v = body.vault ?? {};
@@ -60,9 +96,6 @@ async function estimateSwapOut(vaultAddress: string, sharesAmount: string): Prom
   return amount;
 }
 
-/** Vault pending swap-out queue (paginated). Rows are PendingSwapOutWithTimeout:
- *  { request_id, pending_swap_out: { owner, shares: Coin, redeem_denom }, timeout }.
- *  Parse strictly; a silent default here would lie about real requests (spec §17). */
 export async function pendingSwapOuts(vaultAddress: string): Promise<PendingSwapOut[]> {
   const rows: Omit<PendingSwapOut, "estimate_nhash">[] = [];
   let key: string | null = null;
@@ -126,4 +159,80 @@ export async function latestBlock(): Promise<{ height: number; timeSecs: number 
     height: Number(header.height ?? 0),
     timeSecs: header.time ? Math.floor(new Date(header.time).getTime() / 1000) : 0,
   };
+}
+
+/** Per-read page caps (100 rows/page, the module's own page size). */
+export const GOV_PROPOSAL_PAGE_CAP = 10;
+export const GOV_VOTE_PAGE_CAP = 5;
+export const GOV_MEMBER_PAGE_CAP = 5;
+export const GOV_POLICY_PAGE_CAP = 2;
+
+/** Follow `pagination.next_key` to exhaustion under `pageCap`; a next_key
+ *  surviving the cap marks the result truncated — a prefix, not the set. */
+async function pagedList<T>(path: string, field: string, pageCap: number): Promise<Bounded<T>> {
+  const items: T[] = [];
+  let key: string | null = null;
+  for (let page = 0; page < pageCap; page++) {
+    const q = new URLSearchParams({ "pagination.limit": "100" });
+    if (key) q.set("pagination.key", key);
+    const body = await getJson(`${path}${path.includes("?") ? "&" : "?"}${q}`);
+    for (const row of body[field] ?? []) items.push(row as T);
+    key = body.pagination?.next_key ?? null;
+    if (!key) return { items, truncated: false };
+  }
+  return { items, truncated: true };
+}
+
+export async function groupPolicyInfo(
+  address: string,
+): Promise<{ found: true; info: GroupPolicyInfo } | { found: false }> {
+  try {
+    const body = await getJson(`/cosmos/group/v1/group_policy_info/${encodeURIComponent(address)}`);
+    return { found: true, info: body.info as GroupPolicyInfo };
+  } catch (e) {
+    if (e instanceof LcdError && e.status === 404) return { found: false };
+    throw e;
+  }
+}
+
+export async function groupInfo(groupId: string): Promise<GroupInfo> {
+  const body = await getJson(`/cosmos/group/v1/group_info/${encodeURIComponent(groupId)}`);
+  return body.info as GroupInfo;
+}
+
+export async function groupPoliciesByGroup(groupId: string): Promise<Bounded<GroupPolicyInfo>> {
+  return pagedList(
+    `/cosmos/group/v1/group_policies_by_group/${encodeURIComponent(groupId)}`,
+    "group_policies",
+    GOV_POLICY_PAGE_CAP,
+  );
+}
+
+export async function groupMembers(groupId: string): Promise<Bounded<GroupMember>> {
+  return pagedList(
+    `/cosmos/group/v1/group_members/${encodeURIComponent(groupId)}`,
+    "members",
+    GOV_MEMBER_PAGE_CAP,
+  );
+}
+
+export async function proposalsByPolicy(policyAddress: string): Promise<Bounded<GroupProposal>> {
+  return pagedList(
+    `/cosmos/group/v1/proposals_by_group_policy/${encodeURIComponent(policyAddress)}`,
+    "proposals",
+    GOV_PROPOSAL_PAGE_CAP,
+  );
+}
+
+export async function proposalTally(proposalId: string): Promise<TallyCounts> {
+  const body = await getJson(`/cosmos/group/v1/proposals/${encodeURIComponent(proposalId)}/tally`);
+  return body.tally as TallyCounts;
+}
+
+export async function votesByProposal(proposalId: string): Promise<Bounded<GroupVote>> {
+  return pagedList(
+    `/cosmos/group/v1/votes_by_proposal/${encodeURIComponent(proposalId)}`,
+    "votes",
+    GOV_VOTE_PAGE_CAP,
+  );
 }

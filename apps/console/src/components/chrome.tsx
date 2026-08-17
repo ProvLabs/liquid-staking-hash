@@ -1,11 +1,9 @@
-// Global chrome (spec §8.0): top bar, computed banner stack, grouped role-gated nav,
-// freshness footer. Environment certainty and program health are ambient, never hidden.
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { config, isMainnet } from "@/config";
 import { relTime } from "@/lib/format";
 import { useStore } from "@/data/store";
-import { useWallet, MOCK_IDENTITIES } from "@/tx/wallet";
+import { useWallet } from "@/tx/wallet";
 import { Pill } from "@/components/ui";
 
 type ThemeChoice = "auto" | "light" | "dark";
@@ -60,7 +58,31 @@ function WalletButton() {
   const wallet = useWallet();
   const { role } = useStore();
   const [open, setOpen] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   if (!wallet.address) {
+    if (!wallet.devnetKeyMode) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={() => {
+              setConnectError(null);
+              wallet.connect().catch((e) => {
+                setConnectError(e instanceof Error ? e.message : String(e));
+              });
+            }}
+          >
+            Connect wallet
+          </button>
+          {connectError && (
+            <span role="status" style={{ color: "var(--status-serious)", fontSize: 11 }}>
+              {connectError}
+            </span>
+          )}
+        </div>
+      );
+    }
     return (
       <div style={{ position: "relative" }}>
         <button
@@ -83,19 +105,19 @@ function WalletButton() {
             }}
           >
             <div className="muted-3" style={{ fontSize: 11, padding: "2px 6px" }}>
-              {config.mock ? "mock identities" : "wallet"}
+              {config.mock ? "mock identities" : "devnet identities"}
             </div>
-            {MOCK_IDENTITIES.map((m) => (
+            {wallet.mockIdentityLabels.map((label) => (
               <button
                 type="button"
-                key={m.label}
+                key={label}
                 className="sidenav__link"
                 onClick={() => {
-                  void wallet.connect(m.label);
+                  void wallet.connect(label);
                   setOpen(false);
                 }}
               >
-                {m.label}
+                {label}
               </button>
             ))}
           </div>
@@ -206,6 +228,7 @@ export function SideNav() {
         {link("/validators", "Validators")}
         {link("/redemptions", "Redemptions")}
         {link("/jail", "Jail Watch")}
+        {link("/governance", "Governance")}
       </div>
       <div className="sidenav__group">
         <div className="sidenav__caption">Operate</div>
@@ -228,6 +251,11 @@ export function Footer() {
       <span className="mono">{config.contractAddress.slice(0, 16)}…</span>
       <span>vault {cfg.data ? `${cfg.data.vault_address.slice(0, 12)}…` : "—"}</span>
       <span>console spec v2.0-RC1</span>
+      {__CORPUS_CERTIFIED__ ? null : (
+        <span className="pill pill--warning" data-certification-caveat>
+          pre-certification build (feature-probe vetted, no formal vault release)
+        </span>
+      )}
     </footer>
   );
 }

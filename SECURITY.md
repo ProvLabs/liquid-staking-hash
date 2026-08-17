@@ -116,9 +116,10 @@ in [`contracts/IMPLEMENTATION-STATUS.md`](contracts/IMPLEMENTATION-STATUS.md).
   [`docs/security/dependency-audit-exceptions.md`](docs/security/dependency-audit-exceptions.md),
   cross-checked both directions by `scripts/check-audit-exceptions.mjs`.
   Blanket allowances (`--audit-level` floors, `continue-on-error`,
-  workflow-side ignore flags) are prohibited. **Known gap:** `apps/console`
-  is outside the pnpm workspace and is audited by nothing yet; its coverage
-  lands with PR 8.4b, backstopped by the 8.5 pre-release security review.
+  workflow-side ignore flags) are prohibited. `apps/console` sits outside the
+  pnpm workspace, so its standalone `package-lock.json` gets its own
+  `npm audit` step in the same CI job, under the same posture (dev
+  dependencies in scope, no floors, no ignore flags).
 
 ### Development environment (`infra/devnet/`)
 

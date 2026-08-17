@@ -4,13 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Self-contained delivery (spec §12): strict CSP, only the configured LCD as a
-         network peer. connect-src enumerates the known profile LCD hosts plus localhost
-         for the devnet profile — never a blanket https: (SECURITY.md: injected code must
-         not be able to exfiltrate to arbitrary hosts). A deployment on a different LCD
-         adjusts this list (or tightens it further via server headers). -->
+         network peer. connect-src is GENERATED per profile from VITE_LCD_URL — the
+         token below is replaced by vite.config.ts (scripts/csp.ts, which throws on
+         anything wider than one exact origin) — never a hand-edited host list and
+         never a blanket https: (SECURITY.md: injected code must not be able to
+         exfiltrate to arbitrary hosts). Server headers may tighten further (8.4). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://localhost:* https://lcd.provenance.io https://lcd.test.provenance.io; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'"
+      content="default-src 'self'; connect-src __CSP_CONNECT_SRC__; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'"
     />
     <title>nvHASH Console</title>
     <!-- Pre-paint theme resolution so the first frame is the right surface (no flash). -->

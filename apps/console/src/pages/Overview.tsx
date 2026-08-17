@@ -1,15 +1,16 @@
-// Overview (spec §8.1). Verification dashboard, no write controls. Ranking (DESIGN-NOTES §1):
-// 1) headline health numbers -> 2) invariant proof row -> 3) trends -> 4) deployment -> 5) history.
 import {
   useApr,
   useDeployment,
   useEpoch,
   useLedger,
+  useLedgerLoaded,
   useNow,
   useSnapshot,
   useVault,
   useValidators,
 } from "@/data/store";
+import { anchorMissNotice } from "@/lib/anchors";
+import { useAnchor } from "@/lib/use-anchor";
 import { StatTile, Pill, Panel, Cell } from "@/components/ui";
 import { StepLine, SignedBars, StackedBar } from "@/charts/charts";
 import { hash, shares, pct, humanDuration, relTime, toBig } from "@/lib/format";
@@ -33,7 +34,11 @@ export function Overview() {
   const epoch = useEpoch();
   const deploy = useDeployment();
   const ledger = useLedger();
+  const ledgerLoaded = useLedgerLoaded();
   const now = useNow();
+  const { anchor, state: anchorState } = useAnchor("epoch", ledgerLoaded, (a) =>
+    ledger.some((r) => r.epoch_index === a.index),
+  );
 
   const nav = navFromSources(vault.data, snap.data);
   const tvv = tvvFromSources(vault.data, snap.data);
@@ -52,7 +57,17 @@ export function Overview() {
         </p>
       </div>
 
-      {/* Rank 1: headline numbers */}
+      {anchorState === "missing" && anchor && (
+        <div className="callout callout--info" role="status">
+          {anchorMissNotice(anchor, {
+            ledgerCoverage:
+              ledger.length > 0
+                ? `epochs #${Math.min(...ledger.map((r) => r.epoch_index))}–#${Math.max(...ledger.map((r) => r.epoch_index))}`
+                : undefined,
+          })}
+        </div>
+      )}
+
       <div className="grid-tiles">
         <StatTile
           label="NAV per share"
@@ -78,14 +93,12 @@ export function Overview() {
         />
       </div>
 
-      {/* Rank 2: proof row - the honesty surface, first-class (spec §17.1) */}
       <Panel title="Proof">
         <div className="row" style={{ alignItems: "center", gap: 12 }}>
           <ProofPills />
         </div>
       </Panel>
 
-      {/* Health strip */}
       <Panel title="Health">
         <Cell cell={epoch}>
           {(e) => {
@@ -113,7 +126,6 @@ export function Overview() {
         </Cell>
       </Panel>
 
-      {/* Rank 3: trends */}
       <div className="grid-2">
         <StepLine
           title="NAV over time"
@@ -140,7 +152,6 @@ export function Overview() {
         </Cell>
       </div>
 
-      {/* Rank 4: deployment split with receipt cross-check */}
       <Cell cell={deploy}>
         {(d) => {
           const inv = receiptInvariant(toBig(epoch.data?.receipt_minted ?? "0"), d);
@@ -167,7 +178,6 @@ export function Overview() {
         }}
       </Cell>
 
-      {/* Rank 5: epoch history */}
       <Panel title="Epoch history">
         {ledger.length === 0 ? (
           <p className="muted">
@@ -188,7 +198,7 @@ export function Overview() {
               </thead>
               <tbody>
                 {[...ledger].reverse().map((r) => (
-                  <tr key={r.epoch_index}>
+                  <tr key={r.epoch_index} id={`epoch-${r.epoch_index}`}>
                     <td className="tnum">#{r.epoch_index}</td>
                     <td>{humanDuration(r.ended_at_seconds - r.started_at_seconds)}</td>
                     <td className="num tnum">{hash(r.rewards_claimed)} HASH</td>

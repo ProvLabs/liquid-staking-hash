@@ -1,6 +1,3 @@
-// Validators (spec §8.2). Priority-ordered participation table. Ranking (DESIGN-NOTES §2):
-// 1) who is eligible and WHY (itemized) -> 2) priority/drain order -> 3) arrears -> 4) uptime
-// -> 5) row actions (subordinate, behind expansion). Filters never re-sort or recolor.
 import { Fragment, useState } from "react";
 import { useConfig, useValidators } from "@/data/store";
 import { useRole } from "@/data/store";
@@ -9,6 +6,8 @@ import { msg } from "@/tx/messages";
 import { StatTile, Pill, Panel, AddressChip, Cell, type Tone } from "@/components/ui";
 import { DotStrip } from "@/charts/charts";
 import { hash, pct, absTime } from "@/lib/format";
+import { anchorMissNotice } from "@/lib/anchors";
+import { useAnchor } from "@/lib/use-anchor";
 import type { ValidatorStatus } from "@/lib/types";
 
 function monikerOf(valoper: string): string {
@@ -38,6 +37,12 @@ export function Validators() {
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const { anchor, state: anchorState } = useAnchor(
+    "validator",
+    vals.data !== null && vals.error === null,
+    (a) => (vals.data?.validators ?? []).some((v) => v.valoper === a.valoper),
+    (a) => setExpanded(a.valoper),
+  );
 
   const threshold = cfg.data?.performance_threshold_bps ?? 9500;
 
@@ -49,6 +54,12 @@ export function Validators() {
           Enrolled validators in program-priority order (rank 1 = highest priority = last drained).
         </p>
       </div>
+
+      {anchorState === "missing" && anchor && (
+        <div className="callout callout--info" role="status">
+          {anchorMissNotice(anchor)}
+        </div>
+      )}
 
       <Cell cell={vals}>
         {(data) => {
@@ -131,6 +142,7 @@ export function Validators() {
                         return (
                           <Fragment key={v.valoper}>
                             <tr
+                              id={`val-${v.valoper}`}
                               onClick={() => setExpanded(isOpen ? null : v.valoper)}
                               style={{ cursor: "pointer" }}
                             >

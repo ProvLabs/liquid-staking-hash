@@ -38,7 +38,11 @@ export function StandingHeader({
         <h2 className="text-xl font-semibold">
           {standing.moniker ?? t(locale, "operator.unnamed-validator")}
         </h2>
-        <VerifyLink locale={locale} target="validators" />
+        <VerifyLink
+          locale={locale}
+          target="validators"
+          anchor={standing.active ? { valoper: standing.valoper } : undefined}
+        />
       </div>
       <p className="break-all font-mono text-xs text-muted-foreground">{standing.valoper}</p>
 
