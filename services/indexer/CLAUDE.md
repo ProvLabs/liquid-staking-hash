@@ -80,7 +80,12 @@ transport.
 ## Workers
 
 - **`workers/chain-events/`** → `transactions`, `redemption_requests`,
-  `operator_payments`. Dual source: `tx_search` plus `block_results` per height
+  `operator_payments`, and the materialized `holder_lifecycles` (PR 8.2
+  commit D: after each window's upserts, the store recomputes lifecycle rows
+  from `transactions` for exactly the addresses the window touched — a
+  recompute-from-truth inside the window transaction, so replay from 0 equals
+  resume by construction; equality-gated in `test:grants`). Dual source:
+  `tx_search` plus `block_results` per height
   (EndBlocker payout/refund + NAV marker). `decode.ts` maps raw events to typed
   `DomainEvent`s scoped to the program's vault/receipt denom and, for contract
   payments, to `_contract_address` (chain-facts §events 2). `reduce.ts` is a

@@ -13,6 +13,9 @@
 #                          in; e.g. ./dev pw --filter @nvhash/web run test:e2e)
 #   ./dev pg up|down|reset|logs|psql
 #                          dev postgres (host port 5433; reset wipes data)
+#   ./dev load <scenario|all> [k6 args…]
+#                          k6 load suite against the in-network dev API
+#                          (infra/load/run.sh; devnet-only by construction)
 #   ./dev ps               compose service status
 #   ./dev down             stop everything compose-managed
 set -euo pipefail
@@ -56,6 +59,7 @@ case "$CMD" in
       *) echo "usage: ./dev pg [up|down|reset|logs|psql]" >&2; exit 1 ;;
     esac
     ;;
+  load) exec "$SDIR/infra/load/run.sh" "$@" ;;
   ps)   "${COMPOSE[@]}" --profile db --profile tools ps ;;
   down) "${COMPOSE[@]}" --profile db --profile tools down ;;
   help|*)

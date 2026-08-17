@@ -73,6 +73,14 @@ export const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   ],
   // Validator enrollment; moniker is the operator's public on-chain label.
   ValidatorRegistry: ["valoper", "operator", "moniker", "enrolledAt", "unregisteredAt"],
+  // Materialized holder-lifecycle fold (PR 8.2 commit D, T3 breach). An
+  // AGGREGATE over already-indexed public rows: `address` already keys
+  // `transactions`, and the two heights are derived from that table alone —
+  // no new information class. The API read never selects the address out
+  // (HolderLifecycleFacts carries heights only); adding any behavioral column
+  // beyond the two heights would make this a per-wallet dossier and is a
+  // design-review rejection, not an allowlist edit.
+  HolderLifecycle: ["address", "firstDepositHeight", "exitHeight"],
   // Per-payment PayCommission/PayTip facts — reviewed 2026-07-27.
   // Every column is read straight off a public tx: `payer` is the message
   // sender (a bech32 account, already public in the tx body and its

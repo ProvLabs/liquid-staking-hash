@@ -181,6 +181,24 @@ chrome's stale-heads clause surfaces exactly that), while a killed process is
 a silenced alarm. The alarm must outlive what it watches; compose's
 `restart: unless-stopped` covers the workers' fatal-crash contract.
 
+## Holder-lifecycle materialization (PR 8.2 commit D)
+
+`holder_lifecycles` exists because a measurement met a pre-stated criterion,
+not because the fold looked slow: the 8.2 load pass measured
+`/admin/holder-cohorts` at **21.6 s p95 under three concurrent dashboard
+loads at 1.2 M transactions** against the ratified 2.5 s threshold (T3), the
+API-side window-function fold being superlinear and uncached on every
+`/admin` load. The maintenance is a **recompute-from-truth** in the
+chain-events worker's write phase — after each window's upserts, the store
+re-runs the fold's SQL scoped to exactly the addresses that window touched,
+inside the window transaction. Recompute (not incremental update) is the
+design point: the derived rows are a pure function of `transactions`, so
+replay from 0 equals resume with no conditional-arm subtleties, and the
+equality gate (`test/integration/holder-lifecycle-materialization.test.ts`)
+holds the table to the original fold computed both ways against real
+Postgres. The row carries the two heights only; the address column exists as
+the PK and is never selected across the API boundary.
+
 ## Local mirrors over cross-package imports
 
 `decode/attributes.ts` mirrors the amount discipline in

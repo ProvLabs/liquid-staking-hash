@@ -1,0 +1,17 @@
+// Materialized holder-lifecycle fold: one row per depositor, two heights
+// only. `address` is already-indexed public data and is never selected out
+// by the API read. Recompute-from-truth per window; equality-gated in
+// test/integration/holder-lifecycle-materialization.test.ts.
+
+model HolderLifecycle {
+  address            String  @id
+  /// Height of the address's first `swap_in` — set once by chain history.
+  firstDepositHeight BigInt
+  /// First height at/after the first deposit where the running position
+  /// reached zero; NULL while still holding (absence of a row = unknown).
+  exitHeight         BigInt?
+
+  @@index([firstDepositHeight])
+  @@map("holder_lifecycles")
+  @@schema("indexed")
+}
