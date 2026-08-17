@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    tags.datadoghq.com/env: {{ .Values.datadog.env }}
+    tags.datadoghq.com/service: {{ .Chart.Name }}
+    tags.datadoghq.com/version: {{ .Values.datadog.version }}
+    admission.datadoghq.com/enabled: "true"
+    admission.datadoghq.com/config.mode: hostip
+spec:
+  # Exactly one supervisor, ever. The running marker NAV persists across windows
+  # in the reserved `meta:chain-events:nav` checkpoint row as an unconditional
+  # last-write-wins upsert (src/workers/chain-events/store.ts writeNav — no
+  # observedHeight guard, unlike the other idempotency arms) and is read back
+  # inside the window transaction. Two supervisors on different windows let the
+  # later committer stamp a stale NAV over a newer one, so overlap is a
+  # correctness fault, not wasted work. RollingUpdate — the Kubernetes default —
+  # produces exactly that overlap during a rollout.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+  template:
+    metadata:
+      annotations:
+        # A ConfigMap edit does not restart pods on its own. Without this the
+        # indexer keeps running stale configuration after a values change.
+        checksum/config: {{ include (print $.Template.BasePath "/config-map.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        tags.datadoghq.com/env: {{ .Values.datadog.env }}
+        tags.datadoghq.com/service: {{ .Chart.Name }}
+        tags.datadoghq.com/version: {{ .Values.datadog.version }}
+        admission.datadoghq.com/enabled: "true"
+        admission.datadoghq.com/config.mode: hostip
+    spec:
+      serviceAccountName: {{ .Chart.Name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        # Native sidecar (restartPolicy: Always): starts, and stays running,
+        # before the regular initContainers below — so the proxy is already
+        # listening when the migration runs.
+        - name: cloud-sql-proxy
+          restartPolicy: Always
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.17.1
+          args:
+            - "--private-ip"
+            - "--auto-iam-authn"
+            - "--structured-logs"
+            - "--port=5432"
+            - "{{ .Values.database.instanceName }}"
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+        # Same image and digest as the app container, which is what makes the
+        # schema and the code that reads it the same commit by construction.
+        # `migrate deploy` is a no-op when the database is already current.
+        - name: migrate
+          image: {{ .Values.image.name }}:{{ .Values.image.tag }}
+          workingDir: /app/services/indexer
+          command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+          envFrom:
+            - configMapRef:
+                name: {{ .Chart.Name }}-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image.name }}:{{ .Values.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Chart.Name }}-config
+          env:
+            - name: DD_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/env']
+            - name: DD_SERVICE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/service']
+            - name: DD_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/version']
+          # No `ports` here, and no Service in this chart: the indexer serves no
+          # HTTP to anyone. Liveness is the heartbeat file the supervisor writes
+          # after each successful database ping, so both probes below prove the
+          # process AND its database connection — which an HTTP probe could not.
+          startupProbe:
+            exec:
+              command: ["node", "/app/services/indexer/scripts/healthcheck.mjs"]
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          livenessProbe:
+            exec:
+              command: ["node", "/app/services/indexer/scripts/healthcheck.mjs"]
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: heartbeat
+              mountPath: /heartbeat
+            - name: tmp
+              mountPath: /tmp
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        # The heartbeat path is what makes readOnlyRootFilesystem possible;
+        # INDEXER_HEARTBEAT_FILE in the image points into this mount. The image
+        # also creates the directory, so it stays runnable outside Kubernetes.
+        - name: heartbeat
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

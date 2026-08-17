@@ -1,0 +1,8 @@
+apiVersion: v2
+name: nvhash-indexer
+type: application
+version: 0.1.0
+appVersion: "1.0"
+description: >-
+  nvHASH chain-event indexer. Sole writer of the `indexed` schema
+  (ADR-001 Decision 1). Serves no HTTP, holds no keys, signs nothing.
