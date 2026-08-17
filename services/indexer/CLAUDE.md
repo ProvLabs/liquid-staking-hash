@@ -24,16 +24,23 @@ Read both before changing a worker, a cursor, or an idempotency guard.
   its Prisma schema and migrations live here and run as the `indexer_writer`
   role, the only role with write access. This service never touches the `app`
   schema. Migrations must run cleanly on an empty database.
-- **The schema is ONE baseline migration, not a history.** Nothing runs this
-  schema outside dev and CI, so there is no deployed database whose state a
-  migration has to reach: a schema change edits the models and is regenerated
-  into `prisma/migrations/20260715013707_init`, and every environment is rebuilt
+- **The schema is ONE baseline migration, not a history — and this rule is
+  expiring.** It holds only while no deployed database exists: a schema change
+  edits the models and is regenerated into
+  `prisma/migrations/20260715013707_init`, and every environment is rebuilt
   (`./dev pg reset`, `migrate:deploy`) — indexed data is rebuildable from chain
-  by definition. Add an incremental migration only once a database exists whose
-  contents cannot be recreated. Regenerate with `prisma migrate diff
-  --from-empty --to-schema-datamodel prisma --script`, keeping the file's
-  hand-written header and its trailing constraints (which the datamodel cannot
-  express).
+  by definition. Regenerate with `prisma migrate diff --from-empty
+  --to-schema-datamodel prisma --script`, keeping the file's hand-written header
+  and its trailing constraints (which the datamodel cannot express).
+
+  **A deployed database ends it.** The chart runs `prisma migrate deploy` in an
+  initContainer (ADR-003 Decision 4), and a *regenerated* baseline cannot be
+  applied to a populated database — the first schema change after the first
+  deploy fails the initContainer and the Pod never starts. The replacement rule
+  (incremental migrations, both schemas out of baseline mode) is owned by the
+  migration-mode change; until it lands, **do not sync this chart to an
+  environment whose database must survive**. A first sync against an empty
+  database is safe.
 - **Adding a column is a design-review event**, not a migration — edit the
   allowlist and record the rationale in the design notes.
 - Amount columns are `Decimal(39,0)`, never `Float`. Weight sums are also
@@ -156,6 +163,49 @@ reachable in-network as `http://dev-node:1317`.
 `test/workers/governance-live.test.ts` skips unless `GOV_LIVE_LCD` /
 `GOV_LIVE_CONTRACT` are set; it is the only suite exercising the real transport,
 real pagination, and the interaction between the three planes.
+
+**`./dev` does not forward host environment variables** — it is `docker compose
+run --rm tools "$@"`, so `DATABASE_URL=… ./dev pnpm …` runs *without* the
+variable and Prisma fails on `getConfig`. To migrate as a specific role, pass it
+to compose directly (same pinned container, so ADR-002 holds):
+
+```
+docker compose -f infra/dev/compose.yaml run --rm \
+  -e DATABASE_URL="postgresql://indexer_writer:indexer-dev@postgres:5432/nvhash?schema=indexed" \
+  tools corepack pnpm --filter @nvhash/indexer run migrate:deploy
+```
+
+## Deployment
+
+Container image and ArgoCD chart live here: `Dockerfile`,
+`Dockerfile.dockerignore`, `argocd/`. Topology and rationale:
+[ADR-003](../../docs/architecture/2026-08-17-adr-003-deployment-topology.md).
+Operator instructions:
+[`docs/user/indexer-deployment-runbook.md`](../../docs/user/indexer-deployment-runbook.md).
+
+- **The image runs `node src/index.ts` directly, not `pnpm start`.** That script
+  regenerates the Prisma client first, which needs a writable tree and defeats
+  `readOnlyRootFilesystem`. Generation happens at build time with
+  `prisma generate --generator=client` — the `--generator` flag matters, since
+  the schema's second generator writes into `packages/db-indexed/` and would
+  drag that package into the build context.
+- **Exactly one replica, `strategy: Recreate`.** Not a preference: `writeNav` in
+  `workers/chain-events/store.ts` is an unconditional last-write-wins upsert with
+  no `observedHeight` guard, so two overlapping supervisors can stamp a stale NAV
+  over a newer one. RollingUpdate produces exactly that overlap.
+- **Migrations run as an initContainer on the same image digest** as the app
+  container, so schema and code cannot be different commits.
+- **`INDEX_START_HEIGHT` must be the contract's instantiate height** in any
+  deployed environment. Left at its default of 1, the non-governance streams page
+  the whole chain and never converge. The chart ships `0` — deliberately out of
+  bounds, so the Pod fails closed rather than silently backfilling.
+- **The chart holds no secret material**: database access is Cloud SQL IAM auth,
+  so `DATABASE_URL` carries a principal and no password. Preserving ADR-001
+  ownership under IAM auth requires the `ALTER ROLE … SET role` line in
+  [`infra/cloudsql/roles.sql`](../../infra/cloudsql/roles.sql).
+- **An archive node is required**, not preferred: the height-pinned
+  `x-cosmos-block-height` reads in epoch-history, validator-sampler and
+  governance fail against a pruning node.
 
 ### Full-stack wiring
 

@@ -197,6 +197,8 @@ overrides each one**. IDs are stable for that review's minutes.
 | CO-51 | Contract-side pre-audit set: migrate entry point + wasmd admin (D21); `REDEMPTION_MARGIN_BPS` admin-configurable per the 2026-07-09 simulation finding (D29); `ReceiptAccounting` query (D29); dual-policy split now-or-per-deployment (D25) | §6 |
 | CO-52 | Persona-review action register: all 16 items still read OPEN in-file; most are resolved by delivered App work (A1→M4.2, A2→M5, A4→M7.5, D1/D2→M6.2–6.4). 8.0a annotates resolved-by rows in that file; genuinely open residue (B1/B2 actor-model alignment, C2/C3, E1–E5 doc alignment, F1) is dispositioned at the review — most are spec-alignment edits to schedule with 8.5's doc pass | that register |
 | CO-53 | M6.4 jail e2e-live posture (CO-19) and the deferred reconciler kinds (D30) | §6 |
+| CO-54 | **`indexed_from_height` covers the governance list payload only** (`services/api/src/routes.ts`). Once `INDEX_START_HEIGHT` is a real instantiate height rather than 1, the transactions / epochs / validators endpoints present a window starting there as if it were complete history — the same defect that field was added to prevent, against "never lie about state". Options: extend the field to the other list payloads (`services/api` + `api-types` + web rendering, its own change), or accept on the grounds that nothing earlier exists to omit and record the reasoning in `api-design-notes.md`. **Blocks setting a non-1 start height, not the deploy itself** | 8.4 deploy design §8 Q3 |
+| CO-55 | **Two role files, one gate.** `infra/dev/postgres/roles.sql` is pinned by the grant-boundary gate; `infra/cloudsql/roles.sql` (new, deployed) cannot be — no CI job can observe Cloud SQL. The ownership assertion added to the grant-boundary suite narrows this to the dev substrate only. Options: parameterize one file for both environments, add a post-sync verification step against the real instance, or accept with a named owner. Under §7's definition this is the one deployment property that is not fully enforced | 8.4 deploy design §8 Q2 |
 
 ## 5. Certification checklist (Phase B exit criteria)
 
@@ -283,8 +285,8 @@ for what M8 newly touches.
 
 | `SECURITY.md` requirement | Enforced by |
 | --- | --- |
-| Devnet keys are throwaway; drills point only at disposable chains | Unchanged for the dev stack. 8.4 extends the rule's intent to real environments: testnet/mainnet key material lives only in the per-environment secret store (D24), never in repo files, images, or compose profiles; deploy scripts read from the store and fail closed. Gating: a repo-scan check in `app-ci` (no non-placeholder secrets outside `.env.example` patterns) plus review of the 8.4 profiles |
-| Secrets via environment only | The D24 mechanism in the ArgoCD profiles; bundle-secret check already gates web CI and runs unchanged against production builds at 8.4 |
+| Devnet keys are throwaway; drills point only at disposable chains | Unchanged for the dev stack. 8.4 extends the rule's intent to real environments: testnet/mainnet key material lives only in the per-environment secret store (D24), never in repo files, images, or compose profiles; deploy scripts read from the store and fail closed. Gating: a repo-scan check in `app-ci` (no non-placeholder secrets outside `.env.example` patterns) plus review of the 8.4 profiles. **Status after the indexer leg: the mechanism is stronger than this row assumed — there is no secret store to read from, because the chart holds no secret (see the row below). The `app-ci` repo-scan check is NOT yet delivered and remains outstanding for this row; the indexer's own profiles were reviewed** |
+| Secrets via environment only | The D24 mechanism in the ArgoCD profiles; bundle-secret check already gates web CI and runs unchanged against production builds at 8.4. **D24 resolved for the indexer leg (ADR-003 Decision 3): Cloud SQL IAM auth via `cloud-sql-proxy --auto-iam-authn`, so `DATABASE_URL` carries a principal and no password and the chart has NO `SealedSecret` template at all — there is no secret to store rather than a secret stored well. `infra/cloudsql/roles.sql` is credential-free by construction (`NOLOGIN` domain roles). The api and web legs adopt or override this in their own changes** |
 | Enumerated trust surfaces; adding an admin capability is a spec-level event | D21: if a migrate path is adopted, `liquid-staking-spec.md` §12 + `IMPLEMENTATION-STATUS.md` amend in the same change, and a `contracts/drills/` drill asserts an unauthorized migrate is rejected and post-migrate cw2 version/state are intended — never a key-holding assumption (master plan §6 row) |
 | Audit readiness: spec/code parity, reproducible verification, truthful status ledger | Every Phase B result recorded with date + build in the ledger it belongs to (§5 preamble); the "NOT covered" headline stays truthful until CO-32 closes it; contract freeze before S1 (§2) |
 | Dependencies: `cargo audit`/`npm audit` before releases | 8.0b closes the "(CI enforcement to follow)" tail as CI gates; the cosmjs re-add in 8.4b is the recorded reviewed-dependency event (audited versions only, per `apps/console/CLAUDE.md`) |
@@ -353,3 +355,12 @@ area `CLAUDE.md`s and design notes for unresolved M0–M7 tasking (§4);
 M7 overview §7.5 closure recommendations adopted as §8 pending D26. Phase
 structure per Ira's direction: testnet deploy first, a certification pause on
 external clocks, then the mainnet rollout.*
+
+*2026-08-17: the 8.4 **indexer leg** landed (image, ArgoCD chart, pipeline;
+ADR-003, and its own design + plan under `docs/plans/`). Amends §7's two secrets
+rows — D24 is resolved for this component as Cloud SQL IAM auth with a chart that
+holds no secret at all, and the `app-ci` repo-scan gate that row names is
+recorded as still outstanding rather than assumed done. Adds CO-54 (the
+`indexed_from_height` truncated-history gap, surfaced by making the start height
+configurable) and CO-55 (the deployed role file has no CI gate) to §4.5. The
+api, web and console legs of row 8.4 remain.*

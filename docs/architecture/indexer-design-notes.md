@@ -261,3 +261,68 @@ three planes; this one does. On the governed devnet it reproduced all six drill
 findings in a single pass — including the load-bearing one, that successfully
 executed proposals are absent from chain state while their outcome is still
 recoverable from events.
+
+## Deployment: what the topology has to protect
+
+Full topology and options considered:
+[ADR-003](2026-08-17-adr-003-deployment-topology.md). Recorded here is only what
+is specific to *this* service — the properties a deployment could quietly break.
+
+### Single writer is a correctness requirement
+
+The chart runs `replicas: 1` with `strategy: Recreate`, and neither is a capacity
+choice. `writeNav` in `workers/chain-events/store.ts` persists the running marker
+NAV in the reserved `meta:chain-events:nav` checkpoint row as an
+**unconditional** last-write-wins upsert — it carries no `observedHeight` guard,
+unlike every other idempotency arm in this service — and `readNav` reads it back
+inside the window transaction. Two supervisors working different windows let the
+later committer stamp its NAV over the other's, so overlapping instances corrupt
+the carry rather than merely duplicating work.
+
+RollingUpdate is the Kubernetes default and produces exactly that overlap during
+a rollout, which makes it the most likely way this property gets lost — it reads
+as an improvement.
+
+### The start height is the contract's instantiate height
+
+`Worker.startHeight` exists on every worker, but until `INDEX_START_HEIGHT`
+landed the composition root passed it to the governance worker only; the other
+three fell through to `?? 0n`, floored to 1. On a chain with millions of blocks
+that is a full-chain replay in 500-height windows, each doing a `tx_search` plus
+a `block_results` per height — it does not index slowly, it does not arrive.
+
+Instantiate height is the honest floor rather than a tuning knob: blocks before
+it hold no program events by definition, and the epoch-history and
+validator-sampler streams anchor to `run_epoch` crank heights that cannot precede
+it. Deployment date would silently discard real history, and the bootstrap
+ordering (group and policy created before instantiate, since there is no
+admin-rotation message) makes a gap between the two likely.
+
+The chart ships `0`, which `config.ts` rejects. That is deliberate: an unbootable
+Pod is recoverable, and a silent multi-million-block backfill is not.
+
+### IAM auth preserves the ownership split only with a default role
+
+Database access is Cloud SQL IAM auth, so the chart carries no credential. But
+Prisma connects **as the IAM principal**, and a principal creating tables owns
+them — which breaks ADR-001 Decision 1 invisibly, because `api_reader`'s SELECT
+on future tables comes from default privileges keyed to `indexer_writer`. The
+`ALTER ROLE … SET role = indexer_writer` line in `infra/cloudsql/roles.sql` is
+what keeps ownership correct, and the grant-boundary gate now asserts the
+ownership property (not just the grants) so the requirement has a check behind it.
+
+### Liveness is the heartbeat, because there is no port
+
+The probes exec `scripts/healthcheck.mjs` rather than hitting an endpoint: this
+service opens no listener, and the heartbeat file is written only after a
+successful database ping, so the probe proves the process *and* its database
+connection. An HTTP probe could prove neither. Probe cadence is tied to that
+contract — 15 s ping interval, 45 s staleness ceiling, liveness at 15 s × 3.
+
+### Migrations and the baseline rule
+
+Migrations run in an initContainer on the app container's own image digest, so
+schema and code cannot diverge. This is what makes the one-baseline-migration
+rule in `CLAUDE.md` expire: a regenerated baseline cannot be applied to a
+populated database, so the first schema change after the first deploy fails the
+initContainer.
