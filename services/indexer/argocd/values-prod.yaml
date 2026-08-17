@@ -1,0 +1,28 @@
+projectId: provlabs-prod
+
+image:
+  name: us-central1-docker.pkg.dev/provlabs-prod/docker/nvhash-indexer
+
+datadog:
+  env: provlabs-prod-cluster
+
+database:
+  instanceName: provlabs-prod:us-central1:nuva-shared
+  url: postgres://nvhash-indexer%40provlabs-prod.iam@localhost:5432/nvhash?schema=indexed&sslmode=disable
+
+chain:
+  rpcUrl: http://pio-mainnet-archive-rpc.provenance:26657
+  lcdUrl: http://pio-mainnet-archive-rpc.provenance:1317
+  chainId: pio-mainnet-1
+  # Fail-closed until mainnet instantiate; see values-test.yaml for why 0 rather
+  # than 1. Both must become the contract's instantiate height.
+  startHeight: 0
+  govStartHeight: 0
+
+# Deliberately unset until mainnet instantiate. src/config.ts rejects a blank
+# required value, so a premature sync fails closed rather than indexing an
+# unknown chain.
+contract:
+  address: ""
+  vaultAddress: ""
+  receiptDenom: ""

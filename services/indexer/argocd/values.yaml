@@ -1,0 +1,42 @@
+# Defaults that are NOT per-environment. Anything differing between test and
+# prod belongs in values-test.yaml / values-prod.yaml, not here.
+#
+# Two things this chart deliberately does not have, recorded so neither is added
+# back for symmetry with other ProvLabs charts:
+#
+#   * no Service — the indexer serves no HTTP to anyone (src/index.ts holds no
+#     listener), so there is nothing to expose and nothing should reach it;
+#   * no SealedSecret — database access is Cloud SQL IAM auth through
+#     cloud-sql-proxy --auto-iam-authn, so DATABASE_URL carries a principal and
+#     no password. This chart holds no secret material of any kind. Adding one
+#     would mean the IAM path had been abandoned, which is a design decision.
+
+# Worker tuning. CONFIRMATION_DEPTH 0 is safe on Provenance (instant finality).
+# indexWindowSpan bounds heights per window transaction; a window is a
+# throughput unit, not a latency one.
+tuning:
+  confirmationDepth: 0
+  indexWindowSpan: 500
+  pollIntervalMs: 5000
+  reconcileIntervalMs: 30000
+
+# First cut, not measured. Backfill is RPC- and database-bound rather than
+# CPU-bound. The load test that sizes these properly is separate work.
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    memory: "2Gi"
+
+# Probe cadence is tied to the heartbeat contract in scripts/healthcheck.mjs:
+# the supervisor pings every 15s and the probe treats a heartbeat older than 45s
+# as stale, so liveness at 15s x 3 failures matches that ceiling exactly.
+# Startup is given longer because the chain-isolation boot check runs first.
+probes:
+  startup:
+    periodSeconds: 10
+    failureThreshold: 12
+  liveness:
+    periodSeconds: 15
+    failureThreshold: 3

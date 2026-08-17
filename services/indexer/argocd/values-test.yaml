@@ -1,0 +1,42 @@
+projectId: provlabs-test
+
+image:
+  name: us-central1-docker.pkg.dev/provlabs-test/docker/nvhash-indexer
+
+datadog:
+  env: provlabs-test-cluster
+
+database:
+  instanceName: provlabs-test:us-central1:nuva-shared
+  # No password, and none is possible: cloud-sql-proxy runs with
+  # --auto-iam-authn and the principal inherits `indexer_writer`
+  # (infra/cloudsql/roles.sql). The proxy listens on localhost in the Pod.
+  url: postgres://nvhash-indexer%40provlabs-test.iam@localhost:5432/nvhash?schema=indexed&sslmode=disable
+
+chain:
+  # Archive endpoints are required, not preferred: the epoch-history,
+  # validator-sampler and governance streams read height-pinned state via
+  # x-cosmos-block-height, which a pruning node cannot serve.
+  rpcUrl: http://pio-testnet-archive-rpc.provenance:26657
+  lcdUrl: http://pio-testnet-archive-rpc.provenance:1317
+  chainId: pio-testnet-1
+  # Set both to the contract's INSTANTIATE height before the first sync.
+  #
+  # 0 is not a placeholder to tidy up — it is the fail-closed value, and it must
+  # stay 0 until the real height is known. src/config.ts bounds these at >= 1,
+  # so 0 makes the process exit non-zero at boot. Do NOT "fix" this to 1: 1 is
+  # VALID and starts a full-chain replay, which on a live network never
+  # converges. An unbootable Pod is the recoverable failure; a silent
+  # multi-million-block backfill is not.
+  startHeight: 0
+  # Independent of startHeight and set explicitly: its own default is 1, which
+  # would put the governance stream back on a full-chain replay of its own.
+  govStartHeight: 0
+
+# Unset until the testnet bootstrap has run and the addresses are known.
+# src/config.ts rejects a blank required value, so the container fails closed
+# rather than indexing against an unknown program.
+contract:
+  address: ""
+  vaultAddress: ""
+  receiptDenom: ""

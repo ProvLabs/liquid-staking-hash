@@ -1,0 +1,9 @@
+###
+# THIS FILE IS MANAGED AUTOMATICALLY BY THE CI PROCESS
+###
+
+image:
+  tag: latest
+  digest: ""
+datadog:
+  version: latest
