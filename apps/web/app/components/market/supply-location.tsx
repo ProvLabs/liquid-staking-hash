@@ -35,8 +35,14 @@ export function SupplyLocation({
         </span>
       </div>
       {bridged.length === 0 ? (
+        // An unknown-completeness empty set must not claim all supply is local.
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          {t(locale, "market.supply-bridged-empty")}
+          {t(
+            locale,
+            completeness === "unknown"
+              ? "market.supply-completeness-unknown"
+              : "market.supply-bridged-empty",
+          )}
         </p>
       ) : (
         <>

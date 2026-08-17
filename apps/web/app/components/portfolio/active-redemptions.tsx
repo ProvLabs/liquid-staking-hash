@@ -70,8 +70,14 @@ export function ActiveRedemptions({
         </p>
       ) : null}
       {redemptions.length === 0 ? (
+        // An unknown-completeness empty set must not claim "none exist".
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          {t(locale, "portfolio.redemptions-empty")}
+          {t(
+            locale,
+            completeness === "unknown"
+              ? "portfolio.redemptions-completeness-unknown"
+              : "portfolio.redemptions-empty",
+          )}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
