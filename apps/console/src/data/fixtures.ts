@@ -1,6 +1,3 @@
-// Mock fixtures for every query (spec §15.2): the console builds and renders fully
-// offline. Numbers are internally consistent so the receipt invariant and epoch
-// identity checks PASS (they are the honesty surface, spec §17.1).
 import type {
   AprResponse,
   ConfigResponse,
@@ -13,6 +10,7 @@ import type {
   ValidatorsResponse,
   VaultInfo,
 } from "@/lib/types";
+import type { GovProposals, GovTopology } from "@/lib/governance";
 
 const NOW = Math.floor(Date.now() / 1000);
 const DAY = 86400;
@@ -39,6 +37,7 @@ export const mockConfig: ConfigResponse = {
   concentration_safety_offset_bps: 500,
   commission_bps: 1000,
   jail_unbond_delay_secs: 8 * 3600,
+  redemption_margin_bps: 50,
 };
 
 export const mockEpochStatus: EpochStatusResponse = {
@@ -256,3 +255,136 @@ export const mockLedger: LedgerRow[] = Array.from({ length: 14 }, (_, i) => {
     observed_at: NOW - (13 - i) * 3 * DAY,
   };
 });
+
+const POLICY_ADMIN = ADMIN_ADDR; // Config.admin IS the primary policy in mock
+const POLICY_OPS = "pb1opspolicyopspolicyopspolicyopspolicy00";
+const MEMBERS = [
+  { addr: "pb1memberadaadaadaadaadaadaadaadaada0000", weight: "1" },
+  { addr: "pb1memberbobbobbobbobbobbobbobbobbob0000", weight: "1" },
+  { addr: "pb1membercalcalcalcalcalcalcalcalcal0000", weight: "1" },
+];
+
+const decisionPolicy = {
+  "@type": "/cosmos.group.v1.ThresholdDecisionPolicy",
+  threshold: "2",
+  windows: { voting_period: "300s", min_execution_period: "0s" },
+};
+
+export const mockGovTopology: GovTopology = {
+  state: "governed",
+  groupId: "1",
+  group: {
+    id: "1",
+    admin: MEMBERS[0].addr,
+    metadata: "nvhash admin group",
+    version: "1",
+    total_weight: "3",
+  },
+  policies: {
+    items: [
+      {
+        address: POLICY_ADMIN,
+        group_id: "1",
+        admin: MEMBERS[0].addr,
+        metadata: "primary (admin) policy",
+        version: "1",
+        decision_policy: decisionPolicy,
+      },
+      {
+        address: POLICY_OPS,
+        group_id: "1",
+        admin: MEMBERS[0].addr,
+        metadata: "ops policy",
+        version: "1",
+        decision_policy: decisionPolicy,
+      },
+    ],
+    truncated: false,
+  },
+  members: {
+    items: MEMBERS.map((m) => ({
+      group_id: "1",
+      member: { address: m.addr, weight: m.weight, metadata: "" },
+    })),
+    truncated: false,
+  },
+};
+
+export const mockGovTopologyPlainAccount: GovTopology = { state: "no-group" };
+
+const ZERO_TALLY = {
+  yes_count: "0",
+  no_count: "0",
+  abstain_count: "0",
+  no_with_veto_count: "0",
+};
+
+export const mockGovProposals: GovProposals = {
+  rows: [
+    {
+      proposal: {
+        id: "7",
+        group_policy_address: POLICY_ADMIN,
+        metadata: "raise the AUM fee to 30 bps",
+        proposers: [MEMBERS[0].addr],
+        submit_time: new Date((NOW - 3600) * 1000).toISOString(),
+        group_version: "1",
+        group_policy_version: "1",
+        status: "PROPOSAL_STATUS_SUBMITTED",
+        final_tally_result: ZERO_TALLY, // zeros until tallied — never rendered live
+        voting_period_end: new Date((NOW + 240) * 1000).toISOString(),
+        executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
+        messages: [
+          {
+            "@type": "/cosmwasm.wasm.v1.MsgExecuteContract",
+            sender: POLICY_ADMIN,
+            contract: "pb1contractcontractcontractcontract00000",
+            msg: { update_config: { aum_fee_bps: 30 } },
+            funds: [],
+          },
+        ],
+      },
+      policyAddress: POLICY_ADMIN,
+      liveTally: { yes_count: "1", no_count: "0", abstain_count: "0", no_with_veto_count: "0" },
+      liveTallyError: null,
+      votes: {
+        items: [
+          {
+            proposal_id: "7",
+            voter: MEMBERS[0].addr,
+            option: "VOTE_OPTION_YES",
+            metadata: "",
+            submit_time: new Date((NOW - 1800) * 1000).toISOString(),
+          },
+        ],
+        truncated: false,
+      },
+    },
+    {
+      proposal: {
+        id: "5",
+        group_policy_address: POLICY_ADMIN,
+        metadata: "accepted but not yet executed",
+        proposers: [MEMBERS[1].addr],
+        submit_time: new Date((NOW - 2 * DAY) * 1000).toISOString(),
+        group_version: "1",
+        group_policy_version: "1",
+        status: "PROPOSAL_STATUS_ACCEPTED",
+        final_tally_result: {
+          yes_count: "2",
+          no_count: "1",
+          abstain_count: "0",
+          no_with_veto_count: "0",
+        },
+        voting_period_end: new Date((NOW - DAY) * 1000).toISOString(),
+        executor_result: "PROPOSAL_EXECUTOR_RESULT_NOT_RUN",
+        messages: [],
+      },
+      policyAddress: POLICY_ADMIN,
+      liveTally: null,
+      liveTallyError: null,
+      votes: null, // deleted at the voting-period-end tally (§x/group 2)
+    },
+  ],
+  truncated: false,
+};

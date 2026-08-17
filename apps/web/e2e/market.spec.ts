@@ -46,4 +46,5 @@ test("market figures carry no verify link; the chain-derived history section doe
     .getByRole("link", { name: "Verify on the console" })
     .getAttribute("href");
   expect(href).toMatch(/^https:\/\/console\.invalid\//);
+  expect(href).not.toContain("#");
 });

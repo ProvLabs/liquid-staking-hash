@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import { PolicyPanel } from "~/components/governance/policy-panel";
 import { ProposalList } from "~/components/governance/proposal-list";
+import { VerifyLink } from "~/components/verify-link";
 import { getBootedConfig } from "~/config/config.server";
 import { loadGovernanceListData } from "~/governance/governance.server";
 import { parseStatusParam, GOV_STATUS_FILTERS } from "~/governance/params";
@@ -51,7 +52,10 @@ export default function Governance({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "governance.title")}</h1>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <h1 className="text-3xl font-semibold tracking-tight">{t(locale, "governance.title")}</h1>
+        <VerifyLink locale={locale} target="governance" />
+      </div>
       <p className="text-sm text-muted-foreground">{t(locale, "governance.lede")}</p>
       {/* Said once, plainly, rather than implied by the presence of buttons.
           The composer is member-gated at the route, not hidden here: hiding a

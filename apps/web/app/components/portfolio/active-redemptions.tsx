@@ -1,5 +1,6 @@
 import { t, type Locale, type MessageKey } from "~/i18n";
 import type { Completeness } from "~/api/completeness";
+import { VerifyLink } from "~/components/verify-link";
 import type { RedemptionVM } from "~/portfolio/types";
 
 // §8.2 active redemptions: self-contained status rows from the
@@ -113,17 +114,27 @@ export function ActiveRedemptions({
                     {settledLabel !== null ? ` · ${settledLabel}` : ""}
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1.5 text-sm">
-                  <svg
-                    aria-hidden="true"
-                    focusable="false"
-                    viewBox="0 0 16 16"
-                    className="h-3 w-3 shrink-0"
-                    style={{ fill: status.token }}
-                  >
-                    <path d={status.iconPath} />
-                  </svg>
-                  {t(locale, status.labelKey)}
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-sm">
+                    <svg
+                      aria-hidden="true"
+                      focusable="false"
+                      viewBox="0 0 16 16"
+                      className="h-3 w-3 shrink-0"
+                      style={{ fill: status.token }}
+                    >
+                      <path d={status.iconPath} />
+                    </svg>
+                    {t(locale, status.labelKey)}
+                  </span>
+                  {(r.status === "enqueued" || r.status === "expedited") &&
+                  /^\d{1,15}$/.test(r.requestId) ? (
+                    <VerifyLink
+                      locale={locale}
+                      target="redemptions"
+                      anchor={{ requestId: Number(r.requestId) }}
+                    />
+                  ) : null}
                 </span>
               </li>
             );

@@ -1,6 +1,3 @@
-// ExecuteMsg builders (spec §10.2 build step). One typed builder per contract variant
-// (contracts/src/msg.rs ExecuteMsg). Funds are attached only for PayCommission / PayTip.
-
 export type ExecuteMsg =
   | { pause_vault: { reason: string } }
   | { unpause_vault: Record<string, never> }
@@ -29,6 +26,7 @@ export interface UpdateConfigFields {
   concentration_safety_offset_bps?: number | null;
   commission_bps?: number | null;
   jail_unbond_delay_secs?: number | null;
+  redemption_margin_bps?: number | null;
 }
 
 export const msg = {

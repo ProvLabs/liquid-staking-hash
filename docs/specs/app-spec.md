@@ -726,6 +726,8 @@ The rich `x/group` workflow the boundary doc assigns to the App (boundary §3 go
 >
 > **No `governance` verify-link target** (D8, §12.2): the console has no
 > governance panel, and a pruned proposal has nothing on chain left to link to.
+> *(Retired 2026-08-14, PR 8.4b: the target shipped one pair with the
+> console's panel; live-plane rows link per-row — §12.2's revision.)*
 >
 > Standing gates added: `apps/web/test/governance-decode.test.ts` (golden
 > summaries per variant, totality over the shared vocabulary, unknown/malformed
@@ -1876,6 +1878,21 @@ This section encodes boundary §5 as build requirements.
 > rows `pruned` precisely so the UI can say the chain no longer holds it rather
 > than offer a path that resolves to nothing. The panel and the target remain
 > one pair, scheduled with the §14.13 console follow-on before 8.4.
+>
+> **Revision 2026-08-14 (PR 8.4b): the `governance` target SHIPPED, one pair
+> with the console's `/governance` panel — D8 retired.** The map's absence
+> assertion was inverted (not deleted) in `test/verify-link.test.ts`. Entity
+> anchors delivered with it: `verifyHref` gains an optional TYPED anchor
+> keyed by target (`redemptions` accepts only a request id, `validators` only
+> a valoper, `overview` only an epoch index, `governance` only a proposal
+> id — an impossible link is unrepresentable), formatted as URL fragments so
+> the environment lock is untouched, with the grammar authority in
+> console-spec §14 item 9 and golden strings cross-pinned in both suites.
+> The pruning problem resolves PER ROW: a proposal links only when the LIVE
+> plane held it — a `pruned` or unconfirmed row renders no verify link, and
+> the App's other anchored call sites apply the same rule (a matured or
+> refunded redemption, an unregistered validator: no anchor the App can
+> predict resolves to nothing). §14.13 is DELIVERED.
 
 ### 12.3 Application security
 
@@ -2135,7 +2152,7 @@ Protocol and platform facts this design must respect (chain constraints identica
     - **Typical time-to-payout (§9.5.3):** show the median/p90 only once the cohort has **≥ 10 terminal (matured/expedited) redemption requests**; below that, the flow shows the **60-day guarantee alone** as the default/fallback. The statistic is physically bounded — a request cannot resolve faster than the ~21-day unbonding period nor slower than the 60-day ceiling — so the displayed "typical" settles into a **21–60-day band**; copy never implies precision or a range outside what the mechanism can deliver.
     - **Epoch-metric cold-start:** metrics that require an epoch step — NAV appreciation, net APR, effective yield, and time-to-payout — display only after **≥ 1 completed epoch**, rendering an explicit "first epoch not yet settled" state before that, never a zero. **Point-in-time facts are not gated** and render from block one: TVL, participant count, program age, and eligible-validator count (the Learn live-proof strip §8.1.2).
     - **Epoch cadence = calendar month, computed from block time (contract behavior, cross-referenced):** epochs align to **calendar-month boundaries derived from block time** (`env.block.time`, the consensus-agreed BFT timestamp — the only valid deterministic clock in the contract; Unix/UTC-based but authoritative by consensus, never a node's wall clock or an external UTC source). This is a *contract* fact, not an App display choice — it retires the `min_run_interval_secs` interval gate in favor of block-time month-rollover eligibility in `liquid-staking-spec.md`. The gate is an eligibility floor, not a trigger: the permissionless crank still ends the epoch, so durations remain variable as they always were; the change makes the earliest-valid boundary calendar-deterministic and caller-independent. **Implemented (E-CAL, 2026-07-22):** the contract-side change shipped — `min_run_interval_secs` is retired and `RunEpoch` is gated on `civil_month(env.block.time) > civil_month(last_run)` (`liquid-staking-spec.md` §9 and §14 item 12; implementation record [`docs/plans/2026-07-22-e-cal-calendar-month-implementation.md`](../plans/2026-07-22-e-cal-calendar-month-implementation.md), delivery ledger `IMPLEMENTATION-STATUS.md` §2). The App's "calendar month" copy now matches the contract.**
-13. **[FOLLOW-ON, console] Entity-level deep-link anchors** (request id, valoper, epoch index) so App verify links can land on the exact row, not just the page — a small console addition to schedule with console §14.
+13. **[DELIVERED 2026-08-14, PR 8.4b] Entity-level deep-link anchors** (request id, valoper, epoch index, proposal id) so App verify links land on the exact row. The grammar authority is **console-spec §14 item 9**; both suites pin the same golden strings (`apps/web/test/verify-link.test.ts`, `apps/console/test/anchors.test.ts`). The App's href form is the typed anchor argument in §12.2's 2026-08-14 revision, with the pruned-row no-link rule.
 14. **[DECIDED 2026-07-15, Ira] Product name & environment exposure; domain still open** (boundary §7.1).
     - **Name:** the product is **nvHASH** (the display brand everywhere), with the formal name **"Liquid Staking HASH Vault"** for titles/meta/first-reference. The prior working title "nvHASH App" is retired.
     - **Domain: still `[DECIDE]`.** Undetermined; the working concept is `nvhash.nuva.finance`. A **separate NUVA integration** will reflect the vault inside `app.nuva.finance` at a **post-launch date (TBD)** — a NUVA-team deliverable that imposes no v1 obligation on this App beyond not precluding it.

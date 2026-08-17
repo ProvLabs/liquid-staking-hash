@@ -23,3 +23,5 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __CORPUS_CERTIFIED__: boolean;

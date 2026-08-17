@@ -1,63 +1,126 @@
-// Wallet adapter (spec §10.1). Minimal interface: connect/disconnect/address/signAndBroadcast.
-// Production signing happens entirely in the wallet extension; the console never sees keys.
-// A devnet direct-key / mock mode (compile-excluded from production by the build profile,
-// spec §7) lets drills connect as a chosen on-chain identity without a browser wallet.
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { config } from "@/config";
+import { lcdGetJson } from "@/data/lcd";
+import {
+  decodeAuthAccount,
+  encodeExecuteContract,
+  encodeAuthInfo,
+  encodeTxBody,
+  encodeTxRaw,
+  bytesToBase64,
+  base64ToBytes,
+  MSG_EXECUTE_CONTRACT,
+  type Coin,
+  type Fee,
+} from "@/tx/build";
+import { simulateFee } from "@/tx/simulate";
+import { broadcastAndConfirm } from "@/tx/broadcast";
+import { extensionConnect, extensionDisconnect, extensionSignDirect } from "@/tx/figure-extension";
+import { MOCK_IDENTITIES, mockTxHash } from "@/tx/devnet-keys";
+import type { ExecuteMsg } from "@/tx/messages";
+
+/** True ONLY in the devnet build profile — a compile-time constant Vite
+ *  folds, taking the mock/direct-key branch and its imports with it. */
+const DEVNET_BUILD = import.meta.env.MODE === "devnet";
 
 export type Role = "observer" | "keeper" | "operator" | "admin";
 
 export interface WalletState {
   address: string | null;
   devnetKeyMode: boolean;
+  mockIdentityLabels: string[];
   connect: (mockIdentity?: string) => Promise<void>;
   disconnect: () => void;
-  signAndBroadcast: (msg: unknown, funds?: { denom: string; amount: string }[]) => Promise<string>;
+  /** Simulate the exact rendered message; the result IS the fee (verbatim). */
+  estimateFee: (msg: ExecuteMsg, funds?: Coin[]) => Promise<Fee>;
+  signAndBroadcast: (msg: ExecuteMsg, funds?: Coin[]) => Promise<string>;
 }
 
 const WalletCtx = createContext<WalletState | null>(null);
 
-// Mock identities for devnet/mock drills, keyed to the fixture roles (see data/fixtures.ts).
-export const MOCK_IDENTITIES: { label: string; address: string }[] = [
-  { label: "admin (Ada)", address: "pb1adminadminadminadminadminadminadmin00" },
-  { label: "operator (Pat)", address: "pb1operatoroperatoroperatoroperatorop000" },
-  { label: "keeper (Kai)", address: "pb1keeperkeeperkeeperkeeperkeeperkeep0000" },
-];
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
+  const [pubkey, setPubkey] = useState<string | null>(null);
 
-  const value = useMemo<WalletState>(
-    () => ({
+  const value = useMemo<WalletState>(() => {
+    const mockMode = DEVNET_BUILD && (config.mock || config.devnetKeyMode);
+
+    /** body+authInfo for the exact rendered message, at the CURRENT sequence. */
+    const encodeForSigner = async (msg: ExecuteMsg, funds: Coin[], fee: Fee) => {
+      if (address === null || pubkey === null) throw new Error("wallet not connected");
+      const account = decodeAuthAccount(
+        await lcdGetJson(`/cosmos/auth/v1beta1/accounts/${encodeURIComponent(address)}`),
+      );
+      const signer = {
+        chainId: config.chainId,
+        accountNumber: account.accountNumber,
+        sequence: account.sequence,
+        pubkeyBase64: pubkey,
+      };
+      const bodyBytes = encodeTxBody([
+        {
+          typeUrl: MSG_EXECUTE_CONTRACT,
+          value: encodeExecuteContract(address, config.contractAddress, msg, funds),
+        },
+      ]);
+      return { signer, bodyBytes, authInfoBytes: encodeAuthInfo(signer, fee) };
+    };
+
+    const estimate = async (msg: ExecuteMsg, funds: Coin[]): Promise<Fee> => {
+      if (mockMode) throw new Error("mock mode does not simulate");
+      const provisional = await encodeForSigner(msg, funds, {
+        gasLimit: 0n,
+        amount: 0n,
+        denom: "nhash",
+      });
+      return simulateFee(provisional.bodyBytes, provisional.authInfoBytes);
+    };
+
+    return {
       address,
-      devnetKeyMode: config.devnetKeyMode || config.mock,
+      devnetKeyMode: mockMode,
+      mockIdentityLabels: DEVNET_BUILD ? MOCK_IDENTITIES.map((m) => m.label) : [],
       async connect(mockIdentity?: string) {
-        if (config.mock || config.devnetKeyMode) {
+        if (mockMode) {
           const found = MOCK_IDENTITIES.find((m) => m.label === mockIdentity);
           setAddress(found?.address ?? MOCK_IDENTITIES[0].address);
           return;
         }
-        // Real path: hand off to the Provenance-capable extension wallet [DECIDE §14.1].
-        throw new Error("extension wallet not configured in this build");
+        const account = await extensionConnect(config.chainId);
+        setAddress(account.address);
+        setPubkey(account.pubkeyBase64);
       },
       disconnect() {
+        if (!mockMode) void extensionDisconnect();
         setAddress(null);
+        setPubkey(null);
       },
-      async signAndBroadcast(_msg, _funds) {
-        if (config.mock) {
+      estimateFee: (msg, funds = []) => estimate(msg, funds),
+      async signAndBroadcast(msg, funds = []) {
+        if (mockMode) {
+          if (!config.mock) {
+            throw new Error("devnet key mode does not sign — use the dev node keyring");
+          }
           // Simulated inclusion for the mock drill; returns a fake txhash.
-          return (
-            "MOCK" +
-            Math.abs(hashString(JSON.stringify(_msg)))
-              .toString(16)
-              .toUpperCase()
-          );
+          return mockTxHash(JSON.stringify(msg));
         }
-        throw new Error("signing requires a connected wallet");
+        const fee = await estimate(msg, funds);
+        const { signer, bodyBytes, authInfoBytes } = await encodeForSigner(msg, funds, fee);
+        if (address === null) throw new Error("wallet not connected");
+        const { signatureBase64 } = await extensionSignDirect({
+          chainId: signer.chainId,
+          signerAddress: address,
+          bodyBytesBase64: bytesToBase64(bodyBytes),
+          authInfoBytesBase64: bytesToBase64(authInfoBytes),
+          accountNumber: signer.accountNumber.toString(),
+        });
+        const outcome = await broadcastAndConfirm(
+          encodeTxRaw(bodyBytes, authInfoBytes, [base64ToBytes(signatureBase64)]),
+        );
+        return outcome.txhash;
       },
-    }),
-    [address],
-  );
+    };
+  }, [address, pubkey]);
 
   return <WalletCtx.Provider value={value}>{children}</WalletCtx.Provider>;
 }
@@ -66,11 +129,4 @@ export function useWallet(): WalletState {
   const c = useContext(WalletCtx);
   if (!c) throw new Error("useWallet outside WalletProvider");
   return c;
-}
-
-// deterministic (no Math.random) fake hash for mock txids
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
-  return h;
 }

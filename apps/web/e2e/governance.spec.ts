@@ -55,6 +55,16 @@ test("a pruned proposal says the chain no longer holds it", async ({ page }) => 
   await expect(
     page.getByText("The chain no longer holds this proposal", { exact: false }).first(),
   ).toBeVisible();
+  const governanceLinks = page.locator('a[href*="/governance"][target="_blank"]');
+  await expect(governanceLinks).toHaveCount(0);
+});
+
+test("the governance list carries the console's governance-panel verify link", async ({ page }) => {
+  await page.goto("/governance");
+  const verify = page.getByRole("link", { name: "Verify on the console" }).first();
+  await expect(verify).toBeVisible();
+  const href = await verify.getAttribute("href");
+  expect(href?.endsWith("/governance")).toBe(true);
 });
 
 test("the detail page shows the summary above the exact JSON, for every message", async ({

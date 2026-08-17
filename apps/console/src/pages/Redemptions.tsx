@@ -1,5 +1,3 @@
-// Redemptions (spec §8.4). Ranking (DESIGN-NOTES §4): 1) reserve need vs liquidity ->
-// 2) per-request funded/maturity -> 3) service action -> 4) depositor framing (L4, not a hero).
 import { useSwapOuts, useVault, useStore } from "@/data/store";
 import { useWallet } from "@/tx/wallet";
 import { useTx } from "@/tx/execute";
@@ -8,6 +6,8 @@ import { Panel, Pill, GuardButton, ProportionBar, Cell, AddressChip } from "@/co
 import { hash, shares, humanDuration, ratio, toBig } from "@/lib/format";
 import { computeReserve } from "@/lib/derived";
 import { guardServiceRedemptions } from "@/lib/guards";
+import { anchorMissNotice } from "@/lib/anchors";
+import { useAnchor } from "@/lib/use-anchor";
 
 export function Redemptions() {
   const swap = useSwapOuts();
@@ -15,6 +15,11 @@ export function Redemptions() {
   const wallet = useWallet();
   const { nowSecs, stale, role, refresh } = useStore();
   const tx = useTx();
+  const { anchor, state: anchorState } = useAnchor(
+    "request",
+    swap.data !== null && swap.error === null,
+    (a) => (swap.data ?? []).some((r) => r.id === a.id),
+  );
 
   return (
     <div className="stack">
@@ -24,6 +29,12 @@ export function Redemptions() {
           The pending swap-out queue, funded state, and reserve math, provable against chain.
         </p>
       </div>
+
+      {anchorState === "missing" && anchor && (
+        <div className="callout callout--info" role="status">
+          {anchorMissNotice(anchor)}
+        </div>
+      )}
 
       <Cell cell={swap}>
         {(queue) => {
@@ -40,7 +51,6 @@ export function Redemptions() {
 
           return (
             <>
-              {/* Rank 1: reserve */}
               <Panel title="Reserve">
                 <div className="grid-2" style={{ alignItems: "center" }}>
                   <div className="row" style={{ gap: 32 }}>
@@ -63,7 +73,6 @@ export function Redemptions() {
                 </div>
               </Panel>
 
-              {/* Rank 2: queue */}
               <Panel title="Queue">
                 {queue.length === 0 ? (
                   <p className="muted">No pending swap-outs.</p>
@@ -85,7 +94,7 @@ export function Redemptions() {
                           const mature = r.matures_at_seconds;
                           const own = r.owner === wallet.address;
                           return (
-                            <tr key={r.id} className={own ? "own" : undefined}>
+                            <tr key={r.id} id={`req-${r.id}`} className={own ? "own" : undefined}>
                               <td className="num tnum">{r.id}</td>
                               <td>
                                 {own ? (
@@ -115,7 +124,6 @@ export function Redemptions() {
                 )}
               </Panel>
 
-              {/* Rank 3: action */}
               <Panel title="Service">
                 <GuardButton
                   guard={guardServiceRedemptions({
@@ -138,7 +146,6 @@ export function Redemptions() {
                 </GuardButton>
               </Panel>
 
-              {/* Rank 4: framing */}
               <div className="callout callout--info">
                 Redemptions swap directly with the vault and appear here. The {humanDuration(delay)}{" "}
                 delay is the guarantee; funded requests are expedited on the next service pass.
