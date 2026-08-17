@@ -141,21 +141,28 @@ RESTORE_RES="$(tx "$MEMBER_A" -- wasm store /tmp/migrate-drill-current.wasm)"
 REST_CODE_ID="$(pexec query tx "$RESTORE_RES" -t --home "$HOME_DIR" -o json | jq -r '[.events[]|select(.type=="store_code")|.attributes[]|select(.key=="code_id")|.value]|first' | sed 's/^"//; s/"$//')"
 note "re-storing the identical artifact yielded code_id=$REST_CODE_ID (original $CODE_ID_0) — [VERIFY-3 data point: $([ "$REST_CODE_ID" = "$CODE_ID_0" ] && echo 'deduped to the same id' || echo 'a NEW id was assigned')]"
 
-# The version-distinct build: temp crate copy at 0.1.1 (build metadata is
-# rejected — semver ordering may treat +drill as equal, making the advance
-# unobservable).
+# Version-distinct target: patch-bump a temp crate copy (semver build metadata
+# like +drill can compare equal, so a real version bump is required).
+VERSION_BASE="$(perl -ne 'if (/^version = "(\d+\.\d+\.\d+)"$/) { print $1; exit }' "$REPO_ROOT/contracts/Cargo.toml")"
+[ -n "$VERSION_BASE" ] || fail "could not read the crate version from contracts/Cargo.toml"
+[ "$CW2_BEFORE" = "$VERSION_BASE" ] || fail "deployed cw2 is $CW2_BEFORE but the source crate is $VERSION_BASE: redeploy the devnet from this checkout first"
+VERSION_BUMPED="$(echo "$VERSION_BASE" | awk -F. '{print $1"."$2"."$3+1}')"
+note "version-distinct target: $VERSION_BASE -> $VERSION_BUMPED"
 BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 cp -R "$REPO_ROOT/contracts/." "$BUILD_DIR/contracts/"
 rm -rf "$BUILD_DIR/contracts/artifacts" "$BUILD_DIR/contracts/target"
-perl -pi -e 's{^version = "0\.1\.0"$}{version = "0.1.1"}' "$BUILD_DIR/contracts/Cargo.toml"
-grep -q '^version = "0.1.1"' "$BUILD_DIR/contracts/Cargo.toml" || fail "version bump did not apply"
+perl -pi -e "s{^version = \"\Q$VERSION_BASE\E\"\$}{version = \"$VERSION_BUMPED\"}" "$BUILD_DIR/contracts/Cargo.toml"
+grep -q "^version = \"$VERSION_BUMPED\"\$" "$BUILD_DIR/contracts/Cargo.toml" || fail "version bump did not apply to Cargo.toml"
+# Cargo.lock pins the crate's own version and the optimizer builds --locked.
+perl -0pi -e "s{(name = \"nvhash-staking\"\nversion = )\"\Q$VERSION_BASE\E\"}{\${1}\"$VERSION_BUMPED\"}" "$BUILD_DIR/contracts/Cargo.lock"
+grep -A1 '^name = "nvhash-staking"$' "$BUILD_DIR/contracts/Cargo.lock" | grep -q "version = \"$VERSION_BUMPED\"" || fail "version bump did not apply to Cargo.lock"
 ( cd "$BUILD_DIR/contracts" && ./scripts/build-artifact.sh )
 put_file /tmp/migrate-drill-bumped.wasm < "$BUILD_DIR/contracts/artifacts/nvhash_staking.wasm"
 STORE2="$(tx "$MEMBER_A" -- wasm store /tmp/migrate-drill-bumped.wasm)"
 CODE_ID_1="$(pexec query tx "$STORE2" -t --home "$HOME_DIR" -o json | jq -r '[.events[]|select(.type=="store_code")|.attributes[]|select(.key=="code_id")|.value]|first' | sed 's/^"//; s/"$//')"
 [ -n "$CODE_ID_1" ] && [ "$CODE_ID_1" != "$CODE_ID_0" ] || fail "bumped build did not get a distinct code id"
-ok "migration target stored: code_id=$CODE_ID_1 (v0.1.1)"
+ok "migration target stored: code_id=$CODE_ID_1 (v$VERSION_BUMPED)"
 
 # ============================================================================
 echo; echo "########## 4/6  AUTHORIZED MIGRATE SUCCEEDS THROUGH THE GROUP ##########"
@@ -173,7 +180,8 @@ else
 fi
 MEMBER_A_ADDR="$(addr_of "$MEMBER_A")"
 PROPOSAL="$(jq -n --arg p "$SENDER_POLICY" --arg m "$MEMBER_A_ADDR" --argjson msg "[$MIGRATE_MSG]" \
-  '{group_policy_address:$p,proposers:[$m],metadata:"",messages:$msg,exec:"EXEC_UNSPECIFIED",title:"migrate-drill: upgrade to 0.1.1",summary:"drill"}')"
+  --arg t "migrate-drill: upgrade to $VERSION_BUMPED" \
+  '{group_policy_address:$p,proposers:[$m],metadata:"",messages:$msg,exec:"EXEC_UNSPECIFIED",title:$t,summary:"drill"}')"
 echo "$PROPOSAL" | put_file /tmp/migrate-drill-proposal.json
 SUBMIT_HASH="$(tx "$MEMBER_A" -- group submit-proposal /tmp/migrate-drill-proposal.json)"
 PROPOSAL_ID="$(pexec query tx "$SUBMIT_HASH" -t --home "$HOME_DIR" -o json | jq -r '[.events[]|select(.type=="cosmos.group.v1.EventSubmitProposal")|.attributes[]|select(.key=="proposal_id")|.value]|first' | sed 's/^"//; s/"$//')"
@@ -198,7 +206,7 @@ ok "[VERIFY-2 closed: a group proposal carrying MsgMigrateContract executes]"
 # ============================================================================
 echo; echo "########## 5/6  POST-MIGRATE STATE IS BYTE-IDENTICAL (contract_info excepted) ##########"
 # ============================================================================
-assert_eq "cw2 version advanced" "$(cw2_version)" "0.1.1"
+assert_eq "cw2 version advanced" "$(cw2_version)" "$VERSION_BUMPED"
 DUMP_AFTER="$(state_dump)"
 # Diff the dumps excluding the cw2 marker key (base64 of "contract_info").
 CW2_STATE_ENTRY_B64="Y29udHJhY3RfaW5mbw=="
@@ -220,7 +228,8 @@ echo; echo "########## 6/6  DOWNGRADE IS REJECTED BY THE CONTRACT ON A LIVE CHAI
 DOWN_MSG="$(jq -n --arg s "$SENDER_POLICY" --arg c "$CONTRACT" --arg id "$CODE_ID_0" \
   '{"@type":"/cosmwasm.wasm.v1.MsgMigrateContract",sender:$s,contract:$c,code_id:$id,msg:"e30="}')"
 jq -n --arg p "$SENDER_POLICY" --arg m "$MEMBER_A_ADDR" --argjson msg "[$DOWN_MSG]" \
-  '{group_policy_address:$p,proposers:[$m],metadata:"",messages:$msg,exec:"EXEC_UNSPECIFIED",title:"migrate-drill: downgrade to 0.1.0 (must fail)",summary:"drill"}' \
+  --arg t "migrate-drill: downgrade to $VERSION_BASE (must fail)" \
+  '{group_policy_address:$p,proposers:[$m],metadata:"",messages:$msg,exec:"EXEC_UNSPECIFIED",title:$t,summary:"drill"}' \
   | put_file /tmp/migrate-drill-downgrade.json
 SUBMIT2="$(tx "$MEMBER_A" -- group submit-proposal /tmp/migrate-drill-downgrade.json)"
 P2="$(pexec query tx "$SUBMIT2" -t --home "$HOME_DIR" -o json | jq -r '[.events[]|select(.type=="cosmos.group.v1.EventSubmitProposal")|.attributes[]|select(.key=="proposal_id")|.value]|first' | sed 's/^"//; s/"$//')"
@@ -235,7 +244,7 @@ EXEC2="$(tx "$MEMBER_A" -- group exec "$P2")"
 EXEC2_RESULT="$(pexec query tx "$EXEC2" -t --home "$HOME_DIR" -o json | jq -r '[.events[]|select(.type=="cosmos.group.v1.EventExec")|.attributes[]|select(.key=="result")|.value]|first' | sed 's/^"//; s/"$//')"
 assert_eq "downgrade EventExec.result" "$EXEC2_RESULT" "PROPOSAL_EXECUTOR_RESULT_FAILURE"
 assert_eq "code id still the new one" "$(qj wasm contract "$CONTRACT" | jq -r '.contract_info.code_id')" "$CODE_ID_1"
-assert_eq "cw2 marker still 0.1.1" "$(cw2_version)" "0.1.1"
+assert_eq "cw2 marker still $VERSION_BUMPED" "$(cw2_version)" "$VERSION_BUMPED"
 ok "[VERIFY-4 closed: a wrapped contract failure surfaces as ACCEPTED + executor_result FAILURE, state untouched]"
 
 echo; echo "== MIGRATE DRILL PASSED ($PASS assertions) =="
