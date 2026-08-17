@@ -1,0 +1,14 @@
+# Build context filter for the component Dockerfiles (built from the repo root).
+.git
+node_modules
+**/node_modules
+.pnpm-store
+contracts
+apps/console
+docs
+infra
+**/generated
+apps/web/build
+apps/web/test-results
+apps/web/playwright-report
+**/.env*
