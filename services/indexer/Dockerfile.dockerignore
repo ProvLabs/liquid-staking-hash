@@ -1,0 +1,33 @@
+# Build-context allowlist for services/indexer/Dockerfile.
+#
+# BuildKit prefers `<dockerfile-name>.dockerignore` over the context's
+# `.dockerignore`, so each component scopes its own context and no shared root
+# file has to know about all of them. The legacy (non-BuildKit) builder ignores
+# this file entirely — reproduce the image with `docker buildx build`.
+#
+# Allowlist, not denylist, and deliberately so: a denylist admits every
+# newly-added top-level directory silently, credentials and large fixture
+# corpora included. Omitting something needed here fails the `deps` stage COPY
+# instead, which is the failure mode to prefer.
+#
+# The manifest list below is mirrored by the `deps` stage COPY. The two serve
+# different jobs (context filter vs. copy); a mismatch fails the build rather
+# than producing a wrong image.
+**
+
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!package.json
+
+!services/indexer/**
+
+!apps/web/package.json
+!services/api/package.json
+!packages/api-types/package.json
+!packages/chain-client/package.json
+!packages/db-indexed/package.json
+!packages/fixtures/package.json
+
+# Never in context even though services/indexer/** re-included it above.
+services/indexer/node_modules/**
+services/indexer/argocd/**
