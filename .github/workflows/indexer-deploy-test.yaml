@@ -1,0 +1,44 @@
+# Build the indexer image and open the ArgoCD image-bump PR for provlabs-test.
+#
+# The paths filter uses `paths` with a `!` negation rather than a
+# `paths`/`paths-ignore` pair: GitHub rejects both filters on the same event.
+# The negation covers the WHOLE chart directory, for two reasons — the
+# workflow's own deploy commit edits values-gha-test.yaml and would otherwise
+# retrigger this workflow in a loop, and a chart or values change needs no new
+# image at all, since ArgoCD reads the chart from git directly.
+name: indexer · build and deploy (test)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/indexer/**'
+      - '!services/indexer/argocd/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/indexer-deploy-test.yaml'
+  # Unfiltered, so a deploy can always be forced by hand.
+  workflow_dispatch:
+
+# Granted explicitly rather than inherited: a reusable workflow's declared
+# permissions are capped by the caller's token, and this repository narrows the
+# default elsewhere (app-ci.yaml is contents: read).
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  indexer:
+    uses: ProvLabs/gha-workflows/.github/workflows/docker_build_and_argo_deploy_test.yaml@main
+    secrets: inherit
+    with:
+      docker-file: services/indexer/Dockerfile
+      argo-app: nvhash-indexer
+      auto-merge: false
+      build-cache: true
+      # Left false deliberately. Enabling it disables provenance and SBOM
+      # attestations, and a Node dependency tree benefits more from an SBOM than
+      # from digest stability.
+      reproducible: false

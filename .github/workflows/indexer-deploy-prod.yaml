@@ -1,0 +1,30 @@
+# Promote an already-built test image to provlabs-prod. The shared workflow
+# re-tags across registries rather than rebuilding, so the artifact that runs in
+# prod is the digest that ran in test.
+#
+# Manual only: promotion is a decision, never a consequence of a merge. The
+# shared workflow's image-bump job is itself gated on refs/heads/main, so
+# dispatch from main.
+name: indexer · promote and deploy (prod)
+
+on:
+  workflow_dispatch:
+    inputs:
+      docker-tag:
+        description: 'Test-registry tag to promote, e.g. git-4d0bdfe (the git- prefix is added if omitted)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  indexer:
+    uses: ProvLabs/gha-workflows/.github/workflows/docker_tag_and_argo_deploy_prod.yaml@main
+    secrets: inherit
+    with:
+      docker-tag: ${{ inputs.docker-tag }}
+      argo-app: nvhash-indexer
+      auto-merge: false
