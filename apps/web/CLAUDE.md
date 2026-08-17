@@ -400,8 +400,30 @@ All fail CI on violation.
   `test/brand-tokens.test.ts`): both theme token sets pass the shared dataviz
   method; the mint-green CTA/focus ring clear their WCAG floors and the fixed
   status family stays on its values in both themes.
-- **axe** (`e2e/axe.spec.ts`): WCAG A/AA on both themes. **New routes join its
-  route list.**
+- **axe** (`e2e/axe.spec.ts`): WCAG A/AA. Since PR 8.3 the matrix is **derived
+  from the route registry** (`e2e/support/routes.ts` enumerates the `:lang?`
+  pages — a new page route is scanned by existing; a new `:param` route needs
+  a `DYNAMIC_BINDINGS` entry or `test/a11y-routes.test.ts` fails) × both
+  themes × three auth states (anonymous / holder / roles, fabricated through
+  the app's own login path — `e2e/support/login.ts`, no seam in `app/`).
+  Weakening the tag set or tolerating a violation requires the app-spec §11
+  exception-ledger entry in the same change. Role-bearing offline renders come
+  from **`NVHASH_MOCK_GRANT_ROLES`** (toolingOnly, beside
+  `NVHASH_MOCK_LIVE_DOWN`): a fixture-derived grant — one appended group
+  member, one appended validator row, the admin answering as a governed
+  policy — provably inert when unset (`test/mock-role-grant.test.ts` asserts
+  knob-off responses byte-identical to the fixtures). Populated authenticated
+  surfaces ride the live lane (`e2e-live/axe.spec.ts`).
+- **Motion / keyboard / labeled states** (`e2e/motion.spec.ts`,
+  `e2e/keyboard.spec.ts`, `e2e/states.spec.ts`, PR 8.3): the reduced-motion
+  kill switch with its non-vacuity case; the enumerated keyboard flows
+  (popovers close on Escape AND return focus to their trigger); every §14.4
+  shell, cold-start, below-threshold and LIVE_DOWN state visible in the
+  accessibility tree — an inaccessible caveat is a caveat that does not exist
+  for AT users. The confirm step's semantics are pinned at the component
+  level (`test/tx-confirm-a11y.test.ts` — tier by text, never color alone);
+  the manual screen-reader walk is an 8.5 pre-launch obligation, and a green
+  axe suite is not a completed accessibility review.
 - **No client-side analytics** (`e2e/admin.spec.ts`): the counted pages issue no
   request that looks like analytics and none that leaves the app's origin, and
   set no cookie beyond the theme preference. §14.10's "no beacon, no pixel, no
