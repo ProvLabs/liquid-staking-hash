@@ -9,7 +9,7 @@
 // its `cursorPage` string. `meta:`-prefixed rows are markers, not worker
 // cursors — lag accounting excludes them.
 
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../../prisma.ts";
 import type { OperatorPaymentRow, RedemptionRow, Store, TransactionRow } from "./reduce.ts";
 
 const NAV_MARKER_STREAM = "meta:chain-events:nav";

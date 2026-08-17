@@ -32,3 +32,14 @@ allowBuilds:
   # explicitly rather than left unreviewed.
   msw: false
   prisma: true
+
+# Advisory exceptions for the CI `audit` gate (SECURITY.md "Dependencies and
+# supply chain"). This file is the pnpm-11 home of auditConfig — pnpm no
+# longer reads `package.json#pnpm`. EVERY id listed here MUST have an
+# owner+reason+review-by row in docs/security/dependency-audit-exceptions.md;
+# scripts/check-audit-exceptions.mjs fails CI in both directions. No severity
+# floor and no workflow-side --ignore flags exist anywhere — a genuinely
+# inapplicable advisory earns a named entry, never a threshold.
+auditConfig:
+  ignoreCves: []
+  ignoreGhsas: []

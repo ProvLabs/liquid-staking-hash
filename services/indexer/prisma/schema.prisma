@@ -21,8 +21,17 @@ datasource db {
   schemas  = ["indexed"]
 }
 
+// Explicit output, gitignored: `apps/web` is the repo's SOLE default-output
+// generator, so nothing else may write the hoisted node_modules/@prisma/client
+// (two writers make the last `prisma generate` in a process tree win,
+// globally). Every generator in this schema declares an explicit path —
+// asserted by test/prisma-generator-output.test.ts. The path is OUTSIDE this
+// directory because the whole `prisma/` dir is the multi-file schema: a client
+// generated into it would be re-read as schema source on the next generate.
+// Import the client via src/prisma.ts, never from a generated path directly.
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/client"
 }
 
 // The read-only client for `services/api` (@nvhash/db-indexed

@@ -8,6 +8,7 @@
 // the serialized key set stays exactly this.
 
 import type { FreshnessMeta } from "@nvhash/api-types";
+import type { Completeness } from "~/api/completeness";
 
 export interface ValidatorRow {
   valoper: string;
@@ -43,6 +44,8 @@ export interface ValidatorsData {
   /** Live eligible count from the latest epoch snapshot, or null. */
   eligibleCount: number | null;
   /** Indexed set-health aggregates with their freshness meta; null = API
-   * unreachable or off-shape. */
-  setHealth: { data: SetHealthPublic; meta: FreshnessMeta } | null;
+   * unreachable or off-shape. `completeness` is the wire flag's tri-state:
+   * "partial" = the registry outgrew the producer cap and these aggregates
+   * cover a flagged prefix; "unknown" = older API, no completeness claim. */
+  setHealth: { data: SetHealthPublic; completeness: Completeness; meta: FreshnessMeta } | null;
 }

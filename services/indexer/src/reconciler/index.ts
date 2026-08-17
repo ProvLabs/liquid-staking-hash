@@ -6,7 +6,7 @@
 // it survives an indexer outage (§12.1.3). It advances no cursor; it only reads
 // chain + indexed data and writes reconciler_runs + incidents.
 
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../prisma.ts";
 import { expectObject } from "../decode/scalars.ts";
 import { logger } from "../logger.ts";
 import type { PinnedLcdClient, RpcClient } from "../transport/rpc.ts";

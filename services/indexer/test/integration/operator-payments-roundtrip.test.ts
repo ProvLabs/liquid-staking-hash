@@ -18,7 +18,7 @@
 // grant-boundary and reconciler-alarm gates; brings its own Prisma client.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../src/prisma.ts";
 import { applyEvents } from "../../src/workers/chain-events/reduce.ts";
 import { PrismaStore } from "../../src/workers/chain-events/store.ts";
 import type { DomainEvent } from "../../src/workers/chain-events/events.ts";

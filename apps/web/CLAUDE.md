@@ -317,18 +317,16 @@ All fail CI on violation.
   params have no effect); anonymous requests prompt-and-explain (page) or 401
   (resource route); cookie flags, nonce single-use/replay, and expiry bounds are
   pinned. **Every new personal or public-by-design route joins this suite.**
-- **`test:db` runs `prisma generate` FIRST, and that is load-bearing.**
-  `apps/web/prisma` and `services/indexer/prisma` both declare a generator with
-  **no `output`**, so both write the SAME hoisted `node_modules/@prisma/client`
-  — the last `prisma generate` in a process tree wins, globally. `pnpm -r`
-  ordering hides this (apps/web generates last), but the `db-grants` CI job
-  generates `@nvhash/db-indexed` after it, leaving the shared client holding
-  `indexed` models: `prisma.incidentAck` is then `undefined` and every case in
-  this suite fails on the first line. Generating inside the script makes the
-  suite independent of step order — the same `prisma generate && …` idiom
-  `typecheck` already uses. **Do not remove it as redundant.** The durable fix
-  is an explicit `output` for one of the two schemas (the `@nvhash/db-indexed`
-  precedent); it is a follow-on, not done here.
+- **`test:db` runs `prisma generate` FIRST, and that is load-bearing.** The
+  generated client is not committed, so it must exist before the suite runs —
+  the same `prisma generate && …` idiom `typecheck` already uses, and it keeps
+  the suite independent of job step order. **Do not remove it as redundant.**
+  This schema is the repo's **sole default-output generator**: every generator
+  in `services/indexer/prisma` declares an explicit `output` (gated by its
+  `prisma-generator-output` test), so nothing else writes the hoisted
+  `node_modules/@prisma/client`. A future schema anywhere in the repo must
+  declare an explicit `output` too — two default-output generators race, and
+  the last `prisma generate` in a process tree wins globally.
 - **`app`-schema store gate** (`test:db`, `test/integration/app-stores.test.ts`)
   — the REAL Prisma stores as `app_writer` against a migrated Postgres. It is
   separate from the unit suites on purpose and it is **not** redundant with

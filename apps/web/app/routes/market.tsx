@@ -38,12 +38,18 @@ export default function Market({ loaderData }: Route.ComponentProps) {
       <MarketStatus locale={locale} market={data.market} nowMs={nowMs} />
       <PremiumExplainer locale={locale} />
       {data.market?.sample ? (
-        <Depth locale={locale} sample={data.market.sample} nowMs={nowMs} />
+        <Depth
+          locale={locale}
+          sample={data.market.sample}
+          completeness={data.market.depthCompleteness}
+          nowMs={nowMs}
+        />
       ) : null}
       <SupplyLocation
         locale={locale}
         localSupply={data.localSupply}
         bridged={data.market?.bridged ?? []}
+        completeness={data.market?.bridgedCompleteness ?? "unknown"}
         nowMs={nowMs}
       />
       <History locale={locale} epochs={data.epochs} />

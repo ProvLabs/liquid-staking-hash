@@ -10,7 +10,7 @@
 // model already carries a nullable `cursorPage` string. Lag accounting
 // excludes `meta:`-prefixed rows from the per-stream height exposure.
 
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../prisma.ts";
 
 /** Stream names → durable checkpoint keys, one per worker (app-spec §9.2). */
 export const STREAMS = {

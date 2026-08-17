@@ -202,4 +202,39 @@ describe("honest degradation (§12.1: each read degrades its own surface)", () =
     const offShape = await loadValidatorsData(config());
     expect(offShape.setHealth).toBeNull();
   });
+
+  it("carries the truncation flag as a tri-state: true → partial, false → complete, absent → unknown", async () => {
+    // 8.0b invariant 7: a trimmed set view says so, and an absent flag (older
+    // API) never renders as "complete".
+    const base = {
+      validators: [],
+      set_health: { total: 400, active: 2, eligible: 1, in_arrears: 0 },
+    };
+    server.use(
+      http.get("*/api/v1/validators", () =>
+        HttpResponse.json(envelope({ ...base, validators_truncated: true }, { source: "indexed" })),
+      ),
+    );
+    expect((await loadValidatorsData(config())).setHealth?.completeness).toBe("partial");
+
+    server.use(
+      http.get("*/api/v1/validators", () =>
+        HttpResponse.json(
+          envelope({ ...base, validators_truncated: false }, { source: "indexed" }),
+        ),
+      ),
+    );
+    expect((await loadValidatorsData(config())).setHealth?.completeness).toBe("complete");
+
+    // Flag STRIPPED (deploy skew: older API): unknown, never complete — and
+    // the payload still parses rather than being rejected wholesale.
+    server.use(
+      http.get("*/api/v1/validators", () =>
+        HttpResponse.json(envelope(base, { source: "indexed" })),
+      ),
+    );
+    const absent = await loadValidatorsData(config());
+    expect(absent.setHealth).not.toBeNull();
+    expect(absent.setHealth?.completeness).toBe("unknown");
+  });
 });

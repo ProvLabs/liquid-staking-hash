@@ -290,3 +290,38 @@ jobs:
           name: sim-failures
           path: contracts/sim-failures.log
           if-no-files-found: ignore
+
+  # SECURITY.md "run cargo audit before releases", enforced as a standing CI
+  # gate (PR 8.0b, CO-12). DELIBERATELY unguarded by `changes`: the input that
+  # moves is the ADVISORY DATABASE, which is never in the diff — a doc-only PR
+  # can be the first to see a new advisory against the pinned contract stack.
+  # The job is minutes; the step-guard pattern exists to skip expensive work,
+  # not cheap gates. Exceptions live ONLY in contracts/.cargo/audit.toml with
+  # an owned row in docs/security/dependency-audit-exceptions.md — no
+  # --ignore flags, no severity floor, no continue-on-error: the contract
+  # custodies staked funds, and a blanket allow would silence every future
+  # advisory behind the first inconvenient one.
+  audit:
+    name: contracts · cargo audit (advisory database, unguarded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Show the pinned toolchain (installs it via rust-toolchain.toml)
+        run: rustup show
+      # The binary, not the build cache: cargo-audit's version moves with this
+      # key only, and a hit skips the ~2 min install entirely.
+      - name: Restore cargo-audit binary
+        id: audit-bin
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-v1
+      - name: Install cargo-audit (--locked)
+        if: steps.audit-bin.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --locked
+      - name: Audit Cargo.lock (exceptions only via .cargo/audit.toml)
+        run: cargo audit
+      - name: Every exception has an owner (register ↔ machine lists, both directions)
+        working-directory: .
+        run: node scripts/check-audit-exceptions.mjs

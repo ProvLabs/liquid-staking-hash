@@ -1,17 +1,23 @@
 import { t, type Locale } from "~/i18n";
+import type { Completeness } from "~/api/completeness";
 import { formatAgeSince } from "~/learn/duration";
 import type { MarketSampleView } from "~/market/types";
 
 // §8.5 pool depth, rendered only when a sample exists, carrying the same
 // venue + sample-time label as every market figure. No verify link (§12.1
-// rule 4).
+// rule 4). `completeness` renders the honesty state of the band set:
+// "partial" says the producer trimmed it (never an unlabeled prefix),
+// "unknown" (older API, no flag) withholds the completeness claim. Gated by
+// test/market-data.test.ts.
 export function Depth({
   locale,
   sample,
+  completeness,
   nowMs,
 }: {
   locale: Locale;
   sample: MarketSampleView;
+  completeness: Completeness;
   nowMs: number;
 }) {
   if (sample.depth.length === 0) return null;
@@ -42,6 +48,13 @@ export function Depth({
           </tbody>
         </table>
       </div>
+      {completeness === "partial" ? (
+        <p className="text-xs text-muted-foreground">{t(locale, "market.depth-partial")}</p>
+      ) : completeness === "unknown" ? (
+        <p className="text-xs text-muted-foreground">
+          {t(locale, "market.depth-completeness-unknown")}
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         {t(locale, "market.sample-label", {
           venue: sample.venue,

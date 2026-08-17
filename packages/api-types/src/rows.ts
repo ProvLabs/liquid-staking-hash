@@ -114,8 +114,15 @@ export interface ValidatorRow {
   uptime_bps: number | null;
   /** Eligibility at that epoch, or null before any sample. */
   eligible: boolean | null;
-  /** Reasons the validator failed eligibility checks (empty when eligible). */
+  /** Reasons the validator failed eligibility checks (empty when eligible),
+   * trimmed to `MAX_FAILING_REASONS`. */
   failing_reasons: string[];
+  /**
+   * The trim above bound this row's reason list. OPTIONAL for deploy skew
+   * only: the producer always emits it (PR 8.0b on); a consumer reading an
+   * older producer treats absence as UNKNOWN, never as "complete".
+   */
+  failing_reasons_truncated?: boolean;
   /** Program delegation in nhash base units, decimal string, or null. */
   program_delegation: string | null;
   /** Commission currently due in nhash, decimal string, or null. */
@@ -138,8 +145,18 @@ export interface ValidatorSetHealth {
 
 /** `GET /api/v1/validators` payload: the set plus its health aggregates. */
 export interface ValidatorsPayload {
+  /** Registry rows in registry order (moniker asc), trimmed to
+   * `MAX_VALIDATOR_REGISTRY_ROWS`. */
   validators: ValidatorRow[];
+  /** Aggregates over the SERVED rows; `validators_truncated: true` marks the
+   * whole set view — rows and aggregates — as partial. */
   set_health: ValidatorSetHealth;
+  /**
+   * The registry outgrew the producer cap and the set view is partial.
+   * OPTIONAL for deploy skew only: the producer always emits it (PR 8.0b on);
+   * absence means an older producer — UNKNOWN, never "complete".
+   */
+  validators_truncated?: boolean;
 }
 
 /**
@@ -216,10 +233,18 @@ export interface PortfolioSummary {
   first_activity_at: string | null;
   /** Indexed events for this address (the /transactions row count). */
   transaction_count: number;
-  /** Total shares escrowed in active (enqueued/expedited) redemptions. */
+  /** Total shares escrowed in the SERVED active redemptions (partial when
+   * `active_redemptions_truncated` is true). */
   escrowed_shares: string;
-  /** Active redemptions, newest first. */
+  /** Active redemptions, newest first, trimmed to `MAX_ACTIVE_REDEMPTIONS`
+   * (a trim drops the oldest). */
   active_redemptions: RedemptionRow[];
+  /**
+   * The address's open redemptions outgrew the producer cap. OPTIONAL for
+   * deploy skew only: the producer always emits it (PR 8.0b on); absence
+   * means an older producer — UNKNOWN, never "complete".
+   */
+  active_redemptions_truncated?: boolean;
 }
 
 /**
@@ -383,8 +408,18 @@ export interface BridgedSupplyRow {
 export interface MarketSummary {
   /** Latest pool observation, or null while no market data exists. */
   sample: MarketSample | null;
-  /** Latest reading per remote chain (empty until the bridge is live). */
+  /** Latest reading per remote chain (empty until the bridge is live),
+   * trimmed to `MAX_BRIDGED_SUPPLY_ROWS`. */
   bridged_supply: BridgedSupplyRow[];
+  /**
+   * `sample.depth_bands` was trimmed to `MAX_MARKET_DEPTH_BANDS` (false when
+   * `sample` is null). OPTIONAL for deploy skew only: the producer always
+   * emits it (PR 8.0b on); absence means an older producer — UNKNOWN, never
+   * "complete".
+   */
+  depth_bands_truncated?: boolean;
+  /** Same contract as `depth_bands_truncated`, for `bridged_supply`. */
+  bridged_supply_truncated?: boolean;
 }
 
 // --- internal alert-facts surface (`internal:notifier` scope) ---------

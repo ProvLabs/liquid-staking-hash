@@ -4,7 +4,7 @@
 // incident move together). The reconciler is the SOLE writer of `incidents`
 // (app-spec §9.6).
 
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "../prisma.ts";
 import type { IndexedPlane, ReconcileActions } from "./incidents.ts";
 
 function toBig(value: { toFixed(dp: number): string }): bigint {

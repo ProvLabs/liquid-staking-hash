@@ -6,7 +6,14 @@
 // un-indexed metrics).
 
 import { describe, expect, it } from "vitest";
-import { MAX_GOV_VOTES_PER_PROPOSAL } from "@nvhash/api-types";
+import {
+  MAX_ACTIVE_REDEMPTIONS,
+  MAX_BRIDGED_SUPPLY_ROWS,
+  MAX_FAILING_REASONS,
+  MAX_GOV_VOTES_PER_PROPOSAL,
+  MAX_MARKET_DEPTH_BANDS,
+  MAX_VALIDATOR_REGISTRY_ROWS,
+} from "@nvhash/api-types";
 import {
   toGovDecisionPolicy,
   toGovPolicyRow,
@@ -29,9 +36,9 @@ import {
   premiumDiscountBps,
   REDEMPTION_BAND_CEILING_SECONDS,
   REDEMPTION_BAND_FLOOR_SECONDS,
+  deriveMarketSummary,
   toEpochRow,
   toIncidentRow,
-  toMarketSample,
   toSafeInt,
   toSafeSignedInt,
   toValidatorRow,
@@ -166,9 +173,26 @@ describe("validators derivation", () => {
       uptime_bps: 9990,
       eligible: true,
       failing_reasons: [],
+      failing_reasons_truncated: false,
       program_delegation: "1000000000",
       commission_due: "5",
     });
+  });
+
+  it("trims and flags an over-cap failing_reasons list; under-cap is unflagged", () => {
+    // C7 gate for MAX_FAILING_REASONS: the real derive over a real over-cap
+    // array — never a stand-in of the cap.
+    const over = toValidatorRow(reg, {
+      ...epoch,
+      failingReasons: Array.from({ length: MAX_FAILING_REASONS + 3 }, (_, i) => `reason-${i}`),
+    });
+    expect(over.failing_reasons).toHaveLength(MAX_FAILING_REASONS);
+    expect(over.failing_reasons[0]).toBe("reason-0");
+    expect(over.failing_reasons_truncated).toBe(true);
+
+    const under = toValidatorRow(reg, { ...epoch, failingReasons: ["jailed"] });
+    expect(under.failing_reasons).toEqual(["jailed"]);
+    expect(under.failing_reasons_truncated).toBe(false);
   });
 
   it("reports null per-epoch fields before any sample (never a fabricated 0)", () => {
@@ -199,6 +223,27 @@ describe("validators derivation", () => {
     const payload = deriveValidatorsPayload([reg], new Map([[reg.valoper, epoch]]));
     expect(payload.validators).toHaveLength(1);
     expect(payload.set_health.total).toBe(1);
+    expect(payload.validators_truncated).toBe(false);
+  });
+
+  it("trims and flags an over-cap registry; under-cap is unflagged", () => {
+    // C7 gate for MAX_VALIDATOR_REGISTRY_ROWS: registry order (moniker asc)
+    // is preserved, the flag marks the SET VIEW partial, and the aggregates
+    // are over the served rows.
+    const registry = Array.from({ length: MAX_VALIDATOR_REGISTRY_ROWS + 1 }, (_, i) => ({
+      valoper: `pbvaloper1${String(i).padStart(6, "0")}`,
+      moniker: `val-${String(i).padStart(6, "0")}`,
+      unregisteredAt: null,
+    }));
+    const over = deriveValidatorsPayload(registry, new Map());
+    expect(over.validators).toHaveLength(MAX_VALIDATOR_REGISTRY_ROWS);
+    expect(over.validators[0]?.moniker).toBe("val-000000");
+    expect(over.validators_truncated).toBe(true);
+    expect(over.set_health.total).toBe(MAX_VALIDATOR_REGISTRY_ROWS);
+
+    const under = deriveValidatorsPayload(registry.slice(0, 3), new Map());
+    expect(under.validators).toHaveLength(3);
+    expect(under.validators_truncated).toBe(false);
   });
 });
 
@@ -225,14 +270,32 @@ describe("portfolio derivation ([R2] indexed facts only)", () => {
     expect(summary.transaction_count).toBe(2);
     expect(summary.first_activity_at).toBe("2026-06-01T00:00:00.000Z");
     expect(summary.active_redemptions).toHaveLength(2);
+    expect(summary.active_redemptions_truncated).toBe(false);
     // [R2]: the frozen shape carries NO balance field to misstate.
     expect(Object.keys(summary).sort()).toEqual([
       "active_redemptions",
+      "active_redemptions_truncated",
       "address",
       "escrowed_shares",
       "first_activity_at",
       "transaction_count",
     ]);
+  });
+
+  it("trims and flags an over-cap redemption set; under-cap is unflagged", () => {
+    // C7 gate for MAX_ACTIVE_REDEMPTIONS: input is newest-first (the read
+    // order), so the trim keeps the newest and drops the oldest, and the
+    // escrow sum covers the SERVED rows so the payload stays consistent.
+    const many = Array.from({ length: MAX_ACTIVE_REDEMPTIONS + 5 }, (_, i) => ({
+      ...active,
+      requestId: `req-${String(i).padStart(4, "0")}`,
+      shares: 1n,
+    }));
+    const over = derivePortfolio("pb1walletaqq", null, many.length, many);
+    expect(over.active_redemptions).toHaveLength(MAX_ACTIVE_REDEMPTIONS);
+    expect(over.active_redemptions[0]?.request_id).toBe("req-0000");
+    expect(over.active_redemptions_truncated).toBe(true);
+    expect(over.escrowed_shares).toBe(String(MAX_ACTIVE_REDEMPTIONS));
   });
 
   it("refuses a non-active redemption in the escrow set (defensive guard)", () => {
@@ -279,25 +342,75 @@ describe("market derivation", () => {
     }
   });
 
-  it("toMarketSample carries venue + sample time in the payload ([R6] labeled)", () => {
-    const sample = toMarketSample(
-      {
+  const sampleFacts = {
+    venue: "uniswap-v3",
+    pool: "0xpool",
+    priceNhash: 1_030_000_000n,
+    depthBands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
+    sampledAt: new Date("2026-07-10T12:00:00Z"),
+  };
+
+  it("deriveMarketSummary carries venue + sample time in the payload ([R6] labeled)", () => {
+    const summary = deriveMarketSummary(sampleFacts, 1_000_000_000n, []);
+    expect(summary).toEqual({
+      sample: {
         venue: "uniswap-v3",
         pool: "0xpool",
-        priceNhash: 1_030_000_000n,
-        depthBands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
-        sampledAt: new Date("2026-07-10T12:00:00Z"),
+        price: "1030000000",
+        premium_discount_bps: 300,
+        depth_bands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
+        sampled_at: "2026-07-10T12:00:00.000Z",
       },
-      1_000_000_000n,
-    );
-    expect(sample).toEqual({
-      venue: "uniswap-v3",
-      pool: "0xpool",
-      price: "1030000000",
-      premium_discount_bps: 300,
-      depth_bands: [{ side: "sell", slippage_bps: 100, amount: "5" }],
-      sampled_at: "2026-07-10T12:00:00.000Z",
+      bridged_supply: [],
+      depth_bands_truncated: false,
+      bridged_supply_truncated: false,
     });
+  });
+
+  it("serves the honest empty summary with explicit false flags", () => {
+    expect(deriveMarketSummary(null, null, [])).toEqual({
+      sample: null,
+      bridged_supply: [],
+      depth_bands_truncated: false,
+      bridged_supply_truncated: false,
+    });
+  });
+
+  it("trims and flags over-cap depth bands; under-cap is unflagged", () => {
+    // C7 gate for MAX_MARKET_DEPTH_BANDS (dormant-path: no v1 sampler exists,
+    // so fixtures are the only exerciser — stated in bounds.ts).
+    const over = deriveMarketSummary(
+      {
+        ...sampleFacts,
+        depthBands: Array.from({ length: MAX_MARKET_DEPTH_BANDS + 2 }, (_, i) => ({
+          side: "buy",
+          slippage_bps: i,
+          amount: "1",
+        })),
+      },
+      null,
+      [],
+    );
+    expect(over.sample?.depth_bands).toHaveLength(MAX_MARKET_DEPTH_BANDS);
+    expect(over.depth_bands_truncated).toBe(true);
+    expect(over.bridged_supply_truncated).toBe(false);
+  });
+
+  it("trims and flags over-cap bridged rows; under-cap is unflagged", () => {
+    // C7 gate for MAX_BRIDGED_SUPPLY_ROWS.
+    const rows = Array.from({ length: MAX_BRIDGED_SUPPLY_ROWS + 2 }, (_, i) => ({
+      chain: `chain-${String(i).padStart(3, "0")}`,
+      remoteSupply: 1n,
+      sampledAt: new Date("2026-07-10T12:00:00Z"),
+    }));
+    const over = deriveMarketSummary(null, null, rows);
+    expect(over.bridged_supply).toHaveLength(MAX_BRIDGED_SUPPLY_ROWS);
+    expect(over.bridged_supply[0]?.chain).toBe("chain-000");
+    expect(over.bridged_supply_truncated).toBe(true);
+
+    const under = deriveMarketSummary(null, null, rows.slice(0, 2));
+    expect(under.bridged_supply).toHaveLength(2);
+    expect(under.bridged_supply_truncated).toBe(false);
   });
 });
 

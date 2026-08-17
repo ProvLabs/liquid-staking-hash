@@ -4,7 +4,7 @@
 // live chain.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../../src/prisma.ts";
 import type { Window } from "../../src/runtime/checkpoint.ts";
 import {
   clearRegisteredWorkers,

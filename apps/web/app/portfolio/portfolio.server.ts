@@ -19,6 +19,7 @@ import {
   portfolioMetricsEnvelopeSchema,
   transactionsEnvelopeSchema,
 } from "~/api/api.server";
+import { completenessOf } from "~/api/completeness";
 import { CHROME_READ_TIMEOUT_MS } from "~/chrome/chrome.server";
 import type { WebConfig } from "~/config/config.server";
 import { formatBaseAmount, HASH_EXPONENT, navHashPerShare, SHARE_EXPONENT } from "~/learn/amounts";
@@ -326,6 +327,10 @@ export async function loadPortfolioData(
     yieldTruncated: metrics?.yield_truncated ?? false,
     accrual,
     activeRedemptions,
+    // Tri-state, never a defaulted boolean: an unavailable /portfolio read
+    // (summaryEnv null) and an older API that ships no flag both land on
+    // "unknown" — the panel then makes no completeness claim.
+    activeRedemptionsCompleteness: completenessOf(summaryEnv?.data.active_redemptions_truncated),
     firstActivityAt: summaryEnv?.data.first_activity_at ?? null,
     history,
     personalReadsAvailable: headers !== null && (summaryEnv !== null || metricsEnv !== null),

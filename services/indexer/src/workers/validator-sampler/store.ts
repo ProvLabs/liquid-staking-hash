@@ -3,7 +3,7 @@
 // (runWindow). Amounts are Decimal(39,0) — passed as canonical integer strings;
 // heights are BigInt; failingReasons is a text[]; jailedEvents is JSONB.
 
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../prisma.ts";
 import type { EpochRow, RegistryRow, ValidatorStore } from "./write.ts";
 
 export class PrismaValidatorStore implements ValidatorStore {

@@ -333,6 +333,7 @@ describe("honest-empty state (default reader: no data plane wired)", () => {
         transaction_count: 0,
         escrowed_shares: "0",
         active_redemptions: [],
+        active_redemptions_truncated: false,
       });
 
       const transactions = await fetch(
@@ -702,6 +703,7 @@ describe("populated reader (real derivations behind the frozen shapes)", () => {
         uptime_bps: 9990,
         eligible: true,
         failing_reasons: [],
+        failing_reasons_truncated: false,
         program_delegation: "1000000000",
         commission_due: "5",
       });

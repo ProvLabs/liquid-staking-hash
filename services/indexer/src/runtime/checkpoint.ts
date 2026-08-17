@@ -7,7 +7,7 @@
 // re-processes the window from the last committed height (idempotent replay,
 // SECURITY.md "handle reorgs/replays idempotently").
 
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "../prisma.ts";
 
 /** A closed height range `[from, to]` to process as one unit. */
 export interface Window {

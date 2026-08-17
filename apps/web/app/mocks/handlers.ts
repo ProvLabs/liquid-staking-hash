@@ -294,6 +294,7 @@ export const handlers = [
           transaction_count: 0,
           escrowed_shares: "0",
           active_redemptions: [],
+          active_redemptions_truncated: false,
         },
         { source: "indexed" },
       ),
@@ -305,7 +306,17 @@ export const handlers = [
   // The /market shape (MarketSummary), honest-empty exactly as the real
   // route serves with the sampler parked: no sample, no bridged supply.
   http.get("*/api/v1/market", () =>
-    HttpResponse.json(envelope({ sample: null, bridged_supply: [] }, { source: "indexed" })),
+    HttpResponse.json(
+      envelope(
+        {
+          sample: null,
+          bridged_supply: [],
+          depth_bands_truncated: false,
+          bridged_supply_truncated: false,
+        },
+        { source: "indexed" },
+      ),
+    ),
   ),
   // Personal surfaces (/portfolio, /portfolio/metrics, /transactions):
   // honest-empty defaults mirroring the services/api empty payloads (reader
@@ -322,6 +333,7 @@ export const handlers = [
           transaction_count: 0,
           escrowed_shares: "0",
           active_redemptions: [],
+          active_redemptions_truncated: false,
         },
         { source: "indexed" },
       ),
@@ -378,7 +390,11 @@ export const handlers = [
   http.get("*/api/v1/validators", () =>
     HttpResponse.json(
       envelope(
-        { validators: [], set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 } },
+        {
+          validators: [],
+          set_health: { total: 0, active: 0, eligible: 0, in_arrears: 0 },
+          validators_truncated: false,
+        },
         { source: "indexed" },
       ),
     ),

@@ -245,6 +245,52 @@ describe("empty history and pagination", () => {
     });
     expect(data.history).toEqual({ rows: [], page: 0, pageSize: 50, hasMore: false });
     expect(data.effectiveAprBps).toBeNull();
+    // The default handler emits the flag false: the empty set is complete.
+    expect(data.activeRedemptionsCompleteness).toBe("complete");
+  });
+
+  it("carries the redemption truncation flag as a tri-state: true → partial, absent → unknown", async () => {
+    // 8.0b invariant 7: a trimmed set says so, and an absent flag (older API,
+    // deploy skew) never renders as "complete".
+    const redemption = {
+      request_id: "req-1",
+      shares: "1000000000000000",
+      status: "enqueued" as const,
+      enqueued_at: "2026-07-01T00:00:00Z",
+      expedited_at: null,
+      matured_at: null,
+      refunded_at: null,
+      last_height: 100,
+      last_txhash: "AA",
+    };
+    const base = {
+      address: SESSION.address,
+      first_activity_at: null,
+      transaction_count: 1,
+      escrowed_shares: "1000000000000000",
+      active_redemptions: [redemption],
+    };
+    server.use(
+      http.get("*/api/v1/portfolio", () =>
+        HttpResponse.json(
+          envelope({ ...base, active_redemptions_truncated: true }, { source: "indexed" }),
+        ),
+      ),
+    );
+    const flagged = await loadPortfolioData(withKey(), SESSION, 0);
+    expect(flagged.activeRedemptionsCompleteness).toBe("partial");
+    expect(flagged.activeRedemptions).toHaveLength(1);
+
+    // Flag STRIPPED: the payload still parses (never rejected wholesale) and
+    // the tri-state lands on unknown.
+    server.use(
+      http.get("*/api/v1/portfolio", () =>
+        HttpResponse.json(envelope(base, { source: "indexed" })),
+      ),
+    );
+    const absent = await loadPortfolioData(withKey(), SESSION, 0);
+    expect(absent.activeRedemptions).toHaveLength(1);
+    expect(absent.activeRedemptionsCompleteness).toBe("unknown");
   });
 
   it("page 1 requests offset 50 (page * pageSize)", async () => {

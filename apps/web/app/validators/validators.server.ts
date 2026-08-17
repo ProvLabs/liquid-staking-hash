@@ -20,6 +20,7 @@ import {
 } from "@nvhash/chain-client";
 
 import { fetchApiJson, validatorsEnvelopeSchema } from "~/api/api.server";
+import { completenessOf } from "~/api/completeness";
 import { CHROME_READ_TIMEOUT_MS } from "~/chrome/chrome.server";
 import type { WebConfig } from "~/config/config.server";
 import { bpsToPercent, formatHashCompact } from "~/learn/amounts";
@@ -103,6 +104,10 @@ export async function loadValidatorsData(
               active: indexedSet.data.set_health.active,
               eligible: indexedSet.data.set_health.eligible,
             },
+            // Tri-state, never a defaulted boolean: an absent wire flag
+            // (older API) is "unknown", and the surface then withholds the
+            // completeness claim rather than asserting totality.
+            completeness: completenessOf(indexedSet.data.validators_truncated),
             meta: indexedSet.meta,
           },
   };
