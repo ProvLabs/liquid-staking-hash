@@ -7,6 +7,10 @@ packages:
   - services/*
   - packages/*
 
+# GHSA-ggr8-5vv4-36mx: no patched prisma release yet; drop when upstream moves to >=8.
+overrides:
+  deepmerge-ts: '>=8.0.1'
+
 # Dependency build-script allowlist (pnpm blocks all install scripts by
 # default — SECURITY.md: "avoid install-script-heavy packages"). Prisma is the
 # chosen ORM for the indexed/app schemas (app-spec §5.3, §9.1); its postinstall
