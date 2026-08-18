@@ -19,4 +19,5 @@ ignore = [
   "RUSTSEC-2026-0098", # rustls-webpki 0.101 — see the register row (dev-only test-harness TLS)
   "RUSTSEC-2026-0099", # rustls-webpki 0.101 — see the register row (dev-only test-harness TLS)
   "RUSTSEC-2026-0104", # rustls-webpki 0.101 — see the register row (dev-only test-harness TLS)
+  "RUSTSEC-2026-0258", # h2 0.3 — see the register row (dev-only test-harness HTTP/2)
 ]
