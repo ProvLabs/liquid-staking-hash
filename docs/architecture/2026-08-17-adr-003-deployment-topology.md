@@ -173,4 +173,8 @@ need a writable tree and defeat `readOnlyRootFilesystem`.
    is proven (migrations and the supervisor both run from the image against
    Postgres); the IAM half is not.
 4. Add the gating checks Consequences names, or record their absence with an
-   owner.
+   owner. **Recorded:** the secret repo-scan is outstanding (milestone overview
+   §7); the rendered-chart invariant check is outstanding as **CO-56**, which
+   also carries the single-writer decision — `replicas: 1` bounds overlap but a
+   Deployment does not give at-most-one, so that invariant is currently a
+   topology assumption.
