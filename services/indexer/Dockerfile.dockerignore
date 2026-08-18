@@ -29,5 +29,18 @@
 !packages/fixtures/package.json
 
 # Never in context even though services/indexer/** re-included it above.
+#
+# .env is the load-bearing one: it is gitignored, but the service's CLAUDE.md
+# instructs developers to create one for Prisma to auto-load, so a local
+# `docker buildx build` would otherwise bake a real DATABASE_URL — password
+# included — into an image layer. The allowlist above cannot catch it, because
+# it re-includes the whole service directory.
+services/indexer/.env
+services/indexer/.env.*
+!services/indexer/.env.example
 services/indexer/node_modules/**
 services/indexer/argocd/**
+# Test sources and their configs are never executed in the deployed image.
+services/indexer/test/**
+services/indexer/vitest.config.ts
+services/indexer/vitest.integration.config.ts
