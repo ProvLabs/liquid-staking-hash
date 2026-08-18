@@ -39,7 +39,9 @@ express the same ownership map and grant set.
 (`services/indexer/test/integration/grant-boundary.test.ts`, run by the
 `db-grants` job) asserts the boundary and table ownership against the dev
 substrate. Nothing in CI can observe a deployed instance, so keeping this file
-in agreement is a review obligation, not a gated one. That gap is recorded as an
-open question in
-[the deployment design note](../../docs/plans/2026-08-17-app-m8.4-indexer-deployment-design.md)
-§8 Q2 and needs a named owner rather than silent inheritance.
+in agreement is a review obligation, not a gated one.
+
+That gap is recorded in
+[ADR-003](../../docs/architecture/2026-08-17-adr-003-deployment-topology.md)
+(Consequences) and tracked as **CO-55** in the M8 milestone overview's decision
+register. It needs a named owner rather than silent inheritance.
