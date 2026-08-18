@@ -105,6 +105,12 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          # Declared so a namespace ResourceQuota that requires requests cannot
+          # reject the pod. Applying one baseline migration is short and light.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
