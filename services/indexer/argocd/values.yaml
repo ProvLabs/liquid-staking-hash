@@ -11,6 +11,12 @@
 #     no password. This chart holds no secret material of any kind. Adding one
 #     would mean the IAM path had been abandoned, which is a design decision.
 
+# Bounds how long a terminating supervisor can still be writing while its
+# replacement starts. See the comment in templates/deployment.yaml: a Deployment
+# does not give at-most-one, so this is a bound, not a fix. Short is safe here —
+# a killed window transaction rolls back and the cursor does not move.
+terminationGracePeriodSeconds: 20
+
 # Worker tuning. CONFIRMATION_DEPTH 0 is safe on Provenance (instant finality).
 # indexWindowSpan bounds heights per window transaction; a window is a
 # throughput unit, not a latency one.

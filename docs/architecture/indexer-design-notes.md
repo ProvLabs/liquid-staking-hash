@@ -268,20 +268,41 @@ Full topology and options considered:
 [ADR-003](2026-08-17-adr-003-deployment-topology.md). Recorded here is only what
 is specific to *this* service — the properties a deployment could quietly break.
 
-### Single writer is a correctness requirement
+### Single writer is a correctness requirement — and the chart only bounds it
 
-The chart runs `replicas: 1` with `strategy: Recreate`, and neither is a capacity
-choice. `writeNav` in `workers/chain-events/store.ts` persists the running marker
-NAV in the reserved `meta:chain-events:nav` checkpoint row as an
-**unconditional** last-write-wins upsert — it carries no `observedHeight` guard,
-unlike every other idempotency arm in this service — and `readNav` reads it back
-inside the window transaction. Two supervisors working different windows let the
-later committer stamp its NAV over the other's, so overlapping instances corrupt
-the carry rather than merely duplicating work.
+Two writes in this service are unguarded, which is what makes concurrent
+supervisors a correctness fault rather than wasted work:
 
-RollingUpdate is the Kubernetes default and produces exactly that overlap during
-a rollout, which makes it the most likely way this property gets lost — it reads
-as an improvement.
+- `writeNav` (`workers/chain-events/store.ts`) persists the running marker NAV in
+  the reserved `meta:chain-events:nav` row as an **unconditional**
+  last-write-wins upsert — no `observedHeight` predicate, unlike every other
+  idempotency arm here — and `readNav` reads it back inside the window
+  transaction.
+- `runWindow` (`runtime/checkpoint.ts`) advances the stream cursor with an
+  unconditional `cursorHeight` update, so a stale writer can move a cursor
+  **backwards**.
+
+`runWorker` reads its checkpoint once at startup and never re-reads it, so two
+supervisors that started at different heights stay offset rather than converging.
+
+The chart runs `replicas: 1` with `strategy: Recreate`. That closes the **rollout**
+case: the Deployment controller will not create the new ReplicaSet while old pods
+run, so RollingUpdate — the Kubernetes default, and the most likely way this
+property gets lost, because it reads as an improvement — cannot overlap two
+supervisors on a template change.
+
+**It does not give at-most-one.** A Deployment is at-least-one by design. On a pod
+deletion (node drain, node auto-upgrade, preemption, eviction) the ReplicaSet
+controller creates the replacement as soon as the old pod carries a
+`deletionTimestamp`, while its container is still running; an unreachable node has
+no bound at all. `terminationGracePeriodSeconds` bounds the routine case only.
+
+So the deployed invariant currently rests on a topology property, which is
+precisely what SECURITY.md says a control must not do. Closing it means either a
+StatefulSet (at-most-one per ordinal) or an `observedHeight` predicate on
+`writeNav` plus a `GREATEST` cursor advance — the latter matches the rule
+`CLAUDE.md` already states, is unit-testable without Kubernetes, and would make
+the property enforced rather than assumed. Recorded as a decision, not resolved.
 
 ### The start height is the contract's instantiate height
 

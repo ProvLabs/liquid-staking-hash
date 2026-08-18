@@ -10,14 +10,29 @@ metadata:
     admission.datadoghq.com/enabled: "true"
     admission.datadoghq.com/config.mode: hostip
 spec:
-  # Exactly one supervisor, ever. The running marker NAV persists across windows
-  # in the reserved `meta:chain-events:nav` checkpoint row as an unconditional
-  # last-write-wins upsert (src/workers/chain-events/store.ts writeNav — no
-  # observedHeight guard, unlike the other idempotency arms) and is read back
-  # inside the window transaction. Two supervisors on different windows let the
-  # later committer stamp a stale NAV over a newer one, so overlap is a
-  # correctness fault, not wasted work. RollingUpdate — the Kubernetes default —
-  # produces exactly that overlap during a rollout.
+  # Two supervisors must not write concurrently. Two writes are unguarded:
+  # `writeNav` in src/workers/chain-events/store.ts upserts the running marker
+  # NAV with no observedHeight predicate, and `runWindow` in
+  # src/runtime/checkpoint.ts advances the stream cursor with an unconditional
+  # `cursorHeight` update. Overlap can therefore stamp a stale NAV over a newer
+  # one AND walk a stream cursor backwards; `runWorker` reads its checkpoint once
+  # at startup, so two supervisors stay offset rather than converging.
+  #
+  # `Recreate` closes the ROLLOUT case and only that case: the Deployment
+  # controller will not create the new ReplicaSet while old pods are running, so
+  # it is what keeps RollingUpdate (the Kubernetes default) from overlapping two
+  # supervisors on every template change.
+  #
+  # It does NOT give at-most-one. A Deployment is at-least-one by design: when
+  # the pod is deleted rather than replaced (node drain, node auto-upgrade,
+  # preemption, eviction) the ReplicaSet controller creates the replacement as
+  # soon as the old pod has a deletionTimestamp, while its container is still
+  # running; an unreachable node has no bound at all.
+  # `terminationGracePeriodSeconds` below bounds the routine case. Closing it
+  # properly means either a StatefulSet (at-most-one per ordinal) or guarding the
+  # two writes above in SQL — the house rule in services/indexer/CLAUDE.md
+  # ("idempotency lives in the SQL, not in scheduling") — and that is tracked as
+  # a decision rather than assumed here.
   replicas: 1
   strategy:
     type: Recreate
@@ -39,6 +54,14 @@ spec:
         admission.datadoghq.com/config.mode: hostip
     spec:
       serviceAccountName: {{ .Chart.Name }}
+      # Bounds the overlap window described above: on a pod deletion the
+      # replacement starts while this container is still running, so the shorter
+      # this is, the shorter that window. A window is a throughput unit with a
+      # 120 s transaction timeout (src/runtime/checkpoint.ts), so SIGKILL will
+      # routinely land mid-window — that is safe by construction, because the
+      # window transaction rolls back and the cursor does not move. Chosen
+      # deliberately rather than inherited as the 30 s default.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

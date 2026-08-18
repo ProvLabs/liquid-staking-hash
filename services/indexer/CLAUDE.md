@@ -189,10 +189,18 @@ Operator instructions:
   `prisma generate --generator=client` — the `--generator` flag matters, since
   the schema's second generator writes into `packages/db-indexed/` and would
   drag that package into the build context.
-- **Exactly one replica, `strategy: Recreate`.** Not a preference: `writeNav` in
-  `workers/chain-events/store.ts` is an unconditional last-write-wins upsert with
-  no `observedHeight` guard, so two overlapping supervisors can stamp a stale NAV
-  over a newer one. RollingUpdate produces exactly that overlap.
+- **Exactly one replica, `strategy: Recreate`** — and this bounds overlap rather
+  than preventing it. Two writes are unguarded: `writeNav` in
+  `workers/chain-events/store.ts` (no `observedHeight` predicate) and the cursor
+  advance in `runtime/checkpoint.ts` (unconditional `cursorHeight`). Overlapping
+  supervisors can stamp a stale NAV *and* walk a stream cursor backwards.
+  `Recreate` closes the rollout case, which is the one RollingUpdate would open
+  on every template change. It does **not** give at-most-one: a Deployment is
+  at-least-one by design, so a pod deletion (node drain, auto-upgrade,
+  preemption) starts the replacement while the old container still runs, and an
+  unreachable node is unbounded. `terminationGracePeriodSeconds` bounds the
+  routine case; the durable fix is a StatefulSet or guarding those two writes in
+  SQL, which is the rule this file already states. Tracked as a decision.
 - **Migrations run as an initContainer on the same image digest** as the app
   container, so schema and code cannot be different commits.
 - **`INDEX_START_HEIGHT` must be the contract's instantiate height** in any
