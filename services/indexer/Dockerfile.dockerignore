@@ -10,6 +10,11 @@
 # corpora included. Omitting something needed here fails the `deps` stage COPY
 # instead, which is the failure mode to prefer.
 #
+# One gap in that guarantee: a new workspace package with NO dependencies does
+# not become a lockfile importer (packages/fixtures is one such today), so
+# --frozen-lockfile would not notice its manifest missing from the context. The
+# case that matters — a package the indexer could depend on — does trip.
+#
 # The manifest list below is mirrored by the `deps` stage COPY. The two serve
 # different jobs (context filter vs. copy); a mismatch fails the build rather
 # than producing a wrong image.

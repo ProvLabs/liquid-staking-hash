@@ -16,7 +16,11 @@
 # per platform and gives the wrong value.
 #
 # Keep the base tag in LOCKSTEP with infra/dev/compose.yaml and the container
-# images in .github/workflows/app-ci.yaml.
+# images in .github/workflows/app-ci.yaml. That lockstep is by TAG: those two
+# track the floating `node:22-bookworm-slim`, while the digest below is the
+# snapshot of it that ships. Nothing detects drift between them, so re-resolving
+# on a deliberate bump is what keeps "works under ./dev" and "works in the
+# cluster" the same claim.
 
 FROM node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436 AS base
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
