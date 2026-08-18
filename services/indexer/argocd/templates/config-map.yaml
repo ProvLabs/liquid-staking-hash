@@ -18,6 +18,14 @@ data:
   RECEIPT_DENOM: {{ .Values.contract.receiptDenom | quote }}
   INDEX_START_HEIGHT: {{ .Values.chain.startHeight | quote }}
   GOV_START_HEIGHT: {{ .Values.chain.govStartHeight | quote }}
+  # Empty by default, and empty is the correct value on a chain whose contract
+  # admin resolves to a group policy: discovery finds those on its own. It is
+  # needed for a contract instantiated BEFORE its group existed, where discovery
+  # correctly resolves to the empty set and the policies must be named — the
+  # bootstrap ordering that makes that shape likely is a recorded constraint, so
+  # the seam exists here rather than requiring a template edit under pressure.
+  # Adds to discovery, never replaces it; a malformed entry is a boot error.
+  GOV_GROUP_POLICIES: {{ .Values.contract.govGroupPolicies | default "" | quote }}
   CONFIRMATION_DEPTH: {{ .Values.tuning.confirmationDepth | quote }}
   INDEX_WINDOW_SPAN: {{ .Values.tuning.indexWindowSpan | quote }}
   POLL_INTERVAL_MS: {{ .Values.tuning.pollIntervalMs | quote }}

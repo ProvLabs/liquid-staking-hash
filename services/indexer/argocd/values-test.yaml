@@ -40,3 +40,7 @@ contract:
   address: ""
   vaultAddress: ""
   receiptDenom: ""
+  # Comma-separated x/group policy addresses to mirror IN ADDITION to what
+  # discovery finds. Leave empty unless the contract was instantiated before
+  # its group existed; see templates/config-map.yaml.
+  govGroupPolicies: ""
