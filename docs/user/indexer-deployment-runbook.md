@@ -36,6 +36,12 @@ without them.
       services/indexer/argocd`, `valueFiles: [values-test.yaml,
       values-gha-test.yaml]`. The filename **must** contain `gha` — the shared
       workflow locates it with `select(contains("gha"))` and fails otherwise.
+
+      **Do not create the prod Application until its values are fillable.** The
+      chart ships fail-closed placeholders, so an Application created early sits
+      permanently Degraded in `CrashLoopBackOff` — real alert noise for no
+      benefit. Fail-closed is preserved either way; not creating it yet is
+      simply quieter.
 - [ ] **Org secrets visible to this repository**: `ARGOCD_API_KEY`,
       `ARGOCD_API_KEY_PROD`, `ARGOCD_IMAGE_UPDATER_APP_ID`,
       `ARGOCD_IMAGE_UPDATER_PRIVATE_KEY`.
@@ -136,7 +142,23 @@ In order:
 4. **Checkpoints are advancing.** `window committed` log lines, with
    `indexedHeight` climbing toward `chainHeight`.
 
+### The alarm cannot report its own absence
+
+The reconciler is the honesty alarm and the sole source of `indexer_lag` and
+divergence incidents — and it runs **inside this supervisor process**. When the
+pod is down, no incident is written, so indexer downtime is invisible to the
+system's own alerting rather than reported by it.
+
+**External alerting on pod availability is therefore required**, not optional:
+alert on the Deployment having zero available replicas (Datadog). With
+`replicas: 1` and no PodDisruptionBudget, every node drain produces a gap.
+
 ### Common failure modes
+
+`config.ts` validates in declaration order and throws on the first problem, so
+these surface **one at a time** — with nothing configured you will see the
+`CONTRACT_ADDRESS` error first and the start-height error only after you fix it.
+Set the whole identity block and both heights in a single edit.
 
 | Symptom | Cause |
 | --- | --- |

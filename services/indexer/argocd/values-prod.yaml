@@ -20,8 +20,13 @@ chain:
   govStartHeight: 0
 
 # Deliberately unset until mainnet instantiate. src/config.ts rejects a blank
-# required value, so a premature sync fails closed rather than indexing an
-# unknown chain.
+# required value, so a premature sync cannot INDEX against an unknown chain.
+#
+# It does not stop the migrate initContainer, which needs only DATABASE_URL and
+# so creates the `indexed` schema and `_prisma_migrations` before the app
+# container ever validates config. While the schema is still one regenerated
+# baseline, that leaves behind a recorded baseline whose checksum a later
+# regeneration invalidates — so do not point this at a real instance early.
 contract:
   address: ""
   vaultAddress: ""
