@@ -136,11 +136,13 @@ spec:
               command: ["node", "/app/services/indexer/scripts/healthcheck.mjs"]
             periodSeconds: {{ .Values.probes.startup.periodSeconds }}
             failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
           livenessProbe:
             exec:
               command: ["node", "/app/services/indexer/scripts/healthcheck.mjs"]
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
             failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

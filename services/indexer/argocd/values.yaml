@@ -36,13 +36,22 @@ resources:
     memory: "2Gi"
 
 # Probe cadence is tied to the heartbeat contract in scripts/healthcheck.mjs:
-# the supervisor pings every 15s and the probe treats a heartbeat older than 45s
-# as stale, so liveness at 15s x 3 failures matches that ceiling exactly.
-# Startup is given longer because the chain-isolation boot check runs first.
+# the supervisor pings every 15s, and the probe fails once the heartbeat is older
+# than 45s. The 15s period matches the ping interval so a single missed ping can
+# never trip a failure; the two numbers compose ADDITIVELY rather than matching,
+# so worst-case detection from the last good heartbeat is 45s (going stale) + up
+# to 15s (next probe tick) + 30s (the remaining two failures) — about 90s.
+#
+# Startup gets a longer budget because the chain-isolation boot check runs first.
+#
+# timeoutSeconds is set explicitly: the default is 1s, and each probe cold-starts
+# a Node process, where a timeout counts as a failure.
 probes:
   startup:
     periodSeconds: 10
     failureThreshold: 12
+    timeoutSeconds: 3
   liveness:
     periodSeconds: 15
     failureThreshold: 3
+    timeoutSeconds: 3
