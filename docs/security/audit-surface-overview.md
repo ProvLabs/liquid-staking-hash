@@ -142,7 +142,7 @@ relied upon when assessing the surface above.
 ## References
 
 1.  **[Trust & security model, governance](../specs/liquid-staking-spec.md)** — spec §12, §12.1
-2.  **[Interface contracts: state, execute, query, migrate]** — spec §11; `contracts/schema/`
+2.  **Interface contracts: state, execute, query, migrate** — spec §11; `contracts/schema/`
 3.  **[Epoch engine, jail flow, redemptions]** — spec §8-§10
 4.  **[Security requirements & audit-readiness practices](../../SECURITY.md)**
 5.  **[Delivered baseline & open verification items](../../contracts/IMPLEMENTATION-STATUS.md)**
