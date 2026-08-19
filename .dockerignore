@@ -1,0 +1,18 @@
+# Build context filter for the component Dockerfiles (built from the repo root).
+.git
+node_modules
+**/node_modules
+.pnpm-store
+contracts
+docs
+infra
+**/generated
+apps/web/build
+apps/web/test-results
+apps/console/dist
+apps/web/playwright-report
+**/.env*
+# Console profiles are checked in and client-public; the image build needs them.
+!apps/console/.env.production
+!apps/console/.env.test
+!apps/console/.env.devnet
