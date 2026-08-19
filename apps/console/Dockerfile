@@ -16,6 +16,14 @@ FROM nginxinc/nginx-unprivileged:1.28
 COPY --from=build /repo/apps/console/dist-production /usr/share/nginx/profiles/production
 COPY --from=build /repo/apps/console/dist-test /usr/share/nginx/profiles/test
 COPY --from=build /repo/apps/console/dist-devnet /usr/share/nginx/profiles/devnet
+# Fails closed on an unknown profile before nginx starts.
+COPY --chmod=755 <<'EOF' /docker-entrypoint.d/05-validate-profile.sh
+#!/bin/sh
+case "${CONSOLE_PROFILE:-}" in
+  devnet|test|production) ;;
+  *) echo >&2 "CONSOLE_PROFILE must be devnet, test, or production; got '${CONSOLE_PROFILE:-}'"; exit 1 ;;
+esac
+EOF
 COPY <<'EOF' /etc/nginx/templates/default.conf.template
 server {
   listen 8080;
