@@ -23,7 +23,7 @@
         "minimum": 0.0
       },
       "commission_bps": {
-        "description": "Program commission rate in bps of rewards earned on program delegations. None = the 10% default (DEFAULT_COMMISSION_BPS).",
+        "description": "Program commission rate in bps of rewards on program delegations. None = 10% default.",
         "type": [
           "integer",
           "null"
@@ -40,7 +40,7 @@
         "minimum": 0.0
       },
       "jail_unbond_delay_secs": {
-        "description": "Cooldown between jail report and purge (RC1 §9.8). None = 8h default.",
+        "description": "Cooldown between jail report and purge. None = 8h default.",
         "type": [
           "integer",
           "null"
@@ -57,7 +57,7 @@
         "minimum": 0.0
       },
       "max_concentration_multiple_bps": {
-        "description": "Concentration-cap mirrors; None = Provenance defaults (5.5x, 5%, 33%) and a 5% safety offset below the per-validator max bond.",
+        "description": "Concentration-cap mirrors; None = Provenance defaults (5.5x, 5%, 33%, 5% safety offset).",
         "type": [
           "integer",
           "null"
@@ -97,7 +97,7 @@
         "type": "string"
       },
       "redemption_margin_bps": {
-        "description": "Safety margin over the pending-redemption need, in bps (spec §9.5.6; bounded 0..=1000). None = the 50 bps default.",
+        "description": "Safety margin over the pending-redemption need in bps, bounded 0..=1000. None = 50.",
         "type": [
           "integer",
           "null"
@@ -259,7 +259,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Admin-gated: emergency stop / resume for the fund-moving permissionless cranks (RunEpoch including continuations, ServiceRedemptions). Does not touch the vault's own pause state.",
+        "description": "Admin-gated: emergency stop/resume for the fund-moving permissionless cranks (RunEpoch, ServiceRedemptions). Does not touch the vault's own pause state.",
         "type": "object",
         "required": [
           "set_halted"
@@ -281,7 +281,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Admin-gated: abort a stuck epoch continuation by dropping the persisted delegation targets and returning to Idle. Safe: the withdrawn nhash stays in the contract balance and the next epoch's return settlement swaps the matching receipt back out and burns it (TVV preserved).",
+        "description": "Admin-gated: abort a stuck epoch continuation by dropping the persisted delegation targets; the withdrawn nhash settles at the next epoch, so TVV is preserved.",
         "type": "object",
         "required": [
           "clear_pending_delegations"
@@ -295,7 +295,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Validator-operator: enroll a validator in the program (RC1 §11.2). The caller must be the valoper's operator account (same key payload); the validator must exist on chain. Starts with no captured uptime; eligibility is evaluated from live chain state at each epoch.",
+        "description": "Enroll a validator in the program; the caller must be the valoper's operator account and the validator must exist on chain.",
         "type": "object",
         "required": [
           "register_participation"
@@ -317,7 +317,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Operator or admin: withdraw a validator from the program. Existing program stake on it is unbonded at the next epoch and redeployed.",
+        "description": "Operator or admin: withdraw a validator; its program stake is unbonded at the next epoch and redeployed.",
         "type": "object",
         "required": [
           "unregister_participation"
@@ -339,7 +339,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Permissionless (RC1 §9.8 phase 1): flag that a validator the program has stake on is jailed. Verified against live chain state: if jailed, the first report starts the jail_unbond_delay cooldown (later reports while still jailed are no-ops); if NOT jailed, any existing report is cleared. Moves no funds.",
+        "description": "Permissionless: report a jailed validator, starting the jail_unbond_delay cooldown; a report on an unjailed validator clears instead. Moves no funds.",
         "type": "object",
         "required": [
           "report_jailed_validator"
@@ -361,7 +361,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Permissionless (RC1 §9.8 phase 2, halt-gated): after the cooldown, move the program's stake off a STILL-jailed validator. With an eligible `claimant_valoper` (caller must be its enrolled operator): redelegate up to the claimant's concentration headroom, unbond the remainder. Without one (e.g. a depositor calling): unbond the full program delegation. Rejected (report cleared) if the validator unjailed in the interim. Idempotent once the stake has moved.",
+        "description": "Permissionless (halt-gated): after the cooldown, move stake off a still-jailed validator (redelegate to an eligible claimant's headroom, else unbond all).",
         "type": "object",
         "required": [
           "purge_jailed_validator"
@@ -389,7 +389,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Anyone (nhash attached): pay program commission on behalf of an enrolled validator (RC1 §10.1). Credits the validator's cumulative paid total; overpayment prepays future accrual; non-refundable. Funds are held by the contract and swept into vault principal (raising NAV) at the next epoch's deposit leg.",
+        "description": "Anyone (nhash attached): pay program commission for an enrolled validator. Non-refundable; overpayment prepays future accrual; swept into vault principal next epoch.",
         "type": "object",
         "required": [
           "pay_commission"
@@ -411,7 +411,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Anyone (nhash attached): pay a TIP for an enrolled validator (RC1 §10.2). Credits the CURRENT epoch's tip (the primary priority key; resets at every epoch completion). Non-refundable; funds sweep into vault principal at the next epoch's deposit leg.",
+        "description": "Anyone (nhash attached): pay a tip for an enrolled validator. Credits the current epoch's tip (the primary priority key, reset each epoch); non-refundable.",
         "type": "object",
         "required": [
           "pay_tip"
@@ -433,7 +433,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Permissionless: fold every enrolled validator's current signed-blocks ratio (slashing SigningInfo) into its per-epoch uptime accumulator (RC1 §10.4). Interval-gated by min_capture_interval_secs; early calls are accepted no-ops. Never required: plan time falls back to a direct read.",
+        "description": "Permissionless: fold each enrolled validator's signed-blocks ratio into its per-epoch uptime accumulator. Interval-gated; early calls are accepted no-ops.",
         "type": "object",
         "required": [
           "capture_uptime_signal"
@@ -447,7 +447,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Permissionless: withdraw accrued staking rewards for every delegated validator that has any (phase A alone). Keeper cadence note: rewards claimed inside RunEpoch itself land in the contract balance AFTER that crank's state reads, so they are deposited into the vault at the NEXT epoch. Call ClaimRewards in a prior tx (any time before RunEpoch) so the current epoch's deposit includes them.",
+        "description": "Permissionless: withdraw accrued staking rewards for every delegated validator. Call in a tx before RunEpoch so the current epoch's deposit includes them.",
         "type": "object",
         "required": [
           "claim_rewards"
@@ -461,7 +461,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Permissionless (halt-gated): unbond to cover queued swap-outs and expedite funded ones (phases B + D2 alone). Expedites are gated on principal-marker liquidity only.",
+        "description": "Permissionless (halt-gated): unbond to cover queued swap-outs and expedite funded ones; expedites are gated on principal-marker liquidity only.",
         "type": "object",
         "required": [
           "service_redemptions"
@@ -521,7 +521,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Enrolled validators with a live eligibility assessment (uptime, jailed, tombstoned, commission standing, concentration headroom) read from current chain state. Sorted by program priority, highest first (TIP desc, then uptime desc, then enrollment age) — the reverse of the redemption drain order (RC1 §10.2).",
+        "description": "Enrolled validators with live eligibility read from current chain state, sorted by program priority (tip desc, uptime desc, enrollment age), highest first.",
         "type": "object",
         "required": [
           "validators"
@@ -535,7 +535,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Open jail reports (RC1 §9.8): validators observed jailed and the time a purge becomes allowed. Keeper-facing.",
+        "description": "Open jail reports: validators observed jailed and the time a purge becomes allowed.",
         "type": "object",
         "required": [
           "jail_reports"
@@ -549,7 +549,7 @@
         "additionalProperties": false
       },
       {
-        "description": "The most recent epoch's value decomposition (RC1 §9.10). Only the last snapshot is retained; None before the first epoch crank.",
+        "description": "The most recent epoch's value decomposition; None before the first epoch crank.",
         "type": "object",
         "required": [
           "epoch_snapshot"
@@ -563,7 +563,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Realized APR over the last epoch window with the gross-to-net breakdown (rewards, +commission, +TIP, -AUM estimate, -slash write-down), per RC1 §9.10 / R2 transparency. None before the first epoch crank.",
+        "description": "Realized APR over the last epoch window with the gross-to-net breakdown. None before the first epoch crank.",
         "type": "object",
         "required": [
           "apr"
@@ -577,7 +577,7 @@
         "additionalProperties": false
       },
       {
-        "description": "The spec §5.1 receipt-conservation invariant's legs, in ONE consistent state read (8.4a D29): minted counter, bank supply of the receipt denom, program delegations, in-flight unbonding, earmarked pending deployment, and the saturating residual. Read-only, permissionless, bounded by the validator ceiling (paginated reads to exhaustion).",
+        "description": "The receipt-conservation invariant's legs in one consistent state read. Read-only, permissionless, bounded by the validator ceiling.",
         "type": "object",
         "required": [
           "receipt_accounting"
@@ -595,7 +595,7 @@
   "migrate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "MigrateMsg",
-    "description": "Migration message. Empty: no state transformation is needed, so migration only re-stamps the cw2 version record.",
+    "description": "Empty migration message; migration only re-stamps the cw2 version record.",
     "type": "object",
     "additionalProperties": false
   },
@@ -789,7 +789,7 @@
       "additionalProperties": false,
       "definitions": {
         "EpochSnapshot": {
-          "description": "The single most recent epoch value decomposition (RC1 §9.10): overwritten every epoch, never a growing history. Its `tvv_after` seeds the next epoch's `net_deposits` derivation. Adapted to the single-tx engine: `rewards_deposited` and `write_down` are the crank's exact values, so `tvv_after = tvv_before + rewards_deposited - write_down` by construction (settlement and deploy legs are value-neutral; AUM accrual is the only drift). Commission/TIP funds sit in the contract (outside TVV) between epochs, so the between-epoch TVV delta is purely user swap flow minus AUM: `net_deposits = tvv_before(this) - tvv_after(previous)`.",
+          "description": "The single most recent epoch value decomposition: overwritten every epoch, never a history. `tvv_after = tvv_before + rewards_deposited - write_down` by construction; its `tvv_after` seeds the next epoch's `net_deposits`.",
           "type": "object",
           "required": [
             "aum_fee_estimate",
@@ -815,7 +815,7 @@
           ],
           "properties": {
             "aum_fee_estimate": {
-              "description": "The AUM drag over the window, estimated from the admin's aum_fee_bps mirror (provwasm-std 2.8.0 exposes no vault fee fields).",
+              "description": "AUM drag over the window, estimated from the admin's aum_fee_bps mirror.",
               "allOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -854,7 +854,7 @@
               "minimum": 0.0
             },
             "net_deposits": {
-              "description": "User swap flow since the previous epoch: tvv_before - previous tvv_after. Negative = net redemptions. Slightly understated by the window's AUM accrual.",
+              "description": "User swap flow since the previous epoch: tvv_before - previous tvv_after (negative = net redemptions).",
               "allOf": [
                 {
                   "$ref": "#/definitions/Int128"
@@ -862,7 +862,7 @@
               ]
             },
             "rebalanced": {
-              "description": "Stake redirected between validators by the uniform-slot rebalance (RC1 §9.3): value-neutral, kept productive throughout.",
+              "description": "Stake redirected by the uniform-slot rebalance; value-neutral.",
               "default": "0",
               "allOf": [
                 {
@@ -1078,7 +1078,7 @@
     "receipt_accounting": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ReceiptAccountingResponse",
-      "description": "The §5.1 invariant's legs from one consistent state read (all base-unit amounts of the receipt/underlying denoms as noted per field).",
+      "description": "The receipt-conservation invariant's legs from one consistent state read; all amounts are base units of the denom noted per field.",
       "type": "object",
       "required": [
         "matured_unsettled",
@@ -1090,7 +1090,7 @@
       ],
       "properties": {
         "matured_unsettled": {
-          "description": "minted − staked − unbonding − pending, saturating at zero: the residual a verifier reconciles against matured-but-unsettled value.",
+          "description": "minted - staked - unbonding - pending, saturating at zero (matured-but-unsettled residual).",
           "allOf": [
             {
               "$ref": "#/definitions/Uint128"
@@ -1114,7 +1114,7 @@
           ]
         },
         "receipt_minted": {
-          "description": "The contract's own §5.1 counter (receipt base units).",
+          "description": "The contract's own minted counter (receipt base units).",
           "allOf": [
             {
               "$ref": "#/definitions/Uint128"
@@ -1186,7 +1186,7 @@
           ],
           "properties": {
             "commission_accrued": {
-              "description": "Cumulative program commission accrued / paid, and the grace boundary the paid total must currently meet (RC1 §10.1).",
+              "description": "Cumulative commission accrued/paid, and the grace boundary the paid total must meet.",
               "allOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -1200,7 +1200,7 @@
               "$ref": "#/definitions/Uint128"
             },
             "eligible": {
-              "description": "Live eligibility: enrolled, bonded, not jailed/tombstoned, uptime meets the configured threshold, commission current.",
+              "description": "Live eligibility: enrolled, bonded, not jailed/tombstoned, uptime and commission current.",
               "type": "boolean"
             },
             "enrolled_at_seconds": {
@@ -1209,7 +1209,7 @@
               "minimum": 0.0
             },
             "headroom": {
-              "description": "nhash of new delegation this validator could still legally receive under the concentration cap minus the safety offset (0 when ineligible).",
+              "description": "New-delegation headroom in nhash under the concentration cap minus the safety offset (0 when ineligible).",
               "allOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -1217,7 +1217,7 @@
               ]
             },
             "in_arrears": {
-              "description": "True when commission_paid < commission_due: past the one-epoch grace, which alone makes the validator ineligible until brought current.",
+              "description": "True when commission_paid < commission_due; alone makes the validator ineligible.",
               "type": "boolean"
             },
             "jailed": {
@@ -1238,7 +1238,7 @@
               "type": "boolean"
             },
             "uptime_bps": {
-              "description": "Effective uptime in bps (accumulator mean if any captures, else the live signing-info read). None when uptime cannot be determined (validator or signing info missing, non-ed25519 consensus key).",
+              "description": "Effective uptime in bps (accumulator mean, else live signing-info read); None when uptime cannot be determined.",
               "type": [
                 "integer",
                 "null"

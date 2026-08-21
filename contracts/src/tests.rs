@@ -21,15 +21,9 @@ use crate::msg::{
     ConfigResponse, EpochStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg, ValidatorsResponse,
 };
 
-// test-tube's genesis exposes `nhash` only as a native coin (no marker), and
-// create_vault requires the underlying to be a marker. We therefore stand up a
-// dedicated restricted marker as the test vault's underlying (in Design C
-// production the underlying IS nhash directly, since payment_denom collapses
-// onto the underlying; this substitution only strengthens the correspondence).
-// What these tests prove is the asset-manager authority path and the crank
-// plumbing, which are independent of which denom backs the vault. Full Design C
-// settlement (receipt-marker AcceptAsset) is exercised on the devnet drill,
-// since test-tube 0.5.0 does not ship AcceptAsset.
+// test-tube's nhash is a plain coin and create_vault needs a marker underlying, so a
+// dedicated restricted marker stands in (production underlying is nhash itself).
+// test-tube 0.5.0 lacks AcceptAsset; Design C settlement runs on the devnet drill.
 const FUNDING_DENOM: &str = "nhash";
 const UNDERLYING_DENOM: &str = "nvhash.underlying";
 const SHARE_DENOM: &str = "nvhash.shares";
@@ -141,9 +135,8 @@ fn newest_mtime(path: &std::path::Path) -> Option<std::time::SystemTime> {
         .max()
 }
 
-/// Load the optimized artifact, refusing to run against a STALE one: a binary
-/// older than the contract source would silently exercise outdated code (the
-/// same freshness rule scripts/build-artifact.sh enforces).
+/// Loads the optimized artifact, refusing one older than the contract source
+/// (the freshness rule scripts/build-artifact.sh enforces).
 fn read_fresh_artifact() -> Vec<u8> {
     const HINT: &str = "build it: contracts/scripts/build-artifact.sh (Docker required)";
     let artifact = std::path::Path::new("artifacts/nvhash_staking.wasm");
@@ -174,8 +167,7 @@ fn setup_wasm_with_underlying(
 ) -> Addr {
     let wasm = Wasm::new(app);
     let wasm_byte_code = read_fresh_artifact();
-    // store_code needs more gas than the Auto fee default (4M) as the contract
-    // has grown; sign the upload with an explicit gas limit.
+    // store_code exceeds the Auto fee default (4M gas); upload with an explicit gas limit.
     let uploader = app
         .init_account(&[coin(100_000_000_000_000, FUNDING_DENOM)])
         .unwrap()
@@ -322,8 +314,7 @@ fn claim_and_service_are_noops_on_empty_vault() {
     set_asset_manager(&app, &admin, &vault_address, &contract);
     let wasm = Wasm::new(&app);
 
-    // Snapshot observable state before the two cranks so the "no-op" claim is
-    // actually checked, not just that the calls didn't error.
+    // Snapshot state first so the no-op claim is actually checked.
     let status_before: EpochStatusResponse = wasm
         .query(contract.as_str(), &QueryMsg::EpochStatus {})
         .unwrap();
@@ -339,10 +330,7 @@ fn claim_and_service_are_noops_on_empty_vault() {
     )
     .unwrap();
 
-    // An empty vault has nothing to claim and nothing queued to service, so
-    // neither crank should move any observable state: the vault stays
-    // unpaused, the epoch phase/receipt-minted counter are untouched, and no
-    // delegations get queued.
+    // An empty vault gives the cranks nothing to do; no observable state may move.
     assert!(!vault_paused_before);
     assert!(!query_vault(&app, &vault_address).vault.unwrap().paused);
 
@@ -390,9 +378,8 @@ where
     }
 }
 
-/// Stand up a real validator whose operator is a funded test account (the
-/// test-tube genesis validator's operator key is not recoverable: its operator
-/// address derives from the consensus key, so no signable account exists).
+/// Stands up a validator whose operator is a funded test account; the genesis
+/// validator's operator address derives from the consensus key, so it is not signable.
 #[allow(deprecated)] // delegator_address is deprecated in the SDK but still in the proto
 fn create_validator(app: &ProvwasmTestApp, operator: &SigningAccount) -> String {
     use provwasm_std::shim::Any;
@@ -407,9 +394,8 @@ fn create_validator(app: &ProvwasmTestApp, operator: &SigningAccount) -> String 
                     moniker: "pat-the-reliable".to_string(),
                     ..Default::default()
                 }),
-                // 60%: satisfies both stock genesis params and the Provenance
-                // wisteria uniform-commission pin. Wire format for Dec fields is
-                // the 1e18-scaled integer string.
+                // 60% satisfies stock genesis params and the Provenance uniform-commission pin.
+                // Dec fields wire as 1e18-scaled integer strings.
                 commission: Some(CommissionRates {
                     rate: "600000000000000000".to_string(),
                     max_rate: "600000000000000000".to_string(),
@@ -436,12 +422,8 @@ fn create_validator(app: &ProvwasmTestApp, operator: &SigningAccount) -> String 
     valoper
 }
 
-/// Full enrollment lifecycle against the real embedded chain: a validator is
-/// created from a funded account, its operator registers, the live-eligibility
-/// query sweeps real staking/slashing state (bonded set, pool, params,
-/// SigningInfo via the derived cons address), an uptime capture folds into the
-/// accumulator, an epoch crank runs with an enrolled validator, and the admin
-/// unregisters.
+/// Enrollment lifecycle on the real chain: register, eligibility sweep, uptime
+/// capture, epoch crank, unregister.
 #[test]
 fn validator_enrollment_eligibility_and_capture_flow() {
     let app = ProvwasmTestApp::new();
@@ -481,11 +463,8 @@ fn validator_enrollment_eligibility_and_capture_flow() {
     )
     .unwrap();
 
-    // Live assessment reads real chain state. With threshold 0 the bonded,
-    // unjailed validator is eligible; holding nearly the whole bond itself, its
-    // concentration headroom is zero (33% cap < its ~100% share). Its uptime is
-    // below perfect (the synthetic consensus key never signs) but well above
-    // zero this early in the signing window.
+    // Headroom is zero: the validator holds ~100% of the bond, over the 33% cap.
+    // Uptime is imperfect (the synthetic key never signs) but high this early in the window.
     let resp: ValidatorsResponse = wasm
         .query(contract.as_str(), &QueryMsg::Validators {})
         .unwrap();
@@ -514,9 +493,7 @@ fn validator_enrollment_eligibility_and_capture_flow() {
     assert_eq!(resp.validators[0].uptime_capture_count, 1);
     assert!(resp.validators[0].uptime_bps.unwrap() > 5_000);
 
-    // A full epoch crank with an enrolled validator exercises the eligibility
-    // sweep inside RunEpoch; the empty vault means nothing deploys, the epoch
-    // completes Idle, and the completed epoch resets the uptime accumulator.
+    // Empty vault: the crank completes Idle and resets the uptime accumulator.
     wasm.execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
         .unwrap();
     let status: EpochStatusResponse = wasm
@@ -543,12 +520,8 @@ fn validator_enrollment_eligibility_and_capture_flow() {
     assert!(resp.validators.is_empty());
 }
 
-/// Commission and TIP credits with real fund transfers, any payer. Uses a
-/// contract instance whose underlying is nhash (as in production): the test
-/// vault's restricted-marker underlying cannot ride wasm `funds` (bank-send
-/// restriction), while nhash is a native coin. The epoch rollover semantics
-/// (tip reset, grace-boundary advance) are covered by unit tests and the
-/// devnet drill.
+/// Commission and tip credits with real transfers from any payer. Underlying is
+/// nhash: a restricted-marker underlying cannot ride wasm `funds`.
 #[test]
 fn commission_and_tip_credit_and_query() {
     let app = ProvwasmTestApp::new();
@@ -603,8 +576,7 @@ fn commission_and_tip_credit_and_query() {
     assert!(!v.in_arrears);
     assert!(v.eligible);
 
-    // The attached funds are held by the contract until the next epoch's
-    // deposit leg sweeps them into vault principal.
+    // Attached funds sit on the contract until the next epoch's deposit leg sweeps them.
     let bal = app
         .query::<provwasm_std::types::cosmos::bank::v1beta1::QueryBalanceRequest, provwasm_std::types::cosmos::bank::v1beta1::QueryBalanceResponse>(
             "/cosmos.bank.v1beta1.Query/Balance",
@@ -647,11 +619,8 @@ fn halted_contract_rejects_cranks() {
         .unwrap();
 }
 
-/// The authoritative calendar-month gate coverage against the embedded chain:
-/// a crank rolls the epoch only once block time enters a strictly later civil
-/// month. Time is advanced with `app.increase_time`, so the whole calendar
-/// crossing is exercised deterministically and instantly — no wall-clock wait,
-/// and no test-only cadence knob (the shipped predicate is what runs here).
+/// Pins the calendar-month gate on the embedded chain: a crank rolls only once
+/// block time enters a strictly later civil month.
 #[test]
 fn run_epoch_enforces_calendar_month_and_leaves_vault_unpaused() {
     let app = ProvwasmTestApp::new();
@@ -659,29 +628,24 @@ fn run_epoch_enforces_calendar_month_and_leaves_vault_unpaused() {
     set_asset_manager(&app, &admin, &vault_address, &contract);
     let wasm = Wasm::new(&app);
 
-    // Align the chain clock to just after a month boundary so epoch 1 lands
-    // early in a calendar month, leaving a full month of headroom before the
-    // boundary the same-month retry must NOT cross.
+    // Align just past a month boundary so the same-month retry has full headroom.
     let now = app.get_block_time_seconds() as u64;
     let boundary =
         crate::month::first_of_next_month_secs(cosmwasm_std::Timestamp::from_seconds(now));
     app.increase_time(boundary - now + 10);
 
-    // Epoch 1: block time is in a later civil month than the genesis last_run,
-    // so the crank runs and leaves the vault unpaused.
+    // Epoch 1: a later civil month than the genesis last_run, so the crank runs.
     wasm.execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
         .unwrap();
     assert!(!query_vault(&app, &vault_address).vault.unwrap().paused);
 
-    // A second crank in the SAME calendar month is rejected — the gate is a
-    // calendar boundary, not an elapsed-time floor.
+    // A same-month retry is rejected: the gate is a calendar boundary, not an elapsed floor.
     let err = wasm
         .execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
         .unwrap_err();
     assert!(format!("{err:?}").contains("too soon"));
 
-    // Advance past the next month boundary (32 days clears any month length);
-    // the crank is eligible again.
+    // 32 days clears any month length; the crank is eligible again.
     app.increase_time(32 * 86_400);
     wasm.execute(contract.as_str(), &ExecuteMsg::RunEpoch {}, &[], &admin)
         .unwrap();
@@ -706,8 +670,7 @@ fn migrate_restamps_cw2_version_and_rejects_foreign_code() {
     // No cw2 record (contract never instantiated): migrate must error, not panic.
     migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap_err();
 
-    // Migrating from an older version of this contract re-stamps the record
-    // and reports the transition; a repeat at the same version still succeeds.
+    // An older version re-stamps and reports; a repeat at the same version still succeeds.
     cw2::set_contract_version(deps.as_mut().storage, CONTRACT_NAME, "0.0.9").unwrap();
     for expected_from in ["0.0.9", CONTRACT_VERSION] {
         let res = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap();

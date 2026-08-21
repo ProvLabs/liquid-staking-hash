@@ -1,18 +1,6 @@
-//! Long-running chain-free simulation soak (RC2 §15.5). Runs randomized
-//! multi-decade scenarios through the production planners indefinitely,
-//! asserting the invariant battery every simulated epoch and reporting
-//! periodically. Leave it running for minutes or days; every violation is
-//! printed with its scenario seed (and appended to sim-failures.log) so
-//! `--seed N --scenarios 1` reproduces it exactly.
-//!
-//! Usage:
-//!   cargo run --release --bin simulate -- [--seed N] [--scenarios N]
-//!       [--epochs N] [--report-secs N] [--halt-on-failure] [--trace-out DIR]
-//!
-//! Defaults: random master seed, unbounded scenarios, 240 epochs (20 years,
-//! monthly) per scenario, a status line every 10 seconds. `--trace-out DIR`
-//! writes one `seed-<scenario_seed>.json` deposit/redemption/epoch trace per
-//! scenario into DIR; omit it for today's behavior.
+//! Chain-free simulation soak: runs randomized multi-decade scenarios through the production
+//! planners, asserting the invariant battery every simulated epoch. Violations print their
+//! scenario seed (also appended to sim-failures.log); `--seed N --scenarios 1` reproduces one.
 
 use std::io::Write;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
