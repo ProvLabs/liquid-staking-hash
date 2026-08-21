@@ -59,6 +59,21 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * wasmd's `no such contract` (codespace wasm code 22) — the contract is not
+ * instantiated AT the queried height.
+ *
+ * A third category next to step 1's "we could not read" and step 2's "there is
+ * nothing to read": "there is nothing to read YET". It is expected, because
+ * `GOV_START_HEIGHT` is deliberately below the instantiate height — the group
+ * and its policy are created before the contract (spec D25), and this stream
+ * exists to index that pre-contract history. Matched on the message rather than
+ * an `RpcError` instanceof so this layer stays transport-agnostic.
+ */
+function isContractAbsent(err: unknown): boolean {
+  return err instanceof Error && /no such contract/i.test(err.message);
+}
+
 function policyFrom(value: unknown): PolicyInfo | null {
   const o = asRecord(value);
   if (o === null) return null;
@@ -95,10 +110,27 @@ export async function discoverGovernance(
   //    that would silently stop mirroring governance during an LCD blip and the
   //    surfaces would report "no governance" about a program that has it. Let it
   //    throw so the window is retried.
-  const config = asRecord(await source.smartAtHeight(contractAddress, { config: {} }, height));
-  const admin = config?.["admin"];
-  if (typeof admin !== "string" || admin === "") {
-    throw new Error("contract config carries no admin address");
+  //    The ONE exception is a contract that does not exist at this height yet:
+  //    that is not a failed read, it is a height below instantiate, and the
+  //    stream is supposed to cover those. See `isContractAbsent`.
+  let admin: string | null = null;
+  let config: Record<string, unknown> | null = null;
+  try {
+    config = asRecord(await source.smartAtHeight(contractAddress, { config: {} }, height));
+  } catch (err) {
+    if (!isContractAbsent(err)) throw err;
+    logger.info("contract not instantiated at this height: no contract-derived governance", {
+      stream: "governance",
+      height,
+    });
+  }
+
+  if (config !== null) {
+    const value = config["admin"];
+    if (typeof value !== "string" || value === "") {
+      throw new Error("contract config carries no admin address");
+    }
+    admin = value;
   }
 
   // 2. Is the admin a group policy at all? A plain account is the honest
@@ -106,17 +138,19 @@ export async function discoverGovernance(
   //    yields the empty set. The distinction matters: step 1 failing means "we
   //    could not read", step 2 failing means "there is nothing to read".
   let adminPolicy: PolicyInfo | null = null;
-  try {
-    const body = asRecord(
-      await source.getAtHeight(
-        `cosmos/group/v1/group_policy_info/${encodeURIComponent(admin)}`,
-        {},
-        height,
-      ),
-    );
-    adminPolicy = policyFrom(body?.["info"]);
-  } catch {
-    adminPolicy = null;
+  if (admin !== null) {
+    try {
+      const body = asRecord(
+        await source.getAtHeight(
+          `cosmos/group/v1/group_policy_info/${encodeURIComponent(admin)}`,
+          {},
+          height,
+        ),
+      );
+      adminPolicy = policyFrom(body?.["info"]);
+    } catch {
+      adminPolicy = null;
+    }
   }
 
   if (adminPolicy === null) {
