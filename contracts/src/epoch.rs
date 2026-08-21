@@ -32,13 +32,10 @@ use crate::validators::{
 use crate::vault_ext::{accept_asset_msg, update_vault_nav_msg};
 use crate::ContractError;
 
-/// Floor for the deploy-leg liquid buffer, in bps of vault liquid. The primary
-/// buffer is the AUM fee reserve (plan::fee_reserve).
+/// Deploy-leg liquid buffer floor in bps of vault liquid; the primary buffer is plan::fee_reserve.
 pub const DEPLOY_BUFFER_BPS: u128 = 50;
 
-/// x/exchange payment external ids. Unique per source while outstanding; both
-/// payments are created and accepted inside the same tx, so the ids are reusable
-/// every epoch.
+/// x/exchange payment external ids; created and accepted in one tx, so reusable every epoch.
 pub const DEPLOY_PAYMENT_ID: &str = "nvhash.deploy";
 pub const RETURN_PAYMENT_ID: &str = "nvhash.return";
 pub const WRITEDOWN_PAYMENT_ID: &str = "nvhash.writedown";
@@ -62,11 +59,9 @@ pub(crate) fn assert_not_halted(deps: Deps) -> Result<(), ContractError> {
     Ok(())
 }
 
-/// Total principal currently unbonding (in-flight, not yet matured), plus the
-/// validators whose unbonding-entry queue is already at MAX_UNBOND_ENTRIES
-/// (planning another Undelegate against them would revert the whole crank).
-/// Paginated: truncating this read would re-unbond principal already on its way
-/// back.
+/// Total in-flight unbonding principal, plus validators already at MAX_UNBOND_ENTRIES
+/// (another Undelegate against them reverts the crank). Paginated: a truncated read
+/// re-unbonds principal already returning.
 pub fn unbonding_state(deps: Deps, env: &Env) -> StdResult<(Uint128, Vec<String>)> {
     let sq = StakingQuerier::new(&deps.querier);
     let mut total = Uint128::zero();
@@ -93,16 +88,13 @@ pub fn unbonding_state(deps: Deps, env: &Env) -> StdResult<(Uint128, Vec<String>
     Ok((total, at_capacity))
 }
 
-/// Rebalance constraints derived from in-flight redelegations: the validators
-/// that may not be redelegated FROM, and the `(src, dst)` routes that may not
-/// carry another entry.
+/// Rebalance constraints from in-flight redelegations: validators that may not be
+/// redelegated FROM, and `(src, dst)` routes that cannot carry another entry.
 pub type RedelegationConstraints = (BTreeSet<String>, BTreeSet<(String, String)>);
 
-/// The contract's active redelegations, reduced to the rebalance constraints
-/// (RC1 §9.3): validators that are DESTINATIONS of in-flight entries cannot be
-/// redelegated FROM (the no-transitive-redelegation rule), and (src, dst)
-/// routes already at MAX_UNBOND_ENTRIES cannot carry another entry. Paginated:
-/// a truncated read could emit a move the chain rejects, reverting the crank.
+/// Active redelegations reduced to rebalance constraints: in-flight destinations
+/// cannot be redelegated FROM (no transitive redelegation), and full routes carry
+/// no more entries. Paginated: a truncated read emits moves the chain rejects.
 pub fn redelegation_state(deps: Deps, env: &Env) -> StdResult<RedelegationConstraints> {
     let sq = StakingQuerier::new(&deps.querier);
     let mut blocked_sources = BTreeSet::new();
@@ -133,10 +125,8 @@ pub fn redelegation_state(deps: Deps, env: &Env) -> StdResult<RedelegationConstr
     Ok((blocked_sources, blocked_pairs))
 }
 
-/// (liquid nhash in the vault's principal marker, total vault value, total
-/// shares). With underlying = nhash both values are natively nhash; the receipt
-/// held in the marker is valued into TVV through the vault's internal NAV walk
-/// at its seeded 1:1.
+/// (liquid nhash in the vault's principal marker, total vault value, total shares);
+/// the marker-held receipt values into TVV via the vault's internal NAV at its seeded 1:1.
 pub fn vault_snapshot(deps: Deps, cfg: &Config) -> StdResult<(Uint128, Uint128, Uint128)> {
     let vq = VaultQuerier::new(&deps.querier);
     let resp = vq.vault(cfg.vault_address.to_string())?;
@@ -155,8 +145,7 @@ pub fn vault_snapshot(deps: Deps, cfg: &Config) -> StdResult<(Uint128, Uint128, 
         .and_then(|v| v.total_shares)
         .map(|c| c.amount)
         .unwrap_or_default();
-    // unwrap_or_default here (unlike unbonding_state's map_err-to-error): an absent
-    // coin in the SDK response legitimately means a zero balance, not malformed data.
+    // An absent coin in the SDK response means a zero balance, not malformed data.
     Ok((
         Uint128::from_str(&liquid).unwrap_or_default(),
         Uint128::from_str(&tvv).unwrap_or_default(),
@@ -195,16 +184,12 @@ fn estimate_redeem_nhash(deps: Deps, cfg: &Config, p: &PendingSwapOut) -> StdRes
         cfg.underlying_denom.clone(),
     )?;
     let amt = resp.assets.map(|c| c.amount).unwrap_or_default();
-    // Same reasoning as vault_snapshot: an absent assets coin means zero payout,
-    // not a malformed response, so unwrap_or_default (not an error) is intentional.
+    // An absent assets coin means zero payout, not malformed data (see vault_snapshot).
     Ok(Uint128::from_str(&amt).unwrap_or_default())
 }
 
-/// Pending swap-outs with estimated payout needs. In Design C the only accepted
-/// denom is nhash, so every redemption is nhash; the denom filter is belt-and-braces
-/// (empty = the module default, which is also nhash here). Paginated: a truncated
-/// read under-reserves and lets later requests mature unfunded (refund = cancelled
-/// redemption).
+/// Pending swap-outs with estimated payout needs (every redemption is nhash). Paginated:
+/// a truncated read under-reserves and lets later requests mature unfunded.
 pub fn pending_redemptions(deps: Deps, cfg: &Config) -> StdResult<Vec<(u64, Uint128)>> {
     let vq = VaultQuerier::new(&deps.querier);
     let mut out = vec![];
@@ -242,11 +227,8 @@ pub fn delegations(deps: Deps, env: &Env, denom: &str) -> StdResult<Vec<Delegati
         .collect())
 }
 
-/// Claimable rewards per validator in the underlying denom (floored from the
-/// distribution module's decimal amounts). This is exactly what a
-/// WithdrawDelegatorReward will pay in the same block, so it doubles as the
-/// program-commission accrual base (RC1 §10.1: the contract IS the delegator,
-/// so its claims are precisely the rewards earned on program delegations).
+/// Claimable rewards per validator in the underlying denom, floored; equals what
+/// WithdrawDelegatorReward pays this block, so it is the program-commission accrual base.
 pub fn rewards_by_validator(
     deps: Deps,
     env: &Env,
@@ -284,12 +266,9 @@ fn enrolled_valopers(deps: Deps) -> StdResult<Vec<String>> {
         .collect())
 }
 
-/// Phase A alone: withdraw accrued staking rewards for every delegated validator
-/// that has any (including unregistered validators, so nothing strands), and
-/// accrue program commission on what is claimed. Keepers should call this in a
-/// tx BEFORE RunEpoch so the epoch's reward deposit includes the current
-/// epoch's rewards (rewards claimed inside RunEpoch itself land after that
-/// crank's state reads and deposit at the next epoch).
+/// Phase A alone: withdraw rewards from every delegated validator and accrue program
+/// commission. Keepers call this in a tx before RunEpoch; rewards claimed inside
+/// RunEpoch land after its state reads and deposit at the next epoch.
 pub fn claim_rewards(deps: DepsMut, env: &Env) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     let rewards = rewards_by_validator(deps.as_ref(), env, &cfg.underlying_denom)?;
@@ -308,15 +287,9 @@ pub fn claim_rewards(deps: DepsMut, env: &Env) -> Result<Response, ContractError
         .add_attribute("claimed_validators", n.to_string()))
 }
 
-/// Phases B + D2 alone: unbond in drain-priority order (unenrolled, then
-/// ineligible, then eligible by ascending TIP/uptime priority — RC1 §8/§10.2)
-/// to cover queued swap-outs, and expedite requests already funded BY THE
-/// PRINCIPAL MARKER. Contract-held liquid counts toward coverage (it lands in
-/// the marker at the next epoch's return settlement / reward deposit) but never
-/// toward expedites — and nhash already earmarked for a pending (chunked)
-/// delegation continuation is excluded entirely, since the continuation will
-/// delegate it away. Undelegation auto-withdraws pending rewards, so program
-/// commission is accrued here for the drained validators.
+/// Phases B + D2 alone: unbond in drain-priority order to cover queued swap-outs,
+/// and expedite requests already funded by the principal marker. Contract liquid
+/// counts toward coverage, never expedites; continuation-earmarked nhash is excluded.
 pub fn service_redemptions(deps: DepsMut, env: &Env) -> Result<Response, ContractError> {
     assert_not_halted(deps.as_ref())?;
     let cfg = CONFIG.load(deps.storage)?;
@@ -352,9 +325,7 @@ pub fn service_redemptions(deps: DepsMut, env: &Env) -> Result<Response, Contrac
         (plan, rewards)
     };
 
-    // Undelegate auto-withdraws the validator's pending rewards: charge
-    // commission on them now or they escape the accrual base, and fold them
-    // plus the unbond/expedite activity into the epoch analytics (§9.10).
+    // Undelegate auto-withdraws pending rewards: accrue commission now or they escape the base.
     let drained: Vec<(String, Uint128)> = rewards
         .into_iter()
         .filter(|(v, _)| plan.undelegations.iter().any(|(uv, _)| uv == v))
@@ -400,14 +371,9 @@ fn prost_coin(denom: &str, amount: Uint128) -> ProstCoin {
     }
 }
 
-/// Both messages of one settlement with the vault, in emission order:
-/// `[create_payment, accept_asset]`. The contract (source) offers
-/// `source_amount` in exchange for `target_amount` from the vault (target), and
-/// accepts it in the same tx under its asset-manager authority.
-///
-/// The vault settles only when the pending payment matches the terms carried in
-/// the approval exactly, so both messages are built here from one set of
-/// arguments — the two cannot describe different deals.
+/// One settlement with the vault, in emission order: `[create_payment, accept_asset]`.
+/// Both are built from one set of arguments because the vault settles only when the
+/// pending payment matches the approval's terms exactly.
 fn settlement_msgs(
     env: &Env,
     cfg: &Config,
@@ -436,15 +402,9 @@ fn settlement_msgs(
     [create, accept]
 }
 
-/// Restate the receipt's internal NAV entry at its par 1:1.
-///
-/// An outbound settlement that drains the vault's holding of a denom removes
-/// that denom's NAV entry, and a settlement whose asset denom has no entry is
-/// rejected. Emitting this before the crank's first settlement leg keeps the
-/// entry present without a read. It is legal on a live vault in every reachable
-/// state: if the entry was dropped the vault holds no receipt (removal implies
-/// drained), and otherwise the entry is already par so this restates the same
-/// price — both cases the unpaused-reprice rules allow.
+/// Restate the receipt's internal NAV entry at par 1:1. A draining settlement removes
+/// the entry and a settlement without one is rejected; a par restate is legal on a
+/// live vault in every reachable state.
 fn nav_assert_msg(env: &Env, cfg: &Config) -> CosmosMsg {
     update_vault_nav_msg(
         env.contract.address.as_str(),
@@ -474,17 +434,13 @@ fn unpause_msg(env: &Env, cfg: &Config) -> CosmosMsg {
     .into()
 }
 
-/// The full epoch crank. One transaction end to end: a failure anywhere (including
-/// a settlement leg) reverts messages and state together, so the vault cannot be
-/// left paused, no payment survives half-settled, and the receipt counter cannot
-/// desynchronize from the messages that justify it.
+/// The full epoch crank, one transaction end to end: any failure reverts messages and
+/// state together, so no half-settled payment, stuck pause, or desynced receipt counter.
 pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     assert_not_halted(deps.as_ref())?;
     let cfg = CONFIG.load(deps.storage)?;
 
-    // Continuation crank: a prior crank left unexecuted rebalance moves or
-    // undelegated deploy targets (gas chunking); drain the next chunk.
-    // Bypasses the min-interval guard (epoch in progress).
+    // Continuation: drain the next gas chunk; bypasses the rollover gate (epoch in progress).
     let pending_redel = PENDING_REDELEGATIONS
         .may_load(deps.storage)?
         .unwrap_or_default();
@@ -498,21 +454,14 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let mut epoch = EPOCH.load(deps.storage)?;
     let receipt_minted = RECEIPT_MINTED.load(deps.storage)?;
 
-    // Calendar-month rollover gate (liquid-staking-spec §9): the epoch may end
-    // once block time is in a strictly later civil (year, month) than the last
-    // run. The boundary is a deterministic function of consensus block time, not
-    // of who cranks or how long since last_run — no caller can pick the epoch's
-    // duration through this permissionless entrypoint. Immediately after a run
-    // last_run is in the current month, so the predicate rejects any further run
-    // until the next rollover: double-run is structurally impossible.
+    // Calendar-month rollover gate, deterministic in consensus block time: no caller
+    // can pick the epoch's duration or double-run it.
     if crate::month::year_month(env.block.time) <= crate::month::year_month(epoch.last_run) {
         let next = crate::month::first_of_next_month_secs(epoch.last_run);
         return Err(ContractError::TooSoon { next });
     }
 
-    // Phase A basis: the per-validator claimable rewards this crank will
-    // withdraw. Program commission accrues on them up front (mutates storage,
-    // so it runs before the read-only planning block below).
+    // Phase A basis; commission accrual mutates storage, so it precedes the planning block.
     let rewards = rewards_by_validator(deps.as_ref(), &env, &cfg.underlying_denom)?;
     accrue_commission(deps.storage, &rewards, cfg.commission_bps)?;
 
@@ -520,12 +469,9 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let redelegate_rest: Vec<(String, String, Uint128)>;
     let delegate_rest: Vec<(String, Uint128)>;
     let burned: Uint128;
-    // Hoisted out of the block below so Phase E's receipt-counter delta reuses the
-    // same value the mint message and the rebalance plan were sized from, rather
-    // than re-deriving it on a second path.
+    // Hoisted so Phase E's receipt-counter delta reuses the exact value the mint message used.
     let deployable: Uint128;
-    // Crank measurements for the §9.10 snapshot, assembled inside the planning
-    // block from the same values the messages were built from.
+    // Snapshot measurements, taken from the same values the messages were built from.
     struct CrankStats {
         tvv_before: Uint128,
         total_shares: Uint128,
@@ -541,11 +487,8 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     {
         let d = deps.as_ref();
 
-        // Live eligibility + concentration headroom for every enrolled validator
-        // (RC1 §9.7/§10.3/§10.1 arrears). Assessments arrive priority-sorted
-        // (TIP desc, uptime desc): rebalance seats take that order, so the
-        // highest-priority validators absorb the largest-remainder units and
-        // any cap-blocked residual; the drain order is its reverse.
+        // Eligibility and concentration headroom per enrolled validator. Assessments
+        // arrive priority-sorted; rebalance seats take that order, drain is its reverse.
         let enrolled_list = enrolled_valopers(d)?;
         let assessments = assess_validators(d, &cfg)?;
         let ranks = drain_ranks(&assessments);
@@ -562,8 +505,7 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             msgs.push(DistributionMsg::WithdrawDelegatorReward { validator }.into());
         }
 
-        // Gather state. Contract liquid = claimed rewards swept by earlier cranks +
-        // matured unbondings.
+        // Contract liquid = rewards swept by earlier cranks + matured unbondings.
         let liquid = d
             .querier
             .query_balance(env.contract.address.to_string(), &cfg.underlying_denom)?
@@ -581,30 +523,22 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         // Redemption reserve: payout estimates + margin.
         let need = redemption_need(&pending, cfg.redemption_margin_bps);
 
-        // Fresh-deploy budget: surplus beyond the redemption reserve and the
-        // fee buffer. Reserving the same `need` the service leg targets means
-        // redemption funds are never staked out from under a pending swap-out.
+        // Deploy budget reserves the service leg's `need`: redemption funds are never staked away.
         let budget = if eligible_rooms.is_empty() {
             Uint128::zero()
         } else {
-            // Two nominal epochs of AUM-fee accrual (~30-day months); the epoch
-            // cadence is calendar-month, so this uses the nominal-month constant
-            // rather than the retired min_run_interval_secs.
+            // Two nominal epochs of AUM-fee accrual; cadence is calendar-month.
             let horizon = crate::month::NOMINAL_EPOCH_SECS.saturating_mul(2);
             let buffer = fee_reserve(tvv, cfg.aum_fee_bps, horizon)
                 .max(vault_liquid.multiply_ratio(DEPLOY_BUFFER_BPS, 10_000u128));
             vault_liquid.saturating_sub(need + buffer)
         };
 
-        // Marker liquid once this run's moves land: settle + reward deposit
-        // flow in, at most `budget` flows out (the rebalance may deploy less
-        // when concentration caps bind, leaving MORE liquid than assumed, so
-        // gating expedites on the budget is the conservative side of F1).
+        // Marker liquid once this run's moves land; assuming the full budget flows out
+        // is the conservative side of F1 for gating expedites.
         let marker_after = (vault_liquid + liquid).saturating_sub(budget);
 
-        // Phase B: service redemptions (unbond only the increment), walking
-        // ALL delegations in drain-priority order: unenrolled first, then
-        // ineligible, then eligible by ascending TIP/uptime priority.
+        // Phase B: service redemptions, unbonding only the increment in drain-priority order.
         let dels_for_service = order_for_drain(dels.clone(), &ranks);
         let plan = plan_service(
             &pending,
@@ -617,8 +551,7 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         );
         let service_unbonded: Uint128 = plan.undelegations.iter().map(|(_, a)| *a).sum();
         let expedited = plan.expedite_ids.len() as u32;
-        // Post-unbond stake view: what the uniform-slot rebalance operates on
-        // (the undelegate messages below execute before the redelegations).
+        // Post-unbond stake view for the rebalance; undelegates execute before redelegations.
         let mut post_unbond: std::collections::BTreeMap<String, Uint128> =
             dels.iter().map(|v| (v.valoper.clone(), v.staked)).collect();
         for (validator, amount) in &plan.undelegations {
@@ -636,10 +569,8 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             );
         }
 
-        // Uniform-slot rebalance (RC1 §9.2/§9.3/§9.4): every eligible seat
-        // levels toward the same slot via redelegations (stake on unregistered
-        // or ineligible validators is redirected, never unbonded) plus fresh
-        // liquidity; the concentration-capped residual stays liquid.
+        // Uniform-slot rebalance: non-eligible stake is redirected, never unbonded;
+        // the cap-blocked residual stays liquid.
         let seats: Vec<crate::plan::RebalanceSeat> = eligible_rooms
             .iter()
             .map(|(v, headroom)| crate::plan::RebalanceSeat {
@@ -665,12 +596,8 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         let ret = plan_return(receipt_minted, staked, unbonding, liquid);
         let rewards_dep = liquid.saturating_sub(ret.settle);
 
-        // Return settlement (unpaused): contract pays `settle` nhash, the vault
-        // pays back `settle` receipt at the 1:1 internal NAV. Guarded against a
-        // missing entry (see nav_assert_msg) — as is the deploy leg below, which
-        // needs its own guard because THIS leg can be the settlement that drains
-        // the vault's receipt and takes the entry with it (a full unwind settles
-        // every minted receipt back).
+        // Return settlement (unpaused): `settle` nhash for `settle` receipt at par.
+        // This leg can drain the NAV entry, so the deploy leg carries its own restate.
         if !ret.settle.is_zero() {
             msgs.push(nav_assert_msg(&env, &cfg));
             msgs.extend(settlement_msgs(
@@ -682,27 +609,12 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             ));
         }
 
-        // Slash write-down: the vault rejects WithdrawPrincipalFunds of a
-        // non-accepted denom (verified on devnet 2026-07-09), so the D5 markdown
-        // runs as a GUARDRAIL SANDWICH under the contract's NAV authority
-        // (rotated in at bootstrap via update-nav-authority):
-        //   1. set the receipt's internal NAV to 0 nhash per write_down units
-        //      (zero price is valid for a non-accepted denom),
-        //   2. settle exactly write_down receipt OUT via a zero-priced payment
-        //      (guardrail: write_down x 0 == 0 x write_down), dropping TVV by
-        //      the unbacked amount THIS epoch,
-        //   3. restore the 1:1 entry so every later settlement leg still prices
-        //      exactly at par.
-        // A fractional markdown instead of the sandwich would poison future
-        // legs: the guardrail is exact cross-multiplication against the entry.
-        //
-        // Each repricing of the receipt — an asset the vault holds — requires a
-        // PAUSED vault, while the extraction between them requires a LIVE one
-        // (the vault refuses to settle assets while paused). The sandwich is
-        // therefore bracketed: pause/mark/unpause, settle, pause/restore/unpause.
-        // The reward deposit, which also demands a paused vault, joins the
-        // close-out bracket rather than opening a third. The whole crank is one
-        // transaction, so no user message can observe an intermediate state.
+        // Slash write-down: the vault rejects WithdrawPrincipalFunds of a non-accepted
+        // denom, so the markdown runs as a NAV guardrail sandwich (mark to 0, settle
+        // write_down out zero-priced, restore 1:1) under the contract's NAV authority.
+        // Repricing a held asset requires a paused vault; settling requires a live one,
+        // hence the pause brackets. A fractional markdown would poison later legs: the
+        // settlement guardrail is exact cross-multiplication against the entry.
         let writing_down = !ret.write_down.is_zero();
         if writing_down {
             msgs.push(pause_msg(&env, &cfg, "nvhash-writedown"));
@@ -725,13 +637,8 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             ));
         }
 
-        // Phase C: the atomic pause window. It carries the 1:1 restore when this
-        // crank wrote down, the reward deposit when there is one, or both;
-        // partial failure reverts the whole tx. plan_return settles the whole
-        // matured amount whenever liquid covers it, so today exactly one of the
-        // two occurs on any crank (pinned by write_down_and_reward_deposit_are
-        // _mutually_exclusive); the window carries either so it stays correct
-        // if that ever changes.
+        // Phase C pause window: carries the 1:1 restore and/or the reward deposit.
+        // Today exactly one occurs (test: write_down_and_reward_deposit_are_mutually_exclusive).
         if writing_down || !rewards_dep.is_zero() {
             msgs.push(pause_msg(&env, &cfg, "epoch"));
             if writing_down {
@@ -759,12 +666,8 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             msgs.push(unpause_msg(&env, &cfg));
         }
 
-        // Burn everything returned or written down (outside pause, same tx).
-        // Marker burn only burns coin held by the marker account itself, so the
-        // receipt (settlement proceeds + write-down, both in the contract's
-        // balance by this point in the message sequence) is first transferred
-        // into the receipt marker account. Requires the contract to hold
-        // Transfer access on the restricted receipt marker (bootstrap grant).
+        // Burn returned + written-down receipt. Marker burn only burns marker-account
+        // holdings, so transfer in first; needs Transfer access on the restricted marker.
         burned = ret.settle + ret.write_down;
         if !burned.is_zero() {
             let marker_addr = receipt_marker_address(d, &cfg)?;
@@ -786,8 +689,7 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             );
         }
 
-        // Deploy settlement (unpaused): mint receipt, swap it into the marker for
-        // the surplus nhash, then delegate.
+        // Deploy (unpaused): mint receipt, swap into the marker for the surplus nhash, delegate.
         if !deployable.is_zero() {
             msgs.push(
                 MsgMintRequest {
@@ -807,9 +709,8 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
             ));
         }
 
-        // Phase D1: execute rebalance moves under the shared per-crank gas
-        // budget: redelegations first, then fresh delegations; remainders
-        // carry to continuation cranks (single-EPOCH convergence, §9.3).
+        // Phase D1: rebalance moves under the per-crank gas budget; remainders carry
+        // to continuation cranks.
         let (redel_now, redel_later, deleg_now, deleg_later) = chunk_moves(
             rebalance.redelegations,
             rebalance.delegations,
@@ -861,17 +762,13 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         };
     }
 
-    // Phase E: persist. The receipt invariant moves by what was minted in
-    // (deployable, the same value the mint message and the deploy plan used) minus
-    // what was settled out or written down.
+    // Phase E: persist. The receipt invariant moves by minted (deployable) minus burned.
     if deployable != burned {
         RECEIPT_MINTED.save(deps.storage, &(receipt_minted + deployable - burned))?;
     }
 
-    // §9.10 snapshot: fold the window accumulators with this crank's exact
-    // legs, then start a fresh window. tvv_after is exact by construction in
-    // the single-tx engine: settlements and deploys are value-neutral, so only
-    // the reward deposit (up) and write-down (down) move TVV this crank.
+    // Snapshot: fold window accumulators, start a fresh window. tvv_after is exact:
+    // only the reward deposit (up) and write-down (down) move TVV this crank.
     let crank_claimed: Uint128 = rewards.iter().map(|(_, a)| *a).sum();
     let mut accum = EPOCH_ACCUM.may_load(deps.storage)?.unwrap_or_default();
     accum.rewards_claimed += crank_claimed;
@@ -928,7 +825,7 @@ pub fn run_epoch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     if redelegate_rest.is_empty() && delegate_rest.is_empty() {
         epoch.last_run = env.block.time;
         epoch.phase = EpochPhase::Idle;
-        // Epoch rollover: per-epoch uptime accumulators start fresh (§10.4).
+        // Epoch rollover: per-epoch uptime accumulators start fresh.
         epoch_rollover(deps.storage)?;
     } else {
         epoch.phase = EpochPhase::Releasing;
@@ -974,11 +871,9 @@ fn chunk_moves(
     (redelegations, redel_rest, deleg_now, deleg_rest)
 }
 
-/// Continuation crank: execute the next chunk of pending rebalance moves
-/// (redelegations first, then fresh delegations). Completes the epoch
-/// (advances last_run) once both queues drain. If a move is invalid and this
-/// reverts forever, the admin escape hatch is ClearPendingDelegations, which
-/// drops both queues: dropped redelegations simply leave stake where it is.
+/// Continuation crank: execute the next chunk of pending moves; completes the epoch
+/// once both queues drain. ClearPendingDelegations is the admin escape hatch if a
+/// move reverts forever (dropped moves just leave stake where it is).
 fn continue_epoch(
     deps: DepsMut,
     env: Env,
@@ -1025,13 +920,9 @@ fn continue_epoch(
         .add_attribute("action", "run_epoch_continue"))
 }
 
-/// Message-sequence lock for `run_epoch` (IMPLEMENTATION-STATUS §4): the epoch's
-/// safety story depends on ORDER — the return settlement runs unpaused BEFORE the
-/// pause window, the reward deposit happens strictly INSIDE pause/unpause, the
-/// receipt burn (transfer-then-burn) runs after unpause, and the fresh deploy +
-/// delegations come last. These tests execute the real `run_epoch` against a fully
-/// mocked querier and assert the emitted message list, so a refactor cannot
-/// silently reorder legs.
+/// Message-sequence lock for `run_epoch`: the epoch's safety story depends on order,
+/// so these tests run the real crank against a mocked querier and assert the emitted
+/// message list; a refactor cannot silently reorder legs.
 #[cfg(test)]
 mod sequence_tests {
     use super::*;
@@ -1100,10 +991,9 @@ mod sequence_tests {
         }
     }
 
-    /// Stand up mocked deps + env with the full query surface run_epoch touches.
-    /// `contract_liquid` is the contract's nhash bank balance (matured returns +
-    /// swept rewards); `vault_liquid` the principal marker's liquid nhash;
-    /// `reward` the claimable rewards on the enrolled validator.
+    /// Mocked deps + env covering run_epoch's full query surface. `contract_liquid` is
+    /// the contract's nhash bank balance, `vault_liquid` the principal marker's liquid
+    /// nhash, `reward` the enrolled validator's claimable rewards.
     fn setup(
         contract_liquid: u128,
         vault_liquid: u128,
@@ -1321,11 +1211,9 @@ mod sequence_tests {
         M::decode(any.value.as_slice()).unwrap()
     }
 
-    /// Reward-deposit path: liquid (800) exceeds matured (500), so the crank
-    /// settles the return, deposits the 300 surplus inside the pause window,
-    /// burns the returned receipt, then mints and deploys the vault surplus.
-    /// Locks: settlement BEFORE pause; deposit strictly INSIDE pause/unpause;
-    /// transfer-then-burn AFTER unpause; deploy and delegations LAST.
+    /// Reward-deposit path (liquid 800 > matured 500). Locks: settlement before pause,
+    /// deposit inside pause/unpause, transfer-then-burn after unpause, deploy and
+    /// delegations last.
     #[test]
     fn run_epoch_orders_settle_pause_deposit_burn_deploy() {
         let (mut deps, env) = setup(800, 10_000, 100);
@@ -1343,9 +1231,9 @@ mod sequence_tests {
                 "unpause",           // window closes
                 "transfer_receipt",  // burn leg: receipt into the marker account
                 "burn_receipt",
-                "mint_receipt",   // deploy settlement
-                "update_nav",     // its own par restate: the return leg above may
-                "create_payment", // have drained the entry
+                "mint_receipt", // deploy settlement
+                "update_nav",   // its own par restate (the return leg may drain the entry)
+                "create_payment",
                 "accept_asset",
                 "delegate", // fresh stake last
             ],
@@ -1374,10 +1262,8 @@ mod sequence_tests {
         );
     }
 
-    /// Write-down path: liquid (300) under-covers matured (500), so the 200
-    /// shortfall is a slash loss recognized THIS crank via the NAV guardrail
-    /// sandwich. Locks the bracketed sandwich (pause/mark, settle live,
-    /// pause/restore) and that the burn covers settle + write_down.
+    /// Write-down path (liquid 300 < matured 500): the shortfall is recognized this
+    /// crank. Locks the bracketed sandwich order and that the burn covers settle + write_down.
     #[test]
     fn run_epoch_orders_write_down_sandwich_in_pause_brackets() {
         let (mut deps, env) = setup(300, 0, 0);
@@ -1403,8 +1289,7 @@ mod sequence_tests {
             "write-down sandwich order changed — a fractional markdown, a \
              reordered restore, or an unbracketed reprice breaks the money path"
         );
-        // Sandwich prices: the mark prices 200 units at 0, the restore returns
-        // the entry to 1 nhash per 1 unit.
+        // The mark prices 200 units at 0; the restore returns the entry to 1 nhash per unit.
         let mark: crate::vault_ext::MsgUpdateVaultNavRequest =
             decode_any(&res.messages[4].msg, "update_nav");
         assert_eq!(mark.price.unwrap().amount, "0");
@@ -1413,8 +1298,7 @@ mod sequence_tests {
             decode_any(&res.messages[9].msg, "update_nav");
         assert_eq!(restore.price.unwrap().amount, "1");
         assert_eq!(restore.volume, "1");
-        // Nothing is deposited on this path: the close-out bracket carries the
-        // restore alone.
+        // Nothing is deposited on this path: the close-out bracket carries the restore alone.
         assert!(!kinds.contains(&"deposit_principal"));
         let burn: MsgBurnRequest = decode_any(&res.messages[12].msg, "burn_receipt");
         assert_eq!(burn.amount.unwrap().amount, "500");
@@ -1424,10 +1308,8 @@ mod sequence_tests {
         );
     }
 
-    /// The vault settles a payment only when the pending payment matches the
-    /// terms carried in the approval exactly, so the create-payment leg and the
-    /// accept-asset leg of one settlement must never describe different deals.
-    /// Walks every settlement pair the crank emits on both paths.
+    /// The vault settles only when the payment matches the approval's terms exactly;
+    /// walks every settlement pair on both paths to prove the two legs describe one deal.
     #[test]
     fn settlement_pairs_carry_identical_terms() {
         for (liquid, vault_liquid, reward) in [(800u128, 10_000u128, 100u128), (300, 0, 0)] {
@@ -1468,18 +1350,15 @@ mod sequence_tests {
                 for (a, b) in created.target_amount.iter().zip(&approved.target_amount) {
                     assert_eq!((&a.denom, &a.amount), (&b.denom, &b.amount));
                 }
-                // The contract sources every settlement; the vault is always the
-                // target, which the vault itself requires.
+                // The contract sources every settlement; the vault must be the target.
                 assert_eq!(created.source, contract);
                 assert_eq!(approved.target, vault);
             }
         }
     }
 
-    /// The vault refuses to settle assets while paused and refuses to reprice a
-    /// held asset while live. Walks the emitted sequence tracking pause depth and
-    /// asserts each message sits on the side of that line it needs: every
-    /// accept_asset live, every receipt repricing that moves the price paused.
+    /// The vault settles only while live and reprices a held asset only while paused;
+    /// tracks pause depth and asserts each message sits on the side it needs.
     #[test]
     fn settlements_run_live_and_repricings_run_paused() {
         for (liquid, vault_liquid, reward) in [(800u128, 10_000u128, 100u128), (300, 0, 0)] {
@@ -1506,9 +1385,7 @@ mod sequence_tests {
                     "update_nav" => {
                         let nav: crate::vault_ext::MsgUpdateVaultNavRequest =
                             decode_any(&msg.msg, "update_nav");
-                        // Restating the entry at its existing par price is legal
-                        // live; any other price moves a held asset's value and
-                        // requires the pause.
+                        // A par restate is legal live; any other price requires the pause.
                         let is_par = nav.price.as_ref().map(|p| p.amount.as_str()) == Some("1")
                             && nav.volume == "1";
                         assert!(
@@ -1523,13 +1400,9 @@ mod sequence_tests {
         }
     }
 
-    /// A settlement whose asset denom has no internal NAV entry is rejected, and
-    /// an outbound settlement that drains the vault's holding of a denom removes
-    /// that entry — so a full-unwind return leg can delete the entry the deploy
-    /// leg later in the SAME crank depends on. Every par settlement must
-    /// therefore be immediately preceded by its own par restate. The write-down
-    /// extraction is the sole exception: it settles at the marked-down price on
-    /// purpose, so a par restate in front of it would defeat the sandwich.
+    /// A draining settlement removes the NAV entry a later leg needs, so every par
+    /// settlement must be immediately preceded by its own par restate; the write-down
+    /// extraction alone settles at the marked-down price on purpose.
     #[test]
     fn every_par_settlement_is_preceded_by_a_par_restate() {
         for (liquid, vault_liquid, reward) in [(800u128, 10_000u128, 100u128), (300, 0, 0)] {
@@ -1545,8 +1418,7 @@ mod sequence_tests {
                     decode_any(&res.messages[i + 1].msg, "accept_asset");
                 let payment = approved.payment.unwrap();
                 if payment.external_id == WRITEDOWN_PAYMENT_ID {
-                    // The extraction rides the marked-down entry: the message
-                    // before it is the unpause closing the mark bracket.
+                    // The extraction rides the marked-down entry, after the mark bracket's unpause.
                     assert_eq!(kinds[i - 1], "unpause");
                     continue;
                 }
@@ -1565,11 +1437,9 @@ mod sequence_tests {
         }
     }
 
-    /// The close-out pause window carries the 1:1 restore, the reward deposit, or
-    /// both. Today it is never both: plan_return settles the entire matured
-    /// amount whenever liquid covers it, so a crank that writes down has no
-    /// surplus left to deposit. Pinned because the epoch sequence tests only
-    /// cover the two reachable shapes.
+    /// A crank never both writes down and deposits: plan_return settles the whole
+    /// matured amount whenever liquid covers it. Pinned because the sequence tests
+    /// only cover the two reachable shapes.
     #[test]
     fn write_down_and_reward_deposit_are_mutually_exclusive() {
         for liquid in [0u128, 1, 299, 300, 499, 500, 501, 5_000] {

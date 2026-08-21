@@ -20,23 +20,17 @@ use crate::ContractError;
 pub const CONTRACT_NAME: &str = "crates.io:nvhash-staking";
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Provenance staking-restriction defaults ([VERIFY] live values on the deployed
-/// chain; admin-updatable via UpdateConfig if they differ).
+/// Provenance staking-restriction defaults ([VERIFY] live values; admin-updatable).
 pub const DEFAULT_MAX_CONCENTRATION_MULTIPLE_BPS: u64 = 55_000; // 5.5x
 pub const DEFAULT_MIN_BONDED_CAP_BPS: u64 = 500; // 5%
 pub const DEFAULT_MAX_BONDED_CAP_BPS: u64 = 3_300; // 33%
-/// Default safety margin below the per-validator max bond (RC1 §9.2).
+/// Default safety margin below the per-validator max bond.
 pub const DEFAULT_CONCENTRATION_SAFETY_OFFSET_BPS: u64 = 500; // 5% of max bond
-/// Default program commission (RC1 §10.1), decided 2026-07-09: 10% of rewards
-/// earned on program delegations, leaving validators clearly net-positive
-/// against the uniform 60% protocol commission.
+/// Default program commission: 10% of rewards on program delegations.
 pub const DEFAULT_COMMISSION_BPS: u64 = 1_000;
-/// Default jail-purge cooldown (RC1 §9.8): 8 hours of sustained jailing before
-/// stake may be moved off a validator.
+/// Default jail-purge cooldown before stake may move off a jailed validator.
 pub const DEFAULT_JAIL_UNBOND_DELAY_SECS: u64 = 28_800;
-/// Default redemption safety margin (spec §9.5.6; the 2026-07-09 finding's
-/// parameter, admin-configurable since 8.4a). Bounded 0..=1000 in
-/// `Config::validate`; the serde default fn in state.rs returns the same 50.
+/// Default redemption safety margin; state.rs's serde default returns the same 50.
 pub const DEFAULT_REDEMPTION_MARGIN_BPS: u64 = 50;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -82,12 +76,9 @@ pub fn instantiate(
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
 
-/// Handles `MsgMigrateContract` (wasmd verified the admin — the admin group
-/// policy per spec §12). Errors on a foreign cw2 contract name or a stored
-/// version NEWER than this code's (downgrade guard); equal versions are
-/// idempotent. Re-stamps the cw2 version and touches no other state; a future
-/// layout change writes its transformation here and must handle the
-/// `Releasing` epoch phase explicitly.
+/// Handles `MsgMigrateContract` (wasmd verified the admin). Rejects a foreign cw2 name
+/// or a newer stored version; equal is idempotent. Re-stamps cw2 and touches no other
+/// state; a future layout change must handle the `Releasing` phase explicitly.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     let stored = cw2::get_contract_version(deps.storage)?;
@@ -185,9 +176,7 @@ pub fn execute(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::ReceiptAccounting {} => {
-            // The §5.1 invariant's legs in ONE consistent state read (D29).
-            // Every chain sweep is the crank's own trusted reader shape:
-            // paginated to exhaustion, bounded by the validator ceiling.
+            // The receipt-conservation invariant's legs in one consistent state read (D29).
             let cfg = CONFIG.load(deps.storage)?;
             let receipt_minted = RECEIPT_MINTED.load(deps.storage)?;
             let receipt_bank_supply = deps.querier.query_supply(&cfg.receipt_denom)?.amount;
@@ -645,8 +634,7 @@ mod unit {
 
     #[test]
     fn instantiate_accepts_boundary_config_values() {
-        // Exact edges of every bound are valid: 100% bps rates, min==max caps,
-        // offset one below 100%, and a 3-char denom.
+        // Exact edges of every bound are valid.
         let mut deps = mock_dependencies();
         let admin = deps.api.addr_make("admin");
         let vault = deps.api.addr_make("vault");
@@ -658,8 +646,7 @@ mod unit {
         msg.min_bonded_cap_bps = Some(3_300);
         msg.max_bonded_cap_bps = Some(3_300);
         msg.concentration_safety_offset_bps = Some(9_999);
-        // Both edges of the margin bound are legal (zero's failure mode is a
-        // refund, surfaced by the sim's margin-zero scenario; 1000 is the cap).
+        // Both margin edges are legal; zero's failure mode is a refund, covered by the sim.
         msg.redemption_margin_bps = Some(1_000);
         instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), msg).unwrap();
     }
@@ -698,8 +685,7 @@ mod unit {
 
     #[test]
     fn config_stored_before_the_margin_field_deserializes_at_50() {
-        // Pre-8.4a Config JSON (no margin key) must load as 50 — the
-        // function default, never a bare zero.
+        // Config JSON without the margin key must load as 50 (function default, never bare zero).
         let old_json = r#"{
             "admin": "pb1admin",
             "vault_address": "pb1vault",
@@ -848,9 +834,7 @@ mod unit {
         let resp: EpochStatusResponse = from_json(&bin).unwrap();
         assert!(resp.halted);
 
-        // Resume restores the cranks (RunEpoch then proceeds to chain queries,
-        // which mock deps cannot serve, but it must get past the halt gate — it
-        // will fail with a querier error, not Halted).
+        // Resume must get past the halt gate; mock deps then fail with a querier error, not Halted.
         execute(
             deps.as_mut(),
             mock_env(),
@@ -900,9 +884,7 @@ mod unit {
         .unwrap_err();
         assert!(matches!(err, ContractError::NotOperator { .. }));
 
-        // The caller's own valoper passes shape + operator checks; mock deps
-        // cannot serve the on-chain existence query, so it reports not-found —
-        // proving the authorization gates ran first.
+        // Own valoper passes the auth gates first; mock deps then report ValidatorNotFound.
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -1026,8 +1008,7 @@ mod unit {
         let resp: crate::msg::EpochSnapshotResponse = from_json(&bin).unwrap();
         assert!(resp.snapshot.is_none());
 
-        // A 30-day window on 1e12 TVV: 1e9 rewards + 2e8 commission + 1e8 tips
-        // gross; 1e8 AUM + 2e8 write-down drags -> net 1e9.
+        // 30-day window on 1e12 TVV: gross 1.3e9, net 1e9 after AUM and write-down drags.
         LAST_SNAPSHOT
             .save(
                 deps.as_mut().storage,
@@ -1060,8 +1041,7 @@ mod unit {
         let resp: crate::msg::AprResponse = from_json(&bin).unwrap();
         assert_eq!(resp.epoch_index, 7);
         assert_eq!(resp.window_seconds, 2_592_000);
-        // gross = 1.3e9 annualized over 30d on 1e12 = 158 bps (floor);
-        // net = 1.0e9 -> 121 bps.
+        // 1.3e9 over 30d on 1e12 annualizes to 158 bps (floor); net 1.0e9 to 121 bps.
         assert_eq!(resp.gross_apr_bps, 158);
         assert_eq!(resp.net_apr_bps, 121);
     }
@@ -1126,8 +1106,7 @@ mod unit {
         let jailed = "tpvaloper1jailedjailedjailed".to_string();
         let claimant = valoper_for(&operator);
 
-        // Reporting a validator the chain says is not jailed (the mock querier
-        // resolves to not-jailed) records nothing.
+        // The mock querier resolves not-jailed, so the report records nothing.
         let res = execute(
             deps.as_mut(),
             mock_env(),
@@ -1207,8 +1186,7 @@ mod unit {
             )
             .unwrap();
 
-        // Claimant gates (checked before any chain read): self-claim rejected,
-        // unenrolled claimant rejected, non-operator caller rejected.
+        // Claimant gates run before any chain read: self-claim, unenrolled, non-operator rejected.
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -1260,9 +1238,7 @@ mod unit {
         .unwrap_err();
         assert!(matches!(err, ContractError::NotOperator { .. }));
 
-        // Past the gates, the second observation finds the validator unjailed
-        // (mock chain): the purge is rejected and the stale report cleared, so
-        // a re-jail always needs a fresh two-observation cycle.
+        // An unjailed second observation clears the stale report; a re-jail needs a fresh cycle.
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -1504,14 +1480,8 @@ mod unit {
 
     #[test]
     fn run_epoch_rejects_within_same_calendar_month() {
-        // run_epoch's calendar-month gate runs entirely off storage (CONFIG,
-        // PENDING_DELEGATIONS, EPOCH, RECEIPT_MINTED loads) before any chain query,
-        // so it is reachable with plain mock_dependencies: no gRPC/stargate mocking
-        // needed. (The eligibility sweep only runs when validators are enrolled.)
-        //
-        // EPOCH defaults to last_run = 1970-01-01. A crank whose block time is
-        // later in wall-clock but still in the SAME civil month (1970-01) must be
-        // rejected: the gate is a calendar boundary, not an elapsed-time floor.
+        // The calendar gate runs off storage before any chain query, so mock deps suffice.
+        // Same civil month as the default last_run (1970-01) must be rejected.
         let mut deps = mock_dependencies();
         let admin = deps.api.addr_make("admin");
         let vault = deps.api.addr_make("vault");
@@ -1557,11 +1527,8 @@ mod unit {
         assert!(matches!(err, ContractError::Unauthorized {}));
     }
 
-    // ── migrate: the four cw2 quadrants + the no-other-key property (8.4a) ──
-    // wasmd owns WHO may migrate (the drill's subject); these pin WHAT an
-    // authorized migration may do: name must match, stored version must not
-    // exceed the code's, equal is idempotent, older advances the marker, and
-    // NO storage key beyond contract_info moves.
+    // wasmd owns WHO may migrate; these pin WHAT it may do: name match, no downgrade,
+    // equal idempotent, older advances the marker, no key beyond contract_info moves.
 
     /// Every raw storage entry as (key, value) pairs, for byte-level diffs.
     fn storage_snapshot(storage: &cosmwasm_std::MemoryStorage) -> Vec<(Vec<u8>, Vec<u8>)> {
@@ -1606,8 +1573,7 @@ mod unit {
         let before = storage_snapshot(&deps.storage);
         let res = migrate(deps.as_mut(), mock_env(), MigrateMsg {}).unwrap();
         assert!(res.messages.is_empty());
-        // Equal → idempotent: the marker re-stamps to identical bytes, so the
-        // WHOLE storage is byte-identical — the drill's step-5 property.
+        // Equal version re-stamps to identical bytes, so storage stays byte-identical.
         assert_eq!(storage_snapshot(&deps.storage), before);
     }
 

@@ -17,19 +17,16 @@ pub struct InstantiateMsg {
     /// Min seconds between accepted uptime captures (0 = every call accepted).
     #[serde(default)]
     pub min_capture_interval_secs: u64,
-    /// Concentration-cap mirrors; None = Provenance defaults (5.5x, 5%, 33%)
-    /// and a 5% safety offset below the per-validator max bond.
+    /// Concentration-cap mirrors; None = Provenance defaults (5.5x, 5%, 33%, 5% safety offset).
     pub max_concentration_multiple_bps: Option<u64>,
     pub min_bonded_cap_bps: Option<u64>,
     pub max_bonded_cap_bps: Option<u64>,
     pub concentration_safety_offset_bps: Option<u64>,
-    /// Program commission rate in bps of rewards earned on program delegations.
-    /// None = the 10% default (DEFAULT_COMMISSION_BPS).
+    /// Program commission rate in bps of rewards on program delegations. None = 10% default.
     pub commission_bps: Option<u64>,
-    /// Cooldown between jail report and purge (RC1 §9.8). None = 8h default.
+    /// Cooldown between jail report and purge. None = 8h default.
     pub jail_unbond_delay_secs: Option<u64>,
-    /// Safety margin over the pending-redemption need, in bps (spec §9.5.6;
-    /// bounded 0..=1000). None = the 50 bps default.
+    /// Safety margin over the pending-redemption need in bps, bounded 0..=1000. None = 50.
     pub redemption_margin_bps: Option<u64>,
 }
 
@@ -53,74 +50,48 @@ pub enum ExecuteMsg {
         jail_unbond_delay_secs: Option<u64>,
         redemption_margin_bps: Option<u64>,
     },
-    /// Admin-gated: emergency stop / resume for the fund-moving permissionless
-    /// cranks (RunEpoch including continuations, ServiceRedemptions). Does not
-    /// touch the vault's own pause state.
+    /// Admin-gated: emergency stop/resume for the fund-moving permissionless cranks
+    /// (RunEpoch, ServiceRedemptions). Does not touch the vault's own pause state.
     SetHalted { halted: bool },
-    /// Admin-gated: abort a stuck epoch continuation by dropping the persisted
-    /// delegation targets and returning to Idle. Safe: the withdrawn nhash stays
-    /// in the contract balance and the next epoch's return settlement swaps the
-    /// matching receipt back out and burns it (TVV preserved).
+    /// Admin-gated: abort a stuck epoch continuation by dropping the persisted delegation
+    /// targets; the withdrawn nhash settles at the next epoch, so TVV is preserved.
     ClearPendingDelegations {},
-    /// Validator-operator: enroll a validator in the program (RC1 §11.2). The
-    /// caller must be the valoper's operator account (same key payload); the
-    /// validator must exist on chain. Starts with no captured uptime; eligibility
-    /// is evaluated from live chain state at each epoch.
+    /// Enroll a validator in the program; the caller must be the valoper's operator
+    /// account and the validator must exist on chain.
     RegisterParticipation { valoper: String },
-    /// Operator or admin: withdraw a validator from the program. Existing program
-    /// stake on it is unbonded at the next epoch and redeployed.
+    /// Operator or admin: withdraw a validator; its program stake is unbonded at the
+    /// next epoch and redeployed.
     UnregisterParticipation { valoper: String },
-    /// Permissionless (RC1 §9.8 phase 1): flag that a validator the program has
-    /// stake on is jailed. Verified against live chain state: if jailed, the
-    /// first report starts the jail_unbond_delay cooldown (later reports while
-    /// still jailed are no-ops); if NOT jailed, any existing report is cleared.
-    /// Moves no funds.
+    /// Permissionless: report a jailed validator, starting the jail_unbond_delay cooldown;
+    /// a report on an unjailed validator clears instead. Moves no funds.
     ReportJailedValidator { valoper: String },
-    /// Permissionless (RC1 §9.8 phase 2, halt-gated): after the cooldown, move
-    /// the program's stake off a STILL-jailed validator. With an eligible
-    /// `claimant_valoper` (caller must be its enrolled operator): redelegate up
-    /// to the claimant's concentration headroom, unbond the remainder. Without
-    /// one (e.g. a depositor calling): unbond the full program delegation.
-    /// Rejected (report cleared) if the validator unjailed in the interim.
-    /// Idempotent once the stake has moved.
+    /// Permissionless (halt-gated): after the cooldown, move stake off a still-jailed
+    /// validator (redelegate to an eligible claimant's headroom, else unbond all).
     PurgeJailedValidator {
         valoper: String,
         claimant_valoper: Option<String>,
     },
-    /// Anyone (nhash attached): pay program commission on behalf of an enrolled
-    /// validator (RC1 §10.1). Credits the validator's cumulative paid total;
-    /// overpayment prepays future accrual; non-refundable. Funds are held by
-    /// the contract and swept into vault principal (raising NAV) at the next
-    /// epoch's deposit leg.
+    /// Anyone (nhash attached): pay program commission for an enrolled validator.
+    /// Non-refundable; overpayment prepays future accrual; swept into vault principal next epoch.
     PayCommission { valoper: String },
-    /// Anyone (nhash attached): pay a TIP for an enrolled validator
-    /// (RC1 §10.2). Credits the CURRENT epoch's tip (the primary priority key;
-    /// resets at every epoch completion). Non-refundable; funds sweep into
-    /// vault principal at the next epoch's deposit leg.
+    /// Anyone (nhash attached): pay a tip for an enrolled validator. Credits the current
+    /// epoch's tip (the primary priority key, reset each epoch); non-refundable.
     PayTip { valoper: String },
-    /// Permissionless: fold every enrolled validator's current signed-blocks
-    /// ratio (slashing SigningInfo) into its per-epoch uptime accumulator
-    /// (RC1 §10.4). Interval-gated by min_capture_interval_secs; early calls are
-    /// accepted no-ops. Never required: plan time falls back to a direct read.
+    /// Permissionless: fold each enrolled validator's signed-blocks ratio into its per-epoch
+    /// uptime accumulator. Interval-gated; early calls are accepted no-ops.
     CaptureUptimeSignal {},
-    /// Permissionless: withdraw accrued staking rewards for every delegated
-    /// validator that has any (phase A alone). Keeper cadence note: rewards
-    /// claimed inside RunEpoch itself land in the contract balance AFTER that
-    /// crank's state reads, so they are deposited into the vault at the NEXT
-    /// epoch. Call ClaimRewards in a prior tx (any time before RunEpoch) so the
-    /// current epoch's deposit includes them.
+    /// Permissionless: withdraw accrued staking rewards for every delegated validator.
+    /// Call in a tx before RunEpoch so the current epoch's deposit includes them.
     ClaimRewards {},
-    /// Permissionless (halt-gated): unbond to cover queued swap-outs and expedite
-    /// funded ones (phases B + D2 alone). Expedites are gated on principal-marker
-    /// liquidity only.
+    /// Permissionless (halt-gated): unbond to cover queued swap-outs and expedite funded
+    /// ones; expedites are gated on principal-marker liquidity only.
     ServiceRedemptions {},
     /// Permissionless (min-interval and halt guarded): the full epoch crank.
     /// Bypasses the interval guard only to drain a pending continuation.
     RunEpoch {},
 }
 
-/// Migration message. Empty: no state transformation is needed, so migration
-/// only re-stamps the cw2 version record.
+/// Empty migration message; migration only re-stamps the cw2 version record.
 #[cw_serde]
 pub struct MigrateMsg {}
 
@@ -131,31 +102,22 @@ pub enum QueryMsg {
     Config {},
     #[returns(EpochStatusResponse)]
     EpochStatus {},
-    /// Enrolled validators with a live eligibility assessment (uptime, jailed,
-    /// tombstoned, commission standing, concentration headroom) read from
-    /// current chain state. Sorted by program priority, highest first (TIP
-    /// desc, then uptime desc, then enrollment age) — the reverse of the
-    /// redemption drain order (RC1 §10.2).
+    /// Enrolled validators with live eligibility read from current chain state, sorted by
+    /// program priority (tip desc, uptime desc, enrollment age), highest first.
     #[returns(ValidatorsResponse)]
     Validators {},
-    /// Open jail reports (RC1 §9.8): validators observed jailed and the time a
-    /// purge becomes allowed. Keeper-facing.
+    /// Open jail reports: validators observed jailed and the time a purge becomes allowed.
     #[returns(JailReportsResponse)]
     JailReports {},
-    /// The most recent epoch's value decomposition (RC1 §9.10). Only the last
-    /// snapshot is retained; None before the first epoch crank.
+    /// The most recent epoch's value decomposition; None before the first epoch crank.
     #[returns(EpochSnapshotResponse)]
     EpochSnapshot {},
-    /// Realized APR over the last epoch window with the gross-to-net breakdown
-    /// (rewards, +commission, +TIP, -AUM estimate, -slash write-down), per
-    /// RC1 §9.10 / R2 transparency. None before the first epoch crank.
+    /// Realized APR over the last epoch window with the gross-to-net breakdown.
+    /// None before the first epoch crank.
     #[returns(AprResponse)]
     Apr {},
-    /// The spec §5.1 receipt-conservation invariant's legs, in ONE consistent
-    /// state read (8.4a D29): minted counter, bank supply of the receipt
-    /// denom, program delegations, in-flight unbonding, earmarked pending
-    /// deployment, and the saturating residual. Read-only, permissionless,
-    /// bounded by the validator ceiling (paginated reads to exhaustion).
+    /// The receipt-conservation invariant's legs in one consistent state read.
+    /// Read-only, permissionless, bounded by the validator ceiling.
     #[returns(ReceiptAccountingResponse)]
     ReceiptAccounting {},
 }
@@ -179,11 +141,11 @@ pub struct ConfigResponse {
     pub redemption_margin_bps: u64,
 }
 
-/// The §5.1 invariant's legs from one consistent state read (all base-unit
-/// amounts of the receipt/underlying denoms as noted per field).
+/// The receipt-conservation invariant's legs from one consistent state read;
+/// all amounts are base units of the denom noted per field.
 #[cw_serde]
 pub struct ReceiptAccountingResponse {
-    /// The contract's own §5.1 counter (receipt base units).
+    /// The contract's own minted counter (receipt base units).
     pub receipt_minted: cosmwasm_std::Uint128,
     /// Bank total supply of the receipt denom.
     pub receipt_bank_supply: cosmwasm_std::Uint128,
@@ -193,8 +155,7 @@ pub struct ReceiptAccountingResponse {
     pub unbonding: cosmwasm_std::Uint128,
     /// Earmarked PENDING_DELEGATIONS total (nhash base units).
     pub pending_deployment: cosmwasm_std::Uint128,
-    /// minted − staked − unbonding − pending, saturating at zero: the
-    /// residual a verifier reconciles against matured-but-unsettled value.
+    /// minted - staked - unbonding - pending, saturating at zero (matured-but-unsettled residual).
     pub matured_unsettled: cosmwasm_std::Uint128,
 }
 
@@ -272,26 +233,22 @@ pub struct ValidatorStatus {
     pub enrolled_at_seconds: u64,
     /// Captures folded into the current epoch's accumulator.
     pub uptime_capture_count: u32,
-    /// Effective uptime in bps (accumulator mean if any captures, else the live
-    /// signing-info read). None when uptime cannot be determined (validator or
-    /// signing info missing, non-ed25519 consensus key).
+    /// Effective uptime in bps (accumulator mean, else live signing-info read); None when
+    /// uptime cannot be determined.
     pub uptime_bps: Option<u64>,
     pub jailed: bool,
     pub tombstoned: bool,
     /// TIP credited for the current epoch (primary priority key).
     pub tip_epoch: Uint128,
-    /// Cumulative program commission accrued / paid, and the grace boundary the
-    /// paid total must currently meet (RC1 §10.1).
+    /// Cumulative commission accrued/paid, and the grace boundary the paid total must meet.
     pub commission_accrued: Uint128,
     pub commission_paid: Uint128,
     pub commission_due: Uint128,
-    /// True when commission_paid < commission_due: past the one-epoch grace,
-    /// which alone makes the validator ineligible until brought current.
+    /// True when commission_paid < commission_due; alone makes the validator ineligible.
     pub in_arrears: bool,
-    /// Live eligibility: enrolled, bonded, not jailed/tombstoned, uptime meets
-    /// the configured threshold, commission current.
+    /// Live eligibility: enrolled, bonded, not jailed/tombstoned, uptime and commission current.
     pub eligible: bool,
-    /// nhash of new delegation this validator could still legally receive under
-    /// the concentration cap minus the safety offset (0 when ineligible).
+    /// New-delegation headroom in nhash under the concentration cap minus the safety
+    /// offset (0 when ineligible).
     pub headroom: Uint128,
 }
