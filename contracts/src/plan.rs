@@ -25,12 +25,9 @@ pub fn split_even(total: Uint128, n: usize) -> Vec<Uint128> {
         .collect()
 }
 
-/// Spread `budget` underlying across validators as evenly as their concentration
-/// headroom allows (RC1 §9.2/§9.7): waterfall redistribution — each pass splits
-/// the remainder evenly over validators with room left, clamping each share to
-/// that validator's headroom. Anything no validator can legally take is simply
-/// not allocated (the undeliverable residual stays liquid in the vault, §8).
-/// Deterministic: input order is preserved; zero-amount entries are dropped.
+/// Spread `budget` across validators as evenly as concentration headroom allows:
+/// waterfall redistribution, each share clamped to headroom; the undeliverable residual
+/// stays unallocated (liquid in the vault). Input order kept; zero entries dropped.
 pub fn plan_deploy_capped(
     budget: Uint128,
     headrooms: &[(String, Uint128)],
@@ -54,8 +51,7 @@ pub fn plan_deploy_capped(
                 progressed = true;
             }
         }
-        // No validator could take anything (remaining spread to zero shares):
-        // the leftover is sub-splittable dust; stop.
+        // Remaining spread to all-zero shares is sub-splittable dust; stop.
         if !progressed {
             break;
         }
@@ -80,10 +76,9 @@ pub fn uptime_ratio_bps(signed_blocks_window: i64, missed_blocks_counter: i64) -
     ((signed * 10_000) / window) as u64
 }
 
-/// Per-validator max bond under the Provenance concentration cap (§9.7), reduced
-/// by the configured safety offset:
-/// `maxValPct = clamp(multiple / active_count, min_cap, max_cap)` (all bps of 1);
-/// `max_bond = total_bonded × maxValPct × (1 − offset)`. Floor arithmetic.
+/// Per-validator max bond under the Provenance concentration cap:
+/// `total_bonded × clamp(multiple / active_count, min_cap, max_cap) × (1 − offset)`,
+/// all bps of 1, floor arithmetic.
 pub fn max_bond_adjusted(
     total_bonded: Uint128,
     active_count: u64,
@@ -103,10 +98,8 @@ pub fn max_bond_adjusted(
         .multiply_ratio(10_000u128.saturating_sub(offset_bps as u128), 10_000u128)
 }
 
-/// Validators to claim from: enrolled validators (enrollment order) that have
-/// rewards, then any other validator the contract still has reward-bearing
-/// delegations with (e.g. unregistered but not yet unbonded), sorted for
-/// determinism.
+/// Validators to claim from: enrolled validators with rewards (enrollment order),
+/// then any other reward-bearing delegation, sorted for determinism.
 pub fn plan_claim(validators: &[String], with_rewards: &[String]) -> Vec<String> {
     let mut out: Vec<String> = validators
         .iter()
@@ -126,9 +119,8 @@ pub fn plan_claim(validators: &[String], with_rewards: &[String]) -> Vec<String>
 /// Delegation targets as `(valoper, amount)` pairs, in plan order.
 pub type DelegationTargets = Vec<(String, Uint128)>;
 
-/// Split delegation targets into (this-run, remainder) for chunked execution.
-/// `max == 0` means unlimited. Keeps the per-validator delegate loop inside the
-/// per-tx gas budget; the remainder is persisted and drained by continuation cranks.
+/// Split targets into (this-run, remainder); `max == 0` means unlimited. Bounds the
+/// delegate loop to the per-tx gas budget; the remainder drains on continuation cranks.
 pub fn take_chunk(
     mut targets: DelegationTargets,
     max: u32,
@@ -140,11 +132,9 @@ pub fn take_chunk(
     (targets, rest)
 }
 
-/// nhash the deploy leg must leave liquid so the vault can pay the AUM fee that will
-/// accrue over `horizon_secs`. The fee accrues on the whole TVV and is skimmed from
-/// the principal marker's liquid nhash at each reconcile; deploying it away starves
-/// the fee (observed live in the POC). Design C note: with payment == underlying the
-/// fee path is identity end to end, but the liquidity requirement is unchanged.
+/// nhash the deploy leg must leave liquid for the AUM fee accruing over `horizon_secs`:
+/// the fee accrues on the whole TVV but is skimmed from the principal marker's liquid
+/// nhash, so deploying it away starves the fee.
 pub fn fee_reserve(tvv: Uint128, aum_fee_bps: u64, horizon_secs: u64) -> Uint128 {
     if aum_fee_bps == 0 || horizon_secs == 0 {
         return Uint128::zero();
@@ -159,14 +149,13 @@ pub struct RebalanceSeat {
     pub valoper: String,
     /// Current program delegation (after this crank's redemption unbonds).
     pub current: Uint128,
-    /// Additional delegation the concentration cap admits (RC1 §9.7).
+    /// Additional delegation the concentration cap admits.
     pub add_headroom: Uint128,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RebalancePlan {
-    /// (src, dst, amount) redelegations, sources exhausted in input order,
-    /// destinations filled in priority order.
+    /// (src, dst, amount) redelegations: sources drain in input order, destinations by priority.
     pub redelegations: Vec<(String, String, Uint128)>,
     /// Fresh-liquidity delegations to destinations still below target.
     pub delegations: Vec<(String, Uint128)>,
@@ -174,22 +163,9 @@ pub struct RebalancePlan {
     pub undeployable: Uint128,
 }
 
-/// The uniform-slot rebalance (RC1 §9.2/§9.3/§9.4): drive every eligible
-/// validator toward the same slot within the epoch using redelegations
-/// (stake stays productive) plus fresh liquidity, never unbonding.
-///
-/// - `eligible`: priority-ordered seats. Targets are the headroom-capped
-///   waterfall of the whole pool (their stake + movable other stake + fresh),
-///   so the highest-priority seats absorb largest-remainder units and any
-///   cap-blocked residual (RC1 §10.2).
-/// - `others`: delegations on non-eligible validators (unregistered,
-///   in-arrears, below-threshold, jailed): fully redelegated away (§9.4).
-/// - `blocked_sources`: validators with an in-flight INBOUND redelegation
-///   entry. The no-transitive-redelegation rule forbids moving stake off
-///   them, so their stake is pinned in place this epoch (eligible seats get a
-///   floor at `current`; others simply keep their stake) and retried later.
-/// - `blocked_pairs`: (src, dst) routes at the staking MaxEntries cap for the
-///   contract; the matcher routes around them and defers what cannot move.
+/// Uniform-slot rebalance: level priority-ordered `eligible` seats using redelegations plus
+/// fresh liquidity, never unbonding; non-eligible `others` drain fully. Blocked sources
+/// (no-transitive-redelegation rule) pin at `current`; blocked pairs (MaxEntries) route around.
 pub fn plan_rebalance(
     eligible: &[RebalanceSeat],
     others: &[DelegationView],
@@ -198,7 +174,6 @@ pub fn plan_rebalance(
     blocked_pairs: &BTreeSet<(String, String)>,
 ) -> RebalancePlan {
     if eligible.is_empty() {
-        // Nothing may receive: no moves, all fresh liquidity stays liquid.
         return RebalancePlan {
             undeployable: fresh,
             ..Default::default()
@@ -214,12 +189,7 @@ pub fn plan_rebalance(
     let pool_eligible: Uint128 = eligible.iter().map(|s| s.current).sum();
     let total = pool_eligible + pool_others + fresh;
 
-    // Targets by level water-fill: every free seat gets an equal share of the
-    // pool; a seat whose share violates its floor (pinned stake that cannot
-    // leave) or cap (concentration headroom) is fixed at that bound and the
-    // pool re-levels among the rest. Deterministic, feasible (each target
-    // stays within its bounds), and uniform wherever bounds do not bind;
-    // largest-remainder units land on the highest-priority free seats.
+    // Water-fill: seats breaching floor/cap fix there and re-level; remainder lands top-priority.
     let n = eligible.len();
     let caps: Vec<Uint128> = eligible
         .iter()
@@ -262,8 +232,7 @@ pub fn plan_rebalance(
     }
     let targets: Vec<Uint128> = fixed.into_iter().map(|t| t.unwrap_or_default()).collect();
 
-    // Sources: non-eligible stake first (it must all leave), then eligible
-    // seats above target. Destinations: seats below target, priority order.
+    // Non-eligible stake drains first; destinations fill in priority order.
     let mut sources: Vec<(String, Uint128)> = movable_others
         .iter()
         .map(|d| (d.valoper.clone(), d.staked))
@@ -280,8 +249,7 @@ pub fn plan_rebalance(
         .map(|(s, t)| (s.valoper.clone(), *t - s.current))
         .collect();
 
-    // Route source excess into destination needs, skipping blocked routes;
-    // whatever cannot be routed stays where it is (retried next epoch).
+    // Skip blocked routes; unroutable stake stays put and retries next epoch.
     let mut redelegations = vec![];
     for (src, mut excess) in sources {
         for (dst, need) in dest_needs.iter_mut() {
@@ -298,8 +266,7 @@ pub fn plan_rebalance(
         }
     }
 
-    // Fresh liquidity fills what redelegations did not, bounded by `fresh`;
-    // the rest of `fresh` is undeployable residual.
+    // Fresh liquidity fills what redelegations did not; the rest is undeployable residual.
     let mut delegations = vec![];
     let mut fresh_left = fresh;
     for (dst, need) in dest_needs {
@@ -320,9 +287,8 @@ pub fn plan_rebalance(
     }
 }
 
-/// Annualize a window inflow against a base value, in bps (floor arithmetic):
-/// inflow / base scaled from window_secs to a 365-day year. 0 when the base or
-/// window is degenerate or the math would overflow (u128-saturating guard).
+/// Annualize a window inflow against a base, in bps (floor): inflow / base scaled from
+/// `window_secs` to a 365-day year. 0 on degenerate inputs or u128 overflow.
 pub fn annualized_bps(inflow: Uint128, base: Uint128, window_secs: u64) -> u64 {
     if base.is_zero() || window_secs == 0 || inflow.is_zero() {
         return 0;
@@ -338,8 +304,7 @@ pub fn annualized_bps(inflow: Uint128, base: Uint128, window_secs: u64) -> u64 {
     }
 }
 
-/// Program commission on a claimed reward amount: rewards x bps, floored
-/// (RC1 §10.1).
+/// Program commission on a claimed reward amount: rewards x bps, floored.
 pub fn commission_on(rewards: Uint128, commission_bps: u64) -> Uint128 {
     if commission_bps == 0 {
         return Uint128::zero();
@@ -347,15 +312,12 @@ pub fn commission_on(rewards: Uint128, commission_bps: u64) -> Uint128 {
     rewards.multiply_ratio(commission_bps as u128, 10_000u128)
 }
 
-/// Cosmos SDK staking MaxEntries: at most this many concurrent unbonding entries per
-/// (delegator, validator) pair; an Undelegate beyond it fails the whole tx.
-/// [VERIFY] Provenance mainnet staking params still use the SDK default of 7.
+/// Staking MaxEntries: max unbonding entries per (delegator, validator); exceeding fails
+/// the whole tx. [VERIFY] Provenance mainnet still uses the SDK default of 7.
 pub const MAX_UNBOND_ENTRIES: usize = 7;
 
-/// Total nhash that must be liquid to cover all pending swap-outs, with a small
-/// over-cover margin. `pending` amounts are current-NAV payout estimates
-/// (EstimateSwapOut); payouts re-price at maturity NAV and escrowed shares keep
-/// appreciating during the delay, so the margin covers the drift.
+/// Liquid nhash needed to cover all pending swap-outs plus margin: `pending` amounts are
+/// current-NAV estimates, payouts re-price at maturity NAV, so the margin covers the drift.
 pub fn redemption_need(pending: &[(u64, Uint128)], margin_bps: u64) -> Uint128 {
     let queued: Uint128 = pending
         .iter()
@@ -367,13 +329,9 @@ pub fn redemption_need(pending: &[(u64, Uint128)], margin_bps: u64) -> Uint128 {
     queued.multiply_ratio(10_000u128 + margin_bps as u128, 10_000u128)
 }
 
-/// Unbond in the caller-provided drain order (lowest program priority first,
-/// RC1 §10.2: unenrolled, then ineligible, then eligible by ascending TIP/uptime
-/// priority) until `shortfall` is covered, skipping validators whose
-/// unbonding-entry queue is full (`at_capacity`). Never unbonds more than a
-/// validator's staked amount. May return less than `shortfall` if every
-/// candidate is at capacity; the uncovered remainder is retried on later cranks
-/// as entries mature.
+/// Unbond in the caller-provided drain order (lowest program priority first) until `shortfall`
+/// is covered, skipping validators whose unbonding-entry queue is full (`at_capacity`); never
+/// exceeds a validator's stake. May cover less than `shortfall`; the remainder retries later.
 pub fn plan_unbond(
     drain_ordered: &[DelegationView],
     shortfall: Uint128,
@@ -403,15 +361,9 @@ pub struct ServicePlan {
     pub expedite_ids: Vec<u64>,
 }
 
-/// Plan redemption servicing. `delegations` must already be in drain order
-/// (lowest priority first); see plan_unbond.
-/// - `cover_liquid`: nhash that is in, or will land in, the vault principal
-///   (vault liquid + contract liquid); reduces how much must be unbonded.
-/// - `expedite_liquid`: nhash the principal marker itself will hold when payouts
-///   run. Payouts are made by the vault EndBlocker from the marker only, so
-///   expedites are gated on this, never on contract-held balance.
-/// - `unbonding`: principal already unbonding back (all unbonding in this contract
-///   is redemption-driven); subtracted so it is never re-unbonded.
+/// Plan redemption servicing. `delegations` must be in drain order (see plan_unbond);
+/// `cover_liquid` and already-`unbonding` principal reduce the unbond need (never re-unbonded).
+/// Expedites gate on `expedite_liquid` only: the vault EndBlocker pays from the marker alone.
 pub fn plan_service(
     pending: &[(u64, Uint128)],
     cover_liquid: Uint128,
@@ -428,8 +380,7 @@ pub fn plan_service(
     let mut remaining = expedite_liquid;
     let mut expedite_ids = vec![];
     for (id, amt) in pending {
-        // Hold each request to the same margin the reserve uses so an expedited
-        // payout (re-priced at maturity) cannot outrun the marker.
+        // Gate at the reserve's margin so a re-priced expedited payout cannot outrun the marker.
         let covered = amt.multiply_ratio(10_000u128 + margin_bps as u128, 10_000u128);
         if covered <= remaining {
             expedite_ids.push(*id);
@@ -442,19 +393,13 @@ pub fn plan_service(
     }
 }
 
-/// The Design C return plan. `matured = receipt_minted - staked - unbonding` is
-/// receipt no longer backed by anything out on the chain: either its nhash returned
-/// (it is in `liquid`, the contract balance) or it was slashed away.
+/// The Design C return plan. `matured = receipt_minted - staked - unbonding`: receipt whose
+/// nhash either returned (it is in `liquid`) or was slashed away.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnPlan {
-    /// Receipt to swap back out via an unpaused exchange settlement, backed 1:1 by
-    /// returned nhash (the contract pays `settle` nhash, receives `settle` receipt,
-    /// burns it). Value-neutral by construction.
+    /// Receipt settled back 1:1 against returned nhash (unpaused exchange leg); value-neutral.
     pub settle: Uint128,
-    /// Receipt to withdraw from the marker (paused leg) and burn UNBACKED: principal
-    /// lost to slashing. Marks TVV down immediately so redemptions cannot exit at an
-    /// overstated NAV between epochs. When rewards on hand exceed the slash, the
-    /// loss nets through the settle leg instead and this is zero.
+    /// Slash loss burned UNBACKED (paused leg): immediate TVV mark-down, no overstated-NAV exits.
     pub write_down: Uint128,
 }
 
@@ -601,8 +546,7 @@ mod tests {
 
     #[test]
     fn fee_reserve_scales_with_tvv_and_time() {
-        // 1e9 TVV at 15 bps over 30 days: annual AUM fee is 1e9 * 15/10000 = 1_500_000;
-        // for 30 days: 1_500_000 * 2_592_000/31_536_000 = 123_287 (floor).
+        // 1e9 x 15 bps = 1_500_000/yr; x 2_592_000/31_536_000 = 123_287 (floor).
         assert_eq!(
             fee_reserve(Uint128::new(1_000_000_000), 15, 2_592_000),
             Uint128::new(123_287)
@@ -628,9 +572,7 @@ mod tests {
 
     #[test]
     fn plan_unbond_walks_drain_order() {
-        // Caller provides drain order (lowest priority first); the plan takes
-        // from the front, spilling to the next only when a validator is
-        // exhausted.
+        // Takes from the front of drain order, spilling only when a validator is exhausted.
         let dels = vec![
             DelegationView {
                 valoper: "valB".into(),
@@ -728,9 +670,7 @@ mod tests {
 
     #[test]
     fn rebalance_respects_headroom_and_priority_residual() {
-        // Slot would be 100 each, but valB can only add 10 (cap): the excess
-        // flows to the higher-priority valA; fresh that no seat can take
-        // stays liquid.
+        // Slot 100 each, but valB caps at 10: excess flows to valA; untakeable fresh stays liquid.
         let (bs, bp) = no_blocks();
         let plan = plan_rebalance(
             &[seat("valA", 0, 130), seat("valB", 0, 10)],
@@ -767,8 +707,7 @@ mod tests {
             vec![("valX".into(), "valB".into(), Uint128::new(60))]
         );
 
-        // A blocked (src,dst) route defers that movement entirely when no
-        // other destination needs stake.
+        // A blocked (src,dst) route defers the movement when no other destination needs stake.
         let (bs2, mut bp2) = no_blocks();
         bp2.insert(("valX".to_string(), "valB".to_string()));
         let plan = plan_rebalance(
@@ -839,10 +778,8 @@ mod tests {
             valoper: "valA".into(),
             staked: Uint128::new(500),
         }];
-        // 300 total counts toward coverage (need = 200, so no unbond), but only 50
-        // is in the principal marker: nothing may be expedited. The vault EndBlocker
-        // pays from the marker; expediting past it forces an unfunded maturity,
-        // which refunds (cancels) the user's redemption.
+        // Coverage 300 >= need 200 (no unbond), but only 50 in the marker: no expedites
+        // (an unfunded maturity refunds, i.e. cancels, the user's redemption).
         let plan = plan_service(
             &[(1, Uint128::new(100)), (2, Uint128::new(100))],
             Uint128::new(300),
@@ -887,8 +824,7 @@ mod tests {
             valoper: "valA".into(),
             staked: Uint128::new(1000),
         }];
-        // need = 1000 * (1 + 100bps) = 1010; cover 200 + 700 already unbonding ->
-        // unbond only the 110 increment; never re-unbond what is on its way back.
+        // need 1010; cover 200 + 700 unbonding: unbond only the 110 increment, never re-unbond.
         let plan = plan_service(
             &[(1, Uint128::new(1000))],
             Uint128::new(200),
@@ -952,8 +888,7 @@ mod tests {
                 write_down: Uint128::zero()
             }
         );
-        // partial: 600 staked + 300 unbonding of 1000 out; liquid 150
-        // (100 returned + 50 rewards): settle the 100, deposit the 50 as rewards.
+        // partial: 900 still out of 1000; liquid 150: settle the matured 100, 50 is rewards.
         assert_eq!(
             plan_return(
                 Uint128::new(1000),
@@ -970,8 +905,7 @@ mod tests {
 
     #[test]
     fn plan_return_write_down_recognizes_slash_immediately() {
-        // 1000 deployed, validator slashed 5%: 950 staked, nothing unbonding.
-        // No liquid: the whole 50 is an unbacked write-down THIS epoch.
+        // 5% slash, no liquid: the whole 50 is an unbacked write-down THIS epoch.
         assert_eq!(
             plan_return(
                 Uint128::new(1000),
@@ -984,8 +918,7 @@ mod tests {
                 write_down: Uint128::new(50)
             }
         );
-        // 30 of rewards on hand: 30 nets through the settlement leg, 20 writes down.
-        // Either way settle + write_down == matured: loss recognition never defers.
+        // 30 rewards net through settle, 20 writes down; settle + write_down == matured always.
         assert_eq!(
             plan_return(
                 Uint128::new(1000),

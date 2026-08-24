@@ -1,51 +1,31 @@
-//! Calendar-month arithmetic on consensus block time.
-//!
-//! `RunEpoch` eligibility is a calendar-month rollover: the next run is allowed
-//! once block time is in a strictly later `(year, month)` than the last run
-//! (`liquid-staking-spec.md` §9). The contract only ever receives block time as
-//! `env.block.time` — nanoseconds since the Unix epoch — never the header's
-//! civil date string, so the `(year, month)` the comparison needs is derived
-//! here with a small, dependency-free integer conversion (the days-from-civil
-//! algorithm; H. Hinnant, "chrono-Compatible Low-Level Date Algorithms"). No
-//! external calendar crate, no floats, total and panic-free over the whole
-//! `u64` nanosecond domain: `Timestamp::seconds()` is at most `u64::MAX / 1e9`
-//! (~1.8e10s ≈ 213_500 days ≈ year 2554), so every intermediate stays small and
-//! well within `i64`.
+//! Calendar-month arithmetic on consensus block time: `RunEpoch` eligibility is a strictly
+//! later `(year, month)` than the last run, derived from `env.block.time` via the integer
+//! days-from-civil algorithm (H. Hinnant). Total and panic-free over the u64 nanosecond domain.
 
 use cosmwasm_std::Timestamp;
 
-/// Nominal epoch length used to size the AUM fee-reserve horizon now that
-/// `min_run_interval_secs` is retired. Calendar months are 28–31 days; 30 days
-/// is the mid-point the two-epoch deploy buffer is sized against (`epoch.rs`).
+/// Nominal 30-day epoch length sizing the AUM fee-reserve horizon and deploy buffer (`epoch.rs`).
 pub const NOMINAL_EPOCH_SECS: u64 = 2_592_000; // 30 days
 
 const SECS_PER_DAY: u64 = 86_400;
 
-/// The calendar `(year, month)` of a block time (UTC, from consensus seconds).
-///
-/// Eligibility is the plain tuple comparison
-/// `year_month(now) > year_month(last_run)` — a later year, or the same year and
-/// a later month. `month` is `1..=12`.
+/// The UTC calendar `(year, month)` of a block time; `month` is `1..=12`.
+/// Eligibility is the tuple comparison `year_month(now) > year_month(last_run)`.
 pub fn year_month(t: Timestamp) -> (i32, u32) {
     let (y, m, _) = ymd_from_days((t.seconds() / SECS_PER_DAY) as i64);
     (y, m)
 }
 
-/// First Unix second of the month *after* `t`'s calendar month — i.e. the
-/// earliest instant at which the next epoch becomes eligible. Used for the
-/// `TooSoon { next }` payload.
+/// First Unix second of the month after `t`'s calendar month: the earliest instant the
+/// next epoch is eligible (the `TooSoon { next }` payload).
 pub fn first_of_next_month_secs(t: Timestamp) -> u64 {
     let (y, m, _) = ymd_from_days((t.seconds() / SECS_PER_DAY) as i64);
     let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
     (days_from_civil(ny, nm, 1) as u64) * SECS_PER_DAY
 }
 
-/// Days since 1970-01-01 → `(year, month, day)`, `month`/`day` 1-based.
-///
-/// The days-from-civil inverse: exact integer arithmetic, no leap-year special
-/// cases at the call site (the 400/100/4-year cycle is folded into the era
-/// math, so the 2000-leap / 2100-non-leap century rule is handled). Total for
-/// every `i64` input in the block-time-derived range.
+/// Days since 1970-01-01 to `(year, month, day)`, `month`/`day` 1-based. Exact integer
+/// days-from-civil inverse; the 400/100/4 century leap rule is folded into the era math.
 fn ymd_from_days(z: i64) -> (i32, u32, u32) {
     // Shift the epoch to 0000-03-01 so leap days fall at the end of the cycle.
     let z = z + 719_468;
@@ -61,8 +41,7 @@ fn ymd_from_days(z: i64) -> (i32, u32, u32) {
     (y as i32, m as u32, d as u32)
 }
 
-/// `(year, month, day)` → days since 1970-01-01. Inverse of [`ymd_from_days`];
-/// `month`/`day` 1-based. Used only with in-range civil dates (month starts).
+/// `(year, month, day)` to days since 1970-01-01; inverse of [`ymd_from_days`], 1-based.
 fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
     let y = y as i64 - if m <= 2 { 1 } else { 0 };
     let m = m as i64;
@@ -79,8 +58,7 @@ mod tests {
     use super::*;
     use cosmwasm_std::Timestamp;
 
-    /// Seconds for a UTC calendar date at 00:00:00 (via the internal inverse, so
-    /// the test does not depend on an external date library).
+    /// Seconds for a UTC date at 00:00:00, via the internal inverse (no external date crate).
     fn secs(y: i32, m: u32, d: u32) -> u64 {
         (days_from_civil(y, m, d) as u64) * SECS_PER_DAY
     }
@@ -110,8 +88,7 @@ mod tests {
         // 2000 is a leap year (divisible by 400): Feb 29 exists.
         assert_eq!(ym(2000, 2, 29), (2000, 2));
         assert_eq!(ym(2000, 3, 1), (2000, 3));
-        // 2100 is NOT a leap year (divisible by 100, not 400): Feb has 28 days,
-        // so "day 60" of 2100 is March 1, not Feb 29.
+        // 2100 is NOT a leap year (divisible by 100, not 400): Feb has 28 days.
         assert_eq!(ymd_from_days(days_from_civil(2100, 2, 28)), (2100, 2, 28));
         assert_eq!(
             ymd_from_days(days_from_civil(2100, 2, 28) + 1),
@@ -147,8 +124,7 @@ mod tests {
         // Leap February → March.
         let t = Timestamp::from_seconds(secs(2024, 2, 29));
         assert_eq!(first_of_next_month_secs(t), secs(2024, 3, 1));
-        // The returned instant is exactly the boundary: at it we are eligible,
-        // one second before it we are not.
+        // The instant is exactly the boundary: eligible at it, not one second before.
         let boundary = first_of_next_month_secs(t);
         assert!(year_month(Timestamp::from_seconds(boundary)) > year_month(t));
         assert!(!(year_month(Timestamp::from_seconds(boundary - 1)) > year_month(t)));
@@ -162,14 +138,8 @@ mod tests {
             let t = Timestamp::from_nanos(nanos);
             let (_y, m) = year_month(t);
             proptest::prop_assert!((1..=12).contains(&m));
-            // first_of_next_month is strictly later and lands on a month start.
-            //
-            // The boundary is compared as SECONDS, never reconstructed through
-            // `Timestamp::from_seconds`: that multiplies by 1e9, and for a `t`
-            // in the top month of the u64 nanosecond domain the next month's
-            // start is past `u64::MAX` nanos, so the round trip overflows on an
-            // input this module itself handles. Production never makes it —
-            // `epoch.rs` carries the value as u64 seconds in `TooSoon { next }`.
+            // Compare as seconds: Timestamp::from_seconds(next) overflows u64 nanos
+            // near the domain top (epoch.rs carries the value as u64 seconds).
             let next = first_of_next_month_secs(t);
             let (ny, nm, nd) = ymd_from_days((next / SECS_PER_DAY) as i64);
             proptest::prop_assert_eq!(nd, 1);

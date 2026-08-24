@@ -1,23 +1,13 @@
-//! Local shims for vault module messages that provwasm-std 2.8.0 does not
-//! generate. The pinned provwasm-std predates the vault module's settlement and
-//! internal-NAV messages, so `AcceptAsset` and `UpdateVaultNAV` are hand-rolled
-//! here.
-//!
-//! Shapes are reconciled against the ProvLabs/vault **v1.2.4** tag:
-//! `proto/provlabs/vault/v1/tx.proto` (MsgAcceptAssetRequest,
-//! MsgUpdateVaultNAVRequest) and `proto/provlabs/vault/v1/vault.proto`
-//! (Payment). The round-trip tests below pin every field and tag.
-//!
-//! These shims are deletable once a provwasm-std release ships the generated
-//! types for vault v1.2.4 or later.
+//! Hand-rolled `AcceptAsset` and `UpdateVaultNAV` shims that provwasm-std 2.8.0 predates,
+//! reconciled against the ProvLabs/vault v1.2.4 protos; the round-trip tests pin every field
+//! and tag. Deletable once a provwasm-std release generates types for vault v1.2.4+.
 
 use cosmwasm_std::{AnyMsg, Binary, CosmosMsg};
 use prost::Message;
 use provwasm_std::types::cosmos::base::v1beta1::Coin as ProstCoin;
 
-/// The vault module's view of an x/exchange payment (vault.proto `Payment`).
-/// Field numbers match `provenance.exchange.v1.Payment`, so the same terms
-/// encode identically on the create-payment and accept-asset legs.
+/// The vault module's x/exchange payment (vault.proto `Payment`); field numbers match
+/// `provenance.exchange.v1.Payment` so both legs encode identically.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Payment {
     /// The account that created the payment and owns the escrowed source_amount.
@@ -39,12 +29,8 @@ pub struct Payment {
 
 pub const ACCEPT_ASSET_TYPE_URL: &str = "/provlabs.vault.v1.MsgAcceptAssetRequest";
 
-/// Settles a pending x/exchange payment whose target is the vault.
-///
-/// Tags 3 and 4 are RESERVED upstream (the retired `source` / `external_id`
-/// fields): the approval now carries the full payment, and the vault settles
-/// only when the payment the exchange module holds matches these terms
-/// exactly. Never reuse those tags.
+/// Settles a pending x/exchange payment whose target is the vault. Tags 3 and 4 are
+/// reserved upstream (retired `source` / `external_id`); never reuse them.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MsgAcceptAssetRequest {
     /// The vault's asset manager authorizing the settlement; this contract.
@@ -53,18 +39,14 @@ pub struct MsgAcceptAssetRequest {
     /// The vault settling the payment (must be the payment's target).
     #[prost(string, tag = "2")]
     pub vault_address: ::prost::alloc::string::String,
-    /// The full terms being approved. Settlement fails if any field differs
-    /// from the pending payment.
+    /// Full terms approved; settlement fails if any field differs from the pending payment.
     #[prost(message, optional, tag = "5")]
     pub payment: ::core::option::Option<Payment>,
 }
 
-/// Build the settlement approval for a payment this contract sourced.
-///
-/// `authority` is the vault's asset manager (this contract), `vault_address`
-/// the vault, which is set as the payment target — the vault rejects any other
-/// target. `source`, `source_amount`, `target_amount` and `external_id` must
-/// reproduce the pending payment's terms exactly.
+/// Builds the settlement approval for a payment this contract sourced. The payment target
+/// is forced to `vault_address` (the vault rejects any other target); the remaining
+/// arguments must reproduce the pending payment's terms exactly.
 pub fn accept_asset_msg(
     authority: &str,
     vault_address: &str,
@@ -92,15 +74,9 @@ pub fn accept_asset_msg(
 
 pub const UPDATE_VAULT_NAV_TYPE_URL: &str = "/provlabs.vault.v1.MsgUpdateVaultNAVRequest";
 
-/// Creates or updates one internal NAV entry: signer=1, vault_address=2,
-/// denom=3, price=4 (Coin), volume=5 (Int string), source=6; signer is the
-/// vault's NAV authority. Used by the slash write-down sandwich (see epoch.rs);
-/// the contract is rotated in as NAV authority at bootstrap
-/// (tx vault update-nav-authority).
-///
-/// Repricing a denom the vault HOLDS requires the vault to be paused; pricing
-/// an unheld denom, or restating a held one at the price it already carries, is
-/// permitted while live (vault v1.2.4 keeper/nav.go requirePausedHeldReprice).
+/// Creates or updates one internal NAV entry; `signer` is the vault's NAV authority
+/// (rotated to this contract at bootstrap). Repricing a HELD denom requires a paused vault;
+/// unheld or same-price restatement is allowed live (v1.2.4 keeper/nav.go).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MsgUpdateVaultNavRequest {
     #[prost(string, tag = "1")]
@@ -154,11 +130,8 @@ mod tests {
         }
     }
 
-    /// Guards this seam against silent tag/field regressions: builds the
-    /// message, confirms it is wrapped as a CosmosMsg::Any with the expected type
-    /// URL, then prost-decodes the value bytes back into MsgAcceptAssetRequest and
-    /// checks every field — including every leg of the carried payment — survived
-    /// the round trip.
+    /// Guards the seam against silent tag/field regressions: checks the Any type URL and
+    /// prost-decodes the bytes, verifying every field (payment legs included) round-trips.
     #[test]
     fn accept_asset_msg_round_trips_through_prost() {
         let msg = accept_asset_msg(
@@ -209,9 +182,7 @@ mod tests {
         assert!(payment.source_amount.is_empty());
     }
 
-    /// Tags 3 and 4 are reserved upstream: an encoded approval must carry no
-    /// field with either number, or a node decoding it would see unknown fields
-    /// where the retired source/external_id used to sit.
+    /// Tags 3 and 4 are reserved upstream; an encoded approval must carry neither.
     #[test]
     fn accept_asset_msg_emits_no_reserved_tags() {
         let msg = accept_asset_msg(
@@ -225,8 +196,7 @@ mod tests {
         let CosmosMsg::Any(any) = msg else {
             panic!("expected CosmosMsg::Any")
         };
-        // Top-level protobuf keys are (tag << 3) | wire_type; scan the fields
-        // this message actually encodes and assert none of them is 3 or 4.
+        // Protobuf keys are (tag << 3) | wire_type; assert no encoded tag is 3 or 4.
         let mut buf = any.value.as_slice();
         let mut tags = vec![];
         while !buf.is_empty() {

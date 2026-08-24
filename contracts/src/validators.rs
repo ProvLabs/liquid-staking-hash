@@ -1,11 +1,6 @@
-//! Validator enrollment, on-chain uptime eligibility and concentration headroom
-//! (RC1 §9.7, §10.3, §10.4, §11.2, adapted to the Design C Phase 1 engine).
-//!
-//! Enrollment is operator-initiated (`RegisterParticipation`); the caller must be
-//! the valoper's operator account, proven by comparing bech32 key payloads.
-//! Eligibility is never stored: it is assessed from live chain state (staking
-//! validator set, slashing SigningInfo) at plan/query time, so there is no
-//! oracle and nothing to go stale.
+//! Validator enrollment, uptime eligibility and concentration headroom.
+//! Enrollment is operator-proven via bech32 key payloads; eligibility is never
+//! stored, only assessed from live chain state.
 
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -25,18 +20,14 @@ use crate::plan::{commission_on, max_bond_adjusted, uptime_ratio_bps};
 use crate::state::{Config, ValidatorRecord, CONFIG, JAIL_REPORTS, LAST_CAPTURE, VALIDATORS};
 use crate::ContractError;
 
-/// Hard cap on the enrolled validator set, matching the Provenance active-set
-/// ceiling (100 validators). Rebalance moves are gas-chunked across
-/// continuation cranks (max_delegations_per_run); the fixed per-crank work
-/// (claims + assessments) scales with enrollment, so gas-profile the crank at
-/// this bound before launch (spec §14 checklist).
+/// Enrollment cap, matching the Provenance active-set ceiling. Per-crank work
+/// scales with enrollment, so gas-profile the crank at this bound before launch.
 pub const MAX_VALIDATORS: u32 = 100;
 
 const PAGE_LIMIT: u64 = 100;
 const ED25519_PUBKEY_TYPE_URL: &str = "/cosmos.crypto.ed25519.PubKey";
 
-/// Provenance valoper HRPs end in "valoper" (pbvaloper1..., tpvaloper1...).
-/// An account address here would brick the delegate leg, so reject early.
+/// Rejects non-valoper bech32 (an account address here would brick the delegate leg).
 pub fn validate_valoper(valoper: &str) -> Result<(), ContractError> {
     if !valoper.contains("valoper1") {
         return Err(ContractError::InvalidValoper {
@@ -46,9 +37,8 @@ pub fn validate_valoper(valoper: &str) -> Result<(), ContractError> {
     Ok(())
 }
 
-/// A validator's operator account and its valoper address share the same key
-/// payload; only the bech32 HRP differs. Comparing decoded payloads proves the
-/// caller controls the validator without any extra state.
+/// Proves the caller controls the validator: operator account and valoper share
+/// the same bech32 key payload, only the HRP differs.
 pub fn is_operator(sender: &str, valoper: &str) -> bool {
     match (bech32::decode(sender), bech32::decode(valoper)) {
         (Ok((_, s)), Ok((_, v))) => !s.is_empty() && s == v,
@@ -82,9 +72,7 @@ pub fn register(
             max: MAX_VALIDATORS,
         });
     }
-    // Must exist on chain. A gRPC not-found comes back as an opaque generic
-    // error, so any failure here is reported as not-found (the valoper is in
-    // the message either way).
+    // gRPC not-found is an opaque generic error, so any query failure maps to not-found.
     let sq = StakingQuerier::new(&deps.querier);
     if sq.validator(valoper.clone()).is_err() {
         return Err(ContractError::ValidatorNotFound { valoper });
@@ -109,18 +97,15 @@ pub fn register(
         .add_attribute("valoper", valoper))
 }
 
-/// The single attached coin in the program's underlying denom, rejecting
-/// anything else. Used by the PayCommission/PayTip fund intake.
+/// The single attached coin in the underlying denom; rejects anything else.
 fn attached_underlying(info: &MessageInfo, denom: &str) -> Result<Uint128, ContractError> {
     let amount = cw_utils::must_pay(info, denom)
         .map_err(|e| ContractError::Std(cosmwasm_std::StdError::generic_err(e.to_string())))?;
     Ok(amount)
 }
 
-/// Anyone may pay program commission on a validator's behalf (decided
-/// 2026-07-09): paying only ever helps the validator, and funds are
-/// non-refundable. Held in the contract balance and swept into vault principal
-/// at the next epoch's deposit leg.
+/// Permissionless commission payment on a validator's behalf; non-refundable,
+/// swept into vault principal at the next epoch's deposit leg.
 pub fn pay_commission(
     deps: DepsMut,
     info: &MessageInfo,
@@ -149,8 +134,8 @@ pub fn pay_commission(
         ))
 }
 
-/// Anyone may TIP on a validator's behalf. Credits the current epoch's tip
-/// (the primary priority key, §10.2); resets at every epoch completion.
+/// Permissionless tip on a validator's behalf; credits the current epoch's tip
+/// (the primary priority key), reset at every epoch completion.
 pub fn pay_tip(
     deps: DepsMut,
     info: &MessageInfo,
@@ -172,22 +157,16 @@ pub fn pay_tip(
         .add_attribute("tip_epoch", record.tip_epoch.to_string()))
 }
 
-/// Whether a validator currently produces a MEANINGFUL liveness signal
-/// (RC1 §10.3/§10.4 fix, 2026-07-09): the slashing module's
-/// missed_blocks_counter only advances for validators in the active (bonded)
-/// set and RESETS to zero on a downtime jail, so the SigningInfo of a jailed
-/// or unbonded validator reads as a vacuous perfect ratio. Captures must not
-/// aggregate those samples, and the plan-time direct read must report no
-/// signal rather than a confident 100%.
+/// Whether the validator carries a meaningful liveness signal:
+/// missed_blocks_counter only advances while bonded and resets on jail, so a
+/// jailed/unbonded validator's SigningInfo reads as a vacuous 100%.
 pub fn has_liveness_signal(validator: &Validator) -> bool {
     !validator.jailed && validator.status == BondStatus::Bonded as i32
 }
 
-/// The validator's live jail state: (jailed, unbonding_height). The height is
-/// the jail-episode fingerprint stored with a report (see JailObservation).
-/// A validator missing from the staking module is treated as not jailed
-/// (there is nothing to purge from it; any delegation to it would already be
-/// gone).
+/// Live jail state: (jailed, unbonding_height), the jail-episode fingerprint
+/// (see JailObservation). A validator missing from staking is treated as not
+/// jailed: there is nothing to purge from it.
 fn jail_state_on_chain(deps: Deps, valoper: &str) -> (bool, i64) {
     StakingQuerier::new(&deps.querier)
         .validator(valoper.to_string())
@@ -217,11 +196,9 @@ fn program_stake_on(
         .unwrap_or_default())
 }
 
-/// RC1 §9.8 phase 1 (permissionless): record the first observation of a jailed
-/// validator, starting the jail_unbond_delay cooldown. Idempotent: repeat
-/// reports while still jailed keep the ORIGINAL timestamp (so spam cannot
-/// push the purge window out); an observation of an unjailed validator clears
-/// any report (the validator recovered and keeps its stake).
+/// Permissionless jail-report phase 1: record the first jail observation, starting
+/// the jail_unbond_delay cooldown. Idempotent: repeats keep the original timestamp;
+/// observing an unjailed validator clears any report.
 pub fn report_jailed(deps: DepsMut, env: &Env, valoper: String) -> Result<Response, ContractError> {
     validate_valoper(&valoper)?;
     let resp = Response::new()
@@ -229,21 +206,17 @@ pub fn report_jailed(deps: DepsMut, env: &Env, valoper: String) -> Result<Respon
         .add_attribute("valoper", valoper.clone());
     let (jailed, unbonding_height) = jail_state_on_chain(deps.as_ref(), &valoper);
     if jailed {
-        // Reports exist to move program stake; a validator the program has no
-        // live delegation on has nothing to purge, so recording it would only
-        // seed a stale report for a later episode.
+        // No live program delegation: nothing to purge; a report would only go stale.
         let cfg = CONFIG.load(deps.storage)?;
         if program_stake_on(deps.as_ref(), env, &cfg, &valoper)?.is_zero() {
             return Ok(resp.add_attribute("result", "no_program_stake"));
         }
         if let Some(existing) = JAIL_REPORTS.may_load(deps.storage, &valoper)? {
             if existing.unbonding_height == unbonding_height {
-                // Same episode: keep the ORIGINAL timestamp so spam cannot
-                // push the purge window out.
+                // Same episode: keep the original timestamp so spam cannot extend the window.
                 return Ok(resp.add_attribute("result", "already_reported"));
             }
-            // A report from an earlier jail episode: restart the cycle on the
-            // current one rather than inheriting the elapsed cooldown.
+            // Earlier-episode report: restart the cycle, never inherit elapsed cooldown.
         }
         JAIL_REPORTS.save(
             deps.storage,
@@ -263,13 +236,9 @@ pub fn report_jailed(deps: DepsMut, env: &Env, valoper: String) -> Result<Respon
     }
 }
 
-/// RC1 §9.8 phase 2 (permissionless, halt-gated): move the program's stake off
-/// a validator that was jailed at the report AND is still jailed after the
-/// cooldown (the two-observation sustained-downtime guard). With an eligible
-/// claimant whose enrolled operator is the caller: redelegate up to the
-/// claimant's concentration headroom and unbond the excess. Without one:
-/// unbond everything. The unbonded stake matures back to the pool and
-/// redeploys at a later epoch.
+/// Permissionless, halt-gated purge phase 2: requires jailed at report AND still
+/// jailed after the cooldown (two-observation sustained-downtime guard). With an
+/// eligible caller-operated claimant: redelegate up to headroom, unbond the rest.
 pub fn purge_jailed(
     deps: DepsMut,
     env: &Env,
@@ -281,8 +250,7 @@ pub fn purge_jailed(
     validate_valoper(&valoper)?;
     let cfg = CONFIG.load(deps.storage)?;
 
-    // Storage-level gates first (cheap, unit-testable): a report must exist
-    // and its cooldown must have elapsed.
+    // Storage-level gates first: a report must exist and its cooldown must have elapsed.
     let report = JAIL_REPORTS
         .may_load(deps.storage, &valoper)?
         .ok_or_else(|| ContractError::JailReportMissing {
@@ -295,8 +263,7 @@ pub fn purge_jailed(
     if env.block.time.seconds() < ready {
         return Err(ContractError::JailCooldownActive { ready });
     }
-    // Claimant authorization (storage-level): must be enrolled and the caller
-    // must be its operator. Eligibility is checked against live state below.
+    // Claimant must be enrolled with the caller as operator; live eligibility checked below.
     if let Some(cv) = &claimant_valoper {
         validate_valoper(cv)?;
         if *cv == valoper {
@@ -323,10 +290,8 @@ pub fn purge_jailed(
         JAIL_REPORTS.remove(deps.storage, &valoper);
         return Err(ContractError::NotJailed { valoper });
     }
-    // Same jail EPISODE as the report, or the report is stale: the validator
-    // unjailed and was jailed again without an intervening observation, so
-    // the sustained-downtime guard has not actually run. Restart the cycle on
-    // the current episode instead of purging against the old timestamp.
+    // Episode mismatch = stale report (unobserved unjail/re-jail): restart the
+    // cycle, never purge on the old timestamp (two-observation guard).
     if unbonding_height != report.unbonding_height {
         JAIL_REPORTS.save(
             deps.storage,
@@ -345,8 +310,7 @@ pub fn purge_jailed(
         });
     }
 
-    // The program's live delegation. Zero = already purged: idempotent no-op,
-    // first caller won.
+    // Zero stake = already purged: idempotent no-op, first caller won.
     let staked = program_stake_on(deps.as_ref(), env, &cfg, &valoper)?;
     if staked.is_zero() {
         return Ok(Response::new()
@@ -365,9 +329,7 @@ pub fn purge_jailed(
 
     match &claimant_valoper {
         Some(cv) => {
-            // Live claimant check: eligible per the full assessment (bonded,
-            // unjailed, uptime, commission current) — the spec-recommended
-            // strict reading — with concentration headroom bounding the gain.
+            // Claimant must assess fully eligible (spec strict reading); headroom bounds the gain.
             let assessment = assess_validators(deps.as_ref(), &cfg)?
                 .into_iter()
                 .find(|a| a.valoper == *cv)
@@ -393,9 +355,7 @@ pub fn purge_jailed(
             let rest = staked - redelegated;
             if !rest.is_zero() {
                 if unbond_blocked {
-                    // The cap-excess cannot unbond right now (MaxEntries): the
-                    // redelegation still proceeds; the remainder stays staked
-                    // and a later purge (report retained) finishes the job.
+                    // MaxEntries blocks the unbond leg; remainder stays staked for a later purge.
                     deferred = rest;
                 } else {
                     unbonded = rest;
@@ -419,16 +379,13 @@ pub fn purge_jailed(
         );
     }
 
-    // Clear the report once the full delegation is handled, so a later
-    // RE-jail always requires a fresh two-observation cycle. A deferred
-    // remainder keeps the report (the validator is still jailed and a later
-    // purge should not need a new cooldown).
+    // Clear only when fully handled: a re-jail needs a fresh two-observation
+    // cycle; a deferred remainder keeps the report so no new cooldown is needed.
     if deferred.is_zero() {
         JAIL_REPORTS.remove(deps.storage, &valoper);
     }
 
-    // Moving the delegation auto-withdraws its pending rewards; fold them into
-    // the epoch's claimed-rewards analytics (RC1 §9.10) and count the purge.
+    // Moving the delegation auto-withdraws pending rewards; fold into claimed-rewards analytics.
     let pending_rewards = deps
         .querier
         .query_delegation_rewards(env.contract.address.to_string(), &valoper)?
@@ -454,10 +411,8 @@ pub fn purge_jailed(
         .add_attribute("deferred", deferred.to_string()))
 }
 
-/// Accrue program commission for enrolled validators from a per-validator
-/// claimed-rewards list (RC1 §10.1). Called at every point the contract
-/// knowingly triggers a reward withdrawal, so no claimed reward escapes the
-/// charge. Rewards on unenrolled validators accrue nothing.
+/// Accrue program commission from per-validator claimed rewards; called at
+/// every reward-withdrawing point. Unenrolled validators accrue nothing.
 pub fn accrue_commission(
     storage: &mut dyn Storage,
     rewards: &[(String, Uint128)],
@@ -499,9 +454,8 @@ pub fn unregister(
         .add_attribute("valoper", valoper))
 }
 
-/// Permissionless uptime capture (RC1 §10.4): fold every enrolled validator's
-/// current signed-blocks ratio into its per-epoch accumulator. Interval-gated;
-/// early calls are accepted no-ops so redundant keepers are harmless.
+/// Permissionless uptime capture: fold each validator's signed-blocks ratio into
+/// its per-epoch accumulator. Interval-gated; early calls are accepted no-ops.
 pub fn capture_uptime(deps: DepsMut, env: &Env) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     let last = LAST_CAPTURE.may_load(deps.storage)?;
@@ -528,9 +482,7 @@ pub fn capture_uptime(deps: DepsMut, env: &Env) -> Result<Response, ContractErro
             .validator(valoper.clone())
             .ok()
             .and_then(|resp| resp.validator);
-        // Only bonded, unjailed validators carry a liveness signal; a jailed
-        // or unbonded validator's counter is frozen/reset and would fold a
-        // vacuous 100% sample into the epoch mean (see has_liveness_signal).
+        // Jailed/unbonded counters would fold a vacuous 100% sample (see has_liveness_signal).
         let ratio = match validator {
             Some(v) if has_liveness_signal(&v) => direct_uptime(deps.as_ref(), &v, window)
                 .and_then(|(ratio, tombstoned)| (!tombstoned).then_some(ratio)),
@@ -554,13 +506,9 @@ pub fn capture_uptime(deps: DepsMut, env: &Env) -> Result<Response, ContractErro
         .add_attribute("skipped_no_signal", skipped.to_string()))
 }
 
-/// Epoch rollover, applied at every epoch completion:
-/// - uptime accumulators reset (RC1 §10.4)
-/// - the per-epoch TIP resets (non-cumulative, §10.2)
-/// - the commission grace boundary advances (§10.1): what was billed at the
-///   previous completion becomes due now; the current cumulative accrual
-///   becomes the next boundary. `paid < due` afterward means the validator
-///   blew the one-epoch grace and assesses ineligible until brought current.
+/// Epoch rollover: reset uptime accumulators and the per-epoch tip; advance the
+/// commission grace boundary. Afterward `paid < due` means the one-epoch grace
+/// is blown and the validator assesses ineligible until brought current.
 pub fn epoch_rollover(storage: &mut dyn Storage) -> StdResult<()> {
     for (valoper, mut record) in enrolled(storage)? {
         record.uptime_sum_bps = 0;
@@ -581,21 +529,17 @@ pub struct Assessment {
     pub bonded: bool,
     pub jailed: bool,
     pub tombstoned: bool,
-    /// Effective uptime: accumulator mean when captures exist, else the live
-    /// signing-info read. None when it cannot be determined.
+    /// Effective uptime: accumulator mean if captures exist, else the live read; None if unknown.
     pub uptime_bps: Option<u64>,
     /// Past the one-epoch commission grace (paid < due); alone disqualifies.
     pub in_arrears: bool,
     pub eligible: bool,
-    /// New-delegation headroom under the concentration cap minus the safety
-    /// offset. Zero when ineligible.
+    /// New-delegation headroom under the offset-adjusted concentration cap; zero when ineligible.
     pub headroom: Uint128,
 }
 
-/// Assess every enrolled validator against live chain state (RC1 §10.3 + §9.7):
-/// one paginated sweep of the bonded set (active count + per-validator tokens),
-/// one pool read (total bonded), one slashing-params read, then one SigningInfo
-/// read per enrolled validator.
+/// Assess every enrolled validator against live chain state: one bonded-set sweep,
+/// one pool read, one slashing-params read, one SigningInfo read per enrolled validator.
 pub fn assess_validators(deps: Deps, cfg: &Config) -> StdResult<Vec<Assessment>> {
     let vals = enrolled(deps.storage)?;
     if vals.is_empty() {
@@ -617,8 +561,7 @@ pub fn assess_validators(deps: Deps, cfg: &Config) -> StdResult<Vec<Assessment>>
 
     let mut out = vec![];
     for (valoper, record) in vals {
-        // Bonded sweep first; fall back to an individual read so jailed (not
-        // bonded) validators still report accurate flags in queries.
+        // Fall back to an individual read so non-bonded validators still report accurate flags.
         let (validator, bonded) = match bonded_map.get(&valoper) {
             Some(v) => (Some(v.clone()), true),
             None => (
@@ -628,10 +571,7 @@ pub fn assess_validators(deps: Deps, cfg: &Config) -> StdResult<Vec<Assessment>>
                 false,
             ),
         };
-        // The direct read is only meaningful for a bonded, unjailed validator
-        // (see has_liveness_signal); otherwise report no signal rather than
-        // the vacuous 100% a frozen counter produces. Eligibility is
-        // unaffected: jailed/unbonded already hard-fail below.
+        // Report no signal rather than a frozen counter's vacuous 100% (see has_liveness_signal).
         let (jailed, tokens, direct) = match &validator {
             Some(v) => (
                 v.jailed,
@@ -680,11 +620,9 @@ pub fn assess_validators(deps: Deps, cfg: &Config) -> StdResult<Vec<Assessment>>
     Ok(out)
 }
 
-/// Program priority order, highest first (RC1 §10.2 two-key sort): TIP for the
-/// current epoch descending, then effective uptime descending, then the stable
-/// tie-break (earliest enrollment, then valoper). Deploy targets receive
-/// largest-remainder units in this order; the redemption drain order is its
-/// reverse (see drain_ranks).
+/// Program priority order, highest first: epoch tip desc, then effective uptime
+/// desc, then the stable tie-break (earliest enrollment, then valoper). The
+/// redemption drain order is its reverse (see drain_ranks).
 pub fn sort_by_priority(assessments: &mut [Assessment]) {
     assessments.sort_by(|a, b| {
         b.record
@@ -696,12 +634,9 @@ pub fn sort_by_priority(assessments: &mut [Assessment]) {
     });
 }
 
-/// Map valoper -> drain rank; LOWER ranks are unbonded first when raising
-/// redemption liquidity (RC1 §8/§10.2). Unenrolled validators are absent
-/// (rank 0 by convention at the caller): they drain before everything.
-/// Enrolled-but-ineligible validators drain before eligible ones; within each
-/// class, lowest priority drains first. Input must be priority-sorted
-/// (assess_validators output).
+/// Map valoper -> drain rank; lower ranks unbond first for redemption liquidity.
+/// Unenrolled (absent, caller treats as rank 0) drain first, then ineligible, then
+/// eligible; lowest priority first within a class. Input must be priority-sorted.
 pub fn drain_ranks(assessments: &[Assessment]) -> BTreeMap<String, usize> {
     let n = assessments.len();
     assessments
@@ -763,9 +698,8 @@ fn signed_blocks_window(deps: Deps) -> StdResult<i64> {
     Ok(params.params.map(|p| p.signed_blocks_window).unwrap_or(0))
 }
 
-/// Live signed-blocks ratio (bps) and tombstoned flag for a validator, via its
-/// consensus address. None when the consensus key is not ed25519 or the signing
-/// info is unavailable.
+/// Live signed-blocks ratio (bps) and tombstoned flag via the consensus address.
+/// None when the consensus key is not ed25519 or the signing info is unavailable.
 fn direct_uptime(deps: Deps, validator: &Validator, window: i64) -> Option<(u64, bool)> {
     let cons = cons_address(validator).ok()?;
     let info = SlashingQuerier::new(&deps.querier)
@@ -778,11 +712,9 @@ fn direct_uptime(deps: Deps, validator: &Validator, window: i64) -> Option<(u64,
     ))
 }
 
-/// valoper -> consensus address: decode the ed25519 consensus pubkey, take
-/// sha256(key)[..20], bech32-encode with the chain's valcons HRP (derived from
-/// the valoper HRP). [VERIFY] key-rotation handling on the deployed chain; a
-/// rotated key changes the cons address and this derivation follows the staking
-/// record automatically.
+/// valoper -> consensus address: sha256(ed25519 pubkey)[..20], bech32-encoded
+/// with the valcons HRP derived from the valoper HRP. [VERIFY] key-rotation
+/// handling on the deployed chain; the derivation follows the staking record.
 fn cons_address(validator: &Validator) -> StdResult<String> {
     let any = validator
         .consensus_pubkey
@@ -915,8 +847,7 @@ mod tests {
         ];
         sort_by_priority(&mut v);
         let ranks = drain_ranks(&v);
-        // Ineligible valC drains before both eligible; among eligible, the
-        // lower-priority valB drains before valA.
+        // Ineligible valC drains first; among eligible, lower-priority valB before valA.
         assert!(ranks["valC"] < ranks["valB"]);
         assert!(ranks["valB"] < ranks["valA"]);
 
@@ -994,9 +925,7 @@ mod tests {
 
     #[test]
     fn liveness_signal_requires_bonded_and_unjailed() {
-        // Only a bonded, unjailed validator carries a meaningful
-        // signed-blocks signal; jailed/unbonded counters are frozen or reset
-        // and read as a vacuous 100%.
+        // Jailed/unbonded counters are frozen or reset and read as a vacuous 100%.
         let mut v = Validator {
             status: BondStatus::Bonded as i32,
             jailed: false,
@@ -1029,9 +958,8 @@ mod tests {
     }
 }
 
-/// Regression tests for the jail-episode fingerprint: a report
-/// recorded during one jail episode must not authorize a purge in a LATER
-/// episode, and reports are only recorded where the program has stake.
+/// Jail-episode fingerprint regressions: an earlier-episode report must not
+/// authorize a purge, and reports are only recorded where the program has stake.
 #[cfg(test)]
 mod jail_episode_tests {
     use super::*;
@@ -1156,9 +1084,7 @@ mod jail_episode_tests {
         let res = report_jailed(deps.as_mut(), &env0, VALOPER.to_string()).unwrap();
         assert!(res.attributes.iter().any(|a| a.value == "already_reported"));
 
-        // The validator unjails and is jailed AGAIN (episode 2, height 200)
-        // with no observation in between. The old report's cooldown has fully
-        // elapsed — the purge must still refuse and restart the cycle.
+        // Unobserved re-jail (episode 2, height 200): the elapsed cooldown must not authorize.
         let mut env1 = env0.clone();
         env1.block.time = env0.block.time.plus_seconds(delay + 1_000);
         set_validator(&mut deps.querier, true, 200);
@@ -1179,8 +1105,7 @@ mod jail_episode_tests {
         assert_eq!(obs.unbonding_height, 200);
         assert_eq!(obs.reported_at, env1.block.time);
 
-        // Same episode after the restarted cooldown: the purge proceeds and
-        // unbonds the full program delegation.
+        // Same episode after the restarted cooldown: the purge unbonds everything.
         let mut env2 = env1.clone();
         env2.block.time = env1.block.time.plus_seconds(delay + 1);
         let res = purge_jailed(deps.as_mut(), &env2, &info, VALOPER.to_string(), None).unwrap();
