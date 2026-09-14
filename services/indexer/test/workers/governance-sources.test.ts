@@ -27,10 +27,13 @@ const ADMIN = "tp1groupadmin";
 /** A scripted PolicySource: `routes` maps a path PREFIX to a body (or a thrower). */
 function policySource(opts: {
   admin?: string | null;
+  /** Make the contract read throw with this message, e.g. wasmd's no-such-contract. */
+  smartThrows?: string;
   routes?: Record<string, unknown | (() => never)>;
 }): PolicySource {
   return {
     smartAtHeight: async () => {
+      if (opts.smartThrows !== undefined) throw new Error(opts.smartThrows);
       if (opts.admin === null) throw new Error("LCD down");
       return { admin: opts.admin ?? POLICY_A };
     },
@@ -128,6 +131,33 @@ describe("policy-set discovery (D1: the set, never 'the' policy)", () => {
     await expect(
       discoverGovernance(policySource({ admin: null }), CONTRACT, 100n),
     ).rejects.toThrow();
+  });
+
+  it("resolves to the EMPTY set when the contract does not exist YET at this height", async () => {
+    // GOV_START_HEIGHT is deliberately BELOW the contract's instantiate height:
+    // the group and its policy are created before the contract (spec D25), and
+    // the governance stream exists to index that pre-contract history. Windows
+    // down there query a contract that does not exist yet, and wasmd answers
+    // "no such contract" — which is "there is nothing to read", the step-2 shape,
+    // NOT "we could not read". Treating it as the latter crashed the worker and
+    // aborted the whole indexer on every start.
+    const source = policySource({
+      smartThrows:
+        'RPC 500 on cosmwasm/wasm/v1/contract/tp1contract/smart/eyJjb25maWciOnt9fQ%3D%3D: {"code":2,"message":"codespace wasm code 22: no such contract: address tp1contract","details":[]}',
+    });
+    const got = await discoverGovernance(source, CONTRACT, 100n);
+    expect(got.policies).toEqual([]);
+  });
+
+  it("still mirrors override policies below the contract's instantiate height", async () => {
+    // Overrides are the ONLY way to mirror governance in that pre-contract range,
+    // so the no-such-contract path must not short-circuit past them.
+    const source = policySource({
+      smartThrows: "codespace wasm code 22: no such contract: address tp1contract",
+      routes: fullRoutes,
+    });
+    const got = await discoverGovernance(source, CONTRACT, 100n, [POLICY_B]);
+    expect(got.policies.map((p) => p.address)).toContain(POLICY_B);
   });
 
   it("unions configured override policies with what discovery finds", async () => {
